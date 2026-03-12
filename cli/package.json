@@ -1,0 +1,29 @@
+{
+  "name": "sss-token-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CLI for the Solana Stablecoin Standard (SSS-1 first).",
+  "bin": {
+    "sss-token": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "ts-node src/index.ts",
+    "lint": "eslint \"src/**/*.{ts,tsx}\""
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "commander": "^12.0.0",
+    "toml": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.0",
+    "eslint": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
