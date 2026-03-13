@@ -4,7 +4,9 @@
   "description": "Solana Stablecoin Standard SDK — SSS-1 (Minimal) and SSS-2 (Compliant) presets",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -18,7 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "typescript": "^5.4.0",
+    "typescript": "^5.9.3",
     "vitest": "^1.6.0"
   }
 }
