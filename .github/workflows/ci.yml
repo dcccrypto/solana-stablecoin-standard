@@ -180,6 +180,9 @@ jobs:
           # Workspace deps are pinned to spl-tlv-account-resolution@0.6 / spl-transfer-hook-interface@0.6
           # (which use spl-pod 0.2.x), but pin any remaining 0.2.3 to 0.2.2 as a safety net.
           cargo update "spl-pod@0.2.3" --precise 0.2.2 || true
+          # anchor-syn 0.30.1 uses proc_macro2::Span::source_file() which was removed
+          # in proc-macro2 >=1.0.95 (requires nightly proc-macro-span). Pin to 1.0.94.
+          cargo update "proc-macro2" --precise 1.0.94
           sed -i 's/^version = 4$/version = 3/' Cargo.lock
 
       - name: Anchor build
