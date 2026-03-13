@@ -153,7 +153,12 @@ jobs:
       # Omitting the cache keeps each run hermetic and correct.
 
       - name: Install Anchor CLI
-        run: npm install -g @coral-xyz/anchor-cli@${{ env.ANCHOR_VERSION }}
+        # @coral-xyz/anchor-cli npm package only goes up to 0.31.x.
+        # Anchor 0.32+ is distributed via AVM (cargo-based version manager).
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+          avm install ${{ env.ANCHOR_VERSION }}
+          avm use ${{ env.ANCHOR_VERSION }}
 
       - name: Generate keypair
         run: solana-keygen new --no-bip39-passphrase --silent
