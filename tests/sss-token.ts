@@ -12,6 +12,8 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
   ASSOCIATED_TOKEN_PROGRAM_ID,
+  getAccount,
+  AccountState,
 } from "@solana/spl-token";
 import { expect } from "chai";
 
@@ -322,6 +324,15 @@ describe("sss-token", () => {
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
+
+    // Post-condition: verify the token account is now frozen
+    const tokenAccount = await getAccount(
+      program.provider.connection,
+      ata,
+      "confirmed",
+      TOKEN_2022_PROGRAM_ID
+    );
+    expect(tokenAccount.isFrozen).to.equal(true);
   });
 
   it("thaws a frozen token account", async () => {
@@ -342,6 +353,15 @@ describe("sss-token", () => {
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
+
+    // Post-condition: verify the token account is no longer frozen
+    const tokenAccount = await getAccount(
+      program.provider.connection,
+      ata,
+      "confirmed",
+      TOKEN_2022_PROGRAM_ID
+    );
+    expect(tokenAccount.isFrozen).to.equal(false);
   });
 
   // ---------- Update Roles ----------
