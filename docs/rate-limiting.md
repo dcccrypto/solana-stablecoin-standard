@@ -41,6 +41,7 @@ Each API key maintains an independent bucket with two parameters:
 ```
 HTTP/1.1 429 Too Many Requests
 Content-Type: application/json
+Retry-After: 1
 
 {
   "success": false,
@@ -48,7 +49,11 @@ Content-Type: application/json
 }
 ```
 
-No `Retry-After` header is emitted in the current implementation. Clients should apply exponential back-off when they receive 429 responses.
+The `Retry-After` header is included in every 429 response when the limiter has a non-zero refill rate. Its value is the number of **whole seconds** the client must wait before the token bucket will have at least one token available again (calculated as `ceil((1 - current_tokens) / refill_per_second)`).
+
+If the limiter is configured with `RATE_LIMIT_RPS=0` (zero refill), no `Retry-After` header is emitted because the bucket will never recover without a process restart.
+
+Clients should honour the `Retry-After` value; falling back to exponential back-off is recommended when the header is absent.
 
 ---
 

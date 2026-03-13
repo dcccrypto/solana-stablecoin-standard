@@ -405,4 +405,62 @@ mod tests {
             capacity
         );
     }
+
+    /// Verify that a 429 response includes a `Retry-After` header with a
+    /// positive integer value when the limiter has a non-zero refill rate.
+    ///
+    /// Uses capacity=1, rps=2.0 so `Retry-After` should be 1 second.
+    #[tokio::test]
+    async fn test_retry_after_header_present() {
+        use tower::Service;
+
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("ra-test").expect("api key");
+        let test_key = key_entry.key.clone();
+
+        // capacity=1, rps=2.0 → Retry-After = ceil((1-0)/2.0) = 1 sec
+        let state = AppState::with_limiter(db, RateLimiter::new(1, 2.0));
+        let cors = CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any);
+        let app = Router::new()
+            .route("/api/supply", get(supply))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .layer(cors)
+            .with_state(state);
+
+        let mut svc = app.into_service();
+
+        // Consume the single token.
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri("/api/supply")
+            .header("X-Api-Key", &test_key)
+            .body(Body::empty())
+            .unwrap();
+        let resp = svc.call(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // This one should be rate-limited with Retry-After.
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri("/api/supply")
+            .header("X-Api-Key", &test_key)
+            .body(Body::empty())
+            .unwrap();
+        let resp = svc.call(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let retry_after = resp
+            .headers()
+            .get("Retry-After")
+            .expect("Retry-After header should be present");
+        let val: u64 = retry_after
+            .to_str()
+            .unwrap()
+            .parse()
+            .expect("Retry-After should be a non-negative integer");
+        assert!(val >= 1, "Retry-After should be at least 1 second");
+    }
 }
