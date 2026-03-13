@@ -16,6 +16,12 @@ opt-level = 3
 incremental = false
 codegen-units = 1
 
+[patch.crates-io]
+# blake3 >=1.8.0 requires edition2024 (Rust/Cargo >=1.85).
+# Solana 1.18.x ships Cargo 1.75 in its toolchain; pin blake3 to the
+# last edition2021 release so `anchor build` succeeds in CI.
+blake3 = { version = "=1.7.0" }
+
 [workspace.dependencies]
 anchor-lang = "0.30.1"
 anchor-spl = { version = "0.30.1", features = ["token_2022", "token_2022_extensions"] }
