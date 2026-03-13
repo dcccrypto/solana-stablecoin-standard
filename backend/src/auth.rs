@@ -6,14 +6,15 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use serde_json::json;
-use std::sync::Arc;
 
-use crate::db::Database;
+use crate::state::AppState;
 
-/// Axum middleware that validates the `X-Api-Key` header against the database.
-/// The `/api/health` endpoint is exempt (public).
+/// Axum middleware that validates the `X-Api-Key` header against the database
+/// and enforces per-key rate limiting.
+///
+/// The `/api/health` endpoint is exempt (public, not rate-limited).
 pub async fn require_api_key(
-    State(db): State<Arc<Database>>,
+    State(state): State<AppState>,
     req: Request<Body>,
     next: Next,
 ) -> Response {
@@ -41,8 +42,19 @@ pub async fn require_api_key(
                 }
             };
 
-            match db.validate_api_key(&key_str) {
-                Ok(true) => next.run(req).await,
+            match state.db.validate_api_key(&key_str) {
+                Ok(true) => {
+                    // Key is valid — check rate limit before proceeding.
+                    if state.rate_limiter.check(&key_str) {
+                        next.run(req).await
+                    } else {
+                        (
+                            StatusCode::TOO_MANY_REQUESTS,
+                            Json(json!({"success": false, "error": "Rate limit exceeded"})),
+                        )
+                            .into_response()
+                    }
+                }
                 Ok(false) => (
                     StatusCode::UNAUTHORIZED,
                     Json(json!({"success": false, "error": "Invalid API key"})),

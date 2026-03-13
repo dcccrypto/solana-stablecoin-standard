@@ -2,14 +2,16 @@ mod auth;
 mod db;
 mod error;
 mod models;
+mod rate_limit;
 mod routes;
+mod state;
 
 use axum::{
     middleware,
     routing::{delete, get, post},
     Router,
 };
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -27,6 +29,7 @@ use routes::{
     supply::supply,
     webhooks::{delete_webhook, list_webhooks, register_webhook},
 };
+use state::AppState;
 
 #[tokio::main]
 async fn main() {
@@ -42,7 +45,9 @@ async fn main() {
     // Initialize database
     let db_path = std::env::var("DATABASE_URL").unwrap_or_else(|_| "./sss.db".to_string());
     let db = Database::new(&db_path).expect("Failed to initialize database");
-    let db = Arc::new(db);
+
+    // Build shared application state (DB + rate limiter)
+    let state = AppState::new(db);
 
     // Build CORS layer
     let cors = CorsLayer::new()
@@ -63,10 +68,10 @@ async fn main() {
         .route("/api/webhooks/:id", delete(delete_webhook))
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
-        .layer(middleware::from_fn_with_state(db.clone(), require_api_key))
+        .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
-        .with_state(db);
+        .with_state(state);
 
     // Determine port
     let port: u16 = std::env::var("PORT")
@@ -95,12 +100,15 @@ mod tests {
     };
     use tower::ServiceExt;
 
+    use crate::rate_limit::RateLimiter;
+
     fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
         // Pre-create an API key for tests
         let key_entry = db.create_api_key("test").expect("Failed to create test API key");
         let test_key = key_entry.key.clone();
-        let db = Arc::new(db);
+
+        let state = AppState::new(db);
 
         let cors = CorsLayer::new()
             .allow_origin(Any)
@@ -119,9 +127,33 @@ mod tests {
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
             .route("/api/admin/keys/:id", delete(delete_api_key))
-            .layer(middleware::from_fn_with_state(db.clone(), require_api_key))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
             .layer(cors)
-            .with_state(db);
+            .with_state(state);
+
+        (app, test_key)
+    }
+
+    /// Build an app with a tiny rate limiter (capacity = N, no refill) so we
+    /// can exercise the 429 path without hammering the default 60-token bucket.
+    fn build_app_with_capacity(capacity: u32) -> (Router<()>, String) {
+        let db = Database::new(":memory:").expect("Failed to create test DB");
+        let key_entry = db.create_api_key("rl-test").expect("Failed to create test API key");
+        let test_key = key_entry.key.clone();
+
+        let state = AppState::with_limiter(db, RateLimiter::new(capacity, 0.0));
+
+        let cors = CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any);
+
+        let app = Router::new()
+            .route("/api/health", get(health))
+            .route("/api/supply", get(supply))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .layer(cors)
+            .with_state(state);
 
         (app, test_key)
     }
@@ -227,7 +259,7 @@ mod tests {
     #[tokio::test]
     async fn test_supply_calculation() {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        let db = Arc::new(db);
+        let db = std::sync::Arc::new(db);
 
         // Record some events
         db.record_mint("mint1", 1000, "addr1", None).unwrap();
@@ -243,7 +275,7 @@ mod tests {
     #[tokio::test]
     async fn test_blacklist_add_and_check() {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        let db = Arc::new(db);
+        let db = std::sync::Arc::new(db);
 
         let address = "BlockedAddress12345678901234567890123456789";
         assert!(!db.is_blacklisted(address).unwrap());
@@ -259,7 +291,7 @@ mod tests {
     #[tokio::test]
     async fn test_webhook_crud() {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        let db = Arc::new(db);
+        let db = std::sync::Arc::new(db);
 
         let events = vec!["mint".to_string(), "burn".to_string()];
         let entry = db.register_webhook("https://example.com/webhook", &events).unwrap();
@@ -325,5 +357,52 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    /// Verify that requests beyond the bucket capacity are rejected with 429.
+    ///
+    /// Uses a capacity-3, zero-refill limiter so the test is fast and deterministic.
+    #[tokio::test]
+    async fn test_rate_limit_exceeded() {
+        let capacity: u32 = 3;
+        let (app, key) = build_app_with_capacity(capacity);
+
+        // `oneshot` consumes the router, so we need to call it differently.
+        // Clone the router via a service wrapper isn't needed here since we
+        // build a fresh router per request using the shared state internally.
+        // Instead, drive via tower::Service directly.
+        use tower::Service;
+        let mut svc = app.into_service();
+
+        for i in 0..capacity {
+            let req = Request::builder()
+                .method(Method::GET)
+                .uri("/api/supply")
+                .header("X-Api-Key", &key)
+                .body(Body::empty())
+                .unwrap();
+            let resp = svc.call(req).await.unwrap();
+            assert_eq!(
+                resp.status(),
+                StatusCode::OK,
+                "Request {} (0-indexed) should succeed",
+                i
+            );
+        }
+
+        // One more — should be rate-limited
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri("/api/supply")
+            .header("X-Api-Key", &key)
+            .body(Body::empty())
+            .unwrap();
+        let resp = svc.call(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "Request {} (0-indexed) should be rate-limited",
+            capacity
+        );
     }
 }

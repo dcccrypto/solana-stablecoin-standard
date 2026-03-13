@@ -1,12 +1,12 @@
-/// Token-bucket rate limiter keyed by API key string.
-///
-/// Each API key gets a bucket of `capacity` tokens.
-/// Tokens refill at `refill_per_second` tokens/sec (continuous approximation).
-/// On each request, one token is consumed. If the bucket is empty the request
-/// is rejected with 429.
-///
-/// The implementation is entirely in-memory and resets on process restart,
-/// which is appropriate for a single-instance deployment.
+//! Token-bucket rate limiter keyed by API key string.
+//!
+//! Each API key gets a bucket of `capacity` tokens.
+//! Tokens refill at `refill_per_second` tokens/sec (continuous approximation).
+//! On each request, one token is consumed. If the bucket is empty the request
+//! is rejected with 429.
+//!
+//! The implementation is entirely in-memory and resets on process restart,
+//! which is appropriate for a single-instance deployment.
 
 use std::{
     collections::HashMap,

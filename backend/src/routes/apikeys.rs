@@ -3,13 +3,12 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use std::sync::Arc;
 
-use crate::db::Database;
 use crate::models::ApiResponse;
+use crate::state::AppState;
 
 pub async fn create_api_key(
-    State(db): State<Arc<Database>>,
+    State(state): State<AppState>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
     let label = body
@@ -18,7 +17,7 @@ pub async fn create_api_key(
         .unwrap_or("unnamed")
         .to_string();
 
-    match db.create_api_key(&label) {
+    match state.db.create_api_key(&label) {
         Ok(entry) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "id": entry.id,
             "key": entry.key,
@@ -33,9 +32,9 @@ pub async fn create_api_key(
 }
 
 pub async fn list_api_keys(
-    State(db): State<Arc<Database>>,
+    State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
-    match db.list_api_keys() {
+    match state.db.list_api_keys() {
         Ok(keys) => {
             let redacted: Vec<serde_json::Value> = keys
                 .into_iter()
@@ -58,10 +57,10 @@ pub async fn list_api_keys(
 }
 
 pub async fn delete_api_key(
-    State(db): State<Arc<Database>>,
+    State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
-    match db.delete_api_key(&id) {
+    match state.db.delete_api_key(&id) {
         Ok(true) => Ok(Json(ApiResponse::ok(serde_json::json!({ "deleted": true })))),
         Ok(false) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
