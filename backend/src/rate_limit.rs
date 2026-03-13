@@ -18,6 +18,13 @@
 //! | `RATE_LIMIT_RPS`          | `1.0`   | Refill rate (tokens added per second)|
 //!
 //! Invalid or missing values silently fall back to the defaults.
+//!
+//! ## Retry-After (SSS-011)
+//!
+//! When a request is rate-limited, `check` returns the number of **whole seconds**
+//! the client must wait before the bucket will have at least one token again.
+//! The caller (middleware) is responsible for emitting this value in a
+//! `Retry-After` HTTP response header.
 
 use std::{
     collections::HashMap,
@@ -56,8 +63,11 @@ impl RateLimiter {
 
     /// Attempt to consume one token for `key`.
     ///
-    /// Returns `true` if the request is allowed, `false` if rate-limited.
-    pub fn check(&self, key: &str) -> bool {
+    /// Returns `Ok(())` if the request is allowed.
+    /// Returns `Err(retry_after_secs)` when rate-limited, where `retry_after_secs`
+    /// is the number of whole seconds the client should wait before retrying
+    /// (suitable for use in a `Retry-After` HTTP header).
+    pub fn check(&self, key: &str) -> Result<(), u64> {
         let now = Instant::now();
         let mut map = self.buckets.lock().expect("rate limiter lock poisoned");
 
@@ -73,9 +83,18 @@ impl RateLimiter {
 
         if entry.tokens >= 1.0 {
             entry.tokens -= 1.0;
-            true
+            Ok(())
         } else {
-            false
+            // How many seconds until the bucket has 1 token again?
+            // tokens_needed = 1.0 - current_tokens; wait = tokens_needed / rps
+            let retry_after = if self.refill_per_second > 0.0 {
+                let tokens_needed = 1.0 - entry.tokens;
+                (tokens_needed / self.refill_per_second).ceil() as u64
+            } else {
+                // Zero refill rate — bucket will never recover. Signal a long wait.
+                u64::MAX
+            };
+            Err(retry_after)
         }
     }
 }
@@ -148,32 +167,51 @@ mod tests {
     fn test_allows_up_to_capacity() {
         let rl = RateLimiter::new(5, 0.0); // no refill
         for _ in 0..5 {
-            assert!(rl.check("key1"));
+            assert!(rl.check("key1").is_ok());
         }
-        assert!(!rl.check("key1"));
+        assert!(rl.check("key1").is_err());
     }
 
     #[test]
     fn test_different_keys_are_independent() {
         let rl = RateLimiter::new(2, 0.0);
-        assert!(rl.check("a"));
-        assert!(rl.check("a"));
-        assert!(!rl.check("a"));
+        assert!(rl.check("a").is_ok());
+        assert!(rl.check("a").is_ok());
+        assert!(rl.check("a").is_err());
 
-        assert!(rl.check("b"));
-        assert!(rl.check("b"));
-        assert!(!rl.check("b"));
+        assert!(rl.check("b").is_ok());
+        assert!(rl.check("b").is_ok());
+        assert!(rl.check("b").is_err());
     }
 
     #[test]
     fn test_refill_over_time() {
         let rl = RateLimiter::new(2, 10.0); // 10 tokens/sec
-        assert!(rl.check("key"));
-        assert!(rl.check("key"));
-        assert!(!rl.check("key"));
+        assert!(rl.check("key").is_ok());
+        assert!(rl.check("key").is_ok());
+        assert!(rl.check("key").is_err());
 
         thread::sleep(Duration::from_millis(110)); // ~1.1 tokens refilled
-        assert!(rl.check("key"));
+        assert!(rl.check("key").is_ok());
+    }
+
+    #[test]
+    fn test_retry_after_positive_rps() {
+        // capacity=1, refill=2.0 tok/sec. After exhausting the bucket,
+        // we need 1 token back at 2 tok/sec → 0.5 sec → ceil → 1 sec.
+        let rl = RateLimiter::new(1, 2.0);
+        assert!(rl.check("ra").is_ok());
+        let err = rl.check("ra").unwrap_err();
+        assert_eq!(err, 1, "Retry-After should be 1 second");
+    }
+
+    #[test]
+    fn test_retry_after_zero_rps() {
+        // Zero refill rate → bucket never recovers → u64::MAX sentinel.
+        let rl = RateLimiter::new(1, 0.0);
+        assert!(rl.check("zr").is_ok());
+        let err = rl.check("zr").unwrap_err();
+        assert_eq!(err, u64::MAX, "Zero-rps limiter should return u64::MAX sentinel");
     }
 
     #[test]
@@ -184,9 +222,9 @@ mod tests {
         let rl = RateLimiter::from_env();
         // Defaults: capacity=60.  Should allow 60 consecutive requests.
         for i in 0..60 {
-            assert!(rl.check("env-test"), "request {} should succeed", i);
+            assert!(rl.check("env-test").is_ok(), "request {} should succeed", i);
         }
-        assert!(!rl.check("env-test"), "request 61 should be rate-limited");
+        assert!(rl.check("env-test").is_err(), "request 61 should be rate-limited");
     }
 
     #[test]
@@ -196,10 +234,10 @@ mod tests {
         let rl = RateLimiter::from_env();
         std::env::remove_var("RATE_LIMIT_CAPACITY");
 
-        assert!(rl.check("cap-test"));
-        assert!(rl.check("cap-test"));
-        assert!(rl.check("cap-test"));
-        assert!(!rl.check("cap-test")); // 4th should fail
+        assert!(rl.check("cap-test").is_ok());
+        assert!(rl.check("cap-test").is_ok());
+        assert!(rl.check("cap-test").is_ok());
+        assert!(rl.check("cap-test").is_err()); // 4th should fail
     }
 
     #[test]
@@ -210,6 +248,6 @@ mod tests {
         let rl = RateLimiter::from_env();
         std::env::remove_var("RATE_LIMIT_CAPACITY");
         // First request must succeed (bucket has tokens).
-        assert!(rl.check("fallback-test"));
+        assert!(rl.check("fallback-test").is_ok());
     }
 }
