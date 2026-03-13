@@ -49,5 +49,5 @@ export function getRpcUrl(cfg: SssConfig): string {
  * Creates a Connection from config.
  */
 export function getConnection(cfg: SssConfig): Connection {
-  return new Connection(getRpcUrl(cfg));
+  return new Connection(getRpcUrl(cfg), "confirmed");
 }
