@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{AuditEntry, BlacklistEntry, BurnEvent, MintEvent, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, MintEvent, WebhookEntry};
 
 pub struct Database {
     pub conn: Mutex<Connection>,
@@ -56,6 +56,12 @@ impl Database {
                 id TEXT PRIMARY KEY,
                 url TEXT NOT NULL,
                 events TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id TEXT PRIMARY KEY,
+                key TEXT NOT NULL UNIQUE,
+                label TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
         ")?;
@@ -314,6 +320,56 @@ impl Database {
     pub fn delete_webhook(&self, id: &str) -> Result<bool, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let rows = conn.execute("DELETE FROM webhooks WHERE id = ?1", params![id])?;
+        Ok(rows > 0)
+    }
+
+    // ─── API key management ─────────────────────────────────────────────────
+
+    /// Generate a new API key with the given label.
+    pub fn create_api_key(&self, label: &str) -> Result<ApiKeyEntry, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let key = format!("sss_{}", Uuid::new_v4().to_string().replace('-', ""));
+        let created_at = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO api_keys (id, key, label, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![id, key, label, created_at],
+        )?;
+        Ok(ApiKeyEntry { id, key, label: label.to_string(), created_at })
+    }
+
+    /// Validate that the given key exists.
+    pub fn validate_api_key(&self, key: &str) -> Result<bool, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM api_keys WHERE key = ?1",
+            params![key],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    /// List all API keys (full key included — redaction happens at route level).
+    pub fn list_api_keys(&self) -> Result<Vec<ApiKeyEntry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, key, label, created_at FROM api_keys ORDER BY created_at DESC",
+        )?;
+        let entries = stmt.query_map([], |row| {
+            Ok(ApiKeyEntry {
+                id: row.get(0)?,
+                key: row.get(1)?,
+                label: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(entries)
+    }
+
+    /// Delete an API key by id. Returns true if a row was deleted.
+    pub fn delete_api_key(&self, id: &str) -> Result<bool, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let rows = conn.execute("DELETE FROM api_keys WHERE id = ?1", params![id])?;
         Ok(rows > 0)
     }
 }
