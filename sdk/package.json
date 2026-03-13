@@ -11,6 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
+    "test": "ts-mocha -p ./tsconfig.test.json -t 120000 'tests/**/*.test.ts'",
     "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {
@@ -19,6 +20,11 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/mocha": "^10.0.0",
+    "@types/chai": "^4.3.0",
+    "chai": "^4.3.0",
+    "mocha": "^10.0.0",
+    "ts-mocha": "^10.0.0",
     "typescript": "^5.6.0",
     "eslint": "^9.0.0"
   },
