@@ -190,6 +190,15 @@ jobs:
           # Workspace deps are pinned to spl-tlv-account-resolution@0.6 / spl-transfer-hook-interface@0.6
           # (which use spl-pod 0.2.x), but pin any remaining 0.2.3 to 0.2.2 as a safety net.
           cargo update "spl-pod@0.2.3" --precise 0.2.2 || true
+          # anchor-syn 0.30.1 calls proc_macro2::Span::source_file() which requires
+          # proc_macro::SourceFile — a nightly-only API. proc-macro2 1.0.95+ exposed
+          # this call in wrapper.rs (file(), local_file()), so it fails at compile
+          # time on any toolchain that doesn't have proc_macro::SourceFile (including
+          # the Anchor BPF nightly, which is frozen ~2023).
+          # proc-macro2 1.0.94 is the last version that does NOT call these nightly
+          # proc_macro APIs and is safe for anchor-syn 0.30.1 / Solana 1.18 builds.
+          # CI evidence: 1.0.106 fails with E0599 source_file; 1.0.94 succeeds.
+          cargo update "proc-macro2@1.0" --precise 1.0.94
           sed -i 's/^version = 4$/version = 3/' Cargo.lock
 
       - name: Anchor build
