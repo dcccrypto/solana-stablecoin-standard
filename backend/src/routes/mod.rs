@@ -1,3 +1,4 @@
+pub mod apikeys;
 pub mod compliance;
 pub mod events;
 pub mod health;
