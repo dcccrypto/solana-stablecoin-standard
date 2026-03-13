@@ -2,6 +2,7 @@ import { SSSError } from "./error";
 import type {
   ApiResponse,
   AuditEntry,
+  AuditQuery,
   BlacklistEntry,
   BlacklistRequest,
   BurnEvent,
@@ -140,8 +141,33 @@ export class SSSClient {
 
   // ─── Compliance: audit log ────────────────────────────────────────────────
 
-  async getAuditLog(): Promise<AuditEntry[]> {
-    return this.request<AuditEntry[]>("GET", "/api/compliance/audit");
+  /**
+   * Retrieve compliance audit log entries.
+   *
+   * All parameters are optional. When omitted the backend returns the 100
+   * most recent entries (max 1 000).
+   *
+   * @param query.address  Exact-match filter on the recorded wallet/contract address.
+   * @param query.action   Filter by action type, e.g. `"BLACKLIST_ADD"`, `"BLACKLIST_REMOVE"`.
+   * @param query.limit    Maximum number of entries (1–1000). Defaults to 100.
+   *
+   * @example
+   * // All recent entries
+   * const all = await client.getAuditLog();
+   *
+   * // Only entries for a specific address
+   * const forAddr = await client.getAuditLog({ address: "So1111..." });
+   *
+   * // Latest 10 BLACKLIST_ADD actions
+   * const adds = await client.getAuditLog({ action: "BLACKLIST_ADD", limit: 10 });
+   */
+  async getAuditLog(query: AuditQuery = {}): Promise<AuditEntry[]> {
+    const params = new URLSearchParams();
+    if (query.address) params.set("address", query.address);
+    if (query.action) params.set("action", query.action);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return this.request<AuditEntry[]>("GET", `/api/compliance/audit${qs}`);
   }
 
   // ─── Webhooks ────────────────────────────────────────────────────────────

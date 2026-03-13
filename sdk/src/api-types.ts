@@ -86,6 +86,16 @@ export interface AuditEntry {
   created_at: string;
 }
 
+/** Query parameters for GET /api/compliance/audit */
+export interface AuditQuery {
+  /** Filter by wallet/contract address (exact match) */
+  address?: string;
+  /** Filter by action type (e.g. BLACKLIST_ADD, BLACKLIST_REMOVE) */
+  action?: string;
+  /** Maximum number of entries to return (default: 100, max: 1000) */
+  limit?: number;
+}
+
 // ─── Webhooks ─────────────────────────────────────────────────────────────────
 
 export type EventKind = "mint" | "burn" | "all";

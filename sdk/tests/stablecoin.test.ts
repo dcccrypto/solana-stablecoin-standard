@@ -328,6 +328,107 @@ describe('SSSClient webhooks', () => {
   });
 });
 
+// ─── SSSClient audit log (SSS-014) ───────────────────────────────────────────
+
+describe('SSSClient#getAuditLog()', () => {
+  const entries = [
+    { id: 'a1', action: 'BLACKLIST_ADD', address: 'Addr1', details: 'Reason: sanctions', created_at: '' },
+    { id: 'a2', action: 'BLACKLIST_REMOVE', address: 'Addr2', details: '', created_at: '' },
+  ];
+
+  it('returns entries with no filters (default call)', async () => {
+    mockFetchOnce(entries);
+
+    const client = new SSSClient('http://localhost:8080', 'k');
+    const result = await client.getAuditLog();
+
+    expect(result).toHaveLength(2);
+    expect(result[0].action).toBe('BLACKLIST_ADD');
+  });
+
+  it('sends no query string when called with no arguments', async () => {
+    const fetchSpy = vi.fn().mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: async () => ({ success: true, data: [], error: null }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const client = new SSSClient('http://localhost:8080', 'k');
+    await client.getAuditLog();
+
+    const [url] = fetchSpy.mock.calls[0] as [string];
+    expect(url).toBe('http://localhost:8080/api/compliance/audit');
+  });
+
+  it('appends ?address= when filtering by address', async () => {
+    const fetchSpy = vi.fn().mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: async () => ({ success: true, data: [entries[0]], error: null }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const client = new SSSClient('http://localhost:8080', 'k');
+    await client.getAuditLog({ address: 'Addr1' });
+
+    const [url] = fetchSpy.mock.calls[0] as [string];
+    expect(url).toContain('address=Addr1');
+    expect(url).not.toContain('action=');
+    expect(url).not.toContain('limit=');
+  });
+
+  it('appends ?action= when filtering by action', async () => {
+    const fetchSpy = vi.fn().mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: async () => ({ success: true, data: [entries[0]], error: null }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const client = new SSSClient('http://localhost:8080', 'k');
+    await client.getAuditLog({ action: 'BLACKLIST_ADD' });
+
+    const [url] = fetchSpy.mock.calls[0] as [string];
+    expect(url).toContain('action=BLACKLIST_ADD');
+    expect(url).not.toContain('address=');
+  });
+
+  it('appends ?limit= when a limit is provided', async () => {
+    const fetchSpy = vi.fn().mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: async () => ({ success: true, data: [entries[0]], error: null }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const client = new SSSClient('http://localhost:8080', 'k');
+    await client.getAuditLog({ limit: 10 });
+
+    const [url] = fetchSpy.mock.calls[0] as [string];
+    expect(url).toContain('limit=10');
+  });
+
+  it('combines address + action + limit in query string', async () => {
+    const fetchSpy = vi.fn().mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: async () => ({ success: true, data: [], error: null }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const client = new SSSClient('http://localhost:8080', 'k');
+    await client.getAuditLog({ address: 'So1111', action: 'BLACKLIST_ADD', limit: 5 });
+
+    const [url] = fetchSpy.mock.calls[0] as [string];
+    expect(url).toContain('address=So1111');
+    expect(url).toContain('action=BLACKLIST_ADD');
+    expect(url).toContain('limit=5');
+  });
+
+  it('throws SSSError on failure', async () => {
+    mockFetchError('Unauthorized', 401);
+
+    const client = new SSSClient('http://localhost:8080', 'bad-key');
+    await expect(client.getAuditLog()).rejects.toBeInstanceOf(SSSError);
+  });
+});
+
 // ─── SSSError ─────────────────────────────────────────────────────────────────
 
 describe('SSSError', () => {
