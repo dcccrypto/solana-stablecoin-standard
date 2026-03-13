@@ -5,6 +5,7 @@ use crate::{
     error::AppError,
     models::{ApiResponse, BurnEvent, BurnRequest},
     state::AppState,
+    webhook_dispatch,
 };
 
 pub async fn burn(
@@ -40,6 +41,8 @@ pub async fn burn(
         source = %req.source,
         "Burn event recorded"
     );
+
+    webhook_dispatch::dispatch(&state.db, "burn", serde_json::to_value(&event).unwrap_or_default());
 
     Ok(Json(ApiResponse::ok(event)))
 }
