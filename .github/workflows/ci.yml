@@ -186,10 +186,13 @@ jobs:
           # Workspace deps are pinned to spl-tlv-account-resolution@0.6 / spl-transfer-hook-interface@0.6
           # (which use spl-pod 0.2.x), but pin any remaining 0.2.3 to 0.2.2 as a safety net.
           cargo update "spl-pod@0.2.3" --precise 0.2.2 || true
-          # anchor-syn 0.30.1 uses proc_macro2::Span::source_file() which was removed
-          # in proc-macro2 >=1.0.95 (requires nightly proc-macro-span). Pin to 1.0.94.
-          # Use version-qualified form to reliably target the 1.x line.
-          cargo update "proc-macro2@1.0" --precise 1.0.94
+          # NOTE: Do NOT pin proc-macro2 here. proc-macro2 1.0.94 introduced
+          # SourceFile support in wrapper.rs that uses proc_macro::SourceFile,
+          # which is not available on the Anchor BPF nightly toolchain.
+          # proc-macro2 >=1.0.95 removed the SourceFile wrapper (it was only in 1.0.94),
+          # so letting Cargo resolve to the latest 1.0.x (e.g. 1.0.106) is correct.
+          # anchor-syn 0.30.1 calls proc_macro2::Span::source_file() in proc-macro
+          # expansion context (host toolchain), not in BPF target context, so no issue.
           sed -i 's/^version = 4$/version = 3/' Cargo.lock
 
       - name: Anchor build
