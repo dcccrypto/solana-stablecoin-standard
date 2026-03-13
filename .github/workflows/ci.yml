@@ -175,6 +175,10 @@ jobs:
           cargo update "proc-macro-crate@3.5.0" --precise 3.1.0
           # indexmap >=2.12.0 requires rustc 1.82; Solana 1.18 ships rustc 1.75. Pin to 2.11.4.
           cargo update "indexmap@2.13.0" --precise 2.11.4
+          # spl-pod >=0.2.3 allows solana-program 2.x (unbounded upper), causing a duplicate-crate
+          # type conflict when Cargo resolves two versions of solana-program in the same build.
+          # Pin to 0.2.2 which declares solana-program >=1.18.2,<=2, keeping it on the 1.18 line.
+          cargo update "spl-pod@0.2.3" --precise 0.2.2
           sed -i 's/^version = 4$/version = 3/' Cargo.lock
 
       - name: Anchor build
