@@ -88,10 +88,10 @@ export class SolanaStablecoin {
   /**
    * Derive the config PDA for a given mint.
    */
-  static async getConfigPda(
+  static getConfigPda(
     mint: PublicKey,
     programId: PublicKey = SSS_TOKEN_PROGRAM_ID
-  ): Promise<[PublicKey, number]> {
+  ): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
       [CONFIG_SEED, mint.toBuffer()],
       programId
