@@ -7,7 +7,7 @@
 
 ## Overview
 
-Every authenticated request is subject to a token-bucket rate limit keyed by the caller's API key. Requests that exceed the limit are rejected immediately with **HTTP 429** before they touch the database, protecting the backend from runaway clients and accidental request storms.
+Every authenticated request is subject to a token-bucket rate limit keyed by the caller's API key. The `require_api_key` middleware validates the `X-Api-Key` header first; once the key is confirmed valid, the rate-limiter checks the token bucket. Requests that exceed the limit are rejected with **HTTP 429** before they reach any route handler, protecting the backend from runaway clients and accidental request storms.
 
 The limiter is entirely **in-memory** and resets when the process restarts. This is appropriate for single-instance deployments; distributed setups would require a shared store (e.g. Redis).
 
@@ -44,8 +44,7 @@ Content-Type: application/json
 
 {
   "success": false,
-  "data": null,
-  "error": "rate limit exceeded"
+  "error": "Rate limit exceeded"
 }
 ```
 
@@ -96,6 +95,7 @@ To change the limits, update `capacity` and `refill_per_second` in `Default` and
 
 ## Implementation Notes
 
+- **Wiring:** The `RateLimiter` is wrapped in `Arc` and stored on `AppState` (`backend/src/state.rs`). All Axum route handlers receive `State<AppState>`, which bundles both the database handle and the limiter. The `require_api_key` middleware in `backend/src/auth.rs` is the single enforcement point.
 - **Lock granularity:** A single `Mutex<HashMap<String, BucketState>>` guards all buckets. For very high concurrency, a sharded structure (e.g. `DashMap`) would reduce contention.
 - **Time source:** Uses `std::time::Instant`, which is monotonic and immune to clock adjustments.
 - **Memory:** Buckets are never evicted. In long-running deployments with many ephemeral API keys, memory use will grow unboundedly. Consider a periodic sweep of stale keys in a future iteration.
