@@ -169,6 +169,8 @@ jobs:
           # borsh >=1.6.0 requires rustc 1.77.0; Solana 1.18 ships rustc 1.75. Pin to 1.5.1.
           # Multiple versions of borsh exist (0.9.x, 0.10.x, 1.x); target only the 1.x line.
           cargo update borsh@1.6.0 --precise 1.5.1
+          # proc-macro-crate 3.5.0 requires rustc 1.82.0; Solana 1.18 ships rustc 1.75. Pin to 3.4.0.
+          cargo update "proc-macro-crate@3.5.0" --precise 3.4.0
           sed -i 's/^version = 4$/version = 3/' Cargo.lock
 
       - name: Anchor build
