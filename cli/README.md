@@ -30,22 +30,46 @@ Example:
 npm run dev -- init --preset sss-1
 ```
 
+You can also inspect a full example config at:
+
+- `example.config.toml`
+
 ### Config model
 
 The CLI is config‑driven. It expects a TOML file describing:
 
-- **standard**: `"sss-1"` or `"sss-2"` (currently commands enforce **SSS‑1**)
+- **standard**: `"sss-1"` or `"sss-2"` (which Stablecoin Standard profile you target)
 - **cluster**: `"devnet"`, `"testnet"`, `"mainnet-beta"`, or custom RPC label
 - **rpcUrl**: optional custom RPC endpoint
-- **stablecoinMint**: the SPL mint address of the stablecoin
-- **authorityKeypairPath**: path to the JSON keypair for the mint / freeze authority
+
+Plus nested sections:
+
+- **`[stablecoin]`**:
+  - `name`: human name, e.g. `"My Stablecoin"`
+  - `symbol`: ticker, e.g. `"MUSD"`
+  - `decimals`: number of decimals, e.g. `6`
+  - `tokenProgram`: `"spl-token-2022"` (recommended for Token Extensions) or `"spl-token"`
+  - `mint`: the mint address of the SPL token – **blank before deploy**, filled after on‑chain deployment
+- **`[authorities]`**:
+  - `mint`: keypair path for the mint authority
+  - `freeze`: keypair path for the freeze authority
+  - `metadata`: keypair path for the metadata authority
+  - `permanentDelegate` (optional): keypair path for the permanent delegate authority
+  - `pause` (optional): keypair path for the pause authority (Pausable extension)
+- **`[extensions.*]`**: which Token‑2022 extensions to enable:
+  - `[extensions.metadata]`: `{ enabled = true }` – required for SSS‑1
+  - `[extensions.pausable]`: `{ enabled = true/false }`
+  - `[extensions.permanentDelegate]`: `{ enabled = true/false }`
+  - `[extensions.transferHook]`: `{ enabled = true/false, programId = "<hook_program_id>" }`
 
 By default the CLI looks for `sss-token.config.toml` in the current working directory.  
 You can override this with `--config <path>` on relevant commands.
 
-### `init` – choose your standard
+If you want to see **all** available options in one place, open `example.config.toml`.
 
-Create or validate a config file.
+### `init` – configure or deploy
+
+Configure a new stablecoin (via a preset) or deploy from an existing config.
 
 ```bash
 sss-token init --preset sss-1
@@ -53,14 +77,20 @@ sss-token init --preset sss-2
 sss-token init --custom path/to/config.toml
 ```
 
-- **`--preset sss-1`**: writes a starter `sss-token.config.toml` in the current directory:
+- **`--preset sss-1`**: writes a starter `sss-token.config.toml` in the current directory, with:
   - `standard = "sss-1"`
   - `cluster = "devnet"`
-  - `rpcUrl = ""`
-  - `stablecoinMint = ""` (you fill this with your deployed mint)
-  - `authorityKeypairPath = "~/.config/solana/id.json"`
-- **`--preset sss-2`**: same structure but with `standard = "sss-2"` (commands are still SSS‑1‑only for now).
-- **`--custom`**: loads and validates an existing TOML file and prints which standard it uses.
+  - `[stablecoin]` name/symbol/decimals, `tokenProgram = "spl-token-2022"`, `mint = ""`
+  - `[authorities]` for `mint`, `freeze`, `metadata` all pointing to `~/.config/solana/id.json`
+  - `[extensions.metadata].enabled = true`, other extensions disabled
+- **`--preset sss-2`**: same structure but with `standard = "sss-2"` (future profile with additional extensions).
+- **`--custom`**: loads an existing TOML file and runs a **deployment dry‑run**:
+  - validates the config shape and authorities
+  - prints a summary of which extensions and authorities will be used
+  - in future iterations, this will:
+    - create the mint using the chosen token program,
+    - initialize the requested extensions, and
+    - write the resulting `stablecoin.mint` back into the TOML file.
 
 ### `mint` – SSS‑1 minting
 

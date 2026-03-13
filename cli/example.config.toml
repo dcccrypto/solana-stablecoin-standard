@@ -1,0 +1,52 @@
+# Example Solana Stablecoin Standard config
+# This file shows all available options that the CLI understands today.
+
+standard = "sss-1"
+cluster = "devnet"
+rpcUrl = "" # optional: custom RPC endpoint
+
+[stablecoin]
+# Human-readable token metadata
+name = "Example Dollar"
+symbol = "EXD"
+decimals = 6
+
+# Use "spl-token-2022" for Token Extensions support
+# You can also set "spl-token" if you don't want extensions.
+tokenProgram = "spl-token-2022"
+
+# If you haven't deployed the stablecoin yet, leave this empty.
+# After deployment, this will be populated with the on-chain mint address.
+mint = ""
+
+[authorities]
+# Paths to keypair JSON files for authorities.
+# Usually these are created and managed by the stablecoin manager.
+
+mint = "~/.config/solana/id.json"
+freeze = "~/.config/solana/id.json"
+metadata = "~/.config/solana/id.json"
+
+# Optional authorities for additional extensions:
+# permanentDelegate = "/path/to/permanent-delegate-keypair.json"
+# pause = "/path/to/pause-authority-keypair.json"
+
+# ---- Extensions -------------------------------------------------------------
+
+[extensions.metadata]
+# SSS-1: Metadata is required so wallets and explorers can display the token properly.
+enabled = true
+
+[extensions.pausable]
+# Optional: allow pausing all token activity via the pause authority.
+enabled = false
+
+[extensions.permanentDelegate]
+# Optional: grant a permanent delegate power over transfers.
+enabled = false
+
+[extensions.transferHook]
+# Optional: route transfers through a custom hook program (e.g. blacklist logic).
+enabled = false
+programId = "" # set this if enabled
+

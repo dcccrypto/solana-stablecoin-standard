@@ -2,28 +2,38 @@
 
 import { Command } from "commander";
 import { writeDefaultConfig, loadConfig, SssStandard } from "./config";
+import { deployStablecoinFromConfig } from "./stablecoin/deploy";
 
 const program = new Command();
 
 program
   .name("sss-token")
-  .description("CLI for interacting with Solana Stablecoin Standard tokens")
+  .description("CLI for managers of Solana stablecoins built on the Stablecoin Standard")
   .version("0.1.0");
 
 const init = program
   .command("init")
-  .description("Initialize a config file for an SSS-compliant token");
+  .description(
+    "Deploy or configure an SSS-compliant stablecoin from a TOML configuration",
+  );
 
 init
-  .option("--preset <name>", "Preset standard (sss-1 or sss-2)")
-  .option("--custom <path>", "Use an existing custom config.toml")
-  .action((opts: { preset?: string; custom?: string }) => {
+  .option("--preset <name>", "Generate a starter config (sss-1 or sss-2)")
+  .option(
+    "--custom <path>",
+    "Deploy a new stablecoin from an existing config.toml",
+  )
+  .action(async (opts: { preset?: string; custom?: string }) => {
     if (opts.custom) {
       try {
-        const cfg = loadConfig(opts.custom);
-        console.log("Loaded custom config for", cfg.standard, "from", opts.custom);
+        const cfg = await deployStablecoinFromConfig(opts.custom);
+        // In a future iteration, this will write the on-chain mint address back into the config.
+        console.log(
+          "Config validated for deployment. (Dry run only, no on-chain transaction yet.)",
+        );
+        console.log("Standard:", cfg.standard, "Cluster:", cfg.cluster);
       } catch (err) {
-        console.error("Failed to load custom config:", (err as Error).message);
+        console.error("Failed to deploy from config:", (err as Error).message);
         process.exitCode = 1;
       }
       return;
@@ -63,7 +73,7 @@ program
 
       const amount = BigInt(amountStr);
       console.log(
-        `[DRY RUN] Would mint ${amount.toString()} units to ${recipient} using mint ${cfg.stablecoinMint} on ${cfg.cluster}`,
+        `[DRY RUN] Would mint ${amount.toString()} units to ${recipient} using mint ${cfg.stablecoin.mint} on ${cfg.cluster}`,
       );
     },
   );
@@ -85,7 +95,7 @@ program
 
     const amount = BigInt(amountStr);
     console.log(
-      `[DRY RUN] Would burn ${amount.toString()} units from authority for mint ${cfg.stablecoinMint} on ${cfg.cluster}`,
+      `[DRY RUN] Would burn ${amount.toString()} units from authority for mint ${cfg.stablecoin.mint} on ${cfg.cluster}`,
     );
   });
 
@@ -105,8 +115,7 @@ program
 
     console.log("Standard:", cfg.standard);
     console.log("Cluster:", cfg.cluster);
-    console.log("Mint:", cfg.stablecoinMint || "(not set)");
-    console.log("Authority keypair:", cfg.authorityKeypairPath);
+    console.log("Mint:", cfg.stablecoin.mint || "(not set)");
     console.log(
       "[DRY RUN] On-chain queries for supply and authorities not implemented yet.",
     );
