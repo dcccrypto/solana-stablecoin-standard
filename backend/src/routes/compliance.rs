@@ -1,4 +1,7 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::{Path, State},
+    Json,
+};
 use tracing::info;
 
 use crate::{
@@ -35,6 +38,19 @@ pub async fn add_blacklist(
     info!(address = %req.address, reason = %req.reason, "Address blacklisted");
 
     Ok(Json(ApiResponse::ok(entry)))
+}
+
+pub async fn remove_blacklist(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, AppError> {
+    let removed = state.db.remove_blacklist(&id)?;
+    if removed {
+        info!(id = %id, "Address removed from blacklist");
+        Ok(Json(ApiResponse::ok(serde_json::json!({ "removed": true, "id": id }))))
+    } else {
+        Err(AppError::NotFound(format!("Blacklist entry {} not found", id)))
+    }
 }
 
 pub async fn get_audit(

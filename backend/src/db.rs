@@ -222,6 +222,12 @@ impl Database {
         })
     }
 
+    pub fn remove_blacklist(&self, id: &str) -> Result<bool, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let rows = conn.execute("DELETE FROM blacklist WHERE id = ?1", params![id])?;
+        Ok(rows > 0)
+    }
+
     pub fn is_blacklisted(&self, address: &str) -> Result<bool, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let count: i64 = conn.query_row(

@@ -21,7 +21,7 @@ use auth::require_api_key;
 use db::Database;
 use routes::{
     apikeys::{create_api_key, delete_api_key, list_api_keys},
-    compliance::{add_blacklist, get_audit, get_blacklist},
+    compliance::{add_blacklist, get_audit, get_blacklist, remove_blacklist},
     events::events,
     health::health,
     mint::mint,
@@ -46,6 +46,30 @@ async fn main() {
     let db_path = std::env::var("DATABASE_URL").unwrap_or_else(|_| "./sss.db".to_string());
     let db = Database::new(&db_path).expect("Failed to initialize database");
 
+    // Bootstrap API key from environment (useful for first-run and testing).
+    if let Ok(seed_key) = std::env::var("BOOTSTRAP_API_KEY") {
+        if !seed_key.is_empty() {
+            match db.validate_api_key(&seed_key) {
+                Ok(true) => info!("Bootstrap API key already exists"),
+                _ => {
+                    // Insert the seed key directly
+                    let conn = db.conn.lock().expect("db lock");
+                    conn.execute(
+                        "INSERT OR IGNORE INTO api_keys (id, key, label, created_at) VALUES (?1, ?2, ?3, ?4)",
+                        rusqlite::params![
+                            uuid::Uuid::new_v4().to_string(),
+                            seed_key,
+                            "bootstrap",
+                            chrono::Utc::now().to_rfc3339()
+                        ],
+                    ).expect("Failed to insert bootstrap key");
+                    drop(conn);
+                    info!("Bootstrap API key seeded");
+                }
+            }
+        }
+    }
+
     // Build shared application state (DB + rate limiter)
     let state = AppState::new(db);
 
@@ -63,6 +87,7 @@ async fn main() {
         .route("/api/supply", get(supply))
         .route("/api/events", get(events))
         .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
+        .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
         .route("/api/compliance/audit", get(get_audit))
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
         .route("/api/webhooks/:id", delete(delete_webhook))
@@ -122,6 +147,7 @@ mod tests {
             .route("/api/supply", get(supply))
             .route("/api/events", get(events))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
+            .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
             .route("/api/compliance/audit", get(get_audit))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
             .route("/api/webhooks/:id", delete(delete_webhook))
