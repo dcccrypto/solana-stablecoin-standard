@@ -271,12 +271,49 @@ impl Database {
         })
     }
 
-    pub fn get_audit_log(&self) -> Result<Vec<AuditEntry>, AppError> {
+    pub fn get_audit_log(
+        &self,
+        address: Option<&str>,
+        action: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<AuditEntry>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let mut stmt = conn.prepare(
-            "SELECT id, action, address, details, created_at FROM audit_log ORDER BY created_at DESC",
-        )?;
-        let entries = stmt.query_map([], |row| {
+
+        // Build query dynamically based on optional filters.
+        let mut sql = String::from(
+            "SELECT id, action, address, details, created_at FROM audit_log WHERE 1=1",
+        );
+        if address.is_some() {
+            sql.push_str(" AND address = ?1");
+        }
+        if action.is_some() {
+            sql.push_str(if address.is_some() {
+                " AND action = ?2"
+            } else {
+                " AND action = ?1"
+            });
+        }
+        sql.push_str(" ORDER BY created_at DESC LIMIT ?");
+        // Append the limit placeholder index
+        let limit_idx = 1 + address.is_some() as usize + action.is_some() as usize;
+        // Replace the trailing `?` with the correct placeholder index
+        let sql = sql.replace(" LIMIT ?", &format!(" LIMIT ?{}", limit_idx));
+
+        let mut stmt = conn.prepare(&sql)?;
+
+        // We need to bind params in order; use a Vec of boxed ToSql values.
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        if let Some(a) = address {
+            params.push(Box::new(a.to_string()));
+        }
+        if let Some(ac) = action {
+            params.push(Box::new(ac.to_string()));
+        }
+        params.push(Box::new(limit));
+
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let entries = stmt.query_map(params_refs.as_slice(), |row| {
             Ok(AuditEntry {
                 id: row.get(0)?,
                 action: row.get(1)?,

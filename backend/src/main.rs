@@ -852,4 +852,63 @@ mod qa_tests {
         let payloads = received.lock().await;
         assert_eq!(payloads.len(), 0, "burn-only webhook must not fire on mint");
     }
+
+    // ── 10. Audit log query filtering ────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_audit_log_filtering() {
+        let (app, key) = build_app();
+
+        // Add two addresses to blacklist (generates BLACKLIST_ADD audit entries)
+        let addr_a = "AuditAddrAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        let addr_b = "AuditAddrBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+
+        post_json(
+            app.clone(),
+            "/api/compliance/blacklist",
+            &key,
+            serde_json::json!({"address": addr_a, "reason": "test A"}),
+        )
+        .await;
+        post_json(
+            app.clone(),
+            "/api/compliance/blacklist",
+            &key,
+            serde_json::json!({"address": addr_b, "reason": "test B"}),
+        )
+        .await;
+
+        // Unfiltered — should return at least 2 entries
+        let (status, json) = get_json(app.clone(), "/api/compliance/audit", &key).await;
+        assert_eq!(status, StatusCode::OK);
+        let all = json["data"].as_array().unwrap().len();
+        assert!(all >= 2, "expected at least 2 audit entries, got {}", all);
+
+        // Filter by address — should return only addr_a entries
+        let uri_a = format!("/api/compliance/audit?address={}", addr_a);
+        let (status_a, json_a) = get_json(app.clone(), &uri_a, &key).await;
+        assert_eq!(status_a, StatusCode::OK);
+        let entries_a = json_a["data"].as_array().unwrap();
+        assert!(!entries_a.is_empty(), "should have entries for addr_a");
+        for entry in entries_a {
+            assert_eq!(entry["address"], addr_a, "all entries should match addr_a");
+        }
+
+        // Filter by action — should only return BLACKLIST_ADD entries
+        let (status_ac, json_ac) =
+            get_json(app.clone(), "/api/compliance/audit?action=BLACKLIST_ADD", &key).await;
+        assert_eq!(status_ac, StatusCode::OK);
+        let entries_ac = json_ac["data"].as_array().unwrap();
+        assert!(!entries_ac.is_empty(), "should have BLACKLIST_ADD entries");
+        for entry in entries_ac {
+            assert_eq!(entry["action"], "BLACKLIST_ADD");
+        }
+
+        // limit=1 — should return exactly one entry
+        let (status_lim, json_lim) =
+            get_json(app.clone(), "/api/compliance/audit?limit=1", &key).await;
+        assert_eq!(status_lim, StatusCode::OK);
+        let entries_lim = json_lim["data"].as_array().unwrap();
+        assert_eq!(entries_lim.len(), 1, "limit=1 should return exactly 1 entry");
+    }
 }

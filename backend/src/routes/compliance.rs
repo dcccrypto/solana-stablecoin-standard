@@ -1,12 +1,12 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Json,
 };
 use tracing::info;
 
 use crate::{
     error::AppError,
-    models::{ApiResponse, AuditEntry, BlacklistEntry, BlacklistRequest},
+    models::{ApiResponse, AuditEntry, AuditQuery, BlacklistEntry, BlacklistRequest},
     state::AppState,
 };
 
@@ -55,7 +55,13 @@ pub async fn remove_blacklist(
 
 pub async fn get_audit(
     State(state): State<AppState>,
+    Query(query): Query<AuditQuery>,
 ) -> Result<Json<ApiResponse<Vec<AuditEntry>>>, AppError> {
-    let entries = state.db.get_audit_log()?;
+    let limit = query.limit.unwrap_or(100).min(1000);
+    let entries = state.db.get_audit_log(
+        query.address.as_deref(),
+        query.action.as_deref(),
+        limit,
+    )?;
     Ok(Json(ApiResponse::ok(entries)))
 }

@@ -138,3 +138,13 @@ pub struct EventsQuery {
     pub token_mint: Option<String>,
     pub limit: Option<u32>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct AuditQuery {
+    /// Filter by wallet/contract address (exact match)
+    pub address: Option<String>,
+    /// Filter by action type (e.g. BLACKLIST_ADD, BLACKLIST_REMOVE)
+    pub action: Option<String>,
+    /// Maximum number of entries to return (default: 100, max: 1000)
+    pub limit: Option<u32>,
+}
