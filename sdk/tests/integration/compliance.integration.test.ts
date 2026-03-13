@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { SSSClient } from "../../src/client";
 import { SSSError } from "../../src/error";
-import { BASE_URL, API_KEY, TOKEN_MINT } from "./setup";
+import { BASE_URL, API_KEY } from "./setup";
+
+// Use a dedicated mint for compliance tests so the shared TOKEN_MINT supply
+// totals are not polluted by the successful mint at the end of this suite.
+const COMPLIANCE_MINT = "ComplianceMint1111111111111111111111111111";
 
 describe("Integration: compliance (blacklist enforcement)", () => {
   const client = new SSSClient(BASE_URL, API_KEY);
@@ -31,7 +35,7 @@ describe("Integration: compliance (blacklist enforcement)", () => {
   it("mint() rejects blacklisted recipient with SSSError", async () => {
     try {
       await client.mint({
-        token_mint: TOKEN_MINT,
+        token_mint: COMPLIANCE_MINT,
         amount: 100,
         recipient: BLOCKED_ADDR,
       });
@@ -68,7 +72,7 @@ describe("Integration: compliance (blacklist enforcement)", () => {
 
   it("mint() succeeds for the un-blacklisted address", async () => {
     const event = await client.mint({
-      token_mint: TOKEN_MINT,
+      token_mint: COMPLIANCE_MINT,
       amount: 100,
       recipient: BLOCKED_ADDR,
     });
