@@ -33,8 +33,12 @@ import {
   StablecoinInfo,
 } from './types';
 
-const SSS_TOKEN_PROGRAM_ID = new PublicKey(
-  'SSS1111111111111111111111111111111111111111111'
+/** Deployed program IDs (devnet + localnet) — matches Anchor.toml */
+export const SSS_TOKEN_PROGRAM_ID = new PublicKey(
+  '4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN'
+);
+export const SSS_TRANSFER_HOOK_PROGRAM_ID = new PublicKey(
+  '8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj'
 );
 
 const CONFIG_SEED = Buffer.from('stablecoin-config');

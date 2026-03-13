@@ -9,7 +9,9 @@
     "test": "anchor test",
     "test:sdk": "yarn workspace @stbr/sss-token test",
     "test:backend": "cd backend && cargo test",
-    "lint": "yarn workspace @stbr/sss-token lint"
+    "lint": "yarn workspace @stbr/sss-token lint",
+    "deploy:devnet": "bash scripts/deploy-devnet.sh",
+    "smoke:devnet": "npx ts-node scripts/smoke-test-devnet.ts"
   },
   "devDependencies": {
     "@types/chai": "^4.3.0",
