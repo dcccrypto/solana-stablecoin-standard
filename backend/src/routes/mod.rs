@@ -1,3 +1,4 @@
+pub mod apikeys;
 pub mod burn;
 pub mod compliance;
 pub mod events;

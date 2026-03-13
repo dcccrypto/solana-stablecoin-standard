@@ -69,11 +69,14 @@ pub async fn require_api_key(
                     Json(json!({"success": false, "error": "Invalid API key"})),
                 )
                     .into_response(),
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"success": false, "error": e.to_string()})),
-                )
-                    .into_response(),
+                Err(e) => {
+                    let msg: String = e.to_string();
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"success": false, "error": msg})),
+                    )
+                        .into_response()
+                }
             }
         }
     }

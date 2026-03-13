@@ -94,6 +94,14 @@ pub struct WebhookEntry {
     pub created_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ApiKeyEntry {
+    pub id: String,
+    pub key: String,
+    pub label: String,
+    pub created_at: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T: Serialize> {
     pub success: bool,
