@@ -1,19 +1,23 @@
-use axum::{extract::{Query, State}, Json};
-use std::sync::Arc;
-
-use crate::{
-    db::Database,
-    error::AppError,
-    models::{ApiResponse, EventsQuery, EventsResponse},
+use axum::{
+    extract::{Query, State},
+    Json,
 };
 
-pub async fn list_events(
-    State(db): State<Arc<Database>>,
+use crate::{
+    error::AppError,
+    models::{ApiResponse, EventsQuery, EventsResponse},
+    state::AppState,
+};
+
+pub async fn events(
+    State(state): State<AppState>,
     Query(query): Query<EventsQuery>,
 ) -> Result<Json<ApiResponse<EventsResponse>>, AppError> {
-    let limit = query.limit.unwrap_or(50);
-    let mint_events = db.list_mint_events(query.token_mint.as_deref(), limit)?;
-    let burn_events = db.list_burn_events(query.token_mint.as_deref(), limit)?;
+    let token_mint = query.token_mint.as_deref();
+    let limit = query.limit.unwrap_or(100);
+
+    let mint_events = state.db.list_mint_events(token_mint, limit)?;
+    let burn_events = state.db.list_burn_events(token_mint, limit)?;
 
     Ok(Json(ApiResponse::ok(EventsResponse {
         mint_events,
