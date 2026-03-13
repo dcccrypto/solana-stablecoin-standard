@@ -14,7 +14,7 @@ impl AppState {
     pub fn new(db: Database) -> Self {
         Self {
             db: Arc::new(db),
-            rate_limiter: Arc::new(RateLimiter::default()),
+            rate_limiter: Arc::new(RateLimiter::from_env()),
         }
     }
 

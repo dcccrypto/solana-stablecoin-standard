@@ -77,19 +77,34 @@ Rate limiting applies to **all authenticated endpoints**. The public health endp
 
 ## Configuration
 
-In the current implementation the limiter parameters are set at compile time via `RateLimiter::default()`:
+Since **SSS-010**, rate-limit parameters are read from environment variables at startup (no recompile needed):
 
-```rust
-// backend/src/rate_limit.rs
-impl Default for RateLimiter {
-    fn default() -> Self {
-        // 60 token burst, refills at 1 token/second (= 60 req/min sustained)
-        Self::new(60, 1.0)
-    }
-}
+| Variable | Default | Description |
+|---|---|---|
+| `RATE_LIMIT_CAPACITY` | `60` | Burst size — maximum tokens a bucket can hold |
+| `RATE_LIMIT_RPS` | `1.0` | Refill rate — tokens added per second per key |
+
+Invalid or missing values fall back to the defaults and emit a warning log line.
+
+**Examples:**
+
+```bash
+# Allow 120-request bursts and 2 req/sec sustained
+RATE_LIMIT_CAPACITY=120 RATE_LIMIT_RPS=2.0 ./sss-backend
+
+# Docker / compose
+environment:
+  - RATE_LIMIT_CAPACITY=30
+  - RATE_LIMIT_RPS=0.5
 ```
 
-To change the limits, update `capacity` and `refill_per_second` in `Default` and recompile. Future work (SSS-010 or later) may expose these as environment variables.
+At startup the backend logs the active configuration:
+
+```
+INFO sss_backend: Rate limiter configured: capacity=60 tokens, refill=1 tokens/sec
+```
+
+The compile-time defaults (`RateLimiter::default()`) remain unchanged and are used in test fixtures that do not set these variables.
 
 ---
 
