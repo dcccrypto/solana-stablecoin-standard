@@ -130,3 +130,11 @@ pub struct EventsQuery {
     pub token_mint: Option<String>,
     pub limit: Option<u32>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ApiKeyEntry {
+    pub id: String,
+    pub key: String,
+    pub label: String,
+    pub created_at: String,
+}

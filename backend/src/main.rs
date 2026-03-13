@@ -1,9 +1,11 @@
+mod auth;
 mod db;
 mod error;
 mod models;
 mod routes;
 
 use axum::{
+    middleware,
     routing::{delete, get, post},
     Router,
 };
@@ -13,8 +15,10 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use auth::require_api_key;
 use db::Database;
 use routes::{
+    apikeys::{create_api_key, delete_api_key, list_api_keys},
     compliance::{add_blacklist, get_audit, get_blacklist},
     events::events,
     health::health,
@@ -57,6 +61,9 @@ async fn main() {
         .route("/api/compliance/audit", get(get_audit))
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
         .route("/api/webhooks/:id", delete(delete_webhook))
+        .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
+        .route("/api/admin/keys/:id", delete(delete_api_key))
+        .layer(middleware::from_fn_with_state(db.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(db);
@@ -88,8 +95,11 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    fn build_app() -> Router<()> {
+    fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
+        // Pre-create an API key for tests
+        let key_entry = db.create_api_key("test").expect("Failed to create test API key");
+        let test_key = key_entry.key.clone();
         let db = Arc::new(db);
 
         let cors = CorsLayer::new()
@@ -97,7 +107,7 @@ mod tests {
             .allow_methods(Any)
             .allow_headers(Any);
 
-        Router::new()
+        let app = Router::new()
             .route("/api/health", get(health))
             .route("/api/mint", post(mint))
             .route("/api/burn", post(burn))
@@ -107,13 +117,19 @@ mod tests {
             .route("/api/compliance/audit", get(get_audit))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
             .route("/api/webhooks/:id", delete(delete_webhook))
+            .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
+            .route("/api/admin/keys/:id", delete(delete_api_key))
+            .layer(middleware::from_fn_with_state(db.clone(), require_api_key))
             .layer(cors)
-            .with_state(db)
+            .with_state(db);
+
+        (app, test_key)
     }
 
     #[tokio::test]
     async fn test_health_check() {
-        let app = build_app();
+        // Health is public — no key needed
+        let (app, _key) = build_app();
         let response = app
             .oneshot(
                 Request::builder()
@@ -128,8 +144,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_auth_rejects_missing_key() {
+        let (app, _key) = build_app();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/supply")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_auth_rejects_bad_key() {
+        let (app, _key) = build_app();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/supply")
+                    .header("X-Api-Key", "sss_notarealkey000000000000000000000000000000000000")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
     async fn test_mint_event() {
-        let app = build_app();
+        let (app, key) = build_app();
         let body = serde_json::json!({
             "token_mint": "So11111111111111111111111111111111111111112",
             "amount": 1000000,
@@ -142,6 +191,7 @@ mod tests {
                     .method(Method::POST)
                     .uri("/api/mint")
                     .header("content-type", "application/json")
+                    .header("X-Api-Key", key)
                     .body(Body::from(body.to_string()))
                     .unwrap(),
             )
@@ -152,7 +202,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_burn_event() {
-        let app = build_app();
+        let (app, key) = build_app();
         let body = serde_json::json!({
             "token_mint": "So11111111111111111111111111111111111111112",
             "amount": 500000,
@@ -165,6 +215,7 @@ mod tests {
                     .method(Method::POST)
                     .uri("/api/burn")
                     .header("content-type", "application/json")
+                    .header("X-Api-Key", key)
                     .body(Body::from(body.to_string()))
                     .unwrap(),
             )
@@ -226,12 +277,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_events_endpoint() {
-        let app = build_app();
+        let (app, key) = build_app();
         let response = app
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
                     .uri("/api/events")
+                    .header("X-Api-Key", key)
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -242,12 +294,31 @@ mod tests {
 
     #[tokio::test]
     async fn test_blacklist_endpoint() {
-        let app = build_app();
+        let (app, key) = build_app();
         let response = app
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
                     .uri("/api/compliance/blacklist")
+                    .header("X-Api-Key", key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_api_key_management() {
+        let (app, key) = build_app();
+        // List keys — should include the bootstrap key
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/admin/keys")
+                    .header("X-Api-Key", key)
                     .body(Body::empty())
                     .unwrap(),
             )

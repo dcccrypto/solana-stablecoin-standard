@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{AuditEntry, BlacklistEntry, BurnEvent, MintEvent, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, MintEvent, WebhookEntry};
 
 pub struct Database {
     pub conn: Mutex<Connection>,
@@ -23,6 +23,12 @@ impl Database {
     fn init_schema(&self) -> Result<(), AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         conn.execute_batch("
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id TEXT PRIMARY KEY,
+                key TEXT NOT NULL UNIQUE,
+                label TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS mint_events (
                 id TEXT PRIMARY KEY,
                 token_mint TEXT NOT NULL,
@@ -314,6 +320,58 @@ impl Database {
     pub fn delete_webhook(&self, id: &str) -> Result<bool, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let rows = conn.execute("DELETE FROM webhooks WHERE id = ?1", params![id])?;
+        Ok(rows > 0)
+    }
+
+    // ── API key management ────────────────────────────────────────────────
+
+    /// Generate and store a new random API key, returning the full key once.
+    pub fn create_api_key(&self, label: &str) -> Result<ApiKeyEntry, AppError> {
+        use uuid::Uuid;
+        let id = Uuid::new_v4().to_string();
+        // 32-byte random hex string prefixed with "sss_"
+        let raw = Uuid::new_v4().simple().to_string() + &Uuid::new_v4().simple().to_string();
+        let key = format!("sss_{}", &raw[..48]);
+        let created_at = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO api_keys (id, key, label, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![id, key, label, created_at],
+        )?;
+        Ok(ApiKeyEntry { id, key, label: label.to_string(), created_at })
+    }
+
+    /// Validate an API key — returns true if it exists in the DB.
+    pub fn validate_api_key(&self, key: &str) -> Result<bool, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM api_keys WHERE key = ?1",
+            params![key],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    /// List all keys (key values redacted by caller).
+    pub fn list_api_keys(&self) -> Result<Vec<ApiKeyEntry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, key, label, created_at FROM api_keys ORDER BY created_at DESC",
+        )?;
+        let entries = stmt.query_map([], |row| {
+            Ok(ApiKeyEntry {
+                id: row.get(0)?,
+                key: row.get(1)?,
+                label: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(entries)
+    }
+
+    pub fn delete_api_key(&self, id: &str) -> Result<bool, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let rows = conn.execute("DELETE FROM api_keys WHERE id = ?1", params![id])?;
         Ok(rows > 0)
     }
 }
