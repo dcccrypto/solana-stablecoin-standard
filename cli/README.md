@@ -1,6 +1,6 @@
 # `sss-token` CLI
 
-A command-line tool for **stablecoin managers** on Solana. Use it to deploy and operate SPL tokens that follow the [Solana Stablecoin Standard](https://superteam.fun/earn/listing/build-the-solana-stablecoin-standard-bounty) (SSS), with support for Token-2022 and extensions (metadata, freeze, pause, etc.).
+A command-line tool for **stablecoin managers** on Solana. Use it to deploy and operate SPL tokens that follow the [Solana Stablecoin Standard](https://superteam.fun/earn/listing/build-the-solana-stablecoin-standard-bounty) (SSS), with support for Token-2022 and extensions (metadata, freeze, pause, transfer-hook blacklist, etc.).
 
 ---
 
@@ -8,7 +8,9 @@ A command-line tool for **stablecoin managers** on Solana. Use it to deploy and 
 
 - [Install & build](#install--build)
 - [Two ways to use the CLI](#two-ways-to-use-the-cli)
+- [SSS-1 vs SSS-2](#sss-1-vs-sss-2)
 - [Tutorial: Deploy a new stablecoin (SSS-1)](#tutorial-deploy-a-new-stablecoin-sss-1)
+- [Tutorial: Deploy with blacklist (SSS-2)](#tutorial-deploy-with-blacklist-sss-2)
 - [Tutorial: Manage an existing stablecoin](#tutorial-manage-an-existing-stablecoin)
 - [Configuration reference](#configuration-reference)
 - [Commands reference](#commands-reference)
@@ -47,13 +49,29 @@ npm run dev -- init --preset sss-1
 
 ## Two ways to use the CLI
 
-1. **You don’t have a stablecoin yet**  
-   Create a config (or use a preset), then deploy a new Token-2022 mint with the CLI. The config’s `mint` field is left empty and is filled after deployment.
+1. **You don't have a stablecoin yet**
+   Create a config (or use a preset), then deploy a new Token-2022 mint with the CLI. The config's `mint` field is left empty and is filled after deployment.
 
-2. **You already have a stablecoin**  
-   Point the CLI at your existing mint by setting `[stablecoin] mint = "<your-mint-address>"` in the config. Use the same config to run operations (mint, burn, freeze, status, etc.).
+2. **You already have a stablecoin**
+   Point the CLI at your existing mint by setting `[stablecoin] mint = "<your-mint-address>"` in the config. Use the same config to run operations (mint, burn, freeze, blacklist, status, etc.).
 
 All commands are **config-driven**: by default the CLI looks for `sss-token.config.toml` in the current directory. Override with `--config <path>` when needed.
+
+---
+
+## SSS-1 vs SSS-2
+
+| Feature | SSS-1 | SSS-2 |
+|---------|-------|-------|
+| On-chain metadata (name, symbol, URI) | Required | Required |
+| Mint / freeze / metadata authorities | Required | Required |
+| Token-2022 (SPL Token Extensions) | Required | Required |
+| Transfer hook (blacklist program) | - | Required |
+| Blacklist add / remove / check | - | Yes |
+| Pausable extension | Optional | Optional |
+| Permanent delegate extension | Optional | Optional |
+
+**SSS-2** is SSS-1 plus an on-chain **blacklist transfer hook**. The hook is an Anchor program (see `transfer_hooks/blacklist/`) that blocks transfers to or from blacklisted wallets. The CLI provides commands to manage the blacklist without writing any code.
 
 ---
 
@@ -62,8 +80,6 @@ All commands are **config-driven**: by default the CLI looks for `sss-token.conf
 This walkthrough creates a new Token-2022 mint with metadata (name, symbol, URI) on devnet.
 
 ### Step 1: Create a config from a preset
-
-Generate a starter config for the SSS-1 profile:
 
 ```bash
 sss-token init --preset sss-1
@@ -82,32 +98,28 @@ This creates `sss-token.config.toml` in the current directory with:
 
 Open `sss-token.config.toml` and adjust:
 
-- **`[stablecoin]`**  
-  - `name`, `symbol`, `decimals`  
+- **`[stablecoin]`**
+  - `name`, `symbol`, `decimals`
   - `uri` (optional; for metadata, e.g. a JSON or info URL)
-- **`[authorities]`**  
-  - Paths to keypair JSON files for mint, freeze, and metadata.  
-  - The **mint authority** keypair is used as the transaction payer and mint signer.  
+- **`[authorities]`**
+  - Paths to keypair JSON files for mint, freeze, and metadata.
+  - The **mint authority** keypair is used as the transaction payer and mint signer.
   - Ensure these files exist and correspond to wallets with devnet SOL if you use devnet.
 
 For a full list of options, see `example.config.toml`.
 
 ### Step 3: Deploy the mint
 
-Run:
-
 ```bash
-sss-token init --custom config.toml
+sss-token init --custom sss-token.config.toml
 ```
-
-(You can use `config.toml` or `sss-token.config.toml`; if you created the file in step 1, `sss-token init --custom sss-token.config.toml` is equivalent.)
 
 The CLI will:
 
 1. Create a new Token-2022 mint account (with MetadataPointer extension).
 2. Initialize the base mint (decimals, mint authority, freeze authority).
 3. Call `tokenMetadataInitialize` to add name, symbol, and URI on-chain.
-4. Write the new mint address into the config’s `[stablecoin] mint` field.
+4. Write the new mint address into the config's `[stablecoin] mint` field.
 
 Example output:
 
@@ -124,7 +136,89 @@ Updated config with mint address: /path/to/sss-token.config.toml
 Deployment complete.
 ```
 
-After this, the same config file is ready for all management commands (mint, burn, freeze, status, etc.).
+After this, the same config file is ready for all management commands.
+
+---
+
+## Tutorial: Deploy with blacklist (SSS-2)
+
+SSS-2 adds a **transfer-hook blacklist** to the mint. Every transfer passes through an on-chain Anchor program that checks whether the sender or recipient is blacklisted.
+
+### Prerequisites
+
+You need a deployed instance of the `blacklist_hook` program (see `transfer_hooks/blacklist/`). Build and deploy it with Anchor:
+
+```bash
+cd transfer_hooks/blacklist
+anchor build
+anchor deploy          # note the program ID printed
+```
+
+### Step 1: Create a config
+
+```bash
+sss-token init --preset sss-2
+```
+
+### Step 2: Fill in the hook program ID
+
+Open `sss-token.config.toml` and set:
+
+```toml
+[extensions.transferHook]
+enabled = true
+programId = "<your-deployed-blacklist_hook-program-id>"
+```
+
+Also verify that `[authorities] blacklist` points to the keypair that should act as the blacklist admin.
+
+### Step 3: Deploy
+
+```bash
+sss-token init --custom sss-token.config.toml
+```
+
+The CLI will:
+
+1. Create the Token-2022 mint with **MetadataPointer** and **TransferHook** extensions.
+2. Initialize on-mint metadata (name, symbol, URI).
+3. Initialize the blacklist hook's **Config PDA** (sets the admin authority).
+4. Initialize the **ExtraAccountMetaList PDA** (tells Token-2022 which extra accounts the hook needs at transfer time).
+5. Write the new mint address into the config.
+
+Example output:
+
+```
+=== SSS deploy ===
+Standard: sss-2
+Cluster: devnet
+Token program: spl-token-2022
+Name / symbol / decimals: MyUSD MUSD 6
+Metadata extension: enabled (on-mint name, symbol, uri)
+Transfer hook extension: enabled (program: 84rPjkmm...)
+
+Created mint: 9Xz...abc
+Initializing blacklist hook on-chain...
+Initialized blacklist config PDA: Cfg...xyz
+Initialized extra-account-metas PDA: Ext...xyz
+Updated config with mint address: /path/to/sss-token.config.toml
+Deployment complete.
+```
+
+### Step 4: Use blacklist commands
+
+```bash
+# Block a wallet from sending or receiving the stablecoin
+sss-token blacklist add <wallet-address>
+
+# Unblock a wallet
+sss-token blacklist remove <wallet-address>
+
+# Check if a wallet is blacklisted
+sss-token blacklist check <wallet-address>
+```
+
+All other operations (`mint`, `burn`, `freeze`, `thaw`, `status`, etc.) work exactly like SSS-1.
 
 ---
 
@@ -138,7 +232,9 @@ If the stablecoin is already deployed, you only need a config that points at it.
    - **mint** authority (for minting, and often as payer)
    - **freeze** authority (for freeze/thaw)
    - **metadata** authority (for metadata updates; Token-2022 MetadataPointer)
-4. Set **`cluster`** and optionally **`rpcUrl`** to match the mint’s network.
+   - **blacklist** authority (SSS-2 only; for managing the blacklist)
+4. Set **`cluster`** and optionally **`rpcUrl`** to match the mint's network.
+5. If using SSS-2, set **`[extensions.transferHook] enabled = true`** and the **`programId`**.
 
 No need to run `init --custom` again; use the operations below.
 
@@ -178,15 +274,16 @@ Paths to keypair JSON files (Solana keypair format). `~` is expanded.
 | `metadata`           | Metadata (MetadataPointer) update authority. |
 | `permanentDelegate`  | Optional. Permanent delegate authority. |
 | `pause`              | Optional. Pause authority (Pausable extension). |
+| `blacklist`          | Optional. Blacklist admin authority (SSS-2 / transfer hook). |
 
 ### `[extensions.*]`
 
 Which Token-2022 extensions are enabled (used at deploy time for new mints).
 
-- **`[extensions.metadata]`** – `enabled = true/false`. SSS-1 uses on-mint metadata.
-- **`[extensions.pausable]`** – `enabled = true/false`.
-- **`[extensions.permanentDelegate]`** – `enabled = true/false`.
-- **`[extensions.transferHook]`** – `enabled = true/false`, `programId = "<id>"`.
+- **`[extensions.metadata]`** -- `enabled = true/false`. SSS-1 and SSS-2 both use on-mint metadata.
+- **`[extensions.pausable]`** -- `enabled = true/false`.
+- **`[extensions.permanentDelegate]`** -- `enabled = true/false`.
+- **`[extensions.transferHook]`** -- `enabled = true/false`, `programId = "<id>"`. Required for SSS-2.
 
 See `example.config.toml` for a full sample.
 
@@ -194,7 +291,7 @@ See `example.config.toml` for a full sample.
 
 ## Commands reference
 
-### `init` – Create config or deploy mint
+### `init` -- Create config or deploy mint
 
 ```bash
 sss-token init --preset sss-1
@@ -202,61 +299,97 @@ sss-token init --preset sss-2
 sss-token init --custom <path-to-config.toml>
 ```
 
-- **`--preset sss-1`** / **`--preset sss-2`**  
-  Writes a new `sss-token.config.toml` (or current directory default) with that preset. Does not deploy.
-- **`--custom <path>`**  
-  Deploys a new mint from the given config. Requires `mint = ""`. Writes the new mint address back into the config.
+- **`--preset sss-1`** / **`--preset sss-2`**
+  Writes a new `sss-token.config.toml` with that preset. Does not deploy.
+- **`--custom <path>`**
+  Deploys a new mint from the given config. Requires `mint = ""`. Writes the new mint address back into the config. For SSS-2, also initializes the blacklist hook's Config and ExtraAccountMetas PDAs.
 
 ---
 
-### `mint` – Mint tokens to a recipient
+### `mint` -- Mint tokens to a recipient
 
 ```bash
 sss-token mint <recipient> <amount> [--config <path>]
 ```
 
-- **`<recipient>`** – Solana wallet address (base58). The CLI creates the associated token account (ATA) for the mint if it does not exist.
-- **`<amount>`** – Amount in **raw units** (smallest decimals). For 6 decimals, `1000000` = 1 token.
-
-Uses the mint authority from config and the token program (Token-2022 or legacy) from `[stablecoin]`.
+- **`<recipient>`** -- Solana wallet address (base58). The CLI creates the associated token account (ATA) for the mint if it does not exist.
+- **`<amount>`** -- Amount in **raw units** (smallest decimals). For 6 decimals, `1000000` = 1 token.
 
 ---
 
-### `burn` – Burn tokens
+### `burn` -- Burn tokens
 
 ```bash
 sss-token burn <amount> [--config <path>]
 ```
 
-Burns `<amount>` (raw units) from the **mint authority’s** token account for this mint. That account must exist and hold at least `<amount>`.
+Burns `<amount>` (raw units) from the **mint authority's** token account for this mint.
 
 ---
 
-### `freeze` / `thaw` – Freeze or unfreeze a token account
+### `freeze` / `thaw` -- Freeze or unfreeze a token account
 
 ```bash
 sss-token freeze <address> [--config <path>]
 sss-token thaw <address> [--config <path>]
 ```
 
-- **`<address>`** – The **token account** (not the wallet) to freeze or thaw. Use the ATA or any token account for this mint.
-
-Requires the freeze authority from config.
+- **`<address>`** -- The **token account** (not the wallet) to freeze or thaw.
 
 ---
 
-### `pause` / `unpause` – Pause or resume mint activity (Token-2022 Pausable)
+### `pause` / `unpause` -- Pause or resume mint activity (Token-2022 Pausable)
 
 ```bash
 sss-token pause [--config <path>]
 sss-token unpause [--config <path>]
 ```
 
-Only apply to mints that use the Token-2022 **Pausable** extension. Requires the pause authority (e.g. `[authorities] pause` in config).
+Only applies to mints with the Token-2022 **Pausable** extension.
 
 ---
 
-### `status` – Token and supply snapshot
+### `blacklist` -- Manage the transfer-hook blacklist (SSS-2)
+
+These commands interact with the on-chain blacklist Anchor program. They require:
+- `[extensions.transferHook] enabled = true` and a valid `programId` in the config.
+- `[authorities] blacklist` pointing to the blacklist admin keypair.
+
+#### `blacklist add` -- Block a wallet
+
+```bash
+sss-token blacklist add <wallet> [--config <path>]
+```
+
+Adds the wallet to the blacklist. Future transfers to or from this wallet will be rejected by the transfer hook. If the wallet has never been blacklisted before, a new on-chain PDA is created. If it was previously unblacklisted, the existing PDA is updated.
+
+#### `blacklist remove` -- Unblock a wallet
+
+```bash
+sss-token blacklist remove <wallet> [--config <path>]
+```
+
+Sets the wallet's blacklist entry to `blocked = false`. The PDA remains on-chain so the transfer hook can still resolve it, but transfers are allowed again.
+
+#### `blacklist check` -- Query blacklist status
+
+```bash
+sss-token blacklist check <wallet> [--config <path>]
+```
+
+Reads the wallet's blacklist PDA and prints whether it is currently blocked. This is a **read-only** operation (no transaction, no authority needed).
+
+Example output:
+
+```
+Wallet: 9abc...xyz
+Blacklist PDA: BLk...pda
+Blacklisted: true
+```
+
+---
+
+### `status` -- Token and supply snapshot
 
 ```bash
 sss-token status [--config <path>]
@@ -266,7 +399,7 @@ Prints config (standard, cluster, mint) and on-chain info: supply, decimals, and
 
 ---
 
-### `supply` – Total supply only
+### `supply` -- Total supply only
 
 ```bash
 sss-token supply [--config <path>]
@@ -276,63 +409,42 @@ Prints the current total supply (raw and human-readable) for the configured mint
 
 ---
 
-### `balance` – Balance of an address
+### `balance` -- Balance of an address
 
 ```bash
 sss-token balance <address> [--config <path>]
 ```
 
-- **`<address>`** – Wallet address (base58). The CLI resolves the **associated token account** for the configured mint and prints its balance (raw and human-readable). If the ATA does not exist, the balance is 0.
+- **`<address>`** -- Wallet address (base58). The CLI resolves the **associated token account** for the configured mint and prints its balance. If the ATA does not exist, the balance is 0.
 
 ---
 
-### `set-authority` – Update an authority (mint, freeze, metadata, pause, etc.)
-
-Stablecoins can have multiple authorities (mint, freeze, metadata pointer, pause, etc.). Use this command to change who controls them.
+### `set-authority` -- Update an authority
 
 ```bash
 sss-token set-authority <type> <new-authority> [--config <path>]
 ```
 
-- **`<type>`** – One of: `mint`, `freeze`, `metadata`, `pause`, `permanent-delegate`, etc., depending on the mint’s extensions.
-- **`<new-authority>`** – New authority public key (base58), or `none` to remove the authority (where the program allows it).
-
-The **current** authority is taken from config: the keypair for the corresponding authority (e.g. `authorities.mint` for `mint`, `authorities.metadata` for `metadata`). That keypair must sign the transaction.
+- **`<type>`** -- One of: `mint`, `freeze`, `metadata`, `pause`, `permanent-delegate`.
+- **`<new-authority>`** -- New authority public key (base58), or `none` to remove.
 
 Examples:
 
 ```bash
-# Set a new mint authority
 sss-token set-authority mint 9abc...xyz
-
-# Set a new metadata (MetadataPointer) authority
-sss-token set-authority metadata GuU4YH1v6DdkbZwh5Qi7prDxEupGFTtUaTU7EpzRHbQU
-
-# Remove freeze authority (if the program allows)
 sss-token set-authority freeze none
 ```
 
-Not all authority types exist on every mint; the CLI maps `<type>` to the correct Token-2022 `AuthorityType` (e.g. `MetadataPointer`, `PausableConfig`). If the mint does not have that extension, the transaction will fail on-chain.
-
 ---
 
-### `audit-log` – Recent transactions for the mint
+### `audit-log` -- Recent transactions for the mint
 
 ```bash
 sss-token audit-log [--limit <n>] [--config <path>] [--action <type>]
 ```
 
-- **`--limit <n>`** – How many recent signatures to fetch (default `20`, max `1000`).
-- **`--action <type>`** – Reserved for future filtering (e.g. `mint`, `burn`, `freeze`). For now it is informational only; the command prints all recent transactions involving the mint.
-
-The command calls `getSignaturesForAddress` on the mint and prints, for each transaction:
-
-- Signature
-- Slot
-- Error status
-- Block time (if available)
-
-This gives you a quick, chain-level audit trail to feed into more detailed analysis or an external explorer.
+- **`--limit <n>`** -- How many recent signatures to fetch (default `20`, max `1000`).
+- **`--action <type>`** -- Reserved for future filtering. Currently informational only.
 
 ---
 
@@ -340,18 +452,11 @@ This gives you a quick, chain-level audit trail to feed into more detailed analy
 
 After deployment, you can change who can mint, freeze, update metadata, or pause:
 
-1. Ensure the **current** authority keypair for that type is in your config (e.g. `authorities.metadata` for the metadata pointer).
+1. Ensure the **current** authority keypair for that type is in your config.
 2. Run:
    ```bash
    sss-token set-authority <type> <new-pubkey>
    ```
-3. To use the new authority for future CLI commands, update your config (e.g. point `authorities.metadata` to the new keypair path). The on-chain mint already has the new authority; the config only tells the CLI which keypair to use when signing.
+3. Update your config to point to the new keypair path for future CLI commands. The on-chain mint already has the new authority; the config only tells the CLI which keypair to use when signing.
 
----
-
-## Roadmap
-
-- **SSS-2**-specific features (e.g. blacklist, seize, audit log) when the standard is defined.
-- Optional **SDK** layer so the same logic can be used from scripts or other apps.
-
-As new commands or options are added, this README will be kept in sync.
+> **Note:** The blacklist admin authority is stored in the blacklist hook's Config PDA, not the mint itself. To change the blacklist admin, you would need to add a `set_admin` instruction to the hook program (see production hardening ideas in the hook README).

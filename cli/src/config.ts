@@ -45,6 +45,10 @@ export interface AuthoritiesSection {
    * Optional keypair JSON path for a pause authority (Pausable extension).
    */
   pause?: string;
+  /**
+   * Optional keypair JSON path for the blacklist admin (SSS-2 / transfer hook).
+   */
+  blacklist?: string;
 }
 
 export interface MetadataExtensionConfig {
@@ -173,6 +177,8 @@ export function writeDefaultConfig(
     ? path.resolve(process.cwd(), outPath)
     : defaultConfigPath();
 
+  const isSss2 = preset === "sss-2";
+
   const content = `
 # Solana Stablecoin Standard config
 # Preset: ${preset}
@@ -195,28 +201,32 @@ mint = ""
 mint = "~/.config/solana/id.json"
 freeze = "~/.config/solana/id.json"
 metadata = "~/.config/solana/id.json"
-# Optional: permanent delegate and pause authority (unused in SSS-1 preset)
+# Optional: permanent delegate and pause authority
 # permanentDelegate = ""
 # pause = ""
+${isSss2
+    ? '# Blacklist admin authority (required for SSS-2)\nblacklist = "~/.config/solana/id.json"'
+    : '# blacklist = "" # SSS-2 only: blacklist admin authority'}
 
 # Extensions configuration
 
 [extensions.metadata]
-# SSS-1: Metadata is required so wallets and explorers can display the token properly.
+# Metadata is required so wallets and explorers can display the token properly.
 enabled = true
 
 [extensions.pausable]
-# Optional: allow pausing all token activity. Disabled in SSS-1 preset.
+# Optional: allow pausing all token activity.
 enabled = false
 
 [extensions.permanentDelegate]
-# Optional: grant a permanent delegate power over transfers. Disabled in SSS-1 preset.
+# Optional: grant a permanent delegate power over transfers.
 enabled = false
 
 [extensions.transferHook]
-# Optional: route transfers through a custom hook program (e.g. blacklist). Disabled in SSS-1 preset.
-enabled = false
-programId = ""
+# Route transfers through a custom hook program (e.g. blacklist).
+${isSss2
+    ? '# SSS-2: Transfer hook is required for blacklist enforcement.\nenabled = true\n# Set this to your deployed blacklist_hook program ID before running init --custom.\nprogramId = ""'
+    : 'enabled = false\nprogramId = ""'}
 `.trimStart();
 
   fs.writeFileSync(filePath, content, { encoding: "utf8" });

@@ -16,6 +16,11 @@ import {
   runSetAuthority,
   runAuditLog,
 } from "./stablecoin/operations";
+import {
+  runBlacklistAdd,
+  runBlacklistRemove,
+  runBlacklistCheck,
+} from "./stablecoin/blacklist";
 
 const program = new Command();
 
@@ -214,6 +219,55 @@ program
       const cfg = loadConfig(opts.config);
       const limit = opts.limit ? Math.max(1, Math.min(1000, Number(opts.limit))) : 20;
       await runAuditLog(cfg, limit, opts.action);
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+    }
+  });
+
+const blacklist = program
+  .command("blacklist")
+  .description("Manage the on-chain blacklist (SSS-2 / transfer hook)");
+
+blacklist
+  .command("add")
+  .description("Add a wallet to the blacklist (blocks future transfers)")
+  .argument("<wallet>", "Wallet address to blacklist (base58)")
+  .option("--config <path>", "Path to config TOML")
+  .action(async (wallet: string, opts: { config?: string }) => {
+    try {
+      const cfg = loadConfig(opts.config);
+      await runBlacklistAdd(cfg, wallet);
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+    }
+  });
+
+blacklist
+  .command("remove")
+  .description("Remove a wallet from the blacklist (re-enables transfers)")
+  .argument("<wallet>", "Wallet address to unblacklist (base58)")
+  .option("--config <path>", "Path to config TOML")
+  .action(async (wallet: string, opts: { config?: string }) => {
+    try {
+      const cfg = loadConfig(opts.config);
+      await runBlacklistRemove(cfg, wallet);
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+    }
+  });
+
+blacklist
+  .command("check")
+  .description("Check whether a wallet is currently blacklisted")
+  .argument("<wallet>", "Wallet address to check (base58)")
+  .option("--config <path>", "Path to config TOML")
+  .action(async (wallet: string, opts: { config?: string }) => {
+    try {
+      const cfg = loadConfig(opts.config);
+      await runBlacklistCheck(cfg, wallet);
     } catch (err) {
       console.error((err as Error).message);
       process.exitCode = 1;

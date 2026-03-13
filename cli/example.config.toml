@@ -1,9 +1,15 @@
 # Example Solana Stablecoin Standard config
-# This file shows all available options that the CLI understands today.
+# This file shows all available options that the CLI understands.
+#
+# SSS-1: basic stablecoin with metadata, freeze authority, and optional pause.
+# SSS-2: everything in SSS-1 plus a transfer-hook blacklist that blocks
+#         transfers to/from blacklisted wallets on-chain.
+#
+# Duplicate this file and adjust for your deployment.
 
-standard = "sss-1"
-cluster = "devnet"
-rpcUrl = "" # optional: custom RPC endpoint
+standard = "sss-2"          # "sss-1" or "sss-2"
+cluster = "devnet"           # "devnet", "testnet", "mainnet-beta"
+rpcUrl = ""                  # optional: custom RPC endpoint
 
 [stablecoin]
 # Human-readable token metadata
@@ -11,9 +17,12 @@ name = "Example Dollar"
 symbol = "EXD"
 decimals = 6
 
-# Use "spl-token-2022" for Token Extensions support
-# You can also set "spl-token" if you don't want extensions.
+# Use "spl-token-2022" for Token Extensions support.
+# You can also set "spl-token" if you don't want extensions (SSS-1 only).
 tokenProgram = "spl-token-2022"
+
+# URI for on-chain metadata (e.g. a JSON info page).
+uri = ""
 
 # If you haven't deployed the stablecoin yet, leave this empty.
 # After deployment, this will be populated with the on-chain mint address.
@@ -31,10 +40,14 @@ metadata = "~/.config/solana/id.json"
 # permanentDelegate = "/path/to/permanent-delegate-keypair.json"
 # pause = "/path/to/pause-authority-keypair.json"
 
+# SSS-2 only: blacklist admin authority. This keypair controls who can
+# add/remove wallets from the on-chain blacklist.
+blacklist = "~/.config/solana/id.json"
+
 # ---- Extensions -------------------------------------------------------------
 
 [extensions.metadata]
-# SSS-1: Metadata is required so wallets and explorers can display the token properly.
+# Metadata is required so wallets and explorers can display the token properly.
 enabled = true
 
 [extensions.pausable]
@@ -46,7 +59,9 @@ enabled = false
 enabled = false
 
 [extensions.transferHook]
-# Optional: route transfers through a custom hook program (e.g. blacklist logic).
-enabled = false
-programId = "" # set this if enabled
-
+# SSS-2: route transfers through the blacklist hook program.
+# For SSS-1, leave enabled = false.
+enabled = true
+# Set this to your deployed blacklist_hook program ID.
+# Example (local dev): "84rPjkmmoP3oYZVxjtL2rdcT6hC5Rts6N5XzJTFcJEk6"
+programId = ""

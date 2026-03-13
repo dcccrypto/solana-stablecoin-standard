@@ -1,5 +1,5 @@
 import path from "path";
-import { Keypair, SystemProgram, Transaction } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import {
   loadConfig,
   updateConfigMint,
@@ -11,6 +11,7 @@ import {
   createMint,
   createInitializeMint2Instruction,
   createInitializeMetadataPointerInstruction,
+  createInitializeTransferHookInstruction,
   tokenMetadataInitialize,
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
@@ -18,6 +19,7 @@ import {
   getMintLen,
 } from "@solana/spl-token";
 import { sendAndConfirmTransaction } from "@solana/web3.js";
+import { initializeBlacklistHook } from "./blacklist";
 
 /** Default assumed mint size after metadata realloc (name/symbol/uri + padding). */
 const ASSUMED_FINAL_MINT_SIZE = 4096;
@@ -58,6 +60,25 @@ export async function deployStablecoinFromConfig(
   const useToken2022 = cfg.stablecoin.tokenProgram === "spl-token-2022";
   const metadataEnabled =
     useToken2022 && (cfg.extensions?.metadata?.enabled === true);
+  const transferHookEnabled =
+    useToken2022 && (cfg.extensions?.transferHook?.enabled === true);
+  const transferHookProgramId = transferHookEnabled
+    ? new PublicKey(cfg.extensions!.transferHook!.programId)
+    : null;
+
+  if (transferHookEnabled && !cfg.extensions?.transferHook?.programId?.trim()) {
+    throw new Error(
+      "Transfer hook is enabled but [extensions.transferHook] programId is empty. " +
+      "Set it to your deployed blacklist_hook program ID.",
+    );
+  }
+
+  if (cfg.standard === "sss-2" && !transferHookEnabled) {
+    throw new Error(
+      "SSS-2 requires [extensions.transferHook] enabled = true. " +
+      "Enable it or use standard = \"sss-1\".",
+    );
+  }
 
   const programId = useToken2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
 
@@ -74,66 +95,101 @@ export async function deployStablecoinFromConfig(
   if (metadataEnabled) {
     console.log("Metadata extension: enabled (on-mint name, symbol, uri)");
   }
+  if (transferHookEnabled) {
+    console.log("Transfer hook extension: enabled (program:", transferHookProgramId!.toBase58() + ")");
+  }
   console.log("");
 
   let mintAddress: string;
 
-  if (metadataEnabled) {
-    const metadataAuthority = loadKeypair(cfg.authorities.metadata).publicKey;
+  if (metadataEnabled || transferHookEnabled) {
+    const metadataAuthority = metadataEnabled
+      ? loadKeypair(cfg.authorities.metadata).publicKey
+      : null;
     const mintKeypair = Keypair.generate();
     const mint = mintKeypair.publicKey;
 
-    // Allocate only for MetadataPointer. tokenMetadataInitialize reallocs later.
-    const mintSpace = getMintLen([ExtensionType.MetadataPointer]);
+    const extensions: ExtensionType[] = [];
+    if (metadataEnabled) extensions.push(ExtensionType.MetadataPointer);
+    if (transferHookEnabled) extensions.push(ExtensionType.TransferHook);
+
+    const mintSpace = getMintLen(extensions);
     const lamports = await connection.getMinimumBalanceForRentExemption(
       ASSUMED_FINAL_MINT_SIZE,
     );
 
-    const tx = new Transaction()
-      .add(
-        SystemProgram.createAccount({
-          fromPubkey: payer.publicKey,
-          newAccountPubkey: mint,
-          space: mintSpace,
-          lamports,
-          programId: TOKEN_2022_PROGRAM_ID,
-        }),
-      )
-      .add(
+    const tx = new Transaction().add(
+      SystemProgram.createAccount({
+        fromPubkey: payer.publicKey,
+        newAccountPubkey: mint,
+        space: mintSpace,
+        lamports,
+        programId: TOKEN_2022_PROGRAM_ID,
+      }),
+    );
+
+    if (metadataEnabled) {
+      tx.add(
         createInitializeMetadataPointerInstruction(
           mint,
-          metadataAuthority,
+          metadataAuthority!,
           mint,
-          TOKEN_2022_PROGRAM_ID,
-        ),
-      )
-      .add(
-        createInitializeMint2Instruction(
-          mint,
-          decimals,
-          mintAuthority,
-          freezeAuthority,
           TOKEN_2022_PROGRAM_ID,
         ),
       );
+    }
+
+    if (transferHookEnabled) {
+      const hookAuthority = cfg.authorities.blacklist?.trim()
+        ? loadKeypair(cfg.authorities.blacklist).publicKey
+        : payer.publicKey;
+      tx.add(
+        createInitializeTransferHookInstruction(
+          mint,
+          hookAuthority,
+          transferHookProgramId!,
+          TOKEN_2022_PROGRAM_ID,
+        ),
+      );
+    }
+
+    tx.add(
+      createInitializeMint2Instruction(
+        mint,
+        decimals,
+        mintAuthority,
+        freezeAuthority,
+        TOKEN_2022_PROGRAM_ID,
+      ),
+    );
 
     await sendAndConfirmTransaction(connection, tx, [payer, mintKeypair], {
       commitment: "confirmed",
     });
 
-    await tokenMetadataInitialize(
-      connection,
-      payer,
-      mint,
-      metadataAuthority,
-      payer,
-      name,
-      symbol,
-      uri,
-      [],
-      { commitment: "confirmed" },
-      TOKEN_2022_PROGRAM_ID,
-    );
+    if (metadataEnabled) {
+      await tokenMetadataInitialize(
+        connection,
+        payer,
+        mint,
+        metadataAuthority!,
+        payer,
+        name,
+        symbol,
+        uri,
+        [],
+        { commitment: "confirmed" },
+        TOKEN_2022_PROGRAM_ID,
+      );
+    }
+
+    if (transferHookEnabled) {
+      console.log("Initializing blacklist hook on-chain...");
+      const blacklistAdmin = cfg.authorities.blacklist?.trim()
+        ? loadKeypair(cfg.authorities.blacklist)
+        : payer;
+      await initializeBlacklistHook(connection, transferHookProgramId!, blacklistAdmin, mint);
+    }
 
     mintAddress = mint.toBase58();
   } else {
