@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use spl_token::state::Account as SplTokenAccount;
 
 declare_id!("6HNhRDkViEECPf9sE6bePXePaJQjVN8PJG2v2zbetosY");
 
@@ -45,6 +46,32 @@ pub mod blacklist {
 
         // The `entry` account is closed automatically by Anchor via
         // the `close = authority` constraint on the context.
+        Ok(())
+    }
+
+    /// Hook-style execute entrypoint used by a transfer hook to check
+    /// if either the source or destination owner is blacklisted.
+    pub fn execute(ctx: Context<Execute>) -> Result<()> {
+        let source_data = ctx.accounts.source.try_borrow_data()?;
+        let dest_data = ctx.accounts.destination.try_borrow_data()?;
+
+        let source_token = SplTokenAccount::unpack_from_slice(&source_data)
+            .map_err(|_| error!(BlacklistError::Unauthorized))?;
+        let dest_token = SplTokenAccount::unpack_from_slice(&dest_data)
+            .map_err(|_| error!(BlacklistError::Unauthorized))?;
+
+        let owners = [source_token.owner, dest_token.owner];
+        for owner in owners {
+            let (pda, _) =
+                Pubkey::find_program_address(&[b"blacklist", owner.as_ref()], &crate::ID);
+            if ctx
+                .remaining_accounts
+                .iter()
+                .any(|ai| *ai.key == pda && !ai.data_is_empty())
+            {
+                return err!(BlacklistError::Blacklisted);
+            }
+        }
         Ok(())
     }
 }
@@ -145,6 +172,21 @@ pub struct UnblacklistAccount<'info> {
 pub enum BlacklistError {
     #[msg("Caller is not authorized to modify the blacklist")]
     Unauthorized,
+
+    #[msg("Transfer involves a blacklisted account")]
+    Blacklisted,
 }
 
-
+/// Hook-style execute entrypoint.
+/// In a real Token-2022 TransferHook setup, the token program would pass
+/// the source and destination token accounts and any extra PDAs required
+/// by the hook (such as blacklist entries) as remaining accounts.
+#[derive(Accounts)]
+pub struct Execute<'info> {
+    /// Source token account of the transfer.
+    /// CHECK: validated as token accounts in the handler.
+    pub source: UncheckedAccount<'info>,
+    /// Destination token account of the transfer.
+    /// CHECK: validated as token accounts in the handler.
+    pub destination: UncheckedAccount<'info>,
+}

@@ -1,6 +1,10 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { PublicKey, SystemProgram } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
+import {
+  createMint,
+  getOrCreateAssociatedTokenAccount,
+} from "@solana/spl-token";
 import { expect } from "chai";
 import { Blacklist } from "../target/types/blacklist";
 
@@ -92,6 +96,88 @@ describe("blacklist", () => {
         .rpc();
     } catch {
       threw = true;
+    }
+    expect(threw).to.be.true;
+  });
+
+  it("execute blocks transfers when blacklist PDA is present", async () => {
+    const connection = provider.connection;
+    const payer = provider.wallet.payer;
+
+    // create mint and two token accounts
+    const mint = await createMint(
+      connection,
+      payer,
+      payer.publicKey,
+      null,
+      0,
+    );
+
+    const ownerA = provider.wallet.publicKey;
+    const ownerB = Keypair.generate().publicKey;
+
+    const sourceToken = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mint,
+      ownerA,
+    );
+    const destToken = await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      mint,
+      ownerB,
+    );
+
+    // blacklist ownerA so its blacklist PDA exists
+    const [entryPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("blacklist"), ownerA.toBuffer()],
+      program.programId,
+    );
+
+    await program.methods
+      .blacklistAccount()
+      .accounts({
+        config: configPda,
+        authority: provider.wallet.publicKey,
+        accountToBlacklist: ownerA,
+        entry: entryPda,
+        systemProgram: SystemProgram.programId,
+      } as any)
+      .rpc();
+
+    // 1) execute without passing blacklist PDA -> should succeed
+    await program.methods
+      .execute()
+      .accounts({
+        source: sourceToken.address,
+        destination: destToken.address,
+      } as any)
+      .rpc();
+
+    // 2) execute with blacklist PDA -> should fail with Blacklisted
+    let threw = false;
+    try {
+      await program.methods
+        .execute()
+        .accounts({
+          source: sourceToken.address,
+          destination: destToken.address,
+        } as any)
+        .remainingAccounts([
+          {
+            pubkey: entryPda,
+            isWritable: false,
+            isSigner: false,
+          },
+        ])
+        .rpc();
+    } catch (err: any) {
+      threw = true;
+      const anchorErr = err as anchor.AnchorError;
+      if (anchorErr.error) {
+        expect(anchorErr.error.errorCode.code).to.equal("Blacklisted");
+      }
     }
     expect(threw).to.be.true;
   });
