@@ -1,6 +1,40 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Node
 node_modules/
 dist/
-target/
-*.db
+.yarn/
+
+# Solana / Anchor
+.anchor/
+test-ledger/
+*.so
+*.json
+!package.json
+!tsconfig.json
+!Anchor.toml
+
+# Secrets
+*.pem
+*.key
+id.json
+wallet.json
 .env
+.env.*
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
 .DS_Store
+Thumbs.db

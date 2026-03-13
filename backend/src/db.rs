@@ -23,12 +23,6 @@ impl Database {
     fn init_schema(&self) -> Result<(), AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         conn.execute_batch("
-            CREATE TABLE IF NOT EXISTS api_keys (
-                id TEXT PRIMARY KEY,
-                key TEXT NOT NULL UNIQUE,
-                label TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            );
             CREATE TABLE IF NOT EXISTS mint_events (
                 id TEXT PRIMARY KEY,
                 token_mint TEXT NOT NULL,
@@ -62,6 +56,12 @@ impl Database {
                 id TEXT PRIMARY KEY,
                 url TEXT NOT NULL,
                 events TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id TEXT PRIMARY KEY,
+                key TEXT NOT NULL UNIQUE,
+                label TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
         ")?;
@@ -222,6 +222,12 @@ impl Database {
         })
     }
 
+    pub fn remove_blacklist(&self, id: &str) -> Result<bool, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let rows = conn.execute("DELETE FROM blacklist WHERE id = ?1", params![id])?;
+        Ok(rows > 0)
+    }
+
     pub fn is_blacklisted(&self, address: &str) -> Result<bool, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let count: i64 = conn.query_row(
@@ -265,12 +271,49 @@ impl Database {
         })
     }
 
-    pub fn get_audit_log(&self) -> Result<Vec<AuditEntry>, AppError> {
+    pub fn get_audit_log(
+        &self,
+        address: Option<&str>,
+        action: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<AuditEntry>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let mut stmt = conn.prepare(
-            "SELECT id, action, address, details, created_at FROM audit_log ORDER BY created_at DESC",
-        )?;
-        let entries = stmt.query_map([], |row| {
+
+        // Build query dynamically based on optional filters.
+        let mut sql = String::from(
+            "SELECT id, action, address, details, created_at FROM audit_log WHERE 1=1",
+        );
+        if address.is_some() {
+            sql.push_str(" AND address = ?1");
+        }
+        if action.is_some() {
+            sql.push_str(if address.is_some() {
+                " AND action = ?2"
+            } else {
+                " AND action = ?1"
+            });
+        }
+        sql.push_str(" ORDER BY created_at DESC LIMIT ?");
+        // Append the limit placeholder index
+        let limit_idx = 1 + address.is_some() as usize + action.is_some() as usize;
+        // Replace the trailing `?` with the correct placeholder index
+        let sql = sql.replace(" LIMIT ?", &format!(" LIMIT ?{}", limit_idx));
+
+        let mut stmt = conn.prepare(&sql)?;
+
+        // We need to bind params in order; use a Vec of boxed ToSql values.
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        if let Some(a) = address {
+            params.push(Box::new(a.to_string()));
+        }
+        if let Some(ac) = action {
+            params.push(Box::new(ac.to_string()));
+        }
+        params.push(Box::new(limit));
+
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let entries = stmt.query_map(params_refs.as_slice(), |row| {
             Ok(AuditEntry {
                 id: row.get(0)?,
                 action: row.get(1)?,
@@ -323,26 +366,12 @@ impl Database {
         Ok(rows > 0)
     }
 
-    /// Return all webhook URLs subscribed to a given event kind (e.g. "mint", "burn").
-    pub fn get_webhooks_for_event(&self, event: &str) -> Result<Vec<String>, AppError> {
-        let all = self.list_webhooks()?;
-        let urls = all
-            .into_iter()
-            .filter(|w| w.events.iter().any(|e| e == event || e == "all"))
-            .map(|w| w.url)
-            .collect();
-        Ok(urls)
-    }
+    // ─── API key management ─────────────────────────────────────────────────
 
-    // ── API key management ────────────────────────────────────────────────
-
-    /// Generate and store a new random API key, returning the full key once.
+    /// Generate a new API key with the given label.
     pub fn create_api_key(&self, label: &str) -> Result<ApiKeyEntry, AppError> {
-        use uuid::Uuid;
         let id = Uuid::new_v4().to_string();
-        // 32-byte random hex string prefixed with "sss_"
-        let raw = Uuid::new_v4().simple().to_string() + &Uuid::new_v4().simple().to_string();
-        let key = format!("sss_{}", &raw[..48]);
+        let key = format!("sss_{}", Uuid::new_v4().to_string().replace('-', ""));
         let created_at = Utc::now().to_rfc3339();
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         conn.execute(
@@ -352,7 +381,7 @@ impl Database {
         Ok(ApiKeyEntry { id, key, label: label.to_string(), created_at })
     }
 
-    /// Validate an API key — returns true if it exists in the DB.
+    /// Validate that the given key exists.
     pub fn validate_api_key(&self, key: &str) -> Result<bool, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let count: i64 = conn.query_row(
@@ -363,7 +392,7 @@ impl Database {
         Ok(count > 0)
     }
 
-    /// List all keys (key values redacted by caller).
+    /// List all API keys (full key included — redaction happens at route level).
     pub fn list_api_keys(&self) -> Result<Vec<ApiKeyEntry>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let mut stmt = conn.prepare(
@@ -380,6 +409,7 @@ impl Database {
         Ok(entries)
     }
 
+    /// Delete an API key by id. Returns true if a row was deleted.
     pub fn delete_api_key(&self, id: &str) -> Result<bool, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let rows = conn.execute("DELETE FROM api_keys WHERE id = ?1", params![id])?;

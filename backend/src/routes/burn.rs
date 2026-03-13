@@ -1,16 +1,15 @@
 use axum::{extract::State, Json};
-use std::sync::Arc;
 use tracing::info;
 
 use crate::{
-    db::Database,
     error::AppError,
     models::{ApiResponse, BurnEvent, BurnRequest},
-    webhook,
+    state::AppState,
+    webhook_dispatch,
 };
 
 pub async fn burn(
-    State(db): State<Arc<Database>>,
+    State(state): State<AppState>,
     Json(req): Json<BurnRequest>,
 ) -> Result<Json<ApiResponse<BurnEvent>>, AppError> {
     if req.token_mint.is_empty() {
@@ -23,14 +22,14 @@ pub async fn burn(
         return Err(AppError::BadRequest("amount must be greater than 0".to_string()));
     }
 
-    let event = db.record_burn(
+    let event = state.db.record_burn(
         &req.token_mint,
         req.amount,
         &req.source,
         req.tx_signature.as_deref(),
     )?;
 
-    db.add_audit(
+    state.db.add_audit(
         "BURN",
         &req.source,
         &format!("Burned {} tokens on mint {}", req.amount, req.token_mint),
@@ -43,10 +42,7 @@ pub async fn burn(
         "Burn event recorded"
     );
 
-    // Fire webhooks (best-effort, non-blocking)
-    if let Ok(urls) = db.get_webhooks_for_event("burn") {
-        webhook::dispatch("burn", event.clone(), urls).await;
-    }
+    webhook_dispatch::dispatch(&state.db, "burn", serde_json::to_value(&event).unwrap_or_default());
 
     Ok(Json(ApiResponse::ok(event)))
 }

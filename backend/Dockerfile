@@ -1,43 +1,22 @@
-# Stage 1: Build
-FROM rust:1.75-slim AS builder
+FROM rust:1.79-alpine as builder
+
+RUN apk add --no-cache musl-dev sqlite-dev
 
 WORKDIR /app
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy manifests first for layer caching
 COPY Cargo.toml ./
-
-# Create a dummy main to cache dependencies
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release
-RUN rm -f target/release/deps/sss_backend*
-
-# Copy real source
 COPY src ./src
 
-# Build the real binary
 RUN cargo build --release
 
-# Stage 2: Runtime
-FROM debian:bookworm-slim
+FROM alpine:3.19
+RUN apk add --no-cache sqlite-libs ca-certificates
+WORKDIR /app
+COPY --from=builder /app/target/release/sss-backend .
 
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create data directory
-RUN mkdir -p /data
-
-COPY --from=builder /app/target/release/sss-backend /usr/local/bin/sss-backend
-
-EXPOSE 8080
-
-ENV PORT=8080
+ENV LISTEN_ADDR=0.0.0.0:3000
 ENV DATABASE_URL=/data/sss.db
+ENV RUST_LOG=info
 
-CMD ["sss-backend"]
+EXPOSE 3000
+VOLUME ["/data"]
+CMD ["./sss-backend"]

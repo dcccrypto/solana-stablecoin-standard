@@ -1,129 +1,60 @@
-// ─── API envelope ────────────────────────────────────────────────────────────
+import { Connection, PublicKey, Keypair } from '@solana/web3.js';
+import { AnchorProvider, Program } from '@coral-xyz/anchor';
 
-export interface ApiResponse<T> {
-  success: boolean;
-  data: T | null;
-  error: string | null;
+export type Preset = 'SSS-1' | 'SSS-2';
+
+export interface SssConfig {
+  /** Token-2022 preset */
+  preset: Preset;
+  /** Token decimals (default: 6) */
+  decimals?: number;
+  /** Token name */
+  name: string;
+  /** Token symbol */
+  symbol: string;
+  /** Metadata URI */
+  uri?: string;
+  /** Transfer hook program (required for SSS-2) */
+  transferHookProgram?: PublicKey;
 }
 
-// ─── Health ──────────────────────────────────────────────────────────────────
-
-export interface HealthData {
-  status: string;
-  version: string;
-  timestamp: string;
+export interface MintParams {
+  mint: PublicKey;
+  amount: bigint;
+  recipient: PublicKey;
 }
 
-// ─── Mint ────────────────────────────────────────────────────────────────────
-
-export interface MintRequest {
-  /** Solana token-mint public key */
-  token_mint: string;
-  /** Token amount in raw units (must be > 0) */
-  amount: number;
-  /** Recipient wallet public key */
-  recipient: string;
-  /** Optional Solana transaction signature */
-  tx_signature?: string;
+export interface BurnParams {
+  mint: PublicKey;
+  amount: bigint;
+  source: PublicKey;
 }
 
-export interface MintEvent {
-  id: string;
-  token_mint: string;
-  amount: number;
-  recipient: string;
-  tx_signature: string | null;
-  created_at: string;
+export interface FreezeParams {
+  mint: PublicKey;
+  targetTokenAccount: PublicKey;
 }
 
-// ─── Burn ────────────────────────────────────────────────────────────────────
-
-export interface BurnRequest {
-  /** Solana token-mint public key */
-  token_mint: string;
-  /** Token amount in raw units (must be > 0) */
-  amount: number;
-  /** Source wallet public key */
-  source: string;
-  /** Optional Solana transaction signature */
-  tx_signature?: string;
+export interface MinterConfig {
+  /** Minter public key */
+  minter: PublicKey;
+  /** Maximum mint cap (0 = unlimited) */
+  cap?: bigint;
 }
 
-export interface BurnEvent {
-  id: string;
-  token_mint: string;
-  amount: number;
-  source: string;
-  tx_signature: string | null;
-  created_at: string;
+export interface StablecoinInfo {
+  mint: PublicKey;
+  authority: PublicKey;
+  complianceAuthority: PublicKey;
+  preset: number;
+  paused: boolean;
+  totalMinted: bigint;
+  totalBurned: bigint;
+  circulatingSupply: bigint;
 }
 
-// ─── Supply & events ─────────────────────────────────────────────────────────
-
-export interface SupplyResponse {
-  token_mint: string;
-  total_minted: number;
-  total_burned: number;
-  circulating_supply: number;
-}
-
-export interface EventsResponse {
-  mint_events: MintEvent[];
-  burn_events: BurnEvent[];
-}
-
-// ─── Compliance ──────────────────────────────────────────────────────────────
-
-export interface BlacklistRequest {
-  address: string;
-  reason: string;
-}
-
-export interface BlacklistEntry {
-  id: string;
-  address: string;
-  reason: string;
-  created_at: string;
-}
-
-export interface AuditEntry {
-  id: string;
-  action: string;
-  address: string;
-  details: string;
-  created_at: string;
-}
-
-// ─── Webhooks ─────────────────────────────────────────────────────────────────
-
-export type EventKind = "mint" | "burn" | "all";
-
-export interface WebhookRequest {
-  url: string;
-  events: EventKind[];
-}
-
-export interface WebhookEntry {
-  id: string;
-  url: string;
-  events: EventKind[];
-  created_at: string;
-}
-
-// ─── API keys ────────────────────────────────────────────────────────────────
-
-/** Returned when listing keys (full key is redacted) */
-export interface ApiKeyListEntry {
-  id: string;
-  label: string;
-  key_prefix: string;
-  created_at: string;
-}
-
-/** Returned once at creation time — includes the full key */
-export interface ApiKeyEntry {
-  id: string;
-  key: string;
-  label: string;
-  created_at: string;
+export interface SdkOptions {
+  connection: Connection;
+  provider: AnchorProvider;
+  programId?: PublicKey;
 }

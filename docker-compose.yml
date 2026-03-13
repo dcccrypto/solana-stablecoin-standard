@@ -1,0 +1,26 @@
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sss-backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - sss-data:/data
+    environment:
+      - LISTEN_ADDR=0.0.0.0:3000
+      - DATABASE_URL=/data/sss.db
+      - RUST_LOG=info
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  sss-data:
+    driver: local

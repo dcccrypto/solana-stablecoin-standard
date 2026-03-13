@@ -94,6 +94,14 @@ pub struct WebhookEntry {
     pub created_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ApiKeyEntry {
+    pub id: String,
+    pub key: String,
+    pub label: String,
+    pub created_at: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T: Serialize> {
     pub success: bool,
@@ -131,10 +139,12 @@ pub struct EventsQuery {
     pub limit: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ApiKeyEntry {
-    pub id: String,
-    pub key: String,
-    pub label: String,
-    pub created_at: String,
+#[derive(Debug, Deserialize)]
+pub struct AuditQuery {
+    /// Filter by wallet/contract address (exact match)
+    pub address: Option<String>,
+    /// Filter by action type (e.g. BLACKLIST_ADD, BLACKLIST_REMOVE)
+    pub action: Option<String>,
+    /// Maximum number of entries to return (default: 100, max: 1000)
+    pub limit: Option<u32>,
 }
