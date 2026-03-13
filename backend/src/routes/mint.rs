@@ -6,6 +6,7 @@ use crate::{
     db::Database,
     error::AppError,
     models::{ApiResponse, MintEvent, MintRequest},
+    webhook,
 };
 
 pub async fn mint(
@@ -50,6 +51,11 @@ pub async fn mint(
         recipient = %req.recipient,
         "Mint event recorded"
     );
+
+    // Fire webhooks (best-effort, non-blocking)
+    if let Ok(urls) = db.get_webhooks_for_event("mint") {
+        webhook::dispatch("mint", event.clone(), urls).await;
+    }
 
     Ok(Json(ApiResponse::ok(event)))
 }

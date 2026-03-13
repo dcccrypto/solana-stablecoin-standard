@@ -323,6 +323,17 @@ impl Database {
         Ok(rows > 0)
     }
 
+    /// Return all webhook URLs subscribed to a given event kind (e.g. "mint", "burn").
+    pub fn get_webhooks_for_event(&self, event: &str) -> Result<Vec<String>, AppError> {
+        let all = self.list_webhooks()?;
+        let urls = all
+            .into_iter()
+            .filter(|w| w.events.iter().any(|e| e == event || e == "all"))
+            .map(|w| w.url)
+            .collect();
+        Ok(urls)
+    }
+
     // ── API key management ────────────────────────────────────────────────
 
     /// Generate and store a new random API key, returning the full key once.

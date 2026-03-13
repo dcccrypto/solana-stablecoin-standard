@@ -6,6 +6,7 @@ use crate::{
     db::Database,
     error::AppError,
     models::{ApiResponse, BurnEvent, BurnRequest},
+    webhook,
 };
 
 pub async fn burn(
@@ -41,6 +42,11 @@ pub async fn burn(
         source = %req.source,
         "Burn event recorded"
     );
+
+    // Fire webhooks (best-effort, non-blocking)
+    if let Ok(urls) = db.get_webhooks_for_event("burn") {
+        webhook::dispatch("burn", event.clone(), urls).await;
+    }
 
     Ok(Json(ApiResponse::ok(event)))
 }
