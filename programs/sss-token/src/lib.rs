@@ -6,7 +6,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("SSS1111111111111111111111111111111111111111111");
+declare_id!("4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN");
 
 /// Solana Stablecoin Standard — SSS-1 (Minimal) + SSS-2 (Compliant)
 ///
