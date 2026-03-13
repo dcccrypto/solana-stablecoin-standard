@@ -110,6 +110,7 @@ impl<T: Serialize> ApiResponse<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn err(msg: impl Into<String>) -> Self {
         Self {
             success: false,
