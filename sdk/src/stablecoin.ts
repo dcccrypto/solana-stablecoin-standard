@@ -5,7 +5,7 @@
  * configured client instance, plus convenience aliases for common operations.
  */
 import { SSSClient } from "./client.js";
-import type { MintEvent, BurnEvent, SupplyResponse } from "./types.js";
+import type { MintEvent, BurnEvent, SupplyResponse } from "./api-types.js";
 
 export interface SolanaStablecoinConfig {
   /** Base URL of the SSS backend, e.g. "http://localhost:8080" */
