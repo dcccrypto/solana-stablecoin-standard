@@ -5,6 +5,7 @@ use crate::{
     error::AppError,
     models::{ApiResponse, MintEvent, MintRequest},
     state::AppState,
+    webhook_dispatch,
 };
 
 pub async fn mint(
@@ -49,6 +50,8 @@ pub async fn mint(
         recipient = %req.recipient,
         "Mint event recorded"
     );
+
+    webhook_dispatch::dispatch(&state.db, "mint", serde_json::to_value(&event).unwrap_or_default());
 
     Ok(Json(ApiResponse::ok(event)))
 }
