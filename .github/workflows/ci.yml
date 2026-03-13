@@ -145,8 +145,14 @@ jobs:
       - name: Add Solana to PATH
         run: echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
 
-      - name: Cache Rust (Anchor)
-        uses: Swatinem/rust-cache@v2
+      # NOTE: Do NOT use Swatinem/rust-cache here. The anchor job regenerates
+      # Cargo.lock from scratch via `cargo generate-lockfile` and then builds
+      # with the Solana 1.18 toolchain (rustc 1.75), which differs from the
+      # system rustc used to compute the cache key. Reusing cached build
+      # artifacts compiled under a different rustc (e.g. one that enabled
+      # proc_macro_span) causes compilation errors like:
+      #   error[E0425]: cannot find type `SourceFile` in crate `proc_macro`
+      # Omitting the cache keeps each run hermetic and correct.
 
       - name: Install Anchor CLI
         run: npm install -g @coral-xyz/anchor-cli@${{ env.ANCHOR_VERSION }}
@@ -182,7 +188,8 @@ jobs:
           cargo update "spl-pod@0.2.3" --precise 0.2.2 || true
           # anchor-syn 0.30.1 uses proc_macro2::Span::source_file() which was removed
           # in proc-macro2 >=1.0.95 (requires nightly proc-macro-span). Pin to 1.0.94.
-          cargo update "proc-macro2" --precise 1.0.94
+          # Use version-qualified form to reliably target the 1.x line.
+          cargo update "proc-macro2@1.0" --precise 1.0.94
           sed -i 's/^version = 4$/version = 3/' Cargo.lock
 
       - name: Anchor build
