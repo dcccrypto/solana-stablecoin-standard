@@ -155,15 +155,11 @@ jobs:
       - name: Install Anchor CLI
         run: npm install -g @coral-xyz/anchor-cli@${{ env.ANCHOR_VERSION }}
 
-      - name: Install nightly Rust (for IDL generation)
-        # anchor build's IDL generation step runs `cargo +nightly test` with
-        # RUSTFLAGS="--cfg procmacro2_semver_exempt", which enables super_unstable
-        # in proc-macro2 and requires proc_macro::SourceFile. The Solana BPF
-        # platform-tools nightly (frozen ~2023) lacks this API. Installing a
-        # current system nightly gives anchor a toolchain that has SourceFile.
-        # RUSTUP_TOOLCHAIN=nightly tells anchor to use this instead of the
-        # Solana-linked nightly when generating the IDL.
-        run: rustup toolchain install nightly --no-self-update
+      # NOTE: nightly Rust is no longer installed here. proc_macro::SourceFile
+      # was removed from nightly (the stabilization RFC was closed), so using
+      # RUSTUP_TOOLCHAIN=nightly with anchor-syn 0.30.1 causes a build failure
+      # ("no method named `source_file`"). Anchor builds fine on stable; the
+      # IDL simply won't include source-file path metadata, which is acceptable.
 
       - name: Generate keypair
         run: solana-keygen new --no-bip39-passphrase --silent
@@ -197,14 +193,6 @@ jobs:
           sed -i 's/^version = 4$/version = 3/' Cargo.lock
 
       - name: Anchor build
-        # RUSTUP_TOOLCHAIN=nightly directs anchor-lang-idl's build::build() to
-        # run `cargo +nightly test` using the system nightly (installed above)
-        # rather than the Solana-linked BPF nightly (platform-tools/rust).
-        # The system nightly supports proc_macro::SourceFile, which is required
-        # when RUSTFLAGS="--cfg procmacro2_semver_exempt" activates super_unstable
-        # in proc-macro2 (used by anchor-syn 0.30.1 for IDL source path lookup).
-        env:
-          RUSTUP_TOOLCHAIN: nightly
         run: anchor build
 
       - name: Anchor test (localnet)
