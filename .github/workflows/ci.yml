@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -163,25 +164,16 @@ jobs:
       - name: Generate keypair
         run: solana-keygen new --no-bip39-passphrase --silent
 
-      - name: Generate Cargo.lock
-        run: |
-          # Solana 2.3 ships cargo/rustc 1.86 — generates lockfile v4, which is
-          # fully supported by the bundled Solana cargo. No v3 downgrade needed.
-          cargo generate-lockfile
-          # blake3 v1.8+ requires `edition2024` Cargo feature, which is NOT
-          # supported by Cargo 1.84.0 bundled with Solana platform-tools.
-          # Pin to last known-good version. Do NOT remove this pin.
-          cargo update blake3 --precise 1.7.0
-          # Solana platform-tools cargo (1.84) resolves spl-token-confidential-transfer-*
-          # to 0.3.1/0.4.1 which transitively pull solana-zk-token-sdk@2.3.13 — a crate
-          # with internal compile errors (PedersenCommitment/Pedersen types moved).
-          # Pin to the last versions that use solana-zk-sdk@^2.2.0 instead.
-          cargo update spl-token-confidential-transfer-ciphertext-arithmetic --precise 0.3.0
-          cargo update spl-token-confidential-transfer-proof-generation --precise 0.4.0
+      # Cargo.lock is committed to the repo (not gitignored) so that CI always
+      # builds with the exact dependency set verified locally. This avoids
+      # platform-specific cargo resolution differences (e.g. Agave 2.3.13's
+      # bundled cargo resolves older spl-tlv-account-resolution → spl-pod 0.3
+      # → solana-zk-token-sdk@2.3.13 which has an internal compile error).
 
       - name: Anchor build
-        # Anchor 0.32 uses idl-build feature (stable Rust) for IDL generation —
-        # no nightly Rust or RUSTUP_TOOLCHAIN override needed.
+        # Anchor 0.32 uses idl-build feature (stable Rust) for IDL generation.
+        # Cargo.lock is committed (not gitignored) — anchor build will use the
+        # checked-in lockfile without regenerating it.
         run: anchor build
 
       - name: Anchor test (localnet)
