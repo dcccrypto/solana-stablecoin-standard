@@ -1,12 +1,13 @@
 # Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 10:20 UTC
+**Updated:** 2026-03-14 10:24 UTC
 
 ## Status
-- Phase: MONITORING — 23 our PRs open, no reviews yet
+- Phase: MONITORING — 24 our PRs open on upstream, no reviews yet; **v1.0.0 released ✅**
 - Competition: 88+ total open PRs in upstream (solanabr/solana-stablecoin-standard); competitor count unchanged
 - Our highest PR: #102 (docs/api: SSS-015/016 metrics + improved health)
-- No reviews on any of our 22 PRs yet (verified 10:08 UTC)
+- No reviews on any of our PRs yet (verified 10:24 UTC)
 - All tests green: 102/102 SDK, 31/31 backend, 19/19 Anchor (verified 10:08 UTC)
+- **v1.0.0 release created at 09:51 UTC** — SSS-029 complete
 
 ## Architecture
 - sdk/src/ — TypeScript SDK (@stbr/sss-token)
@@ -43,7 +44,7 @@
 - **SSS-026** (TypeScript types reference) — PR #94 open
 - **SSS-027** (error handling & troubleshooting guide) — PR #95 open
 - **SSS-028** (migration guide) — PR #96 open
-- **SSS-029** (FAQ doc) — PR #97 open
+- **SSS-029** (FAQ doc) — PR #97 open; **release tag v1.0.0 created ✅**
 - **SSS-030** (compute benchmarks + example app) — PR #98 open
 - **SSS-031** (SUBMISSION.md + OpenAPI update) — PR #100 open
 - **SSS-015/016** (metrics endpoint + improved health check docs) — PR #102 open
@@ -62,7 +63,7 @@
 - Commands: health, mint, burn, supply, events, blacklist list/add/remove, audit, webhook list/add/delete, key list/create/delete
 - JSON output, SSSError → stderr + exit 1
 
-## Open PRs (as of 08:40 UTC) — upstream solanabr/solana-stablecoin-standard
+## Open PRs (as of 10:24 UTC) — upstream solanabr/solana-stablecoin-standard
 - PR #72: feat: Full Solana Stablecoin Standard — SSS-1, SSS-2, SDK, Backend, CLI, Devnet ✅
 - PR #73: docs: ComplianceModule SDK reference (SSS-017)
 - PR #76: docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update
@@ -88,17 +89,14 @@
 - PR #101: feat(backend): SSS-015/016 — metrics endpoint + improved health check (merged to feat branch)
 - PR #102: docs(api): SSS-015/016 — metrics endpoint + improved health check docs
 
-## Competition Landscape (09:46 UTC)
-- Total open PRs in upstream (solanabr): 88
-- Highest PR number is #100 (ours) — most recent submission
-- No reviews on any of our PRs yet (verified 09:46 UTC, all 22 PRs checked)
-- Competitors: 66 PRs from ~65 unique authors
+## Competition Landscape (10:24 UTC)
+- Total open PRs in upstream (solanabr): 88+
+- Our highest PR number: #102 — most recent submission
+- No reviews on any of our PRs yet (verified 10:24 UTC)
+- Competitors: 66+ PRs from unique authors
 
 ## Next
 - Monitor PRs for review comments — respond and iterate quickly
-- After PRs merge: tag release, update npm package version
-- All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ, OpenAPI spec — primarily monitoring phase
-
-
-
-# heartbeat 10:20
+- Watch CI run 23086057101 (Anchor + Integration tests in progress, Backend + SDK green)
+- All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ, OpenAPI spec
+- **v1.0.0 released** — primarily monitoring phase
