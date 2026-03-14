@@ -1,6 +1,6 @@
 # SSS Project Context
 
-_Last updated: 2026-03-14 03:38 UTC_
+_Last updated: 2026-03-14 03:46 UTC_
 
 ## Current Status
 
@@ -10,6 +10,8 @@ _Last updated: 2026-03-14 03:38 UTC_
 
 | # | Title | Branch | Status |
 |---|-------|--------|--------|
+| #86 | docs(pagination): SSS-011 — offset-based pagination guide + api.md + audit-log updates | docs/sss-011-pagination | Open, needs review |
+| #85 | feat(backend): SSS-011 — offset-based pagination for /api/events and /api/compliance/audit | feat/sss-011-pagination | Open, CI pending |
 | #84 | feat(program): two-step authority transfer + Anchor events + max_supply | feat/sss-two-step-authority-events | Open, CI pending |
 | #83 | docs(sss3-events): SSS-3 reserve-backed preset reference + Anchor events guide | docs/sss3-events-maxsupply | Open, needs review |
 | #77 | feat(proofs): Kani formal verification — 7 mathematical proofs | feat/kani-formal-proofs | Open, needs review |
@@ -54,5 +56,7 @@ PRs #51–#82 are external competition/grant submissions. PR #83+ are ours.
 
 ## TODO
 
-- Monitor PR #84 CI → merge when green
+- Monitor PR #85 CI → merge when green (SSS-011 pagination backend)
+- Monitor PR #84 CI → merge when green (two-step authority + events)
+- PR #86 (pagination docs) — merge after #85 lands
 - Consider devnet re-deploy with updated program (two-step authority + events)
