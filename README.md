@@ -7,10 +7,17 @@ The project defines two compliance presets — **SSS-1** (minimal) and **SSS-2**
 ### Live Demo & On-Chain References
 
 - [Video Demo](https://youtu.be/3y86hHGvMO4) — Full walkthrough of the CLI, SDK, backend, and React demo
-- [SSS-2 Stablecoin (devnet)](https://solscan.io/token/2wEDPGcCUW78VJVBRFtLcuj6M4xaXp5mD2pDwFyfVUta?cluster=devnet) — Deployed token with blacklist transfer hook
-- [Blacklist Transfer Hook Program (devnet)](https://solscan.io/account/84rPjkmmoP3oYZVxjtL2rdcT6hC5Rts6N5XzJTFcJEk6?cluster=devnet) — The on-chain Anchor program
-- [Mint Transaction (devnet)](https://solscan.io/tx/5KXqaMqXKgSnvxxeU8QHmCkd1bYDjcuyBugDW5xotSq5A2qp7ibGR6u5Vu1addEWi6tTb47RqEbCQJ58GGrT4Yay?cluster=devnet) — Example of minting tokens to a recipient
-- [Blacklisting Transaction (devnet)](https://solscan.io/tx/473RP6JDv69566hDt1reoCmBKgVPcC4te1rMsZpXmEXeLsrxzeTCdy9ePUhXpUMBJK4Yp1fTGJPkcZh5d7CHKbYH?cluster=devnet) — Example of a wallet being added to the blacklist
+
+**Programs deployed (devnet):**
+- [SSS-Core Program](https://solscan.io/account/4ZFzYcNVDSew79hSAVRdtDuMqe9g4vYh7CFvitPSy5DD?cluster=devnet) — Stablecoin config, RBAC, quotas, seize
+- [Blacklist Transfer Hook Program](https://solscan.io/account/84rPjkmmoP3oYZVxjtL2rdcT6hC5Rts6N5XzJTFcJEk6?cluster=devnet) — Transfer-hook blacklist enforcement
+
+**On-chain examples (devnet):**
+- [SSS-2 Stablecoin Deployment](https://solscan.io/token/GMrcrkemTGgxFgQx6t3WHXjkqSNUqG7CkDZygD5rfjVB?cluster=devnet#extensions) — Deployed token with blacklist transfer hook
+- [Mint Transaction](https://solscan.io/tx/5LawZtW6dzxSCkBARNj6eNqMUE6g7pMzrdChJwZQJKJbUL6nbjM3tkNtGfSHqJj26gqRXAngiV9vjtPYmj8M9moG?cluster=devnet) — Minting tokens to a recipient
+- [Blacklist Transaction](https://solscan.io/tx/2HwoGKbKvj2so4sLVBehn61fDaj1WEWWVft6gfAnoiREBFHX1YX9soAg4hBADLadTGwCgsTHmbmdDR6t66ybb8uN?cluster=devnet) — Adding a wallet to the blacklist
+- [Unblacklist Transaction](https://solscan.io/tx/PvMKv7oXb51EwqC5KFBuUWdH3vTvwQJeEnSXtQb5FTMkVATRcJbpGLPn29AYzLkjWNoVVEuJ24A1squNNwmaHiL?cluster=devnet) — Removing a wallet from the blacklist
+- [Transfer After Unblacklist](https://solscan.io/tx/2HMfvYhSBxEQn3YH3f6vRycbALoB5ivcCuAStKV2qz66nDyFchXPTj4uay9mrYv5TenYA5VRH1HZcQg6A7NFMJC3?cluster=devnet) — TransferChecked succeeding after unblacklist
 
 ## Repository Structure
 
