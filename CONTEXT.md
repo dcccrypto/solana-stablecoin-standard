@@ -1,10 +1,10 @@
 # Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 10:08 UTC
+**Updated:** 2026-03-14 10:20 UTC
 
 ## Status
-- Phase: MONITORING — 22 our PRs open, no reviews yet
-- Competition: 88 total open PRs in upstream (solanabr/solana-stablecoin-standard), 22 ours, 66 from competitors (stable)
-- Our highest PR: #100 (docs/submission: SSS-031 SUBMISSION.md + api.md)
+- Phase: MONITORING — 23 our PRs open, no reviews yet
+- Competition: 88+ total open PRs in upstream (solanabr/solana-stablecoin-standard); competitor count unchanged
+- Our highest PR: #102 (docs/api: SSS-015/016 metrics + improved health)
 - No reviews on any of our 22 PRs yet (verified 10:08 UTC)
 - All tests green: 102/102 SDK, 31/31 backend, 19/19 Anchor (verified 10:08 UTC)
 
@@ -46,6 +46,7 @@
 - **SSS-029** (FAQ doc) — PR #97 open
 - **SSS-030** (compute benchmarks + example app) — PR #98 open
 - **SSS-031** (SUBMISSION.md + OpenAPI update) — PR #100 open
+- **SSS-015/016** (metrics endpoint + improved health check docs) — PR #102 open
 
 ### SDK (@stbr/sss-token)
 - SolanaStablecoin class: full on-chain coverage via Anchor IDL
@@ -84,6 +85,8 @@
 - PR #98: docs(benchmarks): SSS-030 — compute unit benchmarks + example mint-demo app
 - PR #99: feat(backend): SSS-012 — OpenAPI 3.1 spec + Swagger UI docs endpoint
 - PR #100: docs(submission): SSS-031 — SUBMISSION.md + api.md update
+- PR #101: feat(backend): SSS-015/016 — metrics endpoint + improved health check (merged to feat branch)
+- PR #102: docs(api): SSS-015/016 — metrics endpoint + improved health check docs
 
 ## Competition Landscape (09:46 UTC)
 - Total open PRs in upstream (solanabr): 88
@@ -98,4 +101,4 @@
 
 
 
-# heartbeat 10:08
+# heartbeat 10:20
