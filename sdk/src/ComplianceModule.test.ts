@@ -1,8 +1,9 @@
 /**
- * Unit tests for ComplianceModule — SSS-017
+ * Unit tests for ComplianceModule — SSS-017 / SSS-018
  *
  * Tests that addToBlacklist / removeFromBlacklist / initializeBlacklist
  * dispatch the correct Anchor instructions via the transfer-hook program IDL,
+ * that getBlacklist() fetches the full BlacklistState via Anchor account fetch,
  * and that isBlacklisted correctly parses on-chain account data.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -206,6 +207,59 @@ describe('ComplianceModule.isBlacklisted', () => {
     const cm = new ComplianceModule(provider, MINT, HOOK_PROGRAM_ID);
 
     expect(await cm.isBlacklisted(TARGET_ADDR)).toBe(true);
+  });
+});
+
+// ── getBlacklist ─────────────────────────────────────────────────────────────
+
+describe('ComplianceModule.getBlacklist', () => {
+  it('returns empty array when account does not exist (not initialized)', async () => {
+    const provider = makeProvider();
+    const cm = new ComplianceModule(provider, MINT, HOOK_PROGRAM_ID);
+    // Make account.blacklistState.fetch throw (account not found)
+    const program = (cm as any)._program = {
+      account: {
+        blacklistState: {
+          fetch: vi.fn().mockRejectedValue(new Error('Account does not exist')),
+        },
+      },
+    };
+    (cm as any)._program = program;
+
+    const result = await cm.getBlacklist();
+    expect(result).toEqual([]);
+  });
+
+  it('returns the blacklisted array from the fetched account', async () => {
+    const provider = makeProvider();
+    const cm = new ComplianceModule(provider, MINT, HOOK_PROGRAM_ID);
+    const blacklisted = [TARGET_ADDR, AUTHORITY];
+    (cm as any)._program = {
+      account: {
+        blacklistState: {
+          fetch: vi.fn().mockResolvedValue({ blacklisted }),
+        },
+      },
+    };
+
+    const result = await cm.getBlacklist();
+    expect(result).toEqual(blacklisted);
+    expect(result).toHaveLength(2);
+  });
+
+  it('returns empty array when blacklisted field is empty', async () => {
+    const provider = makeProvider();
+    const cm = new ComplianceModule(provider, MINT, HOOK_PROGRAM_ID);
+    (cm as any)._program = {
+      account: {
+        blacklistState: {
+          fetch: vi.fn().mockResolvedValue({ blacklisted: [] }),
+        },
+      },
+    };
+
+    const result = await cm.getBlacklist();
+    expect(result).toEqual([]);
   });
 });
 
