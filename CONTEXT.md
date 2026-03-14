@@ -1,12 +1,12 @@
 # Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 08:08 UTC
+**Updated:** 2026-03-14 08:12 UTC
 
 ## Status
 - Phase: MONITORING — 22 open PRs, no reviews yet
-- Competition: 88 total PRs in upstream (solanabr/solana-stablecoin-standard), 22 ours, 66 competing (64 unique competitors)
+- Competition: 88 total PRs in upstream (solanabr/solana-stablecoin-standard), 22 ours, 66 competing (63 unique competitors)
 - Our highest PR: #100 (docs/submission: SSS-031 SUBMISSION.md + api.md)
-- No reviews on any of our 22 PRs yet; 6 competitor PRs have received reviews (none from us)
-- All tests green: 102/102 SDK + 19/19 Anchor + 31/31 backend (main)
+- No reviews on any of our 22 PRs yet
+- All tests green: 102/102 SDK + 31/31 backend (Anchor: pending run)
 
 ## Architecture
 - sdk/src/ — TypeScript SDK (@stbr/sss-token)
@@ -15,11 +15,10 @@
 - backend/ — Rust/Axum REST API
 - SDK wraps Anchor program via IDL (not REST)
 
-## Test Results (verified 08:07 UTC)
+## Test Results (verified 08:12 UTC)
 - SDK: 102/102 passing (6 files)
-- Anchor: 19/19 passing
-- Backend: 31/31 passing on main (33/33 on feat/sss-012-openapi / PR #99)
-- Clippy: clean (0 errors; only expected upstream cfg warnings from Anchor deps)
+- Backend: 31/31 passing
+- Clippy: clean (0 errors, 0 warnings)
 - Rust build: release build successful
 - Docker: no container runtime on host (Dockerfile is valid)
 
@@ -45,6 +44,7 @@
 - **SSS-028** (migration guide) — PR #96 open
 - **SSS-029** (FAQ doc) — PR #97 open
 - **SSS-030** (compute benchmarks + example app) — PR #98 open
+- **SSS-031** (SUBMISSION.md + OpenAPI update) — PR #100 open
 
 ### SDK (@stbr/sss-token)
 - SolanaStablecoin class: full on-chain coverage via Anchor IDL
@@ -54,14 +54,13 @@
   - depositCollateral(), redeem()
 - ComplianceModule class (SSS-2/3 compliant features)
 - 102 vitest unit tests (6 files, all passing)
-- 19 Anchor integration tests (all passing)
 
 ### CLI (sss-token)
 - Global --url / --key options (+ SSS_API_KEY env var)
 - Commands: health, mint, burn, supply, events, blacklist list/add/remove, audit, webhook list/add/delete, key list/create/delete
 - JSON output, SSSError → stderr + exit 1
 
-## Open PRs (as of 07:40 UTC) — upstream solanabr/solana-stablecoin-standard
+## Open PRs (as of 08:12 UTC) — upstream solanabr/solana-stablecoin-standard
 - PR #72: feat: Full Solana Stablecoin Standard — SSS-1, SSS-2, SDK, Backend, CLI, Devnet ✅
 - PR #73: docs: ComplianceModule SDK reference (SSS-017)
 - PR #76: docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update
@@ -82,16 +81,16 @@
 - PR #96: docs(migration): SSS-028 — migration guide (SPL Token → SSS-1/2/3, backend, pitfalls)
 - PR #97: docs(faq): SSS-029 — FAQ doc (presets, SDK, programs, backend, errors, security, migration)
 - PR #98: docs(benchmarks): SSS-030 — compute unit benchmarks + example mint-demo app
+- PR #99: feat(backend): SSS-012 — OpenAPI 3.1 spec + Swagger UI docs endpoint
+- PR #100: docs(submission): SSS-031 — SUBMISSION.md + api.md update
 
 ## Competition Landscape
-- Total open PRs in upstream (solanabr): 30 (as of 08:07 UTC)
+- Total open PRs in upstream (solanabr): 88
 - Highest PR number is #100 (ours) — most recent submission
 - No reviews on any of our PRs yet
-- Other teams: 8 competing PRs (PR #71–#82, latest competitor PR is #82 by denisthe12)
+- Competitors: 66 PRs from 63 unique authors
 
 ## Next
 - Monitor PRs for review comments — respond and iterate quickly
 - After PRs merge: tag release, update npm package version
-- IDL not yet generated locally (programs/sss-token/target/idl/ missing) — will generate if Anchor build runs
 - All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ, OpenAPI spec — primarily monitoring phase
-- Competition is larger than expected: 88 total PRs, 64 unique competitors; staying ahead with 22 PRs and comprehensive feature set
