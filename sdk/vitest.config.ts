@@ -7,6 +7,7 @@ export default defineConfig({
       "**/node_modules/**",
       "**/dist/**",
       "**/tests/integration/**",
+      "**/tests/anchor/**",
     ],
   },
 });
