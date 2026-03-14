@@ -1,57 +1,62 @@
 # SSS Project Context
 
-_Last updated: 2026-03-14 02:05 UTC_
+_Last updated: 2026-03-14 02:25 UTC_
 
 ## Current Status
 
-**CI is green on main.** PR #37 (Cargo.lock CI fix) merged at 01:58 UTC. All
-four CI jobs now pass on main. Active PRs below are awaiting CI completion.
+**CI is green.** All checks pass on main. One open PR in review.
 
 ### Open PRs (priority order)
 
 | # | Title | Branch | Status |
 |---|-------|--------|--------|
-| #38 | feat(sdk): wire Anchor IDL for initialize/mint/burn + getTotalSupply reads config PDA (SSS-016) | feat/sss-016-anchor-idl-wiring | CI pending (Backend + Anchor running) |
-| #34 | fix(anchor): 13/13 anchor tests passing on localnet | fix/anchor-13-tests-passing | CI pending (Anchor + SDK Integration running) |
-| #35 | docs(anchor-testing): update toolchain versions | docs/update-anchor-testing-ci-notes | Docs only |
-| #36 | docs(on-chain-sdk-core): core methods reference | docs/on-chain-sdk-core | Updated getTotalSupply for SSS-016 at 02:05 UTC |
-| #33 | docs(on-chain-sdk-admin): admin methods reference | docs/on-chain-sdk-admin | Conflict resolved at 02:03 UTC, pushed |
+| #39 | feat(compliance): wire ComplianceModule to transfer-hook IDL — SSS-017 | feat/sss-017-compliance-module-anchor-wiring | CI running |
 
-## Recently Merged
+## Recently Merged (this session)
 
-| # | Title | Merged |
-|---|-------|--------|
-| #37 | fix(ci): commit Cargo.lock + anchor build — eliminates platform-specific resolution (SSS-003) | 2026-03-14 01:58 UTC |
-| #32 | fix(ci): upgrade Solana 2.1.21 → 2.3.13 (rustc 1.86) | 2026-03-14 00:58 UTC |
+| # | Title | Notes |
+|---|-------|-------|
+| #38 | feat(sdk): wire Anchor IDL for initialize/mint/burn + getTotalSupply reads config PDA (SSS-016) | All 4 CI checks + CodeRabbit ✅ — merged 02:12 UTC |
 
-## Root Cause of CI Failure (SSS-003 — RESOLVED)
+## What SSS-017 Does
 
-Was: Anchor Programs CI failed due to platform-specific Cargo resolution.
-Fix: Committed Cargo.lock (blake3=1.7.0 pinned) + `anchor build` without `--locked` flag.
+`ComplianceModule` previously had `isBlacklisted()` (raw byte parsing) but NO on-chain mutation methods. PR #39 adds:
+- `sdk/src/idl/sss_transfer_hook.json` — Anchor IDL for the transfer-hook program (hand-crafted)
+- `ComplianceModule.addToBlacklist(address)` → calls `blacklist_add` via Anchor
+- `ComplianceModule.removeFromBlacklist(address)` → calls `blacklist_remove` via Anchor
+- `ComplianceModule.initializeBlacklist()` → calls `initialize_extra_account_meta_list` via Anchor
+- 11 new unit tests; total now 81/81 passing
 
-## CI Key Facts
+## SDK State
+
+- **Tests**: 81/81 passing (6 test files)
+- **TypeScript**: zero errors
+- **IDLs in sdk/src/idl/**: `sss_token.json` (main program) + `sss_transfer_hook.json` (transfer hook)
+- **Program IDs** (devnet + localnet):
+  - sss-token: `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat`
+  - sss-transfer-hook: `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp`
+
+## CI Health
+
+All three CI jobs are consistently green on main:
+- TypeScript SDK ✅
+- Backend (Rust / axum) ✅
+- Anchor Programs ✅
+- SDK Integration Tests ✅
+
+Root cause of previous CI failures (Agave 2.3.x + blake3 1.8.3 + spl-pod stale index) fully resolved in PR #37, merged previously.
+
+## After PR #39 Merges
+
+Potential next tasks (priority order):
+1. **Integration test for ComplianceModule blacklist** — devnet integration test calling `addToBlacklist` / `removeFromBlacklist` / `isBlacklisted` in sequence
+2. **Docs: compliance module reference** — `docs/compliance-module.md` covering all public methods
+3. **SDK: `getBlacklist()` method** — fetch full blacklist from on-chain `BlacklistState` via Anchor account fetch (currently only REST client has this)
+4. **Anchor Programs: minter cap enforcement test** — verify `MinterInfo.cap` is checked in `mint` instruction
+
+## Key Technical Notes
 
 - `anchor build -- --locked` does NOT work with anchor-cli 0.32 — use `anchor build` with committed Cargo.lock
-- `blake3 = "=1.7.0"` in `[workspace.dependencies]` insufficient unless pinned in Cargo.lock via `cargo update`
-- `solana-zk-token-sdk` v2.3.x has source bug in `with_fee.rs` — Cargo.lock pins avoid pulling it in
-
-## Current Branch
-
-`feat/sss-016-anchor-idl-wiring` (PR #38) — committed, pushed, CI running.
-
-## After CI Completes
-
-Priority merge order:
-1. #34 (anchor 13/13 tests) — completes SSS-003
-2. #38 (SDK IDL wiring) — SSS-016
-3. #33, #35, #36 (docs) — any order
-
-## Next Tasks (after PRs merge)
-
-- SSS-017: SDK integration tests against localnet Anchor program (end-to-end)
-- SSS-018: Devnet deployment + smoke test
-- Docs: SDK usage guide for the wired Anchor methods
-
-## SDK Tests
-
-All 37 SDK unit tests pass locally (sdk/).
+- `blake3 = "=1.7.0"` in `[workspace.dependencies]` is INSUFFICIENT if no workspace member directly depends on blake3 — must pin via committed Cargo.lock
+- Both IDLs are lazy-loaded and cached per SDK instance (pattern: `private _program: any | null = null`)
+- `ComplianceModule` program caching: safe to call multiple methods in sequence without re-loading IDL
