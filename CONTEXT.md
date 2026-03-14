@@ -1,6 +1,6 @@
 # SSS Project Context
 
-_Last updated: 2026-03-14 04:36 UTC_
+_Last updated: 2026-03-14 04:42 UTC_
 
 ## Current Status
 
@@ -10,10 +10,11 @@ _Last updated: 2026-03-14 04:36 UTC_
 
 | # | Title | Branch | Status |
 |---|-------|--------|--------|
+| #88 | docs(submission): SUBMISSION.md v2 — updated test counts, program IDs, features | docs/submission-update-v2 | Open, needs review |
 | #87 | feat(sdk): SSS-019 — sync IDL + wire accept_authority, depositCollateral, redeem, SSS-3 max_supply | feat/sss-019-idl-sync-new-instructions | Open, needs review |
 | #86 | docs(pagination): SSS-011 — offset-based pagination guide + api.md + audit-log updates | docs/sss-011-pagination | Open, needs review |
-| #85 | feat(backend): SSS-011 — offset-based pagination for /api/events and /api/compliance/audit | feat/sss-011-pagination | Open, CI pending |
-| #84 | feat(program): two-step authority transfer + Anchor events + max_supply | feat/sss-two-step-authority-events | Open, CI pending |
+| #85 | feat(backend): SSS-011 — offset-based pagination for /api/events and /api/compliance/audit | feat/sss-011-pagination | Open, needs review |
+| #84 | feat(program): two-step authority transfer + Anchor events + max_supply | feat/sss-two-step-authority-events | Open, needs review |
 | #83 | docs(sss3-events): SSS-3 reserve-backed preset reference + Anchor events guide | docs/sss3-events-maxsupply | Open, needs review |
 | #77 | feat(proofs): Kani formal verification — 7 mathematical proofs | feat/kani-formal-proofs | Open, needs review |
 | #76 | docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update | docs/architecture-presets-submission | Open, needs review |
@@ -72,10 +73,12 @@ Smoke test: compile passed, airdrop faucet returned internal error (devnet rate-
 - Monitor PR #85 CI → merge when green (SSS-011 pagination backend)
 - PR #86 (pagination docs) — merge after #85 lands
 - PR #87 (SSS-019 IDL sync) — needs review + merge after #84
+- PR #88 (SUBMISSION.md v2) — needs review, docs only
 - Smoke test devnet after faucet stabilises (re-run `npx ts-node --compiler-options '{"target":"ES2020","lib":["ES2020","DOM"]}' scripts/smoke-test-devnet.ts`)
-- Clean up stale local branches (30+ old feature branches, consider `git branch | grep -v main | xargs git branch -D` after verifying all merged to origin)
+- Local branches cleaned: 42 → 11 (all remaining match open PRs)
 
 ## Heartbeat Log
 
+- 2026-03-14 04:42 UTC: SDK: 102/102 tests green. Backend: 31/31 tests green. Clippy clean. Opened PR #88: SUBMISSION.md v2 (updated test counts 19/19 Anchor, 102/102 SDK, 31/31 Backend; new devnet program IDs; documented two-step authority, Anchor events, Kani proofs, SSS-3 on-chain impl). Cleaned 31 stale local branches (42→11). All 10 PRs open, no reviews yet.
 - 2026-03-14 04:38 UTC: SDK: 102/102 tests green (6 files). Backend: 31/31 tests green. Anchor: 19/19 passing. Cleaned up 7 merged local branches (develop, docs/on-chain-sdk-core, docs/update-anchor-testing-ci-notes, feat/sss-017-sdk-anchor-integration, feat/sss-017-sdk-integration-tests, feat/sss-full-implementation, feat/sss-two-step-authority-events). 41 local branches remain. Devnet faucet still 429-rate-limited — smoke test blocked (not a code issue). All 9 PRs open, no reviews yet.
 - 2026-03-14 04:36 UTC: Cleaned up stale fix/sss-017-idl-sync-initialize-params branch (superseded by PR #87). SDK: 84/84 tests green. Backend: 31/31 tests green. All PRs open, no CI failures detected.
