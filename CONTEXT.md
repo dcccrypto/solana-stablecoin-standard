@@ -1,10 +1,10 @@
 # Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 06:46 UTC
+**Updated:** 2026-03-14 07:04 UTC
 
 ## Status
 - Phase: ACTIVE DOCS / MONITORING
-- All PRs open, no reviews yet as of 06:46 UTC
-- Competition: 81 total open PRs in upstream (solanabr/solana-stablecoin-standard), highest is PR #93 (ours)
+- All PRs open, no reviews yet as of 07:04 UTC
+- Competition: 81 total open PRs in upstream (solanabr/solana-stablecoin-standard), highest is PR #94 (ours)
 - All tests green: 102/102 SDK + 19/19 Anchor + 31/31 backend
 
 ## Architecture
@@ -39,6 +39,7 @@
 - **SSS-022** (authority + collateral SDK docs) — PR #89 open
 - **SSS-024** (on-chain SDK admin & governance docs) — PR #92 open
 - **SSS-025** (end-to-end quickstart guide) — PR #93 open
+- **SSS-026** (TypeScript types reference) — PR #94 open
 
 ### SDK (@stbr/sss-token)
 - SolanaStablecoin class: full on-chain coverage via Anchor IDL
@@ -55,7 +56,7 @@
 - Commands: health, mint, burn, supply, events, blacklist list/add/remove, audit, webhook list/add/delete, key list/create/delete
 - JSON output, SSSError → stderr + exit 1
 
-## Open PRs (as of 06:43 UTC)
+## Open PRs (as of 07:04 UTC)
 - PR #72: feat: Full Solana Stablecoin Standard — SSS-1, SSS-2, SDK, Backend, CLI, Devnet ✅
 - PR #73: docs: ComplianceModule SDK reference (SSS-017)
 - PR #76: docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update
@@ -71,17 +72,17 @@
 - PR #91: fix(smoke-test): SSS-023 — devnet smoke test fully passing
 - PR #92: docs(sdk): SSS-024 — on-chain SDK admin & governance methods reference
 - PR #93: docs(quickstart): SSS-025 — end-to-end quickstart guide
+- PR #94: docs(sdk): SSS-026 — TypeScript types reference
 
 ## Competition Landscape
-- Total open PRs in upstream (solanabr): 81 (as of 06:46 UTC)
-- Highest PR number is #93 (ours) — most recent submission
+- Total open PRs in upstream (solanabr): 81 (as of 07:04 UTC)
+- Highest PR number is #94 (ours) — most recent submission
 - No reviews on any of our PRs yet
-- Other teams: 67 competing PRs + misc issue-based submissions
+- Other teams: ~68 competing PRs + misc issue-based submissions
 
 ## Next
 - Monitor PRs for review comments — respond and iterate quickly
-- Consider: error handling / troubleshooting guide, or SDK TypeScript types reference
+- Consider: error handling / troubleshooting guide (remaining backlog suggestion)
 - After PRs merge: tag release, update npm package version
 - Ensure SUBMISSION.md reflects 102/102 SDK + 19/19 Anchor + 31/31 backend (PR #88 has this update)
-- No new backlog items; all planned work is in open PRs — 14 PRs total
 - IDL not yet generated locally (programs/sss-token/target/idl/ missing) — will generate if Anchor build runs
