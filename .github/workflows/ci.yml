@@ -147,8 +147,8 @@ jobs:
 
       # NOTE: Do NOT use Swatinem/rust-cache here. The anchor job regenerates
       # Cargo.lock from scratch via `cargo generate-lockfile` and then builds
-      # with the Solana 1.18 toolchain (rustc 1.75), which differs from the
-      # system rustc used to compute the cache key. Reusing cached build
+      # with the Solana 2.3 platform-tools toolchain (rustc 1.86), which differs
+      # from the system rustc used to compute the cache key. Reusing cached build
       # artifacts can cause subtle ABI mismatches between the two toolchains.
       # Omitting the cache keeps each run hermetic and correct.
 
@@ -172,10 +172,9 @@ jobs:
           # supported by Cargo 1.84.0 bundled with Solana platform-tools.
           # Pin to last known-good version. Do NOT remove this pin.
           cargo update blake3 --precise 1.7.0
-          # solana-zk-token-sdk v2.3.x has an internal source-level compile error
-          # (PedersenCommitment / Pedersen types moved in the 2.3 release). Pin to
-          # the last known-good version that compiles with rustc 1.86.
-          cargo update -p solana-zk-token-sdk --precise 2.1.21 2>/dev/null || true
+          # solana-zk-token-sdk is no longer a transitive dependency — we upgraded
+          # spl-tlv-account-resolution and spl-transfer-hook-interface to 0.10,
+          # which uses spl-pod 0.5 (depends on solana-zk-sdk, not zk-token-sdk).
 
       - name: Anchor build
         # Anchor 0.32 uses idl-build feature (stable Rust) for IDL generation —
