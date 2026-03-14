@@ -100,4 +100,4 @@
 - After PRs merge: tag release, update npm package version
 - All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ, OpenAPI spec — primarily monitoring phase
 
-# heartbeat 11:16
+# heartbeat 11:42 — SSS-014 complete: date-range filtering on /api/events (PR #103 open, 35/35 tests green)
