@@ -93,6 +93,14 @@
 - After PRs merge: tag release, update npm package version
 - All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ, OpenAPI spec
 
+## Fixes Applied (2026-03-14)
+- Found backend server was running old binary (Mar 13) vs new compiled binary in workspace target
+- The old binary lacked the DELETE /api/compliance/blacklist/:id route working correctly
+- Started correct binary from /target/debug/sss-backend (workspace target, updated Mar 14 20:50)
+- SDK tests now 137/137 (was 26 failing due to: ECONNREFUSED + 1 old-binary bug)
+- Backend server running on port 9876 with BOOTSTRAP API key in sss.db
+- Key insight: backend/ has its own target/ symlink but cargo workspace compiles to root target/
+
 
 
 
@@ -110,3 +118,6 @@
 
 # heartbeat 20:22
 <!-- heartbeat: 2026-03-14T20:22:00Z -->
+
+# heartbeat 20:38
+<!-- heartbeat: 2026-03-14T20:38:00Z -->
