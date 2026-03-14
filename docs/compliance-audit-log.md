@@ -96,13 +96,15 @@ Returns a filtered, time-ordered (newest-first) list of audit entries.
 
 #### Query Parameters
 
-| Parameter | Type   | Default | Max  | Description                                        |
-|-----------|--------|---------|------|----------------------------------------------------|
-| `address` | string | —       | —    | Exact-match filter on wallet or contract address   |
-| `action`  | string | —       | —    | Exact-match filter on action type (see table below)|
-| `limit`   | uint   | `100`   | `1000` | Maximum number of entries to return              |
+| Parameter | Type   | Default | Max    | Description                                        |
+|-----------|--------|---------|--------|----------------------------------------------------|
+| `address` | string | —       | —      | Exact-match filter on wallet or contract address   |
+| `action`  | string | —       | —      | Exact-match filter on action type (see table below)|
+| `limit`   | u32    | `50`    | `1000` | Records per page                                   |
+| `offset`  | u32    | `0`     | —      | Zero-based record offset for pagination            |
 
-All parameters are optional. With no parameters the endpoint returns the 100 most recent entries.
+All parameters are optional. With no parameters the endpoint returns the 50 most recent entries.
+See [pagination.md](./pagination.md) for offset-based pagination patterns.
 
 #### Audit Action Types
 
@@ -116,8 +118,12 @@ All parameters are optional. With no parameters the endpoint returns the 100 mos
 #### Example Requests
 
 ```bash
-# Last 100 entries (default)
+# First 50 entries (default)
 curl -H "X-Api-Key: $KEY" http://localhost:8080/api/compliance/audit
+
+# Page 2 (records 50–99)
+curl -H "X-Api-Key: $KEY" \
+  "http://localhost:8080/api/compliance/audit?offset=50&limit=50"
 
 # All entries for a specific address
 curl -H "X-Api-Key: $KEY" \
@@ -127,9 +133,9 @@ curl -H "X-Api-Key: $KEY" \
 curl -H "X-Api-Key: $KEY" \
   "http://localhost:8080/api/compliance/audit?action=BLACKLIST_ADD&limit=10"
 
-# Combined: address + action filter
+# Combined: address + action filter, paginated
 curl -H "X-Api-Key: $KEY" \
-  "http://localhost:8080/api/compliance/audit?address=So1111...&action=MINT_BLOCKED"
+  "http://localhost:8080/api/compliance/audit?address=So1111...&action=MINT_BLOCKED&offset=0"
 ```
 
 #### Response
@@ -137,17 +143,23 @@ curl -H "X-Api-Key: $KEY" \
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "id": "uuid",
-      "action": "MINT_BLOCKED",
-      "address": "So1111...",
-      "details": "Blocked mint of 1000 to blacklisted address",
-      "created_at": "2026-03-13T21:05:00Z"
-    }
-  ]
+  "data": {
+    "entries": [
+      {
+        "id": "uuid",
+        "action": "MINT_BLOCKED",
+        "address": "So1111...",
+        "details": "Blocked mint of 1000 to blacklisted address",
+        "created_at": "2026-03-13T21:05:00Z"
+      }
+    ],
+    "page": { "total": 42, "offset": 0, "limit": 50 }
+  }
 }
 ```
+
+`page.total` is the count of matching entries (after applying `address`/`action` filters).
+Use `offset + limit < page.total` to detect more pages.
 
 Each entry contains:
 
@@ -171,11 +183,13 @@ The SQLite table is append-only; there are no update or delete operations on aud
 
 ## Integration Test Coverage
 
-Audit log filtering is exercised by `test_audit_log_filtering` in `backend/src/main.rs` (SSS-QA suite). The test verifies:
+Audit log filtering and pagination is exercised by `test_audit_log_filtering` in `backend/src/main.rs` (SSS-QA suite). The test verifies:
 
 - Unfiltered query returns all entries.
 - `?address=` returns only entries matching that address.
 - `?action=BLACKLIST_ADD` returns only blacklist-add entries.
-- `?limit=1` returns exactly one entry.
+- `?limit=1` returns exactly one entry with correct `page.total`.
+- `?offset=` navigation returns the correct slice and `page` metadata.
+- Response shape is `AuditPageResponse { entries, page }` (not a bare array).
 
 See [integration-testing.md](./integration-testing.md) for how to run the full test suite.

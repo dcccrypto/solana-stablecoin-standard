@@ -171,14 +171,15 @@ When no `token_mint` is provided, `token_mint` in the response is `"all"`.
 
 ### `GET /api/events`
 
-List mint and burn events, most-recent first.
+List mint and burn events, most-recent first. Supports offset-based pagination — see [pagination.md](./pagination.md) for details.
 
 **Query parameters**
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `token_mint` | string | ✗ | all | Filter by mint |
-| `limit` | u32 | ✗ | 100 | Max events per type (mint, burn) |
+| Parameter | Type | Required | Default | Max | Description |
+|-----------|------|----------|---------|-----|-------------|
+| `token_mint` | string | ✗ | all | — | Filter by mint |
+| `limit` | u32 | ✗ | `50` | `500` | Records per page (applied to both lists) |
+| `offset` | u32 | ✗ | `0` | — | Zero-based record offset |
 
 **Response 200**
 
@@ -205,11 +206,15 @@ List mint and burn events, most-recent first.
         "tx_signature": "3Yz8AbCdEfGhIjKlMnOpQrStUvWxYz1234567890AB",
         "created_at": "2026-03-13T18:59:00Z"
       }
-    ]
+    ],
+    "mint_page": { "total": 120, "offset": 0, "limit": 50 },
+    "burn_page":  { "total": 34,  "offset": 0, "limit": 50 }
   },
   "error": null
 }
 ```
+
+`mint_page` and `burn_page` are independent pagination metadata objects — mint and burn have separate totals and may need different numbers of pages.
 
 ---
 
@@ -277,25 +282,39 @@ Add an address to the blacklist. Idempotent — re-adding an existing address up
 
 ### `GET /api/compliance/audit`
 
-Return the full audit log, most-recent first.
+Return the audit log, most-recent first. Supports offset-based pagination — see [pagination.md](./pagination.md).
+
+**Query parameters**
+
+| Parameter | Type | Required | Default | Max | Description |
+|-----------|------|----------|---------|-----|-------------|
+| `address` | string | ✗ | — | — | Exact-match filter on wallet/contract address |
+| `action` | string | ✗ | — | — | Exact-match filter on action type |
+| `limit` | u32 | ✗ | `50` | `1000` | Records per page |
+| `offset` | u32 | ✗ | `0` | — | Zero-based record offset |
 
 **Response 200**
 
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "id": "...",
-      "action": "MINT",
-      "address": "RecipientAddress123456789012345678901234567",
-      "details": "Minted 1000000 tokens on mint So11111111111111111111111111111111111111112",
-      "created_at": "2026-03-13T18:59:00Z"
-    }
-  ],
+  "data": {
+    "entries": [
+      {
+        "id": "...",
+        "action": "MINT",
+        "address": "RecipientAddress123456789012345678901234567",
+        "details": "Minted 1000000 tokens on mint So11111111111111111111111111111111111111112",
+        "created_at": "2026-03-13T18:59:00Z"
+      }
+    ],
+    "page": { "total": 980, "offset": 0, "limit": 50 }
+  },
   "error": null
 }
 ```
+
+`page.total` reflects the count after applying `address` and `action` filters.
 
 **Recorded actions**
 
