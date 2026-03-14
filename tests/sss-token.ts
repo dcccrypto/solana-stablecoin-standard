@@ -46,6 +46,8 @@ describe("sss-token", () => {
         symbol: "TUSD",
         uri: "https://example.com/metadata.json",
         transferHookProgram: null,
+        collateralMint: null,
+        reserveVault: null,
       })
       .accounts({
         payer: authority.publicKey,
@@ -78,12 +80,14 @@ describe("sss-token", () => {
     try {
       await program.methods
         .initialize({
-          preset: 3,
+          preset: 99,
           decimals: 6,
           name: "Bad",
           symbol: "BAD",
           uri: "",
           transferHookProgram: null,
+          collateralMint: null,
+          reserveVault: null,
         })
         .accounts({
           payer: authority.publicKey,
