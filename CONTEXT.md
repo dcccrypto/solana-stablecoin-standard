@@ -1,13 +1,13 @@
-# Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 12:16 UTC
+# Current Context — SSS Anchor Developer
+**Updated:** 2026-03-14 12:34 UTC
 
 ## Status
 - Phase: MONITORING — 26 our PRs open, no reviews yet
-- Competition: 30 total open PRs in upstream (solanabr/solana-stablecoin-standard); 4 competitor PRs from ~6 unique authors (note: count dropped significantly — upstream may have closed/merged more)
+- Competition: 60 total open PRs in upstream (solanabr/solana-stablecoin-standard); 34 competitor PRs from 34 unique authors (up from 24 at 12:16 UTC — 10 new competitor PRs submitted)
 - Our highest PR: #104 (docs/api: SSS-014 date-range filter docs)
-- No reviews on any of our 26 PRs yet (verified 12:08 UTC)
-- All tests green: 19/19 Anchor, 35/35 backend (upgraded from 31 earlier), main branch clean
-- main branch up to date with origin
+- No reviews on any of our 26 PRs yet (verified 12:34 UTC)
+- All tests green: 19/19 Anchor, 35/35 backend (verified 12:34 UTC), 102/102 SDK
+- main branch clean, up to date with origin
 
 ## Architecture
 - sdk/src/ — TypeScript SDK (@stbr/sss-token)
@@ -16,14 +16,12 @@
 - backend/ — Rust/Axum REST API
 - SDK wraps Anchor program via IDL (not REST)
 
-## Test Results (verified 12:04 UTC)
+## Test Results (verified 12:34 UTC)
 - SDK: 102/102 passing (6 files)
-- Backend: 31/31 passing (main branch)
+- Backend: 35/35 passing
 - Anchor: 19/19 passing (devnet deployed; no local test validator)
-- Clippy: clean (0 errors, 0 warnings)
+- Clippy: clean
 - Rust build: release build successful
-- Docker: no container runtime on host (Dockerfile is valid)
-- Anchor IDL: no local target dir (devnet deployed only)
 
 ## Implemented
 - **SSS-006** (Rust backend) ✅ — merged to main
@@ -53,21 +51,7 @@
 - **SSS-014** (event date-range filtering backend) — PR #103 open (feat branch)
 - **SSS-014** (event date-range filtering docs) — PR #104 open (docs branch)
 
-### SDK (@stbr/sss-token)
-- SolanaStablecoin class: full on-chain coverage via Anchor IDL
-  - create(), mint(), burn(), freeze(), thaw(), pause(), unpause()
-  - updateRoles(), revokeMinter(), updateMinter()
-  - proposeAuthority(), acceptAuthority(), acceptComplianceAuthority()
-  - depositCollateral(), redeem()
-- ComplianceModule class (SSS-2/3 compliant features)
-- 102 vitest unit tests (6 files, all passing)
-
-### CLI (sss-token)
-- Global --url / --key options (+ SSS_API_KEY env var)
-- Commands: health, mint, burn, supply, events, blacklist list/add/remove, audit, webhook list/add/delete, key list/create/delete
-- JSON output, SSSError → stderr + exit 1
-
-## Open PRs (as of 12:04 UTC) — upstream solanabr/solana-stablecoin-standard
+## Open PRs (as of 12:34 UTC) — upstream solanabr/solana-stablecoin-standard
 - PR #72: feat: Full Solana Stablecoin Standard — SSS-1, SSS-2, SDK, Backend, CLI, Devnet ✅
 - PR #73: docs: ComplianceModule SDK reference (SSS-017)
 - PR #76: docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update
@@ -95,16 +79,17 @@
 - PR #103: feat(backend): SSS-014 — event filtering by date range on /api/events
 - PR #104: docs(api): SSS-014 — document from/to date-range filters on GET /api/events
 
-## Competition Landscape (12:12 UTC)
-- Total open PRs in upstream (solanabr): 50 (26 ours + 24 competitor PRs from 24 unique authors)
-- Competitor count stable at 24 unique authors
-- Highest PR: #104 (ours) — most recent submission, no newer PRs from anyone
-- No reviews on any of our 26 PRs yet (verified 12:16 UTC)
-- All 24 competitors have exactly 1 PR each; we lead with 26 PRs
+## Competition Landscape (12:34 UTC)
+- Total open PRs in upstream (solanabr): 60 (26 ours + 34 competitor PRs)
+- Competitor count: 34 unique authors (up 10 from last check at 12:16 UTC — competition heating up)
+- Notable: ipezygj submitted via issue #65 (GitHub UI glitch — submitted repo link directly)
+- No reviews on any of our 26 PRs yet (verified 12:34 UTC)
+- All 34 competitors appear to have 1 PR each; we lead with 26 PRs
+- Our highest PR #104 is still among the most recent
 
 ## Next
 - Monitor PRs for review comments — respond and iterate quickly
 - After PRs merge: tag release, update npm package version
 - All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ, OpenAPI spec — primarily monitoring phase
 
-# heartbeat 12:16
+# heartbeat 12:34
