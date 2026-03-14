@@ -109,6 +109,7 @@ SSS-2 is a strict superset of SSS-1. Every SSS-1 requirement applies.
 | Extension | Purpose |
 |-----------|---------|
 | **Transfer Hook** | Points to the blacklist hook program. Token-2022 CPIs into this program on every `TransferChecked`. |
+| **DefaultAccountState::Frozen** | All new token accounts start frozen, requiring the issuer to thaw after KYC verification. |
 
 ### 3.2 Additional Required Authorities
 

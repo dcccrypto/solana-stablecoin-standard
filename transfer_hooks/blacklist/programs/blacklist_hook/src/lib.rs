@@ -11,6 +11,16 @@ use instructions::*;
 
 declare_id!("84rPjkmmoP3oYZVxjtL2rdcT6hC5Rts6N5XzJTFcJEk6");
 
+#[cfg(not(feature = "no-entrypoint"))]
+solana_security_txt::security_txt! {
+    name: "SSS Blacklist Transfer Hook",
+    project_url: "https://github.com/luiz-lvj/solana-stablecoin-standard",
+    contacts: "email:security@sss.dev",
+    policy: "https://github.com/luiz-lvj/solana-stablecoin-standard/blob/main/SECURITY.md",
+    preferred_languages: "en",
+    source_code: "https://github.com/luiz-lvj/solana-stablecoin-standard/tree/main/transfer_hooks/blacklist"
+}
+
 #[program]
 pub mod blacklist_hook {
     use super::*;

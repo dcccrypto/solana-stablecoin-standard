@@ -6,7 +6,7 @@ use crate::error::SssError;
 use crate::events::TokensSeized;
 use crate::state::{RoleEntry, StablecoinConfig};
 
-pub fn handler(ctx: Context<SeizeCtx>, amount: u64) -> Result<()> {
+pub fn seize(ctx: Context<SeizeCtx>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
     require!(!ctx.accounts.config.paused, SssError::Paused);
     require!(ctx.accounts.target_ata.is_frozen(), SssError::AccountNotFrozen);

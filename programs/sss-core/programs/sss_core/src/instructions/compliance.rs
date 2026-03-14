@@ -5,7 +5,7 @@ use crate::error::SssError;
 use crate::events::ComplianceToggled;
 use crate::state::StablecoinConfig;
 
-pub fn handler(ctx: Context<SetComplianceCtx>, enabled: bool) -> Result<()> {
+pub fn set_compliance(ctx: Context<SetComplianceCtx>, enabled: bool) -> Result<()> {
     ctx.accounts.config.compliance_enabled = enabled;
 
     emit!(ComplianceToggled {

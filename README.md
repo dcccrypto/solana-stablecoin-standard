@@ -37,7 +37,7 @@ solana-stablecoin-standard/
 | Standard | What it provides | Token-2022 Extensions |
 |----------|-----------------|----------------------|
 | **SSS-1** | Minimal stablecoin — mint/burn, freeze, on-mint metadata | Metadata Pointer |
-| **SSS-2** | SSS-1 + compliance — blacklist enforcement via transfer hook | Metadata Pointer, Transfer Hook |
+| **SSS-2** | SSS-1 + compliance — blacklist enforcement via transfer hook, KYC-gated accounts | Metadata Pointer, Transfer Hook, DefaultAccountState::Frozen |
 
 **SSS-Core features**: RBAC roles, per-minter quotas, supply cap, dual pause, metadata updates, compliance toggle, burn-from-any-account, and **reserve attestation** (proof-of-reserve for GENIUS Act compliance) — with a **feature-gated module system** (`compliance`, `quotas`, `supply-cap`) that lets issuers strip modules they don't need at compile time.
 

@@ -6,7 +6,7 @@ use crate::error::SssError;
 use crate::events::TokensMinted;
 use crate::state::{MinterInfo, RoleEntry, StablecoinConfig};
 
-pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
+pub fn mint_tokens(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
     let config = &ctx.accounts.config;
     require!(!config.paused, SssError::Paused);

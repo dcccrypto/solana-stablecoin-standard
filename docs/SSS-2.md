@@ -18,6 +18,7 @@ SSS-2 tokens MUST be created using **Token-2022**.
 |-----------|---------|
 | **Metadata Pointer** | On-mint metadata (same as SSS-1) |
 | **Transfer Hook** | Points to the blacklist hook program. Token-2022 CPIs into this program on every `TransferChecked`, enforcing blacklist checks. |
+| **DefaultAccountState::Frozen** | All new token accounts start frozen. The issuer must thaw an account before the holder can transact, enabling KYC-gated onboarding. |
 
 ### Required Authorities
 

@@ -4,7 +4,7 @@ use crate::constants::*;
 use crate::events::ReserveAttested;
 use crate::state::{AttestReserveParams, ReserveAttestation, RoleEntry, StablecoinConfig};
 
-pub fn handler(ctx: Context<AttestReserveCtx>, params: AttestReserveParams) -> Result<()> {
+pub fn attest_reserve(ctx: Context<AttestReserveCtx>, params: AttestReserveParams) -> Result<()> {
     let attestation = &mut ctx.accounts.attestation;
     attestation.config = ctx.accounts.config.key();
     attestation.attestor = ctx.accounts.attestor.key();

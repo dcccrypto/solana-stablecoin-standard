@@ -5,7 +5,7 @@ use crate::error::SssError;
 use crate::events::MinterQuotaSet;
 use crate::state::{MinterInfo, StablecoinConfig};
 
-pub fn handler(ctx: Context<SetMinterQuota>, quota: u64) -> Result<()> {
+pub fn set_minter_quota(ctx: Context<SetMinterQuota>, quota: u64) -> Result<()> {
     let info = &mut ctx.accounts.minter_info;
 
     if info.config == Pubkey::default() {

@@ -74,6 +74,7 @@ export async function deployStablecoinFromConfig(
   if (transferHookEnabled) console.log("Transfer hook extension: enabled (program:", transferHookProgramId!.toBase58() + ")");
   if (pausableEnabled) console.log("Pausable extension: enabled");
   if (permanentDelegateEnabled) console.log("Permanent delegate extension: enabled");
+  if (cfg.standard === "sss-2") console.log("Default account state: frozen (new ATAs require thaw)");
   console.log("");
 
   const preset = cfg.standard === "sss-2" ? Presets.SSS_2 : Presets.SSS_1;
@@ -108,6 +109,7 @@ export async function deployStablecoinFromConfig(
       pausable: pausableEnabled,
       permanentDelegate: permanentDelegateEnabled,
       transferHook: transferHookConfig ?? false,
+      defaultAccountStateFrozen: cfg.standard === "sss-2",
     },
   });
 

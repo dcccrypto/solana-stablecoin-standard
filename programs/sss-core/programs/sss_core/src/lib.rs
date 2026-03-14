@@ -10,12 +10,22 @@ use instructions::*;
 
 declare_id!("4ZFzYcNVDSew79hSAVRdtDuMqe9g4vYh7CFvitPSy5DD");
 
+#[cfg(not(feature = "no-entrypoint"))]
+solana_security_txt::security_txt! {
+    name: "SSS-Core",
+    project_url: "https://github.com/luiz-lvj/solana-stablecoin-standard",
+    contacts: "email:security@sss.dev",
+    policy: "https://github.com/luiz-lvj/solana-stablecoin-standard/blob/main/SECURITY.md",
+    preferred_languages: "en",
+    source_code: "https://github.com/luiz-lvj/solana-stablecoin-standard/tree/main/programs/sss-core"
+}
+
 #[program]
 pub mod sss_core {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>, params: state::InitializeParams) -> Result<()> {
-        instructions::initialize::handler(ctx, params)
+        instructions::initialize::initialize(ctx, params)
     }
 
     pub fn grant_role(ctx: Context<GrantRole>, role: u8) -> Result<()> {
@@ -27,11 +37,11 @@ pub mod sss_core {
     }
 
     pub fn set_minter_quota(ctx: Context<SetMinterQuota>, quota: u64) -> Result<()> {
-        instructions::quota::handler(ctx, quota)
+        instructions::quota::set_minter_quota(ctx, quota)
     }
 
     pub fn mint_tokens(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
-        instructions::mint::handler(ctx, amount)
+        instructions::mint::mint_tokens(ctx, amount)
     }
 
     pub fn burn_tokens(ctx: Context<BurnTokens>, amount: u64) -> Result<()> {
@@ -67,19 +77,19 @@ pub mod sss_core {
     }
 
     pub fn seize(ctx: Context<SeizeCtx>, amount: u64) -> Result<()> {
-        instructions::seize::handler(ctx, amount)
+        instructions::seize::seize(ctx, amount)
     }
 
     pub fn update_metadata(ctx: Context<UpdateMetadataCtx>, params: state::UpdateMetadataParams) -> Result<()> {
-        instructions::metadata::handler(ctx, params)
+        instructions::metadata::update_metadata(ctx, params)
     }
 
     pub fn set_compliance(ctx: Context<SetComplianceCtx>, enabled: bool) -> Result<()> {
-        instructions::compliance::handler(ctx, enabled)
+        instructions::compliance::set_compliance(ctx, enabled)
     }
 
     pub fn attest_reserve(ctx: Context<AttestReserveCtx>, params: state::AttestReserveParams) -> Result<()> {
-        instructions::attest::handler(ctx, params)
+        instructions::attest::attest_reserve(ctx, params)
     }
 
     pub fn view_config(ctx: Context<ViewConfigCtx>) -> Result<()> {

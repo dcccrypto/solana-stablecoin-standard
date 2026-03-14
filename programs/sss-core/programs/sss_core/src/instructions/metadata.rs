@@ -7,7 +7,7 @@ use crate::error::SssError;
 use crate::events::MetadataUpdated;
 use crate::state::{StablecoinConfig, UpdateMetadataParams};
 
-pub fn handler(ctx: Context<UpdateMetadataCtx>, params: UpdateMetadataParams) -> Result<()> {
+pub fn update_metadata(ctx: Context<UpdateMetadataCtx>, params: UpdateMetadataParams) -> Result<()> {
     let field = match params.field.as_str() {
         "name" => spl_token_metadata_interface::state::Field::Name,
         "symbol" => spl_token_metadata_interface::state::Field::Symbol,

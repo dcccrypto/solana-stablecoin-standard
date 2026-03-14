@@ -263,3 +263,44 @@ The backend is stateless and holds no secrets beyond the authority keypair (conf
 ### Demo Security
 
 The demo never touches private keys. All signing happens in the Phantom wallet extension. The connected wallet must be the relevant authority (mint authority to mint, freeze authority to freeze, etc.).
+
+---
+
+## Design Rationale
+
+### Why the Hook Doesn't Check `sss-core` Pause State
+
+An alternative design would have the transfer hook read `sss-core`'s `StablecoinConfig.paused` field during every transfer. SSS intentionally avoids this for three reasons:
+
+1. **Program independence.** The blacklist hook is a standalone program that works with or without `sss-core`. Coupling it to `sss-core` would mean every issuer MUST deploy `sss-core` even if they only want blacklist enforcement.
+
+2. **Token-2022 already handles global pause.** The `PausableConfig` extension blocks ALL token operations (transfers, mints, burns) at the Solana runtime level. Adding a second pause check in the hook is redundant — Token-2022 rejects the transaction before the hook is ever invoked.
+
+3. **Minimal extra account overhead.** Adding `sss-core`'s config PDA to the `ExtraAccountMetaList` means every transfer must resolve and pass an additional account, increasing compute cost for every transfer even when pause is not active.
+
+The dual-pause architecture (Token-2022 protocol-level + `sss-core` application-level) provides defense-in-depth without coupling the programs.
+
+### Why Seize Uses Burn + Mint (Not Transfer)
+
+The `seize` instruction performs `thaw → burn → mint-to-treasury → re-freeze` instead of `thaw → transfer → re-freeze`. This is intentional:
+
+1. **Bypass transfer hook.** Seize is an authority action, not a user transfer. The seized funds should move to the treasury regardless of blacklist status — the target is almost certainly blacklisted (that's why they're being seized).
+
+2. **No extra accounts.** A `TransferChecked` through Token-2022 would trigger the hook CPI, requiring the blacklist PDAs for both source and destination. Burn + mint avoids this entirely.
+
+3. **Accurate accounting.** The burn increments `total_burned` and the mint increments `total_minted`, so `total_minted - total_burned` still equals the on-chain supply. The separate `total_seized` counter tracks how much of the burned amount came from seizures.
+
+### Why SSS-2 Uses `DefaultAccountState::Frozen`
+
+When deploying an SSS-2 token, the CLI enables the `DefaultAccountState::Frozen` extension. This means every new Associated Token Account starts frozen. The issuer must explicitly thaw an account before the holder can transact.
+
+This enables **KYC-gated onboarding**: the issuer can verify a wallet off-chain (sanctions screening, identity verification) and only thaw the account after approval. Combined with the blacklist hook, this provides two layers of compliance:
+
+| Layer | What it does | When it applies |
+|-------|-------------|-----------------|
+| **DefaultAccountState::Frozen** | New accounts can't transact until thawed | Account creation time |
+| **Blacklist transfer hook** | Transfers to/from blocked wallets are rejected | Every transfer |
+
+### Security Contact
+
+Both programs embed a `security_txt!` macro (via `solana-security-txt`) with contact information for security researchers. This follows the Solana security best practice established by Neodyme Labs. The security policy is documented in [SECURITY.md](../SECURITY.md).

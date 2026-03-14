@@ -7,7 +7,7 @@ use crate::error::SssError;
 use crate::events::ConfigInitialized;
 use crate::state::{InitializeParams, StablecoinConfig};
 
-pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()> {
+pub fn initialize(ctx: Context<Initialize>, params: InitializeParams) -> Result<()> {
     require!(
         params.preset == PRESET_SSS1 || params.preset == PRESET_SSS2,
         SssError::InvalidPreset
