@@ -18,13 +18,33 @@ pub struct StablecoinConfig {
     pub total_minted: u64,
     /// Total tokens burned
     pub total_burned: u64,
-    /// Transfer hook program (SSS-2 only; Pubkey::default if SSS-1)
+    /// Transfer hook program (SSS-2 only; Pubkey::default if SSS-1/3)
     pub transfer_hook_program: Pubkey,
+    /// SSS-3: collateral token mint (e.g. USDC; Pubkey::default if SSS-1/2)
+    pub collateral_mint: Pubkey,
+    /// SSS-3: reserve vault token account address (Pubkey::default if SSS-1/2)
+    pub reserve_vault: Pubkey,
+    /// SSS-3: total collateral deposited into the reserve vault
+    pub total_collateral: u64,
     pub bump: u8,
 }
 
 impl StablecoinConfig {
     pub const SEED: &'static [u8] = b"stablecoin-config";
+
+    /// Net circulating supply (total_minted - total_burned)
+    pub fn net_supply(&self) -> u64 {
+        self.total_minted.saturating_sub(self.total_burned)
+    }
+
+    /// Reserve ratio in basis points (10_000 = 100% collateralized).
+    pub fn reserve_ratio_bps(&self) -> u64 {
+        let supply = self.net_supply();
+        if supply == 0 {
+            return 10_000;
+        }
+        self.total_collateral.saturating_mul(10_000) / supply
+    }
 }
 
 /// Per-minter configuration — minters are PDAs keyed by [config, minter_pubkey].
@@ -61,6 +81,10 @@ pub struct InitializeParams {
     pub uri: String,
     /// Transfer hook program (required for SSS-2)
     pub transfer_hook_program: Option<Pubkey>,
+    /// SSS-3: collateral token mint (e.g. USDC mint address)
+    pub collateral_mint: Option<Pubkey>,
+    /// SSS-3: reserve vault token account address
+    pub reserve_vault: Option<Pubkey>,
 }
 
 /// Parameters for updating authorities.
