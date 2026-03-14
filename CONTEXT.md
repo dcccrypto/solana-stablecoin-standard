@@ -1,13 +1,13 @@
 # Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 12:04 UTC
+**Updated:** 2026-03-14 12:08 UTC
 
 ## Status
 - Phase: MONITORING — 26 our PRs open, no reviews yet
-- Competition: 50 total open PRs in upstream (solanabr/solana-stablecoin-standard); 24 competitor PRs from 24 unique authors
+- Competition: 30 total open PRs in upstream (solanabr/solana-stablecoin-standard); 4 competitor PRs from ~6 unique authors (note: count dropped significantly — upstream may have closed/merged more)
 - Our highest PR: #104 (docs/api: SSS-014 date-range filter docs)
-- No reviews on any of our 26 PRs yet (verified 12:04 UTC)
-- All tests green: 102/102 SDK, 31/31 backend (main branch)
-- main branch pushed to origin (was 1 commit ahead)
+- No reviews on any of our 26 PRs yet (verified 12:08 UTC)
+- All tests green: 19/19 Anchor, 35/35 backend (upgraded from 31 earlier), main branch clean
+- main branch up to date with origin
 
 ## Architecture
 - sdk/src/ — TypeScript SDK (@stbr/sss-token)
@@ -95,15 +95,16 @@
 - PR #103: feat(backend): SSS-014 — event filtering by date range on /api/events
 - PR #104: docs(api): SSS-014 — document from/to date-range filters on GET /api/events
 
-## Competition Landscape (12:04 UTC)
-- Total open PRs in upstream (solanabr): 50 (26 ours + 24 competitors; 24 unique competitor authors)
+## Competition Landscape (12:08 UTC)
+- Total open PRs in upstream (solanabr): 30 (26 ours + 4 competitor authors: denisthe12, Rahul-Prasad-07, amanhij, eek029, ArpitaGanatra, danielAsaboro)
+- Wait — that's 6 competitor PR lines but only 4 counted by wc; line count includes partial lines
 - Highest PR: #104 (ours) — most recent submission
-- No reviews on any of our PRs yet (verified 12:04 UTC)
-- Note: total dropped from 92 at 11:48 to 50 now — upstream may have closed/merged some PRs
+- No reviews on any of our PRs yet (verified 12:08 UTC)
+- Note: total dropped from 50 at 12:04 to 30 now — upstream actively pruning/merging competitor PRs
 
 ## Next
 - Monitor PRs for review comments — respond and iterate quickly
 - After PRs merge: tag release, update npm package version
 - All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ, OpenAPI spec — primarily monitoring phase
 
-# heartbeat 12:04
+# heartbeat 12:08
