@@ -140,7 +140,7 @@ describe("sss_core", () => {
   describe("initialize", () => {
     it("creates config PDA and transfers authorities", async () => {
       await (program.methods as any)
-        .initialize({ preset: 1, supplyCap: new BN(1_000_000_000_000), complianceEnabled: false })
+        .initialize({ preset: 1, supplyCap: new BN(1_000_000_000_000), complianceEnabled: false, transferHookProgram: null })
         .accountsStrict({
           authority: admin.publicKey,
           mint: mint.publicKey,
@@ -187,7 +187,7 @@ describe("sss_core", () => {
       const [badConfig] = findConfigPda(badMint.publicKey, program.programId);
       try {
         await (program.methods as any)
-          .initialize({ preset: 99, supplyCap: null, complianceEnabled: false })
+          .initialize({ preset: 99, supplyCap: null, complianceEnabled: false, transferHookProgram: null })
           .accountsStrict({
             authority: admin.publicKey,
             mint: badMint.publicKey,
@@ -401,6 +401,7 @@ describe("sss_core", () => {
           minterInfo: minterInfoPda,
           mint: mint.publicKey,
           recipientAta: victimAta,
+          recipientBlacklistEntry: SystemProgram.programId,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
         .signers([minter])
@@ -430,6 +431,7 @@ describe("sss_core", () => {
             minterInfo: minterInfoPda,
             mint: mint.publicKey,
             recipientAta: victimAta,
+            recipientBlacklistEntry: SystemProgram.programId,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .signers([nobody])
@@ -454,10 +456,11 @@ describe("sss_core", () => {
             minterInfo: minterInfoPda,
             mint: mint.publicKey,
             recipientAta: victimAta,
+            recipientBlacklistEntry: SystemProgram.programId,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .signers([minter])
-          .rpc({ commitment: "confirmed" });
+        .rpc({ commitment: "confirmed" });
         assert.fail("should have thrown");
       } catch (e: any) {
         assert.include(e.toString(), "QuotaExceeded");
@@ -477,6 +480,7 @@ describe("sss_core", () => {
           minterInfo: minterInfoPda,
           mint: mint.publicKey,
           recipientAta: victimAta,
+          recipientBlacklistEntry: SystemProgram.programId,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
         .signers([minter])
@@ -512,6 +516,7 @@ describe("sss_core", () => {
           minterInfo: minterInfoPda,
           mint: mint.publicKey,
           recipientAta: burnerAta,
+          recipientBlacklistEntry: SystemProgram.programId,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
         .signers([minter])
@@ -675,6 +680,7 @@ describe("sss_core", () => {
             minterInfo: minterInfoPda,
             mint: mint.publicKey,
             recipientAta: victimAta,
+            recipientBlacklistEntry: SystemProgram.programId,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .signers([minter])
@@ -1187,6 +1193,199 @@ describe("sss_core", () => {
       const att = await (program.account as any).reserveAttestation.fetch(attestationPda);
       assert.equal(att.reserveAmount.toNumber(), 15_000_000_000);
       assert.equal(att.source, "Updated audit Q2 2026");
+    });
+  });
+
+  describe("negative tests", () => {
+    let negVictimAta: PublicKey;
+    let negBurnerAta: PublicKey;
+    let negTreasuryAta: PublicKey;
+
+    before(async () => {
+      negVictimAta = getAssociatedTokenAddressSync(
+        mint.publicKey, victim.publicKey, false, TOKEN_2022_PROGRAM_ID,
+      );
+      negBurnerAta = getAssociatedTokenAddressSync(
+        mint.publicKey, burner.publicKey, false, TOKEN_2022_PROGRAM_ID,
+      );
+      negTreasuryAta = getAssociatedTokenAddressSync(
+        mint.publicKey, treasury.publicKey, false, TOKEN_2022_PROGRAM_ID,
+      );
+    });
+
+    it("rejects zero-amount mint", async () => {
+      const [rolePda] = findRolePda(configPda, minter.publicKey, ROLE_MINTER, program.programId);
+      const [minterInfoPda] = findMinterInfoPda(configPda, minter.publicKey, program.programId);
+
+      try {
+        await (program.methods as any)
+          .mintTokens(new BN(0))
+          .accountsStrict({
+            minter: minter.publicKey,
+            config: configPda,
+            roleEntry: rolePda,
+            minterInfo: minterInfoPda,
+            mint: mint.publicKey,
+            recipientAta: negVictimAta,
+            recipientBlacklistEntry: SystemProgram.programId,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .signers([minter])
+          .rpc({ commitment: "confirmed" });
+        assert.fail("should have thrown");
+      } catch (e: any) {
+        assert.include(e.toString(), "ZeroAmount");
+      }
+    });
+
+    it("rejects zero-amount burn", async () => {
+      const [rolePda] = findRolePda(configPda, burner.publicKey, ROLE_BURNER, program.programId);
+
+      try {
+        await (program.methods as any)
+          .burnTokens(new BN(0))
+          .accountsStrict({
+            burner: burner.publicKey,
+            config: configPda,
+            roleEntry: rolePda,
+            mint: mint.publicKey,
+            burnerAta: negBurnerAta,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .signers([burner])
+          .rpc({ commitment: "confirmed" });
+        assert.fail("should have thrown");
+      } catch (e: any) {
+        assert.include(e.toString(), "ZeroAmount");
+      }
+    });
+
+    it("rejects zero-amount seize", async () => {
+      const [rolePda] = findRolePda(configPda, seizer.publicKey, ROLE_SEIZER, program.programId);
+      const [freezerRolePda] = findRolePda(configPda, freezer.publicKey, ROLE_FREEZER, program.programId);
+
+      const acct = await getAccount(connection, negVictimAta, "confirmed", TOKEN_2022_PROGRAM_ID);
+      if (!acct.isFrozen) {
+        await (program.methods as any)
+          .freezeTokenAccount()
+          .accountsStrict({
+            freezer: freezer.publicKey,
+            config: configPda,
+            roleEntry: freezerRolePda,
+            mint: mint.publicKey,
+            targetAta: negVictimAta,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .signers([freezer])
+          .rpc({ commitment: "confirmed" });
+      }
+
+      try {
+        await (program.methods as any)
+          .seize(new BN(0))
+          .accountsStrict({
+            seizer: seizer.publicKey,
+            config: configPda,
+            roleEntry: rolePda,
+            mint: mint.publicKey,
+            targetAta: negVictimAta,
+            treasuryAta: negTreasuryAta,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .signers([seizer])
+          .rpc({ commitment: "confirmed" });
+        assert.fail("should have thrown");
+      } catch (e: any) {
+        assert.include(e.toString(), "ZeroAmount");
+      }
+
+      await (program.methods as any)
+        .thawTokenAccount()
+        .accountsStrict({
+          freezer: freezer.publicKey,
+          config: configPda,
+          roleEntry: freezerRolePda,
+          mint: mint.publicKey,
+          targetAta: negVictimAta,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([freezer])
+        .rpc({ commitment: "confirmed" });
+    });
+
+    it("rejects seize overflow (more than target balance)", async () => {
+      const [rolePda] = findRolePda(configPda, seizer.publicKey, ROLE_SEIZER, program.programId);
+      const [freezerRolePda] = findRolePda(configPda, freezer.publicKey, ROLE_FREEZER, program.programId);
+
+      await (program.methods as any)
+        .freezeTokenAccount()
+        .accountsStrict({
+          freezer: freezer.publicKey,
+          config: configPda,
+          roleEntry: freezerRolePda,
+          mint: mint.publicKey,
+          targetAta: negVictimAta,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([freezer])
+        .rpc({ commitment: "confirmed" });
+
+      const acct = await getAccount(connection, negVictimAta, "confirmed", TOKEN_2022_PROGRAM_ID);
+      const overflowAmount = Number(acct.amount) + 1_000_000;
+
+      try {
+        await (program.methods as any)
+          .seize(new BN(overflowAmount))
+          .accountsStrict({
+            seizer: seizer.publicKey,
+            config: configPda,
+            roleEntry: rolePda,
+            mint: mint.publicKey,
+            targetAta: negVictimAta,
+            treasuryAta: negTreasuryAta,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .signers([seizer])
+          .rpc({ commitment: "confirmed" });
+        assert.fail("should have thrown");
+      } catch (e: any) {
+        assert.ok(e.toString().length > 0, "seize overflow should fail");
+      }
+
+      await (program.methods as any)
+        .thawTokenAccount()
+        .accountsStrict({
+          freezer: freezer.publicKey,
+          config: configPda,
+          roleEntry: freezerRolePda,
+          mint: mint.publicKey,
+          targetAta: negVictimAta,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([freezer])
+        .rpc({ commitment: "confirmed" });
+    });
+
+    it("rejects grant_role with invalid role value (out of range)", async () => {
+      const invalidRole = 99;
+      const randomGuy = Keypair.generate();
+      const [rolePda] = findRolePda(configPda, randomGuy.publicKey, invalidRole, program.programId);
+
+      try {
+        await (program.methods as any)
+          .grantRole(invalidRole)
+          .accountsStrict({
+            authority: admin.publicKey,
+            config: configPda,
+            grantee: randomGuy.publicKey,
+            roleEntry: rolePda,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc({ commitment: "confirmed" });
+        assert.fail("should have thrown");
+      } catch (e: any) {
+        assert.include(e.toString(), "InvalidRole");
+      }
     });
   });
 });

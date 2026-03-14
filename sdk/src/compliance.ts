@@ -310,9 +310,19 @@ export class Compliance {
       return { wallet, pda, blocked: false };
     }
 
-    // Layout: 8-byte discriminator | 32-byte wallet | 32-byte mint | 1-byte blocked | 1-byte bump
+    // Layout: 8-byte disc | 32-byte wallet | 32-byte mint | 1-byte blocked | 4+N reason | ...
     const blocked = accountInfo.data[8 + 32 + 32] !== 0;
-    return { wallet, pda, blocked };
+    let reason: string | undefined;
+    if (blocked) {
+      const reasonOffset = 8 + 32 + 32 + 1;
+      const reasonLen = accountInfo.data.readUInt32LE(reasonOffset);
+      if (reasonLen > 0 && reasonLen <= 128) {
+        reason = accountInfo.data
+          .subarray(reasonOffset + 4, reasonOffset + 4 + reasonLen)
+          .toString("utf8");
+      }
+    }
+    return { wallet, pda, blocked, reason };
   }
 
   // ─── PDA helpers ───────────────────────────────────────────────────────────

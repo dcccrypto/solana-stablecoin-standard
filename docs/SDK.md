@@ -222,6 +222,10 @@ For browser environments where the wallet signs:
 const tx = await stable.buildMintTransaction(payerPubkey, recipientPubkey, 1_000_000n);
 const tx2 = await stable.buildTransferTransaction(ownerPubkey, destPubkey, 500_000n, 6);
 const tx3 = stable.buildBurnTransaction(ownerPubkey, 250_000n);
+const tx4 = stable.buildFreezeTransaction(payerPubkey, tokenAccountPubkey);
+const tx5 = stable.buildThawTransaction(payerPubkey, tokenAccountPubkey);
+const tx6 = stable.buildSeizeTransaction(payerPubkey, targetAta, treasuryPubkey, 100_000n);
+const tx7 = stable.buildSetAuthorityTransaction(payerPubkey, "freeze", newAuthorityPubkey);
 // Sign with wallet adapter, then send
 ```
 
@@ -232,6 +236,7 @@ const tx3 = stable.buildBurnTransaction(ownerPubkey, 250_000n);
 ```typescript
 const supply = await stable.getSupply();
 // { raw: 1000000n, uiAmount: 1.0, uiAmountString: "1.000000", decimals: 6 }
+// Note: uiAmount is deprecated; use uiAmountString for full precision (amounts > 2^53)
 ```
 
 `uiAmountString` provides full precision for amounts > 2^53.
@@ -241,6 +246,7 @@ const supply = await stable.getSupply();
 ```typescript
 const balance = await stable.getBalance(walletPubkey);
 // { raw: 500000n, uiAmount: 0.5, uiAmountString: "0.500000", ata: PublicKey, exists: true }
+// Note: uiAmount is deprecated; use uiAmountString for full precision
 ```
 
 **Note**: `getBalance()` only catches "account not found" errors. Network errors are properly propagated.
@@ -287,7 +293,7 @@ await stable.compliance.closeBlacklistEntry(walletPubkey, adminKeypair);
 
 // Check status (read-only, no signing needed)
 const status = await stable.compliance.isBlacklisted(walletPubkey);
-// { wallet: PublicKey, pda: PublicKey, blocked: boolean }
+// { wallet: PublicKey, pda: PublicKey, blocked: boolean, reason?: string }
 ```
 
 ### Two-Step Admin Transfer
@@ -396,7 +402,7 @@ Requires `ROLE_BURNER`.
 ```typescript
 await stable.core.refresh();
 const config = stable.core.getState();
-// { authority, pendingAuthority, mint, preset, paused, complianceEnabled, totalMinted, totalBurned, supplyCap, bump }
+// { authority, pendingAuthority, mint, preset, paused, complianceEnabled, totalMinted, totalBurned, supplyCap, transferHookProgram: PublicKey | null, bump }
 
 const minterInfo = await stable.core.fetchMinterInfo(minterPubkey);
 // { config, minter, quota, totalMinted, isActive, bump }
@@ -463,9 +469,9 @@ interface TransferOptions  { owner: Keypair; destination: PublicKey; amount: big
 interface FreezeOptions    { tokenAccount: PublicKey; freezeAuthority: Keypair; }
 interface ThawOptions      { tokenAccount: PublicKey; freezeAuthority: Keypair; }
 interface SetAuthorityOptions { type: AuthorityKind; currentAuthority: Keypair; newAuthority: PublicKey | null; }
-interface SupplyInfo       { raw: bigint; uiAmount: number; uiAmountString: string; decimals: number; }
-interface BalanceInfo      { raw: bigint; uiAmount: number; uiAmountString: string; ata: PublicKey; exists: boolean; }
+interface SupplyInfo       { raw: bigint; /** @deprecated Use uiAmountString for full precision */ uiAmount: number; uiAmountString: string; decimals: number; }
+interface BalanceInfo      { raw: bigint; /** @deprecated Use uiAmountString for full precision */ uiAmount: number; uiAmountString: string; ata: PublicKey; exists: boolean; }
 interface TokenStatus      { mint: PublicKey; supply: SupplyInfo; mintAuthority: PublicKey | null; freezeAuthority: PublicKey | null; }
 interface AuditLogEntry    { signature: string; slot: number; err: unknown; blockTime: Date | null; }
-interface BlacklistStatus  { wallet: PublicKey; pda: PublicKey; blocked: boolean; }
+interface BlacklistStatus  { wallet: PublicKey; pda: PublicKey; blocked: boolean; reason?: string; }
 ```

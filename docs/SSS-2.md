@@ -36,7 +36,7 @@ The blacklist hook is an Anchor program that must be deployed before the SSS-2 t
 | Account | Seeds | Fields | Purpose |
 |---------|-------|--------|---------|
 | **Config** | `["config", mint]` | `admin`, `pending_admin`, `mint`, `bump`, `_reserved[64]` | Admin authority, two-step transfer state |
-| **BlacklistEntry** | `["blacklist", mint, wallet]` | `wallet`, `mint`, `blocked`, `bump`, `_reserved[32]` | Per-wallet, per-mint blacklist flag |
+| **BlacklistEntry** | `["blacklist", mint, wallet]` | `wallet`, `mint`, `blocked`, `bump`, `reason` (String, max 128 chars), `_reserved` | Per-wallet, per-mint blacklist flag; `reason` persisted on-chain for audit compliance |
 | **ExtraAccountMetaList** | `["extra-account-metas", mint]` | TLV-encoded list | Tells Token-2022 which extra accounts to resolve for the hook |
 
 **Per-mint scoping**: Blacklist PDAs include the mint in their seeds, so each SSS-2 token has an independent blacklist. Blacklisting a wallet on one mint does NOT affect other mints using the same hook program.
@@ -127,6 +127,16 @@ SSS-2 tokens require `createTransferCheckedWithTransferHookInstruction` instead 
 
 ---
 
+### Zero-Amount Guards
+
+The SSS-Core program rejects zero-amount operations with `ZeroAmount` (6017). `mint_tokens`, `burn_tokens`, `burn_from`, and `seize` all require `amount > 0`.
+
+### Blacklist Check on Mint (Required Account)
+
+When `compliance_enabled` is true, SSS-Core's `mint_tokens` instruction requires `recipient_blacklist_entry` as a **required** `UncheckedAccount` in the instruction context — not in `remaining_accounts`. This prevents bypassing the blacklist check by omitting the account.
+
+---
+
 ## Error Codes
 
 | Code | Name | Description |
@@ -141,6 +151,8 @@ SSS-2 tokens require `createTransferCheckedWithTransferHookInstruction` instead 
 | 6007 | `NotTransferring` | Transfer hook invoked outside of a token transfer |
 | 6008 | `NoPendingAdmin` | No pending admin nomination to accept |
 | 6009 | `CannotCloseBlockedEntry` | Cannot close a blacklist entry that is still blocked |
+| 6017 | `ZeroAmount` | `mint_tokens`, `burn_tokens`, `burn_from`, or `seize` was called with `amount == 0` |
+| 6018 | `HookProgramNotSet` | Transfer hook program not set on StablecoinConfig |
 
 ---
 

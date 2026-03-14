@@ -21,7 +21,7 @@ This program powers the **SSS-2** profile of the [Solana Stablecoin Standard](ht
 | Account | Layout (bytes) |
 |---------|----------------|
 | **Config** | admin (32) + pending_admin `Option<Pubkey>` (33) + mint (32) + bump (1) + _reserved (64) |
-| **BlacklistEntry** | wallet (32) + mint (32) + blocked (1) + bump (1) + _reserved (32) |
+| **BlacklistEntry** | wallet (32) + mint (32) + blocked (1) + reason `String` (4+N, max 128) + bump (1) + _reserved (32) |
 
 The `_reserved` fields are reserved for future upgrades and must not be used by clients.
 
@@ -31,7 +31,7 @@ The `_reserved` fields are reserved for future upgrades and must not be used by 
 |-------------|-------------|--------------|
 | `initialize_config` | Any signer (becomes admin) | Creates the Config PDA, recording the admin and the mint. |
 | `initialize_extra_account_meta_list` | Any signer (payer) | Allocates the TLV account so Token-2022 can resolve extra accounts at transfer time. |
-| `add_to_blacklist(wallet, reason)` | Admin only | Sets `blocked = true` on the wallet's BlacklistEntry PDA for this mint (creates it if needed via `init_if_needed`). `reason` is an optional string stored on-chain and emitted in the `WalletBlacklisted` event. |
+| `add_to_blacklist(wallet, reason)` | Admin only | Sets `blocked = true` and stores `reason` (max 128 chars) on the wallet's BlacklistEntry PDA for this mint (creates it if needed via `init_if_needed`). The reason is persisted on-chain for audit compliance and also emitted in the `WalletBlacklisted` event. |
 | `remove_from_blacklist(wallet)` | Admin only | Sets `blocked = false` on the BlacklistEntry PDA. Does **not** close the account. |
 | `close_blacklist_entry(wallet)` | Admin only | Closes the BlacklistEntry PDA and reclaims rent to the admin. **Fails** if the entry is still blocked. |
 | `transfer_admin(new_admin)` | Admin only | Nominates a new admin. The new admin must call `accept_admin` to complete the handover. |

@@ -87,6 +87,8 @@ npx solana-stable operate mint <recipient-wallet> <amount-raw-units>
 npx solana-stable mint <recipient-wallet> <amount-raw-units>
 ```
 
+**Zero-amount guard**: Mint, burn, burn_from, and seize all reject `amount == 0` with error `ZeroAmount` (6017).
+
 Example: mint 1,000 tokens (with 6 decimals = 1,000,000,000 raw units):
 
 ```bash
@@ -101,7 +103,7 @@ The ATA for the recipient is created automatically if it doesn't exist.
 npx solana-stable operate burn <amount-raw-units>
 ```
 
-Burns from the mint authority's own ATA.
+Burns from the mint authority's own ATA. `amount` must be greater than 0 (zero-amount guard).
 
 ### Transfer Tokens
 
@@ -208,7 +210,7 @@ These commands require an SSS-2 token with a configured blacklist program.
 npx solana-stable compliance add <wallet> --reason "OFAC SDN"
 ```
 
-The wallet will be unable to send or receive this token. The on-chain `BlacklistEntry` PDA is created (if it doesn't exist) with `blocked = true`.
+The wallet will be unable to send or receive this token. The on-chain `BlacklistEntry` PDA is created (if it doesn't exist) with `blocked = true`. The `--reason` parameter (max 128 chars) is stored on-chain in the PDA for audit compliance.
 
 ### Remove from Blacklist
 
@@ -301,7 +303,7 @@ await stable.seize({
 });
 ```
 
-This thaws the account, burns the specified amount (via permanent delegate), mints the same amount to the treasury, and re-freezes the account.
+This thaws the account, burns the specified amount (via permanent delegate), mints the same amount to the treasury, and re-freezes the account. `amount` must be greater than 0 (zero-amount guard).
 
 ---
 

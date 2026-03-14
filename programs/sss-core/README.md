@@ -25,7 +25,8 @@ StablecoinConfig PDA                RoleEntry PDA (per wallet+role)
 │ total_seized         │
 │ supply_cap           │             MinterInfo PDA
 │ bump                 │             ["minter", config, minter]
-│ _reserved: [u8; 64]  │             ┌──────────────────────┐
+│ transfer_hook_program│
+│ _reserved: [u8; 22]  │             ┌──────────────────────┐
 └─────────────────────┘             │ config               │
                                     │ minter               │
                                     │ quota: u64            │
@@ -57,21 +58,21 @@ StablecoinConfig PDA                RoleEntry PDA (per wallet+role)
 | `grant_role` | Authority | Grant a role (PDA per config+grantee+role) |
 | `revoke_role` | Authority | Revoke a role (closes PDA, reclaims rent) |
 | `set_minter_quota` | Authority | Create or update a minter's quota |
-| `mint_tokens` | Minter | Mint tokens (checks role, quota, pause, supply cap). When `compliance_enabled`, checks recipient blacklist via remaining_accounts. |
-| `burn_tokens` | Burner | Burn tokens from own ATA (checks role, pause) |
-| `burn_from` | Burner | Burn from **any** account using permanent delegate (checks ROLE_BURNER, pause) |
+| `mint_tokens` | Minter | Mint tokens (checks role, quota, pause, supply cap, zero-amount). When `compliance_enabled`, checks recipient blacklist via required `recipient_blacklist_entry` account. |
+| `burn_tokens` | Burner | Burn tokens from own ATA (checks role, pause, zero-amount) |
+| `burn_from` | Burner | Burn from **any** account using permanent delegate (checks ROLE_BURNER, pause, zero-amount) |
 | `pause` | Pauser | Pause all operations |
 | `unpause` | Pauser | Resume all operations |
 | `freeze_token_account` | Freezer | Freeze a token account |
 | `thaw_token_account` | Freezer | Thaw a frozen token account |
 | `transfer_authority` | Authority | Nominate a new authority (step 1 of 2) |
 | `accept_authority` | New authority | Accept authority nomination (step 2 of 2) |
-| `seize` | Seizer | Thaw → burn → mint to treasury → re-freeze |
+| `seize` | Seizer | Thaw → burn → mint to treasury → re-freeze (zero-amount guard) |
 | `update_metadata` | Authority | Update on-mint metadata (name, symbol, uri) via CPI to Token-2022 |
 | `set_compliance` | Authority | Toggle `compliance_enabled` flag on config |
 | `view_config` | None | Read-only view of config state (call via simulate, no signer required) |
 | `view_minter` | None | Read-only view of minter info (call via simulate, no signer required) |
-| `attest_reserve` | Attestor | Create or update ReserveAttestation PDA with proof-of-reserve data (source, uri, reserve_amount). Uses init_if_needed — repeated attestations update the same PDA. |
+| `attest_reserve` | Attestor | Create or update ReserveAttestation PDA with proof-of-reserve data (source, uri, reserve_amount). Uses init_if_needed — repeated attestations **overwrite** the same PDA (latest-only design; see note below). |
 | `view_reserve` | None | Read-only view of the latest attestation (call via simulate, no signer required) |
 
 ## Roles
@@ -134,6 +135,16 @@ All state-changing instructions emit typed events:
 | 6014 | `RecipientBlacklisted` | The recipient wallet is on the blacklist (SSS-2 mint check) |
 | 6015 | `InvalidMetadataField` | The metadata field name is not one of `name`, `symbol`, or `uri` |
 | 6016 | `ComplianceNotEnabled` | Operation requires `compliance_enabled = true` on the config |
+| 6017 | `ZeroAmount` | Amount must be greater than zero (mint, burn, burn_from, seize) |
+| 6018 | `HookProgramNotSet` | Transfer hook program not set in config |
+
+## ReserveAttestation Design Note
+
+The `attest_reserve` instruction uses a single PDA seeded by `["reserve", config]` — meaning only **one attestation exists at a time** (latest-only). Repeated calls overwrite the previous attestation data.
+
+**Why latest-only?** On-chain storage is expensive. The most recent attestation is the actionable one for downstream consumers. Historical attestations are preserved in the transaction history and events (`ReserveAttested`), which can be indexed off-chain for audit trails.
+
+**Future enhancement (v2):** Add an `index` field to the PDA seed (`["reserve", config, index_le_bytes]`) for historical on-chain records. This would require a counter in `StablecoinConfig` and is a breaking change.
 
 ## Feature-Gated Modules
 
@@ -162,7 +173,7 @@ anchor build
 anchor test
 ```
 
-The test suite includes **44 tests** covering initialization, RBAC, mint/burn, freeze/thaw, pause, seize, compliance, metadata, authority transfer, and reserve attestation (grant attestor role, record attestation, update attestation).
+The test suite includes **50 tests** covering initialization, RBAC, mint/burn, freeze/thaw, pause, seize, compliance, metadata, authority transfer, reserve attestation, and negative tests (zero-amount guards, seize overflow, invalid role).
 
 ## Fuzz / Invariant Tests
 
@@ -185,6 +196,7 @@ The file `tests/fuzz-invariants.ts` contains stateful fuzz-style tests that exec
 3. **Freeze → seize accounting** — freezes an account, seizes tokens, verifies `total_seized` tracking.
 4. **Supply cap enforcement** — mints up to near the cap, then verifies overflow is rejected.
 5. **Rapid interleaved operations** — rapid pause/unpause/freeze/thaw to stress state transitions.
+6. **Randomized operations loop** — 20 iterations of randomly selected operations (mint, burn, freeze, thaw, pause, unpause, seize) with invariant checks after each successful operation.
 
 Run with:
 

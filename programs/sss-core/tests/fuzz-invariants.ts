@@ -185,7 +185,7 @@ describe("sss_core fuzz invariants", () => {
     await sendAndConfirmTransaction(connection, createMintTx, [admin, mint], { commitment: "confirmed" });
 
     await (program.methods as any)
-      .initialize({ preset: 1, supplyCap: new BN(SUPPLY_CAP), complianceEnabled: false })
+      .initialize({ preset: 1, supplyCap: new BN(SUPPLY_CAP), complianceEnabled: false, transferHookProgram: null })
       .accountsStrict({
         authority: admin.publicKey,
         mint: mint.publicKey,
@@ -253,6 +253,7 @@ describe("sss_core fuzz invariants", () => {
         minterInfo: minterInfoPda,
         mint: mint.publicKey,
         recipientAta,
+        recipientBlacklistEntry: SystemProgram.programId,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .signers([minter])
@@ -473,6 +474,110 @@ describe("sss_core fuzz invariants", () => {
     assert.isFalse(thawedCheck.isFrozen, "account should be thawed");
 
     await checkInvariants("rapid-end");
+  });
+
+  // ── Fuzz sequence 6: randomized operations ─────────────────
+
+  it("sequence: randomized operations loop (20 iterations)", async function () {
+    this.timeout(300_000);
+
+    const ITERATIONS = 20;
+    const OPS = ["mint", "burn", "freeze", "thaw", "pause", "unpause", "seize"] as const;
+
+    function randomInt(min: number, max: number): number {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    let userFrozen = false;
+
+    for (let i = 0; i < ITERATIONS; i++) {
+      const op = OPS[randomInt(0, OPS.length - 1)];
+      const label = `rand-${i}-${op}`;
+
+      try {
+        switch (op) {
+          case "mint": {
+            if (expectedPaused) break;
+            const amt = randomInt(1_000, 10_000_000);
+            const minterInfo = await fetchMinterInfo();
+            const quotaLeft = MINTER_QUOTA - minterInfo.totalMinted.toNumber();
+            const config = await fetchConfig();
+            const netSupply = config.totalMinted.toNumber() - config.totalBurned.toNumber();
+            const capLeft = SUPPLY_CAP - netSupply;
+            if (amt > quotaLeft || amt > capLeft) break;
+            await doMint(amt, userAta);
+            break;
+          }
+          case "burn": {
+            if (expectedPaused) break;
+            const acct = await getAccount(connection, burnerAta, "confirmed", TOKEN_2022_PROGRAM_ID);
+            if (Number(acct.amount) === 0) {
+              const minterInfo = await fetchMinterInfo();
+              const quotaLeft = MINTER_QUOTA - minterInfo.totalMinted.toNumber();
+              const config = await fetchConfig();
+              const capLeft = SUPPLY_CAP - (config.totalMinted.toNumber() - config.totalBurned.toNumber());
+              const canSeed = Math.min(quotaLeft, capLeft, 1_000_000);
+              if (canSeed > 0) {
+                await doMint(canSeed, burnerAta);
+              } else break;
+            }
+            const bal = await getAccount(connection, burnerAta, "confirmed", TOKEN_2022_PROGRAM_ID);
+            const amt = randomInt(1, Math.min(Number(bal.amount), 1_000_000));
+            if (amt <= 0) break;
+            await doBurn(amt, burnerAta);
+            break;
+          }
+          case "freeze": {
+            if (userFrozen) break;
+            await doFreeze(userAta);
+            userFrozen = true;
+            break;
+          }
+          case "thaw": {
+            if (!userFrozen) break;
+            await doThaw(userAta);
+            userFrozen = false;
+            break;
+          }
+          case "pause": {
+            if (expectedPaused) break;
+            await doPause();
+            break;
+          }
+          case "unpause": {
+            if (!expectedPaused) break;
+            await doUnpause();
+            break;
+          }
+          case "seize": {
+            if (expectedPaused) break;
+            if (!userFrozen) {
+              const acct = await getAccount(connection, userAta, "confirmed", TOKEN_2022_PROGRAM_ID);
+              if (Number(acct.amount) === 0) break;
+              await doFreeze(userAta);
+              userFrozen = true;
+            }
+            const acct = await getAccount(connection, userAta, "confirmed", TOKEN_2022_PROGRAM_ID);
+            const amt = randomInt(1, Math.min(Number(acct.amount), 1_000_000));
+            if (amt <= 0) break;
+            await doSeize(userAta, amt);
+            userFrozen = true; // seize re-freezes
+            break;
+          }
+        }
+      } catch (e: any) {
+        // Expected failures (e.g., quota exceeded, already paused) are fine in
+        // randomized testing — we just skip and keep going.
+        console.log(`  [${label}] op skipped: ${e.message?.substring(0, 80)}`);
+        continue;
+      }
+
+      await checkInvariants(label);
+    }
+
+    // Cleanup: ensure unpaused and unfrozen for subsequent tests
+    if (expectedPaused) await doUnpause();
+    if (userFrozen) await doThaw(userAta);
   });
 
   // ── Final invariant summary ──────────────────────────────────

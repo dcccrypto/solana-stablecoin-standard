@@ -328,6 +328,7 @@ export class SolanaStablecoin {
         presetNum,
         opts.supplyCap ?? null,
         complianceEnabled,
+        hookProgramId ?? null,
       );
     }
 
@@ -589,6 +590,105 @@ export class SolanaStablecoin {
       getAssociatedTokenAddressSync(this.mint, owner, false, this.tokenProgramId);
     return new Transaction().add(
       createBurnInstruction(ata, this.mint, owner, amount, [], this.tokenProgramId),
+    );
+  }
+
+  /**
+   * Build an unsigned freeze transaction (for wallet adapter).
+   */
+  buildFreezeTransaction(
+    tokenAccount: PublicKey,
+    freezeAuthority: PublicKey,
+  ): Transaction {
+    return new Transaction().add(
+      createFreezeAccountInstruction(
+        tokenAccount,
+        this.mint,
+        freezeAuthority,
+        [],
+        this.tokenProgramId,
+      ),
+    );
+  }
+
+  /**
+   * Build an unsigned thaw transaction (for wallet adapter).
+   */
+  buildThawTransaction(
+    tokenAccount: PublicKey,
+    freezeAuthority: PublicKey,
+  ): Transaction {
+    return new Transaction().add(
+      createThawAccountInstruction(
+        tokenAccount,
+        this.mint,
+        freezeAuthority,
+        [],
+        this.tokenProgramId,
+      ),
+    );
+  }
+
+  /**
+   * Build an unsigned seize transaction (for wallet adapter).
+   * The caller must sign with the permanent delegate / freeze authority.
+   */
+  async buildSeizeTransaction(
+    authority: PublicKey,
+    targetTokenAccount: PublicKey,
+    treasury: PublicKey,
+    amount: bigint,
+  ): Promise<Transaction> {
+    const treasuryAta = getAssociatedTokenAddressSync(
+      this.mint,
+      treasury,
+      false,
+      this.tokenProgramId,
+    );
+
+    const tx = new Transaction();
+    const treasuryInfo = await this.connection.getAccountInfo(treasuryAta);
+    if (!treasuryInfo) {
+      tx.add(
+        createAssociatedTokenAccountInstruction(
+          authority,
+          treasuryAta,
+          treasury,
+          this.mint,
+          this.tokenProgramId,
+        ),
+      );
+    }
+    tx.add(createThawAccountInstruction(targetTokenAccount, this.mint, authority, [], this.tokenProgramId));
+    tx.add(createBurnInstruction(targetTokenAccount, this.mint, authority, amount, [], this.tokenProgramId));
+    tx.add(createMintToInstruction(this.mint, treasuryAta, authority, amount, [], this.tokenProgramId));
+    tx.add(createFreezeAccountInstruction(targetTokenAccount, this.mint, authority, [], this.tokenProgramId));
+    return tx;
+  }
+
+  /**
+   * Build an unsigned set-authority transaction (for wallet adapter).
+   */
+  buildSetAuthorityTransaction(
+    currentAuthority: PublicKey,
+    type: string,
+    newAuthority: PublicKey | null,
+  ): Transaction {
+    const authorityType = AUTHORITY_TYPE_MAP[type];
+    if (authorityType === undefined) {
+      throw new Error(
+        `Unknown authority type "${type}". Valid types: ${Object.keys(AUTHORITY_TYPE_MAP).join(", ")}`,
+      );
+    }
+    return new Transaction().add(
+      createSetAuthorityInstruction(
+        this.mint,
+        currentAuthority,
+        authorityType,
+        newAuthority,
+        [],
+        this.tokenProgramId,
+      ),
     );
   }
 

@@ -96,6 +96,10 @@ SolanaStablecoin
 ├── buildMintTransaction(...)       Unsigned mint tx (wallet adapter)
 ├── buildBurnTransaction(...)       Unsigned burn tx
 ├── buildTransferTransaction(...)   Unsigned transfer tx
+├── buildFreezeTransaction(...)     Unsigned freeze tx
+├── buildThawTransaction(...)       Unsigned thaw tx
+├── buildSeizeTransaction(...)      Unsigned seize tx (async — checks ATA)
+├── buildSetAuthorityTransaction(.) Unsigned set-authority tx
 │
 ├── compliance                      SSS-2 blacklist operations
 │   ├── blacklistAdd(wallet, admin, reason?)
@@ -368,6 +372,9 @@ For browser environments where the wallet signs:
 const tx = await stablecoin.buildMintTransaction(payerPubkey, recipientPubkey, 1_000_000n);
 const tx2 = await stablecoin.buildTransferTransaction(ownerPubkey, destPubkey, 500_000n, 6);
 const tx3 = stablecoin.buildBurnTransaction(ownerPubkey, 250_000n);
+const tx4 = stablecoin.buildFreezeTransaction(tokenAccount, freezeAuthority);
+const tx5 = stablecoin.buildThawTransaction(tokenAccount, freezeAuthority);
+const tx6 = await stablecoin.buildSeizeTransaction(authority, targetAta, treasury, 100_000n);
 // Sign with wallet adapter, then send
 ```
 
@@ -384,7 +391,7 @@ const supply = await stablecoin.getSupply();
 // { raw: 10000000n, uiAmount: 10, uiAmountString: "10.000000", decimals: 6 }
 ```
 
-`uiAmountString` provides full precision for amounts > 2^53.
+> **Precision note**: `uiAmount` is a JavaScript `number` and loses precision for amounts > 2^53 (~9B tokens at 6 decimals). Always use `uiAmountString` for display and `raw` for arithmetic. `uiAmount` is **deprecated** and will be removed in a future major version.
 
 ### Get balance
 
@@ -563,7 +570,8 @@ await stablecoin.core.burnFrom(burnerKeypair, targetAta, 100_000n);
 ```typescript
 await stablecoin.core.refresh();
 const config = stablecoin.core.getState();
-// { authority, pendingAuthority, mint, preset, paused, complianceEnabled, totalMinted, totalBurned, supplyCap, bump }
+// { authority, pendingAuthority, mint, transferHookProgram, preset, paused, complianceEnabled,
+//   totalMinted, totalBurned, totalSeized, supplyCap, bump }
 
 const minterInfo = await stablecoin.core.fetchMinterInfo(minterPubkey);
 // { config, minter, quota, totalMinted, isActive, bump }
@@ -673,4 +681,4 @@ If `core` is configured, `refresh()` also updates `stablecoin.core.getState()`.
 | `BalanceInfo` | `raw: bigint`, `uiAmount: number`, `uiAmountString: string`, `ata: PublicKey`, `exists: boolean` |
 | `TokenStatus` | `mint: PublicKey`, `supply: SupplyInfo`, `mintAuthority`, `freezeAuthority` |
 | `AuditLogEntry` | `signature: string`, `slot: number`, `err: unknown`, `blockTime: Date \| null` |
-| `BlacklistStatus` | `wallet: PublicKey`, `pda: PublicKey`, `blocked: boolean` |
+| `BlacklistStatus` | `wallet: PublicKey`, `pda: PublicKey`, `blocked: boolean`, `reason?: string` |

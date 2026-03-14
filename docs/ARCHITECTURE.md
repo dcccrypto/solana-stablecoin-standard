@@ -1,5 +1,39 @@
 # Architecture
 
+## System Diagram
+
+```
+                          ┌──────────────────────────────────────────┐
+                          │            React Demo (Layer 6)           │
+                          │  Phantom Wallet ← builds tx client-side  │
+                          └────────────────┬─────────────────────────┘
+                                           │ HTTP (webhooks only)
+                          ┌────────────────▼─────────────────────────┐
+                          │        Express Backend (Layer 5)          │
+                          │  REST API │ Event Listener │ Webhooks     │
+                          └────────────────┬─────────────────────────┘
+                                           │ uses SDK
+                          ┌────────────────▼─────────────────────────┐
+                          │     CLI + TypeScript SDK (Layer 4)        │
+                          │  SolanaStablecoin │ SssCoreClient │       │
+                          │  Compliance       │ Presets                │
+                          └──────┬──────────────────────┬────────────┘
+                                 │ RPC                   │ RPC
+                   ┌─────────────▼──────┐     ┌─────────▼───────────┐
+                   │ SSS-Core Program   │     │  Blacklist Hook     │
+                   │ (Layer 3)          │     │  (Layer 2)          │
+                   │ RBAC, Quotas,      │     │  Transfer-time      │
+                   │ Pause, Seize,      │     │  blacklist check    │
+                   │ Metadata, Attest   │     │  (CPI from          │
+                   └──────┬─────────────┘     │   Token-2022)       │
+                          │ CPI               └──────┬──────────────┘
+                   ┌──────▼──────────────────────────▼──────────────┐
+                   │       Token-2022 + Extensions (Layer 1)         │
+                   │  MetadataPointer │ TransferHook │ Pausable      │
+                   │  PermanentDelegate │ DefaultAccountState        │
+                   └────────────────────────────────────────────────┘
+```
+
 ## Layer Model
 
 The Solana Stablecoin Standard is organized in five layers. Each layer depends only on the one below it.
@@ -42,13 +76,14 @@ On every transfer, the hook: (1) verifies the `TransferHookAccount.transferring`
 
 The core on-chain program that defines the **StablecoinConfig PDA** — the foundation of the standard. It provides:
 
-- **RBAC**: PDA-per-role pattern (`["role", config, grantee, role_type]`). Roles: Minter, Burner, Freezer, Pauser, Blacklister, Seizer. Each `RoleEntry` records `granted_by` (the authority who granted the role).
+- **RBAC**: PDA-per-role pattern (`["role", config, grantee, role_type]`). Roles: Minter, Burner, Freezer, Pauser, Blacklister, Seizer, Attestor. Each `RoleEntry` records `granted_by` (the authority who granted the role).
+- **Transfer Hook Integration**: The `StablecoinConfig` stores the `transfer_hook_program` address, so downstream consumers can discover the hook program without parsing mint extensions.
 - **Per-Minter Quotas**: `MinterInfo` PDA tracks cumulative minted amounts against configurable caps.
 - **Pause/Unpause**: Protocol-level pause flag on the config PDA. Blocks mint, burn, and seize.
 - **Two-Step Authority Transfer**: Nominate → accept pattern prevents accidental loss of admin control.
 - **Seize**: Atomic thaw → burn (permanent delegate) → mint to treasury → re-freeze. The `StablecoinConfig` tracks `total_seized` alongside `total_minted` and `total_burned`. Bypasses the transfer hook since seizure is an authority action, not a user transfer.
 - **Supply Cap**: Optional on-chain supply ceiling enforced during minting.
-- **Compliance Toggle**: `compliance_enabled` boolean on the config PDA. When true, `mint_tokens` checks the recipient's blacklist entry via `remaining_accounts`. Replaces the hardcoded preset check.
+- **Compliance Toggle**: `compliance_enabled` boolean on the config PDA. When true, `mint_tokens` checks the recipient's blacklist entry via a **required** `recipient_blacklist_entry` account. This prevents bypassing the check by omitting the account.
 - **Metadata Updates**: `update_metadata` instruction updates on-mint metadata (name, symbol, uri) via CPI to Token-2022.
 - **Burn From**: `burn_from` burns from any account using the permanent delegate, unlike `burn_tokens` which can only burn from the burner's own ATA.
 - **Read-Only Views**: `view_config` and `view_minter` expose config/minter state via `simulateTransaction`, requiring no signer.

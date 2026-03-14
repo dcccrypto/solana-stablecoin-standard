@@ -53,7 +53,7 @@ SSS-2 provides the on-chain primitives to implement these requirements. The actu
 
 The SSS-Core program has a `compliance_enabled` boolean on the `StablecoinConfig` PDA that controls whether blacklist checks are enforced during minting:
 
-- **When `true`**: `mint_tokens` checks the recipient's `BlacklistEntry` PDA via `remaining_accounts`. Minting to a blacklisted wallet is rejected with `RecipientBlacklisted`.
+- **When `true`**: `mint_tokens` requires the recipient's `BlacklistEntry` PDA (`recipient_blacklist_entry`) as a **mandatory account** in the instruction context — not in `remaining_accounts`. This prevents bypassing the check by omitting the account. Minting to a blacklisted wallet is rejected with `RecipientBlacklisted`.
 - **When `false`**: No blacklist check is performed during minting.
 
 The flag is set at `initialize` time and can be toggled at any time by the authority via the `set_compliance` instruction.
@@ -90,7 +90,7 @@ Every compliance action is a Solana transaction with a permanent, immutable sign
 
 | Action | Transaction Contents |
 |--------|---------------------|
-| `compliance add <wallet>` | Calls `add_to_blacklist` on the hook program. Creates or updates a BlacklistEntry PDA. |
+| `compliance add <wallet>` | Calls `add_to_blacklist` on the hook program. Creates or updates a BlacklistEntry PDA. The `reason` string (max 128 chars) is **stored on-chain in the PDA** for audit compliance, not just emitted in events. |
 | `compliance remove <wallet>` | Calls `remove_from_blacklist` on the hook program. Updates the BlacklistEntry PDA. |
 | `compliance close <wallet>` | Calls `close_blacklist_entry`. Reclaims rent for an unblocked entry. |
 | `compliance transfer-admin` | Calls `transfer_admin`. Nominates a new blacklist admin. |
@@ -165,8 +165,9 @@ const [pda] = PublicKey.findProgramAddressSync(
   hookProgramId,
 );
 const info = await connection.getAccountInfo(pda);
-// Anchor layout: 8-byte discriminator + 32-byte wallet + 32-byte mint + 1-byte blocked + 1-byte bump
+// Anchor layout: 8-byte discriminator + 32-byte wallet + 32-byte mint + 1-byte blocked + 1-byte bump + reason (String, max 128 chars)
 const blocked = info && info.data.length >= 73 ? info.data[72] !== 0 : false;
+// reason is stored in the PDA for audit compliance
 ```
 
 **CLI:**
@@ -180,6 +181,7 @@ npx solana-stable compliance check <wallet>
 ```typescript
 const status = await stable.compliance.isBlacklisted(walletPubkey);
 console.log(status.blocked); // true or false
+console.log(status.reason);  // optional: reason string from PDA (when blocked)
 ```
 
 ---

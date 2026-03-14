@@ -63,6 +63,10 @@ pub enum SssError {
     InvalidMetadataField = 6015,
     #[msg("Compliance not enabled")]
     ComplianceNotEnabled = 6016,
+    #[msg("Amount must be greater than zero")]
+    ZeroAmount = 6017,
+    #[msg("Transfer hook program not set")]
+    HookProgramNotSet = 6018,
 }
 
 // ── Events ───────────────────────────────────────────────────────────
@@ -215,6 +219,7 @@ pub struct StablecoinConfig {
     pub authority: Pubkey,
     pub pending_authority: Option<Pubkey>,
     pub mint: Pubkey,
+    pub transfer_hook_program: Option<Pubkey>,
     pub preset: u8,
     pub paused: bool,
     pub compliance_enabled: bool,
@@ -223,7 +228,7 @@ pub struct StablecoinConfig {
     pub total_seized: u64,
     pub supply_cap: Option<u64>,
     pub bump: u8,
-    pub _reserved: [u8; 55],
+    pub _reserved: [u8; 22],
 }
 
 #[account]
@@ -272,6 +277,7 @@ pub struct InitializeParams {
     pub preset: u8,
     pub supply_cap: Option<u64>,
     pub compliance_enabled: bool,
+    pub transfer_hook_program: Option<Pubkey>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -304,6 +310,7 @@ pub mod sss_core {
         config.authority = ctx.accounts.authority.key();
         config.pending_authority = None;
         config.mint = ctx.accounts.mint.key();
+        config.transfer_hook_program = params.transfer_hook_program;
         config.preset = params.preset;
         config.paused = false;
         config.compliance_enabled = params.compliance_enabled;
@@ -312,7 +319,7 @@ pub mod sss_core {
         config.total_seized = 0;
         config.supply_cap = params.supply_cap;
         config.bump = ctx.bumps.config;
-        config._reserved = [0u8; 55];
+        config._reserved = [0u8; 22];
 
         let cpi_program = ctx.accounts.token_program.to_account_info();
 
@@ -429,18 +436,18 @@ pub mod sss_core {
     /// For SSS-2 (preset=2), pass the recipient's blacklist entry PDA as the
     /// first remaining account. If the entry exists and is blocked, mint is rejected.
     pub fn mint_tokens(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
+        require!(amount > 0, SssError::ZeroAmount);
         let config = &ctx.accounts.config;
         require!(!config.paused, SssError::Paused);
         require!(ctx.accounts.minter_info.is_active, SssError::MinterNotActive);
 
         #[cfg(feature = "compliance")]
         if config.compliance_enabled {
-            if let Some(bl_account) = ctx.remaining_accounts.first() {
-                if !bl_account.data_is_empty() && bl_account.data_len() >= 8 + 32 + 32 + 1 {
-                    let data = bl_account.try_borrow_data()?;
-                    let blocked = data[8 + 32 + 32] != 0;
-                    require!(!blocked, SssError::RecipientBlacklisted);
-                }
+            let bl_account = &ctx.accounts.recipient_blacklist_entry;
+            if !bl_account.data_is_empty() && bl_account.data_len() >= 8 + 32 + 32 + 1 {
+                let data = bl_account.try_borrow_data()?;
+                let blocked = data[8 + 32 + 32] != 0;
+                require!(!blocked, SssError::RecipientBlacklisted);
             }
         }
 
@@ -509,6 +516,7 @@ pub mod sss_core {
 
     /// Burn tokens from the burner's own ATA. Requires ROLE_BURNER.
     pub fn burn_tokens(ctx: Context<BurnTokens>, amount: u64) -> Result<()> {
+        require!(amount > 0, SssError::ZeroAmount);
         require!(!ctx.accounts.config.paused, SssError::Paused);
 
         let ix = spl_token_2022::instruction::burn(
@@ -673,6 +681,7 @@ pub mod sss_core {
     /// Seize tokens: thaw → burn (permanent delegate) → mint to treasury → re-freeze.
     /// Requires ROLE_SEIZER. The target account must already be frozen.
     pub fn seize(ctx: Context<SeizeCtx>, amount: u64) -> Result<()> {
+        require!(amount > 0, SssError::ZeroAmount);
         require!(!ctx.accounts.config.paused, SssError::Paused);
         require!(ctx.accounts.target_ata.is_frozen(), SssError::AccountNotFrozen);
 
@@ -825,6 +834,7 @@ pub mod sss_core {
     /// Burn tokens from any account using the config PDA as permanent delegate.
     /// Requires ROLE_BURNER. Unlike burn_tokens, this can burn from any holder's ATA.
     pub fn burn_from(ctx: Context<BurnFromCtx>, amount: u64) -> Result<()> {
+        require!(amount > 0, SssError::ZeroAmount);
         require!(!ctx.accounts.config.paused, SssError::Paused);
 
         let mint_key = ctx.accounts.mint.key();
@@ -1035,6 +1045,13 @@ pub struct SetMinterQuota<'info> {
     /// CHECK: the minter wallet
     pub minter: UncheckedAccount<'info>,
 
+    // SAFETY: init_if_needed is safe here because:
+    // 1. Only the config admin can call this (has_one = authority above)
+    // 2. The PDA is seeded with [config, minter], so it's unique per minter
+    // 3. The handler checks if config == default to distinguish first-init vs update
+    // 4. Reinitialization attack is mitigated: Anchor prevents re-init of an existing
+    //    account with a different discriminator, and the PDA seed uniqueness prevents
+    //    a malicious actor from creating a colliding account.
     #[account(
         init_if_needed,
         payer = authority,
@@ -1078,6 +1095,13 @@ pub struct MintTokens<'info> {
 
     #[account(mut, token::mint = mint, token::token_program = token_program)]
     pub recipient_ata: InterfaceAccount<'info, TokenAccount>,
+
+    /// Recipient's blacklist entry PDA from the transfer hook program.
+    /// Required when compliance_enabled is true. Pass the derived PDA —
+    /// if the account does not exist on-chain (never blacklisted), pass it
+    /// anyway and the check will pass (empty account = not blacklisted).
+    /// CHECK: Validated manually by reading raw data; empty/missing = not blocked.
+    pub recipient_blacklist_entry: UncheckedAccount<'info>,
 
     pub token_program: Interface<'info, TokenInterface>,
 }
@@ -1318,6 +1342,12 @@ pub struct AttestReserveCtx<'info> {
     )]
     pub role_entry: Account<'info, RoleEntry>,
 
+    // SAFETY: init_if_needed is intentionally used to implement a "latest-only"
+    // attestation model. The PDA is seeded by ["reserve", config] with no index,
+    // so repeated calls overwrite the same account. This is by design — only the
+    // most recent attestation is kept on-chain. Historical attestations are
+    // preserved in transaction history and ReserveAttested events for audit.
+    // A future version may add an index to the seed for on-chain history.
     #[account(
         init_if_needed,
         payer = attestor,

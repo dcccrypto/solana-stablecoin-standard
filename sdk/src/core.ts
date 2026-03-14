@@ -79,6 +79,7 @@ export interface SssConfigState {
   authority: PublicKey;
   pendingAuthority: PublicKey | null;
   mint: PublicKey;
+  transferHookProgram: PublicKey | null;
   preset: number;
   paused: boolean;
   complianceEnabled: boolean;
@@ -114,6 +115,14 @@ function parseConfigAccount(data: Buffer): SssConfigState {
   const mint = new PublicKey(data.subarray(offset, offset + 32));
   offset += 32;
 
+  // Option<Pubkey>: 1 byte tag + 32 bytes if Some
+  const hasHookProgram = data[offset] === 1;
+  offset += 1;
+  const transferHookProgram = hasHookProgram
+    ? new PublicKey(data.subarray(offset, offset + 32))
+    : null;
+  offset += 32;
+
   const preset = data[offset];
   offset += 1;
   const paused = data[offset] !== 0;
@@ -140,6 +149,7 @@ function parseConfigAccount(data: Buffer): SssConfigState {
     authority,
     pendingAuthority,
     mint,
+    transferHookProgram,
     preset,
     paused,
     complianceEnabled,
@@ -223,6 +233,7 @@ export class SssCoreClient {
     preset: number,
     supplyCap: bigint | null = null,
     complianceEnabled = false,
+    transferHookProgram: PublicKey | null = null,
   ): Promise<string> {
     const data = Buffer.concat([
       disc("initialize"),
@@ -231,6 +242,9 @@ export class SssCoreClient {
         ? Buffer.concat([Buffer.from([1]), encodeBN(supplyCap)])
         : Buffer.concat([Buffer.from([0]), encodeBN(0n)]),
       Buffer.from([complianceEnabled ? 1 : 0]),
+      transferHookProgram !== null
+        ? Buffer.concat([Buffer.from([1]), transferHookProgram.toBuffer()])
+        : Buffer.from([0]),
     ]);
 
     const ix = new TransactionInstruction({

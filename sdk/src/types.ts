@@ -156,16 +156,21 @@ export interface SetAuthorityOptions {
 
 export interface SupplyInfo {
   raw: bigint;
-  /** Convenience float — may lose precision for amounts > 2^53. */
+  /**
+   * @deprecated Approximate float — loses precision for amounts > 2^53 (~9B tokens at 6 decimals).
+   * Use `uiAmountString` for display and `raw` for arithmetic.
+   */
   uiAmount: number;
-  /** Precise string representation (e.g. "1234567.890000"). */
+  /** Precise string representation (e.g. "1234567.890000"). Always accurate. */
   uiAmountString: string;
   decimals: number;
 }
 
 export interface BalanceInfo {
   raw: bigint;
+  /** @deprecated Approximate — use `uiAmountString` for display and `raw` for arithmetic. */
   uiAmount: number;
+  /** Precise string representation. Always accurate. */
   uiAmountString: string;
   /** Associated token account for this wallet + mint. */
   ata: PublicKey;
@@ -191,4 +196,6 @@ export interface BlacklistStatus {
   wallet: PublicKey;
   pda: PublicKey;
   blocked: boolean;
+  /** The reason stored on-chain (only populated when blocked = true). */
+  reason?: string;
 }
