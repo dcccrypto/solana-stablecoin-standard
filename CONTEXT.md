@@ -1,88 +1,62 @@
-# SSS Project Context
+# Current Context — SSS SDK Developer
+**Updated:** 2026-03-14
 
-_Last updated: 2026-03-14 05:04 UTC_
+## Status
+- Phase: ACTIVE
+- SSS-019 (IDL sync + new SDK instructions): PR #87 open
+- SSS-022 (authority + collateral SDK docs): PR #89 open
+- Submission docs: PR #88 open
+- Main PR: PR #90 open (feat: full SSS-1 + SSS-2 presets)
 
-## Current Status
+## Architecture
+- sdk/src/ — TypeScript SDK (@stbr/sss-token)
+- cli/src/ — CLI tool (sss-token)
+- programs/sss-token/ — Anchor program (Token-2022, SSS-1 + SSS-2 + SSS-3 presets)
+- backend/ — Rust/Axum REST API
+- SDK wraps Anchor program via IDL (not REST)
 
-**Fork main is clean and up to date.** PR #84 open against upstream solanabr/main.
+## Implemented
+- **SSS-006** (Rust backend) ✅ — merged to main
+- **SSS-007** (API auth) ✅ — merged to main
+- **SSS-008** (webhook delivery) ✅ — merged to main
+- **SSS-005** (TypeScript SDK + CLI) ✅ — merged to main
+- **SSS-009** (rate limiting) ✅ — merged to main
+- **SSS-010** (rate limit config) ✅ — merged to main
+- **SSS-011** (Retry-After header / pagination) ✅ — merged to main
+- **SSS-012** (SDK integration tests) ✅ — merged to main (PR #15)
+- **SSS-013** (devnet deploy) ✅ — merged to main (PR #16)
+- **SSS-014** (audit log query filtering) ✅ — merged to main (PRs #19, #20)
+- **SSS-015** (Anchor program tests) ✅ — merged to main
+- **SSS-019** (IDL sync + new instructions) — PR #87 open
+- **SSS-021** (ComplianceModule SDK) ✅ — merged to main (PR #46)
+- **SSS-022** (authority + collateral SDK docs) — PR #89 open
 
-### Open PRs (our team — priority order)
+### SDK (@stbr/sss-token)
+- SolanaStablecoin class: full on-chain coverage via Anchor IDL
+  - create(), mint(), burn(), freeze(), thaw(), pause(), unpause()
+  - updateRoles(), revokeMinter(), updateMinter()
+  - proposeAuthority(), acceptAuthority(), acceptComplianceAuthority()
+  - depositCollateral(), redeem()
+- ComplianceModule class (SSS-2/3 compliant features)
+- 102 vitest unit tests (6 files, all passing)
+- 19 Anchor integration tests (all passing)
 
-| # | Title | Branch | Status |
-|---|-------|--------|--------|
-| #89 | docs(sdk): SSS-022 — two-step authority + depositCollateral + redeem SDK reference | docs/sss-022-authority-collateral-sdk-methods | Open, needs review |
-| #88 | docs(submission): SUBMISSION.md v2 — updated test counts, program IDs, features | docs/submission-update-v2 | Open, needs review |
-| #87 | feat(sdk): SSS-019 — sync IDL + wire accept_authority, depositCollateral, redeem, SSS-3 max_supply | feat/sss-019-idl-sync-new-instructions | Open, needs review |
-| #86 | docs(pagination): SSS-011 — offset-based pagination guide + api.md + audit-log updates | docs/sss-011-pagination | Open, needs review |
-| #85 | feat(backend): SSS-011 — offset-based pagination for /api/events and /api/compliance/audit | feat/sss-011-pagination | Open, needs review |
-| #84 | feat(program): two-step authority transfer + Anchor events + max_supply | feat/sss-two-step-authority-events | Open, needs review |
-| #83 | docs(sss3-events): SSS-3 reserve-backed preset reference + Anchor events guide | docs/sss3-events-maxsupply | Open, needs review |
-| #77 | feat(proofs): Kani formal verification — 7 mathematical proofs | feat/kani-formal-proofs | Open, needs review |
-| #76 | docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update | docs/architecture-presets-submission | Open, needs review |
-| #73 | docs: ComplianceModule SDK reference (SSS-017) | docs/compliance-module | Open, needs review |
-| #72 | feat: Full Solana Stablecoin Standard — SSS-1, SSS-2, SDK, Backend, CLI, Devnet ✅ | feat/sss-full-implementation | Open, needs review |
+### CLI (sss-token)
+- Global --url / --key options (+ SSS_API_KEY env var)
+- Commands: health, mint, burn, supply, events, blacklist list/add/remove, audit, webhook list/add/delete, key list/create/delete
+- JSON output, SSSError → stderr + exit 1
 
-## Program Features (on fork main)
+## Open PRs
+- PR #87: feat(sdk): SSS-019 — sync IDL + wire accept_authority, depositCollateral, redeem, SSS-3 max_supply
+- PR #88: docs(submission): SUBMISSION.md v2 — updated test counts, program IDs, feature list
+- PR #89: docs(sdk): SSS-022 — two-step authority transfer + depositCollateral + redeem SDK reference
+- PR #90: feat: Solana Stablecoin Standard (SSS) — SSS-1 Minimal + SSS-2 Compliant presets
 
-- SSS-1/2/3/4 presets (initialize, mint, burn, freeze/thaw, pause)
-- SSS-3: deposit_collateral + redeem instructions (reserve-backed)
-- Two-step authority transfer: propose → accept (admin + compliance)
-- max_supply enforcement on mint
-- 10 Anchor events for full observability
-- ComplianceModule: blacklist_add/remove via Anchor + getBlacklist()
-- Transfer hook integration (sss_transfer_hook program)
-- Kani formal verification: 7/7 invariants proven
+## Recent Fixes (this session)
+- Fixed Anchor programId override in SolanaStablecoin.ts (both create() and _getProgram())
+- Updated smoke-test-devnet.ts to use local ~/.config/solana/id.json (avoids airdrop rate limits)
 
-## SDK State
-
-- **Tests**: 84/84 passing on main (6 test files); 89/89 on feat/sss-019-idl-sync-new-instructions (PR #87)
-- **TypeScript**: zero errors
-- **IDLs in sdk/src/idl/**: sss_token.json + sss_transfer_hook.json
-- **Program IDs** (devnet + localnet):
-  - sss-token: AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat
-  - sss-transfer-hook: phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp
-
-## CI Health (fork main)
-
-- TypeScript SDK ✅
-- Backend (Rust / axum) ✅
-- Anchor Programs ✅
-- SDK Integration Tests ✅
-
-## Upstream Note
-
-Upstream (solanabr/solana-stablecoin-standard) only has "Initial commit". All our work is on the fork (dcccrypto). PR #84 is the consolidated submission to upstream.
-
-## External PR Wave
-
-PRs #51–#82 are external competition/grant submissions. PR #83+ are ours.
-
-## Devnet Deploy (latest)
-
-Deployed 2026-03-14 04:07 UTC with two-step authority + events + max_supply program.
-
-| Program | Program ID | Explorer |
-|---------|-----------|---------|
-| sss-token | 4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN | https://explorer.solana.com/address/4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN?cluster=devnet |
-| sss-transfer-hook | 8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj | https://explorer.solana.com/address/8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj?cluster=devnet |
-
-Smoke test: compile passed, airdrop faucet returned internal error (devnet rate-limit flakiness — not a program issue).
-
-## TODO
-
-- Monitor PR #84 CI → merge when green (two-step authority + events)
-- Monitor PR #85 CI → merge when green (SSS-011 pagination backend)
-- PR #86 (pagination docs) — merge after #85 lands
-- PR #87 (SSS-019 IDL sync) — needs review + merge after #84
-- PR #89 (SSS-022 authority/collateral SDK doc) — needs review, docs only
-- PR #88 (SUBMISSION.md v2) — needs review, docs only
-- Smoke test devnet after faucet stabilises (re-run `npx ts-node --compiler-options '{"target":"ES2020","lib":["ES2020","DOM"]}' scripts/smoke-test-devnet.ts`)
-- Local branches cleaned: 42 → 11 (all remaining match open PRs)
-
-## Heartbeat Log
-
-- 2026-03-14 05:04 UTC: All tests green — Anchor 19/19, SDK 102/102, Backend 31/31. No uncommitted WIP. New external competitor PR #90 opened against upstream. 11 open PRs, no reviews yet. No CI failures. No new tasks identified — all TODO items are in "waiting for review" state. Monitoring.
-- 2026-03-14 04:46 UTC: No new code since last heartbeat. Identified docs gap: proposeAuthority/acceptAuthority/acceptComplianceAuthority/depositCollateral/redeem all in SDK (102/102 tests) with no reference doc. Wrote docs/on-chain-sdk-authority-collateral.md (SSS-022) — 331 lines covering two-step authority transfer flow + SSS-3 collateral methods with full params tables, account tables, error tables, end-to-end examples, Anchor event subscription. Opened PR #89. 11 open PRs total, no reviews yet.
-- 2026-03-14 04:42 UTC: SDK: 102/102 tests green. Backend: 31/31 tests green. Clippy clean. Opened PR #88: SUBMISSION.md v2 (updated test counts 19/19 Anchor, 102/102 SDK, 31/31 Backend; new devnet program IDs; documented two-step authority, Anchor events, Kani proofs, SSS-3 on-chain impl). Cleaned 31 stale local branches (42→11). All 10 PRs open, no reviews yet.
-- 2026-03-14 04:38 UTC: SDK: 102/102 tests green (6 files). Backend: 31/31 tests green. Anchor: 19/19 passing. Cleaned up 7 merged local branches (develop, docs/on-chain-sdk-core, docs/update-anchor-testing-ci-notes, feat/sss-017-sdk-anchor-integration, feat/sss-017-sdk-integration-tests, feat/sss-full-implementation, feat/sss-two-step-authority-events). 41 local branches remain. Devnet faucet still 429-rate-limited — smoke test blocked (not a code issue). All 9 PRs open, no reviews yet.
-- 2026-03-14 04:36 UTC: Cleaned up stale fix/sss-017-idl-sync-initialize-params branch (superseded by PR #87). SDK: 84/84 tests green. Backend: 31/31 tests green. All PRs open, no CI failures detected.
+## Next
+- Monitor CI on PR #87, #88, #89, #90
+- Consider SSS-016: add streaming events endpoint or retry logic for webhook consumer
+- After PRs merge: tag release, update npm package version
