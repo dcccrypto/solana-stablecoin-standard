@@ -22,8 +22,8 @@ You also need a Solana wallet with some devnet SOL. The deploy script will airdr
 
 | Program | ID |
 |---------|----|
-| `sss-token` | `4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN` |
-| `sss-transfer-hook` | `8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj` |
+| `sss-token` | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
+| `sss-transfer-hook` | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
 
 > **Note:** These are the canonical IDs baked into `Anchor.toml`. They are stable across deployments using the same upgrade authority keypair.
 
@@ -62,12 +62,12 @@ After a successful run, `deploy/devnet-latest.json` will look like:
   "deployedAt": "2026-03-13T20:35:00Z",
   "wallet": "YourWalletPubkey...",
   "programs": {
-    "sssToken": "4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN",
-    "transferHook": "8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj"
+    "sssToken": "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
+    "transferHook": "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp"
   },
   "explorerLinks": {
-    "sssToken": "https://explorer.solana.com/address/4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN?cluster=devnet",
-    "transferHook": "https://explorer.solana.com/address/8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj?cluster=devnet"
+    "sssToken": "https://explorer.solana.com/address/AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat?cluster=devnet",
+    "transferHook": "https://explorer.solana.com/address/phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp?cluster=devnet"
   }
 }
 ```
@@ -88,11 +88,13 @@ npx ts-node scripts/smoke-test-devnet.ts
 
 The smoke test:
 
-1. Generates a throwaway payer keypair and airdrops 1 SOL
+1. Loads `~/.config/solana/id.json` as payer (must be funded with ≥0.1 SOL on devnet — avoids airdrop rate limits)
 2. Initializes an SSS-1 stablecoin (`Smoke USD / SUSD`)
-3. Mints 1,000 SUSD to a recipient wallet
-4. Reads on-chain supply and asserts it equals 1,000 SUSD
-5. Prints Solana Explorer links for all transactions
+3. Registers a minter PDA (required before `mintTo()`)
+4. Creates the recipient ATA explicitly to avoid signer-cast issues with `AnchorProvider`
+5. Mints 1,000 SUSD to the recipient wallet
+6. Reads on-chain supply and asserts it equals 1,000 SUSD
+7. Prints Solana Explorer links for all transactions
 
 ### Expected output
 
@@ -118,7 +120,7 @@ import { AnchorProvider, Wallet } from '@coral-xyz/anchor';
 const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
 const provider = new AnchorProvider(connection, wallet, { commitment: 'confirmed' });
 
-// SSS_TOKEN_PROGRAM_ID = '4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN'
+// SSS_TOKEN_PROGRAM_ID = 'AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat'
 const stablecoin = await SolanaStablecoin.create(provider, sss1Config({
   name: 'My USD',
   symbol: 'MUSD',
