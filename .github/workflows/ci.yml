@@ -182,6 +182,19 @@ jobs:
           # resolution to 0.32.1 which depends on proc-macro-crate 3.5.0+ (incompatible with
           # rustc 1.75 via toml_datetime 1.0.0). This cargo update is belt-and-suspenders.
           cargo update -p proc-macro-crate --precise 3.1.0 2>/dev/null || true
+          # anchor-attribute-error 0.32.1 pulls proc-macro-crate 3.5.0+ (requires rustc 1.82).
+          # Pin all anchor-* attribute/procedural crates to 0.32.0 to match anchor-lang =0.32.0.
+          cargo update -p anchor-attribute-error --precise 0.32.0 2>/dev/null || true
+          cargo update -p anchor-attribute-event --precise 0.32.0 2>/dev/null || true
+          cargo update -p anchor-attribute-access-control --precise 0.32.0 2>/dev/null || true
+          cargo update -p anchor-attribute-account --precise 0.32.0 2>/dev/null || true
+          cargo update -p anchor-attribute-constant --precise 0.32.0 2>/dev/null || true
+          cargo update -p anchor-attribute-interface --precise 0.32.0 2>/dev/null || true
+          cargo update -p anchor-attribute-program --precise 0.32.0 2>/dev/null || true
+          cargo update -p anchor-attribute-state --precise 0.32.0 2>/dev/null || true
+          cargo update -p anchor-derive-accounts --precise 0.32.0 2>/dev/null || true
+          cargo update -p anchor-derive-space --precise 0.32.0 2>/dev/null || true
+          cargo update -p anchor-syn --precise 0.32.0 2>/dev/null || true
           # indexmap >=2.12.0 requires rustc 1.82; pin to last compatible release.
           cargo update -p indexmap --precise 2.11.4 2>/dev/null || true
           # toml_datetime >=1.0.0 requires rustc 1.76; Solana 1.18 ships rustc 1.75. Pin to 0.6.9.
