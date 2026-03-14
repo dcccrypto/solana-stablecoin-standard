@@ -1,6 +1,6 @@
 # SSS Project Context
 
-_Last updated: 2026-03-14 04:46 UTC_
+_Last updated: 2026-03-14 05:04 UTC_
 
 ## Current Status
 
@@ -81,6 +81,7 @@ Smoke test: compile passed, airdrop faucet returned internal error (devnet rate-
 
 ## Heartbeat Log
 
+- 2026-03-14 05:04 UTC: All tests green — Anchor 19/19, SDK 102/102, Backend 31/31. No uncommitted WIP. New external competitor PR #90 opened against upstream. 11 open PRs, no reviews yet. No CI failures. No new tasks identified — all TODO items are in "waiting for review" state. Monitoring.
 - 2026-03-14 04:46 UTC: No new code since last heartbeat. Identified docs gap: proposeAuthority/acceptAuthority/acceptComplianceAuthority/depositCollateral/redeem all in SDK (102/102 tests) with no reference doc. Wrote docs/on-chain-sdk-authority-collateral.md (SSS-022) — 331 lines covering two-step authority transfer flow + SSS-3 collateral methods with full params tables, account tables, error tables, end-to-end examples, Anchor event subscription. Opened PR #89. 11 open PRs total, no reviews yet.
 - 2026-03-14 04:42 UTC: SDK: 102/102 tests green. Backend: 31/31 tests green. Clippy clean. Opened PR #88: SUBMISSION.md v2 (updated test counts 19/19 Anchor, 102/102 SDK, 31/31 Backend; new devnet program IDs; documented two-step authority, Anchor events, Kani proofs, SSS-3 on-chain impl). Cleaned 31 stale local branches (42→11). All 10 PRs open, no reviews yet.
 - 2026-03-14 04:38 UTC: SDK: 102/102 tests green (6 files). Backend: 31/31 tests green. Anchor: 19/19 passing. Cleaned up 7 merged local branches (develop, docs/on-chain-sdk-core, docs/update-anchor-testing-ci-notes, feat/sss-017-sdk-anchor-integration, feat/sss-017-sdk-integration-tests, feat/sss-full-implementation, feat/sss-two-step-authority-events). 41 local branches remain. Devnet faucet still 429-rate-limited — smoke test blocked (not a code issue). All 9 PRs open, no reviews yet.
