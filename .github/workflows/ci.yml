@@ -168,6 +168,10 @@ jobs:
           # Solana 2.3 ships cargo/rustc 1.86 — generates lockfile v4, which is
           # fully supported by the bundled Solana cargo. No v3 downgrade needed.
           cargo generate-lockfile
+          # blake3 v1.8+ requires `edition2024` Cargo feature, which is NOT
+          # supported by Cargo 1.84.0 bundled with Solana platform-tools.
+          # Pin to last known-good version. Do NOT remove this pin.
+          cargo update blake3 --precise 1.7.0
           # solana-zk-token-sdk v2.3.x has an internal source-level compile error
           # (PedersenCommitment / Pedersen types moved in the 2.3 release). Pin to
           # the last known-good version that compiles with rustc 1.86.
