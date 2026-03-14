@@ -1,12 +1,12 @@
 # Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 08:12 UTC
+**Updated:** 2026-03-14 08:40 UTC
 
 ## Status
 - Phase: MONITORING — 22 open PRs, no reviews yet
-- Competition: 88 total PRs in upstream (solanabr/solana-stablecoin-standard), 22 ours, 66 competing (63 unique competitors)
+- Competition: 30 total PRs in upstream (solanabr/solana-stablecoin-standard), 22 ours, 8 competing (8 unique competitors)
 - Our highest PR: #100 (docs/submission: SSS-031 SUBMISSION.md + api.md)
 - No reviews on any of our 22 PRs yet
-- All tests green: 102/102 SDK + 31/31 backend (Anchor: pending run)
+- All tests green: 102/102 SDK + Anchor pending (no local IDL target dir)
 
 ## Architecture
 - sdk/src/ — TypeScript SDK (@stbr/sss-token)
@@ -15,12 +15,13 @@
 - backend/ — Rust/Axum REST API
 - SDK wraps Anchor program via IDL (not REST)
 
-## Test Results (verified 08:12 UTC)
+## Test Results (verified 08:40 UTC)
 - SDK: 102/102 passing (6 files)
-- Backend: 31/31 passing
+- Backend: 31/31 passing (last verified 08:16 UTC)
 - Clippy: clean (0 errors, 0 warnings)
 - Rust build: release build successful
 - Docker: no container runtime on host (Dockerfile is valid)
+- Anchor IDL: no local target dir (devnet deployed only)
 
 ## Implemented
 - **SSS-006** (Rust backend) ✅ — merged to main
@@ -60,7 +61,7 @@
 - Commands: health, mint, burn, supply, events, blacklist list/add/remove, audit, webhook list/add/delete, key list/create/delete
 - JSON output, SSSError → stderr + exit 1
 
-## Open PRs (as of 08:12 UTC) — upstream solanabr/solana-stablecoin-standard
+## Open PRs (as of 08:40 UTC) — upstream solanabr/solana-stablecoin-standard
 - PR #72: feat: Full Solana Stablecoin Standard — SSS-1, SSS-2, SDK, Backend, CLI, Devnet ✅
 - PR #73: docs: ComplianceModule SDK reference (SSS-017)
 - PR #76: docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update
@@ -84,11 +85,13 @@
 - PR #99: feat(backend): SSS-012 — OpenAPI 3.1 spec + Swagger UI docs endpoint
 - PR #100: docs(submission): SSS-031 — SUBMISSION.md + api.md update
 
-## Competition Landscape
-- Total open PRs in upstream (solanabr): 88
+## Competition Landscape (08:40 UTC)
+- Total open PRs in upstream (solanabr): 30
 - Highest PR number is #100 (ours) — most recent submission
 - No reviews on any of our PRs yet
-- Competitors: 66 PRs from 63 unique authors
+- Competitors: 8 PRs from 8 unique authors:
+  - #82 denisthe12, #81 Rahul-Prasad-07, #80 amanhij, #79 eek029
+  - #78 ArpitaGanatra, #75 danielAsaboro, #74 Abhishek-Vidhate, #71 Shivam-Gujjar-Boy
 
 ## Next
 - Monitor PRs for review comments — respond and iterate quickly
