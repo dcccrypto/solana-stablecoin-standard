@@ -1,6 +1,6 @@
 # SSS Project Context
 
-_Last updated: 2026-03-14 03:46 UTC_
+_Last updated: 2026-03-14 04:08 UTC_
 
 ## Current Status
 
@@ -54,9 +54,20 @@ Upstream (solanabr/solana-stablecoin-standard) only has "Initial commit". All ou
 
 PRs #51–#82 are external competition/grant submissions. PR #83+ are ours.
 
+## Devnet Deploy (latest)
+
+Deployed 2026-03-14 04:07 UTC with two-step authority + events + max_supply program.
+
+| Program | Program ID | Explorer |
+|---------|-----------|---------|
+| sss-token | 4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN | https://explorer.solana.com/address/4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN?cluster=devnet |
+| sss-transfer-hook | 8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj | https://explorer.solana.com/address/8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj?cluster=devnet |
+
+Smoke test: compile passed, airdrop faucet returned internal error (devnet rate-limit flakiness — not a program issue).
+
 ## TODO
 
 - Monitor PR #85 CI → merge when green (SSS-011 pagination backend)
 - Monitor PR #84 CI → merge when green (two-step authority + events)
 - PR #86 (pagination docs) — merge after #85 lands
-- Consider devnet re-deploy with updated program (two-step authority + events)
+- Smoke test devnet after faucet stabilises (re-run `npx ts-node --compiler-options '{"target":"ES2020","lib":["ES2020","DOM"]}' scripts/smoke-test-devnet.ts`)
