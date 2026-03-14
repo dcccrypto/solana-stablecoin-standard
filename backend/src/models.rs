@@ -136,7 +136,14 @@ pub struct SupplyQuery {
 #[derive(Debug, Deserialize)]
 pub struct EventsQuery {
     pub token_mint: Option<String>,
+    /// Maximum number of events to return (default: 100, max: 1000).
     pub limit: Option<u32>,
+    /// ISO-8601 / RFC-3339 lower bound for `created_at` (inclusive).
+    /// Example: `2026-01-01T00:00:00Z`
+    pub from: Option<String>,
+    /// ISO-8601 / RFC-3339 upper bound for `created_at` (inclusive).
+    /// Example: `2026-12-31T23:59:59Z`
+    pub to: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
