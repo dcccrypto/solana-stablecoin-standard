@@ -32,9 +32,9 @@ A specification for a stablecoin with on-chain collateral enforcement (no oracle
 
 ## Test Results
 
-**Anchor Programs (localnet):** 13/13 passing
-**TypeScript SDK:** 81/81 passing (6 test files)
-**Backend (Rust/axum):** cargo test clean
+**Anchor Programs (localnet):** 19/19 passing
+**TypeScript SDK:** 102/102 passing (6 test files)
+**Backend (Rust/axum):** 33/33 passing (`cargo test`)
 **CI:** All 4 jobs green on main ✅
 
 ---
@@ -69,7 +69,7 @@ cd sdk && npm install && cd ..
 ### 2. Run Anchor tests
 
 ```bash
-# This starts a local validator, deploys programs, and runs all 13 tests
+# This starts a local validator, deploys programs, and runs all 19 tests
 anchor test
 ```
 
@@ -91,8 +91,15 @@ sss-anchor
     ✔ Blacklisted address cannot receive tokens
     ✔ Blacklist check — sender side
     ✔ Non-authority cannot modify blacklist
+  SSS-3 (Reserve-Backed)
+    ✔ Initialize SSS-3 stablecoin with max_supply
+    ✔ Propose and accept authority transfer
+    ✔ Deposit collateral
+    ✔ Redeem tokens against collateral
+    ✔ Reject mint beyond max_supply
+    ✔ Non-authority cannot accept authority transfer
 
-13 passing
+19 passing
 ```
 
 ### 3. Run SDK tests
@@ -105,7 +112,7 @@ npx vitest run
 Expected output:
 ```
 Test Files  6 passed (6)
-Tests       81 passed (81)
+Tests       102 passed (102)
 ```
 
 ### 4. Run the backend
@@ -117,6 +124,12 @@ docker compose up -d
 # Verify
 curl http://localhost:8080/api/health
 # {"success":true,"data":{"status":"ok",...}}
+
+# Browse interactive API docs (Swagger UI)
+open http://localhost:8080/api/docs
+
+# Download machine-readable OpenAPI 3.1 spec
+curl http://localhost:8080/api/openapi.json
 ```
 
 ### 5. Try the REST API
@@ -182,6 +195,10 @@ Blacklist operations (hook-based, wallet-level) and freeze/thaw (Token-2022 acco
 
 The SSS-3 specification demonstrates how Solana's Token-2022 stack can support a trustless, oracle-free, privacy-preserving stablecoin. No other Solana stablecoin design simultaneously offers on-chain collateral enforcement, ZK transfer privacy, and a compliance blacklist.
 
+### 6. OpenAPI 3.1 spec + interactive Swagger UI
+
+`GET /api/openapi.json` serves a machine-readable OpenAPI 3.1 spec covering all 14 routes with full request/response schemas. `GET /api/docs` serves a Swagger UI that lets developers try every endpoint in the browser — no additional tooling required.
+
 ---
 
 ## Documentation Index
@@ -193,12 +210,19 @@ The SSS-3 specification demonstrates how Solana's Token-2022 stack can support a
 | [SSS-2.md](./SSS-2.md) | Compliant preset specification |
 | [SSS-3.md](./SSS-3.md) | Trustless collateral-backed reference design |
 | [on-chain-sdk-core.md](./on-chain-sdk-core.md) | `SolanaStablecoin` SDK reference |
+| [on-chain-sdk-authority-collateral.md](./on-chain-sdk-authority-collateral.md) | Two-step authority transfer + collateral SDK reference |
+| [compliance-audit-log.md](./compliance-audit-log.md) | Compliance audit log reference |
 | [compliance-module.md](./compliance-module.md) | `ComplianceModule` SDK reference |
 | [transfer-hook.md](./transfer-hook.md) | On-chain transfer-hook program reference |
-| [api.md](./api.md) | REST API reference |
+| [api.md](./api.md) | REST API reference (incl. OpenAPI spec + Swagger UI endpoints) |
+| [authentication.md](./authentication.md) | Authentication & API key guide |
+| [rate-limiting.md](./rate-limiting.md) | Rate limiting reference |
 | [devnet-deploy.md](./devnet-deploy.md) | Devnet deployment guide |
 | [anchor-program-testing.md](./anchor-program-testing.md) | Anchor test suite guide |
 | [integration-testing.md](./integration-testing.md) | Integration test guide |
+| [formal-verification.md](./formal-verification.md) | Kani formal proofs guide |
+| [migration-guide.md](./migration-guide.md) | SPL Token → SSS-1/2/3 migration guide |
+| [sdk-cli.md](./sdk-cli.md) | CLI reference |
 | [CHANGELOG.md](../CHANGELOG.md) | Full changelog |
 
 ---
@@ -216,9 +240,9 @@ sdk/
     idl/
       sss_token.json         Anchor IDL for sss-token
       sss_transfer_hook.json Anchor IDL for transfer-hook
-  *.test.ts              81 unit tests
+  *.test.ts              102 unit tests
 backend/
-  src/                   Rust/axum REST server (auth, rate limiting, audit log, webhooks)
+  src/                   Rust/axum REST server (auth, rate limiting, audit log, webhooks, OpenAPI spec + Swagger UI)
 docs/                    All documentation
 .github/workflows/ci.yml All CI jobs
 ```

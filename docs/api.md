@@ -495,6 +495,35 @@ Delete an API key by its ID. The key is immediately invalid for future requests.
 
 ---
 
+## OpenAPI Spec & Swagger UI
+
+### `GET /api/openapi.json`
+
+Public endpoint (no authentication required). Returns the full OpenAPI 3.1 spec for all 14 routes in JSON format. Useful for generating client SDKs or importing into Postman/Insomnia.
+
+**Response 200** — `Content-Type: application/json`
+
+```json
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Solana Stablecoin Standard — REST Backend", "version": "0.1.0", ... },
+  "paths": { ... },
+  "components": { "schemas": { ... }, "securitySchemes": { ... } }
+}
+```
+
+---
+
+### `GET /api/docs`
+
+Public endpoint (no authentication required). Returns the Swagger UI HTML page. Browse and interact with every endpoint directly in your browser.
+
+```bash
+open http://localhost:8080/api/docs
+```
+
+---
+
 ## Error Responses
 
 All errors follow the standard envelope with `success: false`:
