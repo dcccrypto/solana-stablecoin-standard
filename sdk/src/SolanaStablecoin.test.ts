@@ -360,6 +360,132 @@ describe('SolanaStablecoin — Anchor IDL wiring', () => {
     });
   });
 
+  // ── acceptAuthority() + acceptComplianceAuthority() ─────────────────────
+
+  describe('acceptAuthority()', () => {
+    async function makeStablecoin() {
+      const provider = makeMockProvider();
+      const stablecoin = await SolanaStablecoin.create(provider, {
+        preset: 'SSS-1',
+        name: 'T',
+        symbol: 'T',
+      });
+      (stablecoin as any)._program = null;
+      mockProgram = makeMockProgram();
+      const anchor = await import('@coral-xyz/anchor');
+      (anchor.Program as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+        () => mockProgram
+      );
+      return { stablecoin, provider };
+    }
+
+    it('calls program.methods.acceptAuthority with pending + config + mint accounts', async () => {
+      const { stablecoin, provider } = await makeStablecoin();
+
+      await stablecoin.acceptAuthority();
+
+      expect(mockProgram._methodCalls.acceptAuthority).toHaveBeenCalledOnce();
+      const accountsCallArgs = mockProgram._builder.accounts.mock.calls[0][0];
+      expect(accountsCallArgs.pending).toEqual(provider.wallet.publicKey);
+      expect(accountsCallArgs.config).toEqual(stablecoin.configPda);
+      expect(accountsCallArgs.mint).toEqual(stablecoin.mint);
+    });
+
+    it('calls program.methods.acceptComplianceAuthority with correct accounts', async () => {
+      const { stablecoin, provider } = await makeStablecoin();
+
+      await stablecoin.acceptComplianceAuthority();
+
+      expect(mockProgram._methodCalls.acceptComplianceAuthority).toHaveBeenCalledOnce();
+      const accountsCallArgs = mockProgram._builder.accounts.mock.calls[0][0];
+      expect(accountsCallArgs.pending).toEqual(provider.wallet.publicKey);
+      expect(accountsCallArgs.config).toEqual(stablecoin.configPda);
+    });
+  });
+
+  // ── SSS-3: create() with SSS-3 preset ────────────────────────────────────
+
+  describe('create() with SSS-3 preset', () => {
+    it('calls initialize with preset=3 and SSS-3 fields', async () => {
+      const provider = makeMockProvider();
+      const collateralMint = new PublicKey('So11111111111111111111111111111111111111112');
+      const reserveVault = new PublicKey('11111111111111111111111111111111');
+
+      await SolanaStablecoin.create(provider, {
+        preset: 'SSS-3',
+        name: 'Reserve USD',
+        symbol: 'RUSD',
+        decimals: 6,
+        collateralMint,
+        reserveVault,
+        maxSupply: 1_000_000_000n,
+      });
+
+      expect(mockProgram._methodCalls.initialize).toHaveBeenCalledOnce();
+      const [initParams] = mockProgram._methodCalls.initialize.mock.calls[0];
+      expect(initParams.preset).toBe(3);
+      expect(initParams.collateralMint).toEqual(collateralMint);
+      expect(initParams.reserveVault).toEqual(reserveVault);
+      expect(initParams.maxSupply?.toString()).toBe('1000000000');
+    });
+
+    it('sets maxSupply to null when not specified', async () => {
+      const provider = makeMockProvider();
+
+      await SolanaStablecoin.create(provider, {
+        preset: 'SSS-1',
+        name: 'No Max',
+        symbol: 'NM',
+      });
+
+      const [initParams] = mockProgram._methodCalls.initialize.mock.calls[0];
+      expect(initParams.maxSupply).toBeNull();
+    });
+  });
+
+  // ── depositCollateral() ───────────────────────────────────────────────────
+
+  describe('depositCollateral()', () => {
+    async function makeStablecoin() {
+      const provider = makeMockProvider();
+      const stablecoin = await SolanaStablecoin.create(provider, {
+        preset: 'SSS-3',
+        name: 'T',
+        symbol: 'T',
+      });
+      (stablecoin as any)._program = null;
+      mockProgram = makeMockProgram();
+      const anchor = await import('@coral-xyz/anchor');
+      (anchor.Program as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+        () => mockProgram
+      );
+      return { stablecoin, provider };
+    }
+
+    it('calls program.methods.depositCollateral with correct amount as BN', async () => {
+      const { stablecoin } = await makeStablecoin();
+      const collateralMint = new PublicKey('So11111111111111111111111111111111111111112');
+      const reserveVault = new PublicKey('11111111111111111111111111111111');
+      const depositorCollateral = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+
+      await stablecoin.depositCollateral({
+        amount: 500_000n,
+        collateralMint,
+        reserveVault,
+        depositorCollateral,
+      });
+
+      expect(mockProgram._methodCalls.depositCollateral).toHaveBeenCalledOnce();
+      const [amountArg] = mockProgram._methodCalls.depositCollateral.mock.calls[0];
+      expect(amountArg.toString()).toBe('500000');
+
+      const accountsCallArgs = mockProgram._builder.accounts.mock.calls[0][0];
+      expect(accountsCallArgs.collateralMint).toEqual(collateralMint);
+      expect(accountsCallArgs.reserveVault).toEqual(reserveVault);
+      expect(accountsCallArgs.depositorCollateral).toEqual(depositorCollateral);
+    });
+  });
+
   // ── PDA derivation ────────────────────────────────────────────────────────
 
   describe('PDA derivation', () => {
@@ -398,6 +524,251 @@ describe('SolanaStablecoin — Anchor IDL wiring', () => {
         SSS_TOKEN_PROGRAM_ID
       );
       expect(stablecoin.configPda.toBase58()).toBe(expected.toBase58());
+    });
+  });
+
+  // ── SSS-021: proposeAuthority() ───────────────────────────────────────────
+
+  describe('proposeAuthority()', () => {
+    async function makeStablecoin() {
+      const provider = makeMockProvider();
+      const stablecoin = await SolanaStablecoin.create(provider, {
+        preset: 'SSS-1',
+        name: 'T',
+        symbol: 'T',
+      });
+      (stablecoin as any)._program = null;
+      mockProgram = makeMockProgram();
+      const anchor = await import('@coral-xyz/anchor');
+      (anchor.Program as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+        () => mockProgram
+      );
+      return { stablecoin, provider };
+    }
+
+    it('calls program.methods.updateRoles with proposed authority as first positional arg', async () => {
+      const { stablecoin } = await makeStablecoin();
+      const proposed = new PublicKey('So11111111111111111111111111111111111111112');
+
+      await stablecoin.proposeAuthority({ proposed });
+
+      expect(mockProgram._methodCalls.updateRoles).toHaveBeenCalledOnce();
+      // proposeAuthority(isCompliance=false) → updateRoles(proposed, null)
+      const [newAuthority, newComplianceAuthority] = mockProgram._methodCalls.updateRoles.mock.calls[0];
+      expect(newAuthority).toEqual(proposed);
+      expect(newComplianceAuthority).toBeNull();
+    });
+
+    it('includes config, mint, and authority in accounts', async () => {
+      const { stablecoin, provider } = await makeStablecoin();
+      const proposed = new PublicKey('So11111111111111111111111111111111111111112');
+
+      await stablecoin.proposeAuthority({ proposed });
+
+      const accountsCallArgs = mockProgram._builder.accounts.mock.calls[0][0];
+      expect(accountsCallArgs.authority).toEqual(provider.wallet.publicKey);
+      expect(accountsCallArgs.config).toEqual(stablecoin.configPda);
+      expect(accountsCallArgs.mint).toEqual(stablecoin.mint);
+    });
+
+    it('returns the transaction signature from rpc()', async () => {
+      const { stablecoin } = await makeStablecoin();
+      const proposed = new PublicKey('So11111111111111111111111111111111111111112');
+
+      const sig = await stablecoin.proposeAuthority({ proposed });
+      expect(sig).toBe('mockTxSig');
+    });
+  });
+
+  // ── SSS-021: redeem() ─────────────────────────────────────────────────────
+
+  describe('redeem()', () => {
+    async function makeStablecoin() {
+      const provider = makeMockProvider();
+      const stablecoin = await SolanaStablecoin.create(provider, {
+        preset: 'SSS-3',
+        name: 'Reserve USD',
+        symbol: 'RUSD',
+        decimals: 6,
+      });
+      (stablecoin as any)._program = null;
+      mockProgram = makeMockProgram();
+      const anchor = await import('@coral-xyz/anchor');
+      (anchor.Program as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+        () => mockProgram
+      );
+      return { stablecoin, provider };
+    }
+
+    it('calls program.methods.redeem with correct amount as BN', async () => {
+      const { stablecoin } = await makeStablecoin();
+      const collateralMint = new PublicKey('So11111111111111111111111111111111111111112');
+      const reserveVault = new PublicKey('11111111111111111111111111111111');
+      const redeemerSssAccount = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+      const redeemerCollateral = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe8bSe');
+
+      await stablecoin.redeem({
+        amount: 250_000n,
+        redeemerSssAccount,
+        collateralMint,
+        reserveVault,
+        redeemerCollateral,
+      });
+
+      expect(mockProgram._methodCalls.redeem).toHaveBeenCalledOnce();
+      const [amountArg] = mockProgram._methodCalls.redeem.mock.calls[0];
+      expect(amountArg.toString()).toBe('250000');
+    });
+
+    it('includes all required accounts: redeemer, config, sss_mint, collateral, vault', async () => {
+      const { stablecoin, provider } = await makeStablecoin();
+      const collateralMint = new PublicKey('So11111111111111111111111111111111111111112');
+      const reserveVault = new PublicKey('11111111111111111111111111111111');
+      const redeemerSssAccount = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+      const redeemerCollateral = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe8bSe');
+
+      await stablecoin.redeem({
+        amount: 100n,
+        redeemerSssAccount,
+        collateralMint,
+        reserveVault,
+        redeemerCollateral,
+      });
+
+      const accountsCallArgs = mockProgram._builder.accounts.mock.calls[0][0];
+      expect(accountsCallArgs.redeemer).toEqual(provider.wallet.publicKey);
+      expect(accountsCallArgs.config).toEqual(stablecoin.configPda);
+      expect(accountsCallArgs.sssMint).toEqual(stablecoin.mint);
+      expect(accountsCallArgs.collateralMint).toEqual(collateralMint);
+      expect(accountsCallArgs.reserveVault).toEqual(reserveVault);
+      expect(accountsCallArgs.redeemerSssAccount).toEqual(redeemerSssAccount);
+      expect(accountsCallArgs.redeemerCollateral).toEqual(redeemerCollateral);
+    });
+
+    it('uses TOKEN_2022_PROGRAM_ID as sssTokenProgram by default', async () => {
+      const { stablecoin } = await makeStablecoin();
+      const { TOKEN_2022_PROGRAM_ID } = await import('@solana/spl-token');
+
+      await stablecoin.redeem({
+        amount: 1n,
+        redeemerSssAccount: new PublicKey('So11111111111111111111111111111111111111112'),
+        collateralMint: new PublicKey('11111111111111111111111111111111'),
+        reserveVault: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
+        redeemerCollateral: new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe8bSe'),
+      });
+
+      const accountsCallArgs = mockProgram._builder.accounts.mock.calls[0][0];
+      expect(accountsCallArgs.sssTokenProgram).toEqual(TOKEN_2022_PROGRAM_ID);
+    });
+
+    it('accepts a custom collateralTokenProgram override', async () => {
+      const { stablecoin } = await makeStablecoin();
+      const customProgram = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+
+      await stablecoin.redeem({
+        amount: 1n,
+        redeemerSssAccount: new PublicKey('So11111111111111111111111111111111111111112'),
+        collateralMint: new PublicKey('11111111111111111111111111111111'),
+        reserveVault: new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe8bSe'),
+        redeemerCollateral: new PublicKey('So11111111111111111111111111111111111111112'),
+        collateralTokenProgram: customProgram,
+      });
+
+      const accountsCallArgs = mockProgram._builder.accounts.mock.calls[0][0];
+      expect(accountsCallArgs.collateralTokenProgram).toEqual(customProgram);
+    });
+
+    it('returns the transaction signature from rpc()', async () => {
+      const { stablecoin } = await makeStablecoin();
+
+      const sig = await stablecoin.redeem({
+        amount: 1n,
+        redeemerSssAccount: new PublicKey('So11111111111111111111111111111111111111112'),
+        collateralMint: new PublicKey('11111111111111111111111111111111'),
+        reserveVault: new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe8bSe'),
+        redeemerCollateral: new PublicKey('So11111111111111111111111111111111111111112'),
+      });
+      expect(sig).toBe('mockTxSig');
+    });
+  });
+
+  // ── SSS-021: SDK-level max_supply guard ───────────────────────────────────
+
+  describe('max_supply enforcement (SDK-level guard)', () => {
+    it('passes maxSupply as BN to initialize for SSS-3', async () => {
+      const provider = makeMockProvider();
+
+      await SolanaStablecoin.create(provider, {
+        preset: 'SSS-3',
+        name: 'Capped USD',
+        symbol: 'CUSD',
+        maxSupply: 5_000_000n,
+      });
+
+      expect(mockProgram._methodCalls.initialize).toHaveBeenCalledOnce();
+      const [initParams] = mockProgram._methodCalls.initialize.mock.calls[0];
+      expect(initParams.maxSupply?.toString()).toBe('5000000');
+    });
+
+    it('passes maxSupply as BN to initialize for SSS-1', async () => {
+      const provider = makeMockProvider();
+
+      await SolanaStablecoin.create(provider, {
+        preset: 'SSS-1',
+        name: 'Capped Token',
+        symbol: 'CT',
+        maxSupply: 1_000_000_000n,
+      });
+
+      const [initParams] = mockProgram._methodCalls.initialize.mock.calls[0];
+      expect(initParams.maxSupply?.toString()).toBe('1000000000');
+    });
+
+    it('sets maxSupply to null when undefined', async () => {
+      const provider = makeMockProvider();
+
+      await SolanaStablecoin.create(provider, {
+        preset: 'SSS-1',
+        name: 'No Cap',
+        symbol: 'NC',
+      });
+
+      const [initParams] = mockProgram._methodCalls.initialize.mock.calls[0];
+      expect(initParams.maxSupply).toBeNull();
+    });
+
+    it('sets maxSupply to null when 0n (explicitly unlimited)', async () => {
+      const provider = makeMockProvider();
+
+      await SolanaStablecoin.create(provider, {
+        preset: 'SSS-1',
+        name: 'Explicit No Cap',
+        symbol: 'ENC',
+        maxSupply: 0n,
+      });
+
+      const [initParams] = mockProgram._methodCalls.initialize.mock.calls[0];
+      expect(initParams.maxSupply).toBeNull();
+    });
+
+    it('getTotalSupply returns correct circulating supply after mints', async () => {
+      const provider = makeMockProvider();
+      const stablecoin = await SolanaStablecoin.create(provider, {
+        preset: 'SSS-1',
+        name: 'T',
+        symbol: 'T',
+      });
+
+      // Mock: 2M minted, 500k burned → 1.5M circulating
+      mockProgram.account.stablecoinConfig.fetch.mockResolvedValueOnce({
+        totalMinted: new BN(2_000_000),
+        totalBurned: new BN(500_000),
+      });
+
+      const supply = await stablecoin.getTotalSupply();
+      expect(supply.totalMinted).toBe(2_000_000n);
+      expect(supply.totalBurned).toBe(500_000n);
+      expect(supply.circulatingSupply).toBe(1_500_000n);
     });
   });
 });
