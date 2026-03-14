@@ -1,12 +1,12 @@
 # Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 10:46 UTC
+**Updated:** 2026-03-14 10:50 UTC
 
 ## Status
 - Phase: MONITORING — 24 our PRs open, no reviews yet
 - Competition: 30 total open PRs in upstream (solanabr/solana-stablecoin-standard); 7 competitor PRs
 - Our highest PR: #102 (docs/api: SSS-015/016 metrics + improved health)
 - No reviews on any of our 24 PRs yet (verified 10:42 UTC)
-- All tests green: 102/102 SDK, 19/19 Anchor, 31/31 backend (verified 10:42 UTC)
+- All tests green: 111/111 unit + 9/9 anchor (backend 31/31); 26 integration skipped (no live server)
 
 ## Architecture
 - sdk/src/ — TypeScript SDK (@stbr/sss-token)
