@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -147,8 +148,8 @@ jobs:
 
       # NOTE: Do NOT use Swatinem/rust-cache here. The anchor job regenerates
       # Cargo.lock from scratch via `cargo generate-lockfile` and then builds
-      # with the Solana 1.18 toolchain (rustc 1.75), which differs from the
-      # system rustc used to compute the cache key. Reusing cached build
+      # with the Solana 2.3 platform-tools toolchain (rustc 1.86), which differs
+      # from the system rustc used to compute the cache key. Reusing cached build
       # artifacts can cause subtle ABI mismatches between the two toolchains.
       # Omitting the cache keeps each run hermetic and correct.
 
@@ -163,23 +164,16 @@ jobs:
       - name: Generate keypair
         run: solana-keygen new --no-bip39-passphrase --silent
 
-      - name: Generate Cargo.lock
-        run: |
-          # Solana 2.3 ships cargo/rustc 1.86 — generates lockfile v4, which is
-          # fully supported by the bundled Solana cargo. No v3 downgrade needed.
-          cargo generate-lockfile
-          # blake3 v1.8+ requires `edition2024` Cargo feature, which is NOT
-          # supported by Cargo 1.84.0 bundled with Solana platform-tools.
-          # Pin to last known-good version. Do NOT remove this pin.
-          cargo update blake3 --precise 1.7.0
-          # solana-zk-token-sdk v2.3.x has an internal source-level compile error
-          # (PedersenCommitment / Pedersen types moved in the 2.3 release). Pin to
-          # the last known-good version that compiles with rustc 1.86.
-          cargo update -p solana-zk-token-sdk --precise 2.1.21 2>/dev/null || true
+      # Cargo.lock is committed to the repo (not gitignored) so that CI always
+      # builds with the exact dependency set verified locally. This avoids
+      # platform-specific cargo resolution differences (e.g. Agave 2.3.13's
+      # bundled cargo resolves older spl-tlv-account-resolution → spl-pod 0.3
+      # → solana-zk-token-sdk@2.3.13 which has an internal compile error).
 
       - name: Anchor build
-        # Anchor 0.32 uses idl-build feature (stable Rust) for IDL generation —
-        # no nightly Rust or RUSTUP_TOOLCHAIN override needed.
+        # Anchor 0.32 uses idl-build feature (stable Rust) for IDL generation.
+        # Cargo.lock is committed (not gitignored) — anchor build will use the
+        # checked-in lockfile without regenerating it.
         run: anchor build
 
       - name: Anchor test (localnet)
