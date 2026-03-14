@@ -8,9 +8,9 @@ This document covers deploying the Solana Stablecoin Standard programs to Solana
 
 | Tool | Minimum Version | Install |
 |------|----------------|---------|
-| [Solana CLI](https://docs.solana.com/cli/install-solana-cli-tools) | 1.18+ | `sh -c "$(curl -sSfL https://release.solana.com/stable/install)"` |
-| [Anchor CLI](https://www.anchor-lang.com/docs/installation) | 0.30.1 | `avm install 0.30.1 && avm use 0.30.1` |
-| Rust (stable) | 1.78+ | `rustup update stable` |
+| [Solana CLI](https://release.anza.xyz) | Agave 2.3.x | `sh -c "$(curl -sSfL https://release.anza.xyz/v2.3.13/install)"` |
+| [Anchor CLI](https://www.anchor-lang.com/docs/installation) | 0.32.0 | `avm install 0.32.0 && avm use 0.32.0` |
+| Rust (stable) | 1.86+ | `rustup update stable` |
 | Node.js | 20+ | `nvm install 20` |
 | `jq` | any | `apt install jq` / `brew install jq` |
 
