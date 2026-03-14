@@ -1,13 +1,13 @@
 {
-  "address": "4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN",
+  "address": "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
   "metadata": {
     "name": "sss_token",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "Solana Stablecoin Standard — SSS-1 (Minimal) and SSS-2 (Compliant) presets"
+    "description": "Solana Stablecoin Standard \u2014 SSS-1 (Minimal) and SSS-2 (Compliant) presets"
   },
   "docs": [
-    "Solana Stablecoin Standard — SSS-1 (Minimal) + SSS-2 (Compliant)",
+    "Solana Stablecoin Standard \u2014 SSS-1 (Minimal) + SSS-2 (Compliant)",
     "",
     "SSS-1: Token-2022 mint with freeze authority + metadata",
     "SSS-2: SSS-1 + permanent delegate + transfer hook + blacklist enforcement"
@@ -985,7 +985,7 @@
     {
       "name": "MinterInfo",
       "docs": [
-        "Per-minter configuration — minters are PDAs keyed by [config, minter_pubkey]."
+        "Per-minter configuration \u2014 minters are PDAs keyed by [config, minter_pubkey]."
       ],
       "type": {
         "kind": "struct",

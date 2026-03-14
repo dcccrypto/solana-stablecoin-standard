@@ -11,6 +11,7 @@
     "build": "tsc",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:anchor": "vitest run --config vitest.anchor.config.ts",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {

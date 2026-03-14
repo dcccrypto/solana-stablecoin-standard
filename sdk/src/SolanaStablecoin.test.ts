@@ -137,7 +137,7 @@ describe('SolanaStablecoin — Anchor IDL wiring', () => {
       expect(initParams.name).toBe('Test Stable');
       expect(initParams.symbol).toBe('TST');
       expect(initParams.decimals).toBe(6);
-      expect(initParams.transfer_hook_program).toBeNull();
+      expect(initParams.transferHookProgram).toBeNull();
     });
 
     it('calls program.methods.initialize with preset=2 for SSS-2', async () => {
@@ -154,7 +154,7 @@ describe('SolanaStablecoin — Anchor IDL wiring', () => {
 
       const [initParams] = mockProgram._methodCalls.initialize.mock.calls[0];
       expect(initParams.preset).toBe(2);
-      expect(initParams.transfer_hook_program).toEqual(hookProgram);
+      expect(initParams.transferHookProgram).toEqual(hookProgram);
     });
 
     it('passes the mint keypair as a signer', async () => {
@@ -202,7 +202,7 @@ describe('SolanaStablecoin — Anchor IDL wiring', () => {
       expect(initParams.decimals).toBe(6);
     });
 
-    it('SSS-1 sets transfer_hook_program to null', async () => {
+    it('SSS-1 sets transferHookProgram to null', async () => {
       const provider = makeMockProvider();
 
       await SolanaStablecoin.create(provider, {
@@ -214,7 +214,7 @@ describe('SolanaStablecoin — Anchor IDL wiring', () => {
 
       const [initParams] = mockProgram._methodCalls.initialize.mock.calls[0];
       // SSS-1 must ignore transferHookProgram even if provided
-      expect(initParams.transfer_hook_program).toBeNull();
+      expect(initParams.transferHookProgram).toBeNull();
     });
   });
 
