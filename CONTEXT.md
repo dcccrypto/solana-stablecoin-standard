@@ -1,6 +1,6 @@
 # SSS Project Context
 
-_Last updated: 2026-03-14 04:08 UTC_
+_Last updated: 2026-03-14 04:13 UTC_
 
 ## Current Status
 
@@ -10,6 +10,7 @@ _Last updated: 2026-03-14 04:08 UTC_
 
 | # | Title | Branch | Status |
 |---|-------|--------|--------|
+| #87 | feat(sdk): SSS-019 — sync IDL + wire accept_authority, depositCollateral, redeem, SSS-3 max_supply | feat/sss-019-idl-sync-new-instructions | Open, needs review |
 | #86 | docs(pagination): SSS-011 — offset-based pagination guide + api.md + audit-log updates | docs/sss-011-pagination | Open, needs review |
 | #85 | feat(backend): SSS-011 — offset-based pagination for /api/events and /api/compliance/audit | feat/sss-011-pagination | Open, CI pending |
 | #84 | feat(program): two-step authority transfer + Anchor events + max_supply | feat/sss-two-step-authority-events | Open, CI pending |
@@ -32,7 +33,7 @@ _Last updated: 2026-03-14 04:08 UTC_
 
 ## SDK State
 
-- **Tests**: 84/84 passing (6 test files)
+- **Tests**: 89/89 passing (6 test files)
 - **TypeScript**: zero errors
 - **IDLs in sdk/src/idl/**: sss_token.json + sss_transfer_hook.json
 - **Program IDs** (devnet + localnet):
@@ -67,7 +68,8 @@ Smoke test: compile passed, airdrop faucet returned internal error (devnet rate-
 
 ## TODO
 
-- Monitor PR #85 CI → merge when green (SSS-011 pagination backend)
 - Monitor PR #84 CI → merge when green (two-step authority + events)
+- Monitor PR #85 CI → merge when green (SSS-011 pagination backend)
 - PR #86 (pagination docs) — merge after #85 lands
+- PR #87 (SSS-019 IDL sync) — needs review + merge after #84
 - Smoke test devnet after faucet stabilises (re-run `npx ts-node --compiler-options '{"target":"ES2020","lib":["ES2020","DOM"]}' scripts/smoke-test-devnet.ts`)
