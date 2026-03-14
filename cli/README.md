@@ -298,6 +298,19 @@ Burns `<amount>` (raw units) from the **mint authority's** token account.
 
 ---
 
+### `transfer` -- Transfer tokens to a recipient
+
+```bash
+solana-stable transfer <recipient> <amount> [--config <path>]
+```
+
+- **`<recipient>`** -- Destination wallet address (base58). Creates the ATA if it doesn't exist.
+- **`<amount>`** -- Amount in **raw units**.
+
+Uses `TransferChecked` with automatic transfer-hook account resolution — works for both SSS-1 and SSS-2 tokens. On SSS-2, the blacklist hook is invoked automatically.
+
+---
+
 ### `freeze` / `thaw` -- Freeze or unfreeze a token account
 
 ```bash

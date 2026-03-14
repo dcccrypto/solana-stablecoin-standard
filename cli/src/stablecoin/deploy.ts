@@ -1,9 +1,9 @@
 import path from "path";
 import { PublicKey } from "@solana/web3.js";
-import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import {
   SolanaStablecoin,
   Presets,
+  TOKEN_2022_PROGRAM_ID,
   type TransferHookConfig,
 } from "sss-token-sdk";
 import {

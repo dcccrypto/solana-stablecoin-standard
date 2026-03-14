@@ -285,6 +285,7 @@ solana-stable init --custom <config.toml>      Deploy a mint
 
 solana-stable mint <recipient> <amount>        Mint tokens
 solana-stable burn <amount>                    Burn tokens
+solana-stable transfer <recipient> <amount>    Transfer (with hook support)
 solana-stable freeze <token-account>           Freeze account
 solana-stable thaw <token-account>             Thaw account
 solana-stable pause                            Global pause

@@ -1,6 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
-import { SolanaStablecoin } from "sss-token-sdk";
+import { SolanaStablecoin, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "sss-token-sdk";
 import { getConnection, loadKeypair } from "../solana-helpers";
 import type { SssConfig } from "../config";
 

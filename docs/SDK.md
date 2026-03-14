@@ -95,6 +95,7 @@ const stable = SolanaStablecoin.load(connection, {
   mint: new PublicKey("7NDka..."),
   tokenProgramId: TOKEN_2022_PROGRAM_ID,         // optional, defaults to Token-2022
   transferHookProgramId: new PublicKey("84rPj..."), // optional, enables compliance
+  ssCoreProgramId: new PublicKey("4ZFzy..."),       // optional, enables RBAC/core
 });
 ```
 
@@ -286,6 +287,89 @@ const configPda2 = stable.compliance.getConfigPda();
 const blacklistPda2 = stable.compliance.getBlacklistPda(walletPubkey);
 ```
 
+## SSS-Core Module (RBAC, Quotas, Seize)
+
+The `core` property is available when `ssCoreProgramId` is provided via `load()`. It exposes the on-chain SSS-Core program for RBAC-gated operations, per-minter quotas, supply caps, and protocol-level pause.
+
+```typescript
+const stable = SolanaStablecoin.load(connection, {
+  mint: mintPubkey,
+  ssCoreProgramId: coreProgramId,
+});
+
+if (!stable.core) throw new Error("No core program configured");
+```
+
+### Initialize
+
+```typescript
+await stable.core.initialize(authorityKeypair, 0 /* preset */, 1_000_000_000n /* supply cap */);
+```
+
+### Role Management
+
+```typescript
+import { ROLE_MINTER, ROLE_BURNER, ROLE_FREEZER, ROLE_PAUSER, ROLE_SEIZER } from "sss-token-sdk";
+
+await stable.core.grantRole(authority, minterPubkey, ROLE_MINTER);
+await stable.core.setMinterQuota(authority, minterPubkey, 500_000_000n);
+await stable.core.revokeRole(authority, minterPubkey, ROLE_MINTER);
+```
+
+### RBAC-Gated Operations
+
+```typescript
+await stable.core.mintTokens(minterKeypair, recipientAta, 100_000n);
+await stable.core.burnTokens(burnerKeypair, burnerAta, 50_000n);
+await stable.core.freezeAccount(freezerKeypair, targetAta);
+await stable.core.thawAccount(freezerKeypair, targetAta);
+await stable.core.seize(seizerKeypair, targetAta, treasuryAta, 100_000n);
+await stable.core.pause(pauserKeypair);
+await stable.core.unpause(pauserKeypair);
+```
+
+### State Caching
+
+```typescript
+await stable.core.refresh();
+const config = stable.core.getState();
+// { authority, pendingAuthority, mint, preset, paused, totalMinted, totalBurned, supplyCap, bump }
+
+const minterInfo = await stable.core.fetchMinterInfo(minterPubkey);
+// { config, minter, quota, totalMinted, isActive, bump }
+```
+
+### Two-Step Authority Transfer
+
+```typescript
+await stable.core.transferAuthority(currentAdmin, newAdminPubkey);
+await stable.core.acceptAuthority(newAdminKeypair);
+```
+
+### PDA Helpers
+
+```typescript
+import { getSssConfigAddress, getRoleAddress, getMinterInfoAddress } from "sss-token-sdk";
+
+const [configPda] = getSssConfigAddress(mint, coreProgramId);
+const [rolePda] = getRoleAddress(configPda, grantee, ROLE_MINTER, coreProgramId);
+const [minterPda] = getMinterInfoAddress(configPda, minter, coreProgramId);
+
+// Instance helpers:
+stable.core.getRolePda(grantee, ROLE_MINTER);
+stable.core.getMinterInfoPda(minter);
+```
+
+### Refresh / getState (Vault Standard Pattern)
+
+```typescript
+await stable.refresh(); // fetches mint info + core config if available
+const state = stable.getState();
+// { mint, supply: SupplyInfo, mintAuthority, freezeAuthority }
+```
+
+---
+
 ## Type Reference
 
 ```typescript
@@ -305,6 +389,7 @@ interface LoadOptions {
   mint: PublicKey;
   tokenProgramId?: PublicKey;     // default: TOKEN_2022_PROGRAM_ID
   transferHookProgramId?: PublicKey;
+  ssCoreProgramId?: PublicKey;    // enables stable.core
 }
 
 interface MintOptions      { recipient: PublicKey; amount: bigint; minter: Keypair; }

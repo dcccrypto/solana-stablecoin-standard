@@ -1,5 +1,6 @@
 export { SolanaStablecoin } from "./stablecoin";
 export { Compliance, getConfigAddress, getBlacklistAddress, getExtraAccountMetasAddress } from "./compliance";
+export { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 export {
   SssCoreClient,
   getSssConfigAddress,

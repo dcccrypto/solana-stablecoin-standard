@@ -58,13 +58,13 @@ The CLI will additionally:
 ### Mint Tokens
 
 ```bash
-npx sss-token mint <recipient-wallet> <amount-raw-units>
+npx solana-stable mint <recipient-wallet> <amount-raw-units>
 ```
 
 Example: mint 1,000 tokens (with 6 decimals = 1,000,000,000 raw units):
 
 ```bash
-npx sss-token mint Dkvvhfumm9TZ7oCX9DnowbEaorLvmFpF3T8GZCAaebAT 1000000000
+npx solana-stable mint Dkvvhfumm9TZ7oCX9DnowbEaorLvmFpF3T8GZCAaebAT 1000000000
 ```
 
 The ATA for the recipient is created automatically if it doesn't exist.
@@ -72,10 +72,24 @@ The ATA for the recipient is created automatically if it doesn't exist.
 ### Burn Tokens
 
 ```bash
-npx sss-token burn <amount-raw-units>
+npx solana-stable burn <amount-raw-units>
 ```
 
 Burns from the mint authority's own ATA.
+
+### Transfer Tokens
+
+```bash
+npx solana-stable transfer <recipient-wallet> <amount-raw-units>
+```
+
+Transfers tokens to a recipient wallet. Uses `TransferChecked` with automatic transfer-hook resolution — works for both SSS-1 and SSS-2 tokens. On SSS-2, the blacklist hook is invoked automatically and the transfer is rejected if sender or recipient is blacklisted.
+
+Example:
+
+```bash
+npx solana-stable transfer Dkvvhfumm9TZ7oCX9DnowbEaorLvmFpF3T8GZCAaebAT 500000000
+```
 
 ### Check Supply
 
