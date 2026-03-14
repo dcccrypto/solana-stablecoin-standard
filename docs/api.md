@@ -19,9 +19,9 @@
 
 ### `GET /api/health`
 
-Public endpoint. No authentication required.
+Public endpoint. No authentication required. Returns server liveness and database readiness. Returns `200 OK` when healthy, `503 Service Unavailable` when the database is unreachable.
 
-**Response 200**
+**Response 200 — healthy**
 
 ```json
 {
@@ -29,11 +29,87 @@ Public endpoint. No authentication required.
   "data": {
     "status": "ok",
     "version": "0.1.0",
-    "timestamp": "2026-03-13T18:59:00Z"
+    "timestamp": "2026-03-14T10:20:00Z",
+    "db": "ok",
+    "uptime_seconds": 3600
+  }
+}
+```
+
+**Response 503 — database unreachable**
+
+```json
+{
+  "success": false,
+  "data": {
+    "status": "degraded",
+    "version": "0.1.0",
+    "timestamp": "2026-03-14T10:20:00Z",
+    "db": "error",
+    "uptime_seconds": 3600
+  }
+}
+```
+
+**Response fields**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | `"ok"` or `"degraded"` |
+| `version` | string | Cargo package version |
+| `timestamp` | string | ISO-8601 UTC timestamp of this response |
+| `db` | string | `"ok"` if DB ping succeeded, `"error"` otherwise |
+| `uptime_seconds` | u64 | Seconds since the server process started |
+
+> **Note (SSS-016):** `db` and `uptime_seconds` were added in SSS-016. Clients that previously consumed only `status` + `version` remain compatible; the new fields are additive. Load balancers should check the HTTP status code (200 vs. 503) rather than parsing the body.
+
+---
+
+## Metrics
+
+### `GET /api/metrics`
+
+Authenticated endpoint. Returns Prometheus-style operational counters as JSON. All counters are in-memory and reset when the server process restarts.
+
+**Auth:** `X-Api-Key` required (same as all other authenticated routes).
+
+**Response 200**
+
+```json
+{
+  "success": true,
+  "data": {
+    "mint_total": 42,
+    "burn_total": 17,
+    "mint_amount_total": 98000000,
+    "burn_amount_total": 31500000,
+    "error_total": 3,
+    "rate_limit_total": 1,
+    "webhook_dispatch_total": 59,
+    "webhook_failure_total": 2,
+    "uptime_seconds": 7200
   },
   "error": null
 }
 ```
+
+**Response fields**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mint_total` | u64 | Number of successful mint operations since startup |
+| `burn_total` | u64 | Number of successful burn operations since startup |
+| `mint_amount_total` | u64 | Sum of all minted token amounts (raw units) since startup |
+| `burn_amount_total` | u64 | Sum of all burned token amounts (raw units) since startup |
+| `error_total` | u64 | Number of 4xx/5xx error responses returned since startup |
+| `rate_limit_total` | u64 | Number of 429 rate-limit responses returned since startup |
+| `webhook_dispatch_total` | u64 | Number of webhook dispatch attempts fired since startup |
+| `webhook_failure_total` | u64 | Number of failed webhook dispatches (non-2xx or timeout) since startup |
+| `uptime_seconds` | u64 | Server uptime in seconds (derived from process start timestamp) |
+
+**Response 401** — missing or invalid API key
+
+> **Implementation note:** All counters use lock-free `AtomicU64` accumulators. There is no persistence — counters return to zero on every restart. For durable metrics, scrape this endpoint periodically into a time-series store (e.g. Prometheus, InfluxDB, or a simple cron + database).
 
 ---
 
@@ -513,3 +589,4 @@ All errors follow the standard envelope with `success: false`:
 | 401 | Unauthorized — missing or invalid `X-Api-Key` |
 | 404 | Not found |
 | 500 | Internal server error |
+| 503 | Service unavailable — database unreachable (`GET /api/health` only) |
