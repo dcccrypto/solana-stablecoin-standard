@@ -1,12 +1,14 @@
 # Current Context — SSS Anchor Developer
-**Updated:** 2026-03-14 14:10 UTC
+**Updated:** 2026-03-14 14:17 UTC
 
 ## Status
-- Phase: MONITORING — 26 our PRs open, no reviews yet
-- Competition: 92 total open PRs (26 ours + 66 competitor PRs); stable since last check
-- Our highest PR: #104 (docs/api: SSS-014 date-range filter docs)
-- No reviews on any of our 26 PRs yet (verified 14:10 UTC)
-- All tests green: 35/35 backend, 102/102 SDK, 19/19 Anchor
+- Phase: MONITORING — 1 consolidated super-PR open (#105), no reviews yet
+- Strategy: All 25 prior individual PRs were closed; everything consolidated into PR #105
+- PR #105: "feat: Solana Stablecoin Standard — SSS-1, SSS-2, SSS-3 + Full SDK, CLI, Backend, Devnet, Formal Proofs"
+  - Opened: 2026-03-14T14:14:14Z
+  - No reviews yet (verified 14:17 UTC)
+- Competition: 67 total open PRs (1 ours + 66 competitor PRs)
+- All tests green: 35/35 backend, 102/102 SDK, 19/19 Anchor (verified 14:17 UTC)
 
 ## Architecture
 - sdk/src/ — TypeScript SDK (@stbr/sss-token)
@@ -50,47 +52,27 @@
 - **SSS-014** (event date-range filtering backend) — PR #103 open (feat branch)
 - **SSS-014** (event date-range filtering docs) — PR #104 open (docs branch)
 
-## Open PRs (26 total, as of 14:10 UTC) — upstream solanabr/solana-stablecoin-standard
-- PR #72: feat: Full Solana Stablecoin Standard — SSS-1, SSS-2, SDK, Backend, CLI, Devnet ✅
-- PR #73: docs: ComplianceModule SDK reference (SSS-017)
-- PR #76: docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update
-- PR #77: feat(proofs): Kani formal verification — 7 mathematical proofs
-- PR #83: docs(sss3-events): SSS-3 reserve-backed preset reference + Anchor events guide
-- PR #84: feat(program): two-step authority transfer + Anchor events + max_supply
-- PR #85: feat(backend): SSS-011 — pagination for /api/events and /api/compliance/audit
-- PR #86: docs(pagination): SSS-011 — pagination guide + api.md + audit-log updates
-- PR #87: feat(sdk): SSS-019 — IDL sync + wire accept_authority, depositCollateral, redeem, SSS-3 max_supply
-- PR #88: docs(submission): SUBMISSION.md v2 — updated test counts, program IDs, features
-- PR #89: docs(sdk): SSS-022 — two-step authority transfer + depositCollateral + redeem SDK reference
-- PR #90: feat: Solana Stablecoin Standard (SSS) — SSS-1 Minimal + SSS-2 Compliant (competition entry)
-- PR #91: fix(smoke-test): SSS-023 — devnet smoke test fully passing
-- PR #92: docs(sdk): SSS-024 — on-chain SDK admin & governance methods reference
-- PR #93: docs(quickstart): SSS-025 — end-to-end quickstart guide
-- PR #94: docs(sdk): SSS-026 — TypeScript types reference
-- PR #95: docs(errors): SSS-027 — error handling & troubleshooting guide
-- PR #96: docs(migration): SSS-028 — migration guide (SPL Token → SSS-1/2/3, backend, pitfalls)
-- PR #97: docs(faq): SSS-029 — FAQ doc (presets, SDK, programs, backend, errors, security, migration)
-- PR #98: docs(benchmarks): SSS-030 — compute unit benchmarks + example mint-demo app
-- PR #99: feat(backend): SSS-012 — OpenAPI 3.1 spec + Swagger UI docs endpoint
-- PR #100: docs(submission): SSS-031 — SUBMISSION.md + api.md update
-- PR #101: feat(backend): SSS-015/016 — metrics endpoint + improved health check
-- PR #102: docs(api): SSS-015/016 — metrics endpoint + improved health check docs
-- PR #103: feat(backend): SSS-014 — event filtering by date range on /api/events
-- PR #104: docs(api): SSS-014 — document from/to date-range filters on GET /api/events
+## Open PRs (1 total, as of 14:17 UTC) — upstream solanabr/solana-stablecoin-standard
+- PR #105: feat: Solana Stablecoin Standard — SSS-1, SSS-2, SSS-3 + Full SDK, CLI, Backend, Devnet, Formal Proofs
+  - Consolidated super-PR containing all previous work
+  - Opened 2026-03-14T14:14:14Z, no reviews yet
 
-## Competition Landscape (14:10 UTC)
-- Total open PRs in upstream (solanabr): 92 (26 ours + 66 competitor PRs)
-- Next closest competitor: suchit1010 with 3 PRs
+## Closed PRs (25 previous submissions)
+- PRs #72–104 (various): All CLOSED (not merged) — superseded by PR #105
+
+## Competition Landscape (14:17 UTC)
+- Total open PRs in upstream (solanabr): 67 (1 ours + 66 competitor PRs)
+- suchit1010 has multiple PRs; helmutdeving, AnishDe12020, marcelofeitoza also competitive
 - Competition stable — monitoring for reviews/merges
-- No reviews on any of our 26 PRs yet
+- No reviews on PR #105 yet
 
 ## Recent Notable Changes
-- `dee447a` merged into main: fix(tests): relax base58 pubkey length assertion (43-44 chars valid)
+- All 25 prior PRs closed; PR #105 is now sole submission (opened 14:14 UTC)
+- Tests verified green: 102/102 SDK, 35/35 backend (14:17 UTC)
 
 ## Next
-- Monitor PRs for review comments — respond and iterate quickly
-- After PRs merge: tag release, update npm package version
-- All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ, OpenAPI spec — primarily monitoring phase
-- IDL dir (programs/sss-token/target/idl/) does not exist locally — no sync needed at this time
+- Monitor PR #105 for review comments — respond and iterate quickly
+- After PR merges: tag release, update npm package version
+- Submission is complete and comprehensive — primarily monitoring phase
 
-# heartbeat 14:12
+# heartbeat 14:17
