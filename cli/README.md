@@ -387,6 +387,30 @@ Blacklist PDA: BLk...pda
 Blacklisted: true
 ```
 
+#### `blacklist close` -- Reclaim rent for an unblocked entry
+
+```bash
+sss-token blacklist close <wallet> [--config <path>]
+```
+
+Closes the BlacklistEntry PDA for a wallet that has `blocked = false`, reclaiming rent to the admin. Fails if the entry is still blocked — you must `blacklist remove` first.
+
+#### `blacklist transfer-admin` -- Nominate a new admin
+
+```bash
+sss-token blacklist transfer-admin <new-admin-pubkey> [--config <path>]
+```
+
+Initiates a two-step admin transfer. The nominated admin must call `accept-admin` to finalize. The current admin remains active until the transfer is accepted.
+
+#### `blacklist accept-admin` -- Accept admin role
+
+```bash
+sss-token blacklist accept-admin <keypair-path> [--config <path>]
+```
+
+Accepts a pending admin nomination. `<keypair-path>` is the path to the nominated admin's keypair JSON file. After acceptance, update your config's `[authorities] blacklist` to the new keypair path.
+
 ---
 
 ### `status` -- Token and supply snapshot
@@ -425,7 +449,7 @@ sss-token balance <address> [--config <path>]
 sss-token set-authority <type> <new-authority> [--config <path>]
 ```
 
-- **`<type>`** -- One of: `mint`, `freeze`, `metadata`, `pause`, `permanent-delegate`.
+- **`<type>`** -- One of: `mint`, `freeze`, `metadata`, `metadata-pointer`, `pause`, `permanent-delegate`, `transfer-fee-config`, `close-mint`, `interest-rate`.
 - **`<new-authority>`** -- New authority public key (base58), or `none` to remove.
 
 Examples:
@@ -459,4 +483,4 @@ After deployment, you can change who can mint, freeze, update metadata, or pause
    ```
 3. Update your config to point to the new keypair path for future CLI commands. The on-chain mint already has the new authority; the config only tells the CLI which keypair to use when signing.
 
-> **Note:** The blacklist admin authority is stored in the blacklist hook's Config PDA, not the mint itself. To change the blacklist admin, you would need to add a `set_admin` instruction to the hook program (see production hardening ideas in the hook README).
+> **Note:** The blacklist admin authority is stored in the hook program's Config PDA, not the mint itself. Use `blacklist transfer-admin` and `blacklist accept-admin` for a secure two-step admin transfer.

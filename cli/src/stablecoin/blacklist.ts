@@ -176,6 +176,94 @@ export async function runBlacklistRemove(cfg: SssConfig, walletStr: string): Pro
   console.log("Tx:", sig);
 }
 
+export async function runBlacklistClose(cfg: SssConfig, walletStr: string): Promise<void> {
+  const connection = getConnection(cfg);
+  const blacklistProgramId = getBlacklistProgramId(cfg);
+  const admin = requireBlacklistAuthority(cfg);
+  const mint = requireMint(cfg);
+  const wallet = new PublicKey(walletStr);
+
+  const [configPda] = findConfigPda(mint, blacklistProgramId);
+  const [blacklistPda] = findBlacklistPda(mint, wallet, blacklistProgramId);
+
+  const data = Buffer.concat([
+    anchorDiscriminator("close_blacklist_entry"),
+    wallet.toBuffer(),
+  ]);
+
+  const ix = new TransactionInstruction({
+    keys: [
+      { pubkey: admin.publicKey, isSigner: true, isWritable: true },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: configPda, isSigner: false, isWritable: false },
+      { pubkey: blacklistPda, isSigner: false, isWritable: true },
+    ],
+    programId: blacklistProgramId,
+    data,
+  });
+
+  const tx = new Transaction().add(ix);
+  const sig = await sendAndConfirmTransaction(connection, tx, [admin], { commitment: "confirmed" });
+  console.log("Closed blacklist entry for:", walletStr);
+  console.log("Rent reclaimed to:", admin.publicKey.toBase58());
+  console.log("Tx:", sig);
+}
+
+export async function runBlacklistTransferAdmin(cfg: SssConfig, newAdminStr: string): Promise<void> {
+  const connection = getConnection(cfg);
+  const blacklistProgramId = getBlacklistProgramId(cfg);
+  const admin = requireBlacklistAuthority(cfg);
+  const mint = requireMint(cfg);
+  const newAdmin = new PublicKey(newAdminStr);
+
+  const [configPda] = findConfigPda(mint, blacklistProgramId);
+
+  const data = Buffer.concat([
+    anchorDiscriminator("transfer_admin"),
+    newAdmin.toBuffer(),
+  ]);
+
+  const ix = new TransactionInstruction({
+    keys: [
+      { pubkey: admin.publicKey, isSigner: true, isWritable: true },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: configPda, isSigner: false, isWritable: true },
+    ],
+    programId: blacklistProgramId,
+    data,
+  });
+
+  const tx = new Transaction().add(ix);
+  const sig = await sendAndConfirmTransaction(connection, tx, [admin], { commitment: "confirmed" });
+  console.log("Nominated new blacklist admin:", newAdminStr);
+  console.log("Pending admin must call 'blacklist accept-admin' to finalize.");
+  console.log("Tx:", sig);
+}
+
+export async function runBlacklistAcceptAdmin(cfg: SssConfig, newAdminKeypairPath: string): Promise<void> {
+  const connection = getConnection(cfg);
+  const blacklistProgramId = getBlacklistProgramId(cfg);
+  const mint = requireMint(cfg);
+  const newAdmin = loadKeypair(newAdminKeypairPath);
+
+  const [configPda] = findConfigPda(mint, blacklistProgramId);
+
+  const ix = new TransactionInstruction({
+    keys: [
+      { pubkey: newAdmin.publicKey, isSigner: true, isWritable: false },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: configPda, isSigner: false, isWritable: true },
+    ],
+    programId: blacklistProgramId,
+    data: anchorDiscriminator("accept_admin"),
+  });
+
+  const tx = new Transaction().add(ix);
+  const sig = await sendAndConfirmTransaction(connection, tx, [newAdmin], { commitment: "confirmed" });
+  console.log("Accepted blacklist admin role:", newAdmin.publicKey.toBase58());
+  console.log("Tx:", sig);
+}
+
 export async function runBlacklistCheck(cfg: SssConfig, walletStr: string): Promise<void> {
   const connection = getConnection(cfg);
   const blacklistProgramId = getBlacklistProgramId(cfg);

@@ -6,6 +6,7 @@ dist/
 
 # Anchor / Solana
 .anchor/test-ledger/
+.anchor/program-logs/
 target/
 *.so
 test-ledger/

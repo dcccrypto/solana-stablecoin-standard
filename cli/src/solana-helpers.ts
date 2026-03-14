@@ -6,7 +6,8 @@ import type { SssConfig } from "./config";
 const CLUSTER_ENDPOINTS: Record<string, string> = {
   devnet: "https://api.devnet.solana.com",
   testnet: "https://api.testnet.solana.com",
-  mainnet: "https://api.mainnet.solana.com",
+  mainnet: "https://api.mainnet-beta.solana.com",
+  "mainnet-beta": "https://api.mainnet-beta.solana.com",
 };
 
 /**

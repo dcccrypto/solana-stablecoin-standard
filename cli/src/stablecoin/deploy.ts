@@ -12,6 +12,8 @@ import {
   createInitializeMint2Instruction,
   createInitializeMetadataPointerInstruction,
   createInitializeTransferHookInstruction,
+  createInitializePermanentDelegateInstruction,
+  createInitializePausableConfigInstruction,
   tokenMetadataInitialize,
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
@@ -21,16 +23,14 @@ import {
 import { sendAndConfirmTransaction } from "@solana/web3.js";
 import { initializeBlacklistHook } from "./blacklist";
 
-/** Default assumed mint size after metadata realloc (name/symbol/uri + padding). */
-const ASSUMED_FINAL_MINT_SIZE = 4096;
-
 /**
  * Deploys a new SPL mint from config: creates the mint on-chain (with optional
- * Token-2022 Metadata extension), then updates the config file with the new mint address.
+ * Token-2022 extensions), then updates the config file with the new mint address.
  *
  * Token-2022 with metadata follows the working pattern:
- * - Allocate only for MetadataPointer; fund with enough lamports for final size.
- * - Tx1: CreateAccount → MetadataPointer → InitializeMint2.
+ * - Allocate only for extensions; fund with enough lamports for the final size
+ *   (metadata reallocs, so we use a generous estimate for rent).
+ * - Tx1: CreateAccount → extension inits → InitializeMint2.
  * - Tx2: tokenMetadataInitialize (reallocs mint and writes name/symbol/uri).
  */
 export async function deployStablecoinFromConfig(
@@ -62,6 +62,10 @@ export async function deployStablecoinFromConfig(
     useToken2022 && (cfg.extensions?.metadata?.enabled === true);
   const transferHookEnabled =
     useToken2022 && (cfg.extensions?.transferHook?.enabled === true);
+  const pausableEnabled =
+    useToken2022 && (cfg.extensions?.pausable?.enabled === true);
+  const permanentDelegateEnabled =
+    useToken2022 && (cfg.extensions?.permanentDelegate?.enabled === true);
   const transferHookProgramId = transferHookEnabled
     ? new PublicKey(cfg.extensions!.transferHook!.programId)
     : null;
@@ -98,11 +102,18 @@ export async function deployStablecoinFromConfig(
   if (transferHookEnabled) {
     console.log("Transfer hook extension: enabled (program:", transferHookProgramId!.toBase58() + ")");
   }
+  if (pausableEnabled) {
+    console.log("Pausable extension: enabled");
+  }
+  if (permanentDelegateEnabled) {
+    console.log("Permanent delegate extension: enabled");
+  }
   console.log("");
 
   let mintAddress: string;
 
-  if (metadataEnabled || transferHookEnabled) {
+  const needsExtensions = metadataEnabled || transferHookEnabled || pausableEnabled || permanentDelegateEnabled;
+  if (needsExtensions) {
     const metadataAuthority = metadataEnabled
       ? loadKeypair(cfg.authorities.metadata).publicKey
       : null;
@@ -112,11 +123,13 @@ export async function deployStablecoinFromConfig(
     const extensions: ExtensionType[] = [];
     if (metadataEnabled) extensions.push(ExtensionType.MetadataPointer);
     if (transferHookEnabled) extensions.push(ExtensionType.TransferHook);
+    if (pausableEnabled) extensions.push(ExtensionType.PausableConfig);
+    if (permanentDelegateEnabled) extensions.push(ExtensionType.PermanentDelegate);
 
     const mintSpace = getMintLen(extensions);
-    const lamports = await connection.getMinimumBalanceForRentExemption(
-      ASSUMED_FINAL_MINT_SIZE,
-    );
+    // Use generous rent for metadata realloc; metadata init will expand the account
+    const rentSize = metadataEnabled ? Math.max(mintSpace, 4096) : mintSpace;
+    const lamports = await connection.getMinimumBalanceForRentExemption(rentSize);
 
     const tx = new Transaction().add(
       SystemProgram.createAccount({
@@ -148,6 +161,26 @@ export async function deployStablecoinFromConfig(
           mint,
           hookAuthority,
           transferHookProgramId!,
+          TOKEN_2022_PROGRAM_ID,
+        ),
+      );
+    }
+
+    if (permanentDelegateEnabled) {
+      tx.add(
+        createInitializePermanentDelegateInstruction(
+          mint,
+          payer.publicKey,
+          TOKEN_2022_PROGRAM_ID,
+        ),
+      );
+    }
+
+    if (pausableEnabled) {
+      tx.add(
+        createInitializePausableConfigInstruction(
+          mint,
+          payer.publicKey,
           TOKEN_2022_PROGRAM_ID,
         ),
       );

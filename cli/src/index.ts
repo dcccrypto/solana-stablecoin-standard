@@ -19,6 +19,9 @@ import {
 import {
   runBlacklistAdd,
   runBlacklistRemove,
+  runBlacklistClose,
+  runBlacklistTransferAdmin,
+  runBlacklistAcceptAdmin,
   runBlacklistCheck,
 } from "./stablecoin/blacklist";
 
@@ -268,6 +271,51 @@ blacklist
     try {
       const cfg = loadConfig(opts.config);
       await runBlacklistCheck(cfg, wallet);
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+    }
+  });
+
+blacklist
+  .command("close")
+  .description("Close an unblocked blacklist entry to reclaim rent")
+  .argument("<wallet>", "Wallet address whose entry to close (base58)")
+  .option("--config <path>", "Path to config TOML")
+  .action(async (wallet: string, opts: { config?: string }) => {
+    try {
+      const cfg = loadConfig(opts.config);
+      await runBlacklistClose(cfg, wallet);
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+    }
+  });
+
+blacklist
+  .command("transfer-admin")
+  .description("Nominate a new blacklist admin (two-step: nominate → accept)")
+  .argument("<new-admin>", "New admin wallet address (base58)")
+  .option("--config <path>", "Path to config TOML")
+  .action(async (newAdmin: string, opts: { config?: string }) => {
+    try {
+      const cfg = loadConfig(opts.config);
+      await runBlacklistTransferAdmin(cfg, newAdmin);
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+    }
+  });
+
+blacklist
+  .command("accept-admin")
+  .description("Accept a pending blacklist admin nomination")
+  .argument("<keypair-path>", "Path to the nominated admin's keypair JSON")
+  .option("--config <path>", "Path to config TOML")
+  .action(async (keypairPath: string, opts: { config?: string }) => {
+    try {
+      const cfg = loadConfig(opts.config);
+      await runBlacklistAcceptAdmin(cfg, keypairPath);
     } catch (err) {
       console.error((err as Error).message);
       process.exitCode = 1;
