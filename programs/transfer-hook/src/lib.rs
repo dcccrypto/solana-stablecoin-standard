@@ -16,12 +16,12 @@ pub mod sss_transfer_hook {
         let blacklist = &ctx.accounts.blacklist_state;
         // Check sender
         require!(
-            !blacklist.is_blacklisted(ctx.accounts.source_token_account.owner),
+            !blacklist.is_blacklisted(*ctx.accounts.source_token_account.owner),
             HookError::SenderBlacklisted
         );
         // Check receiver
         require!(
-            !blacklist.is_blacklisted(ctx.accounts.destination_token_account.owner),
+            !blacklist.is_blacklisted(*ctx.accounts.destination_token_account.owner),
             HookError::ReceiverBlacklisted
         );
         msg!("Transfer hook: {} tokens OK", amount);

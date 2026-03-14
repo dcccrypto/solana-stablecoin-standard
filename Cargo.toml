@@ -19,6 +19,15 @@ codegen-units = 1
 [workspace.dependencies]
 anchor-lang = "=0.32.0"
 anchor-spl = { version = "=0.32.0", features = ["token_2022", "token_2022_extensions"] }
+anchor-attribute-program = "=0.32.0"
+anchor-attribute-account = "=0.32.0"
+anchor-attribute-event = "=0.32.0"
+anchor-attribute-error = "=0.32.0"
+anchor-attribute-constant = "=0.32.0"
+anchor-attribute-access-control = "=0.32.0"
+anchor-derive-accounts = "=0.32.0"
+anchor-derive-serde = "=0.32.0"
+anchor-derive-space = "=0.32.0"
 spl-token-2022 = { version = "8", features = ["no-entrypoint"] }
 spl-tlv-account-resolution = "0.7"
 spl-transfer-hook-interface = "0.7"
