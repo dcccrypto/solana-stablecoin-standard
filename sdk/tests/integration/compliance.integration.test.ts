@@ -3,6 +3,10 @@ import { SSSClient } from "../../src/client";
 import { SSSError } from "../../src/error";
 import { BASE_URL, API_KEY, TOKEN_MINT } from "./setup";
 
+// Use the shared TOKEN_MINT fixture — it is a valid base58 Solana pubkey
+// seeded by the test backend, so compliance checks exercise real on-chain logic.
+const COMPLIANCE_MINT = TOKEN_MINT;
+
 describe("Integration: compliance (blacklist enforcement)", () => {
   const client = new SSSClient(BASE_URL, API_KEY);
   const BLOCKED_ADDR = "BlockedAddr" + Date.now().toString().slice(-30).padEnd(30, "0");
@@ -31,7 +35,7 @@ describe("Integration: compliance (blacklist enforcement)", () => {
   it("mint() rejects blacklisted recipient with SSSError", async () => {
     try {
       await client.mint({
-        token_mint: TOKEN_MINT,
+        token_mint: COMPLIANCE_MINT,
         amount: 100,
         recipient: BLOCKED_ADDR,
       });
@@ -68,7 +72,7 @@ describe("Integration: compliance (blacklist enforcement)", () => {
 
   it("mint() succeeds for the un-blacklisted address", async () => {
     const event = await client.mint({
-      token_mint: TOKEN_MINT,
+      token_mint: COMPLIANCE_MINT,
       amount: 100,
       recipient: BLOCKED_ADDR,
     });
