@@ -133,6 +133,8 @@ Endpoints:
 | [Devnet Deployment](docs/devnet-deploy.md) | Deploying and smoke-testing on Solana devnet |
 | [Integration Testing](docs/integration-testing.md) | Running the full integration test suite and CI setup |
 | [Anchor Program Tests](docs/anchor-program-testing.md) | Running the Anchor on-chain test suite locally and in CI (SSS-015) |
+| [SSS-3 Reserve-Backed Preset](docs/sss3-reserve-backed.md) | Collateral vault enforcement, max supply cap, reserve ratio — SSS-3 and SSS-4 |
+| [On-Chain Program Events](docs/on-chain-program-events.md) | Anchor event reference — all emitted events, TypeScript listener examples |
 
 ## Judging Criteria
 
