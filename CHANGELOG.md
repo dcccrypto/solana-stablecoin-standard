@@ -12,6 +12,8 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 - `docs/SSS-1.md` — minimal preset specification
 - `docs/SSS-2.md` — compliant preset specification
 - `docs/SSS-3.md` — trustless collateral-backed preset reference design
+- `docs/compute-benchmarks.md` — compute unit benchmarks for all instructions + rent costs [SSS-030]
+- `examples/mint-demo.ts` — end-to-end example: initialize, register minter, mint, burn [SSS-030]
 
 ---
 
