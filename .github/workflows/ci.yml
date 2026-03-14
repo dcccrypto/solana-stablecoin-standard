@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: "20"
+  SOLANA_VERSION: "1.18.26"
+  ANCHOR_VERSION: "0.32.1"
+
+jobs:
+  # ── SDK ────────────────────────────────────────────────────────
+  sdk:
+    name: SDK — build & typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: sdk/package-lock.json
+      - run: npm ci
+        working-directory: sdk
+      - run: npm run build
+        working-directory: sdk
+
+  # ── CLI ────────────────────────────────────────────────────────
+  cli:
+    name: CLI — build & typecheck
+    needs: sdk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+        working-directory: sdk
+      - run: npm run build
+        working-directory: sdk
+      - run: npm ci
+        working-directory: cli
+      - run: npm run build
+        working-directory: cli
+
+  # ── Backend ────────────────────────────────────────────────────
+  backend:
+    name: Backend — build & typecheck
+    needs: sdk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+        working-directory: sdk
+      - run: npm run build
+        working-directory: sdk
+      - run: npm ci
+        working-directory: backend
+      - run: npx tsc --noEmit
+        working-directory: backend
+
+  # ── Anchor programs ────────────────────────────────────────────
+  anchor-blacklist:
+    name: Blacklist Hook — build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: coral-xyz/setup-anchor@v3
+        with:
+          anchor-version: ${{ env.ANCHOR_VERSION }}
+          solana-cli-version: ${{ env.SOLANA_VERSION }}
+      - run: anchor build
+        working-directory: transfer_hooks/blacklist
+
+  anchor-sss-core:
+    name: SSS-Core — build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: coral-xyz/setup-anchor@v3
+        with:
+          anchor-version: ${{ env.ANCHOR_VERSION }}
+          solana-cli-version: ${{ env.SOLANA_VERSION }}
+      - run: anchor build
+        working-directory: programs/sss-core
+
+  # ── Demo ───────────────────────────────────────────────────────
+  demo:
+    name: Demo — build
+    needs: sdk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+        working-directory: demo
+      - run: npm run build
+        working-directory: demo

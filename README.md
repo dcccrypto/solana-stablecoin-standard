@@ -42,14 +42,14 @@ See [docs/SSS-1.md](docs/SSS-1.md) and [docs/SSS-2.md](docs/SSS-2.md) for the fu
 cd cli && npm install && npm run build
 
 # Generate a starter config
-npx sss-token init --preset sss-1
+npx solana-stable init --preset sss-1
 
 # Edit sss-token.config.toml (set authorities, name, symbol)
 # Then deploy
-npx sss-token init --custom sss-token.config.toml
+npx solana-stable init --custom sss-token.config.toml
 
 # Mint tokens
-npx sss-token mint <recipient-wallet> 1000000
+npx solana-stable mint <recipient-wallet> 1000000
 ```
 
 ### 2. Integrate programmatically (SDK)
@@ -90,6 +90,7 @@ npm run dev
 
 | Document | Contents |
 |----------|----------|
+| [docs/SSS-SPEC.md](docs/SSS-SPEC.md) | **Formal specification** — SSS-1, SSS-2, SSS-Core, SDK/CLI interface |
 | [docs/README.md](docs/README.md) | Overview, quick start, preset comparison, architecture diagram |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layer model, data flows, security model |
 | [docs/SDK.md](docs/SDK.md) | Presets, custom configs, TypeScript examples |
@@ -101,10 +102,12 @@ npm run dev
 
 Each component also has its own README:
 
+- [programs/sss-core/README.md](programs/sss-core/README.md) — SSS-Core program (RBAC, quotas, seize)
+- [transfer_hooks/blacklist/README.md](transfer_hooks/blacklist/README.md) — Blacklist hook program
 - [cli/README.md](cli/README.md) — CLI usage and config reference
 - [sdk/README.md](sdk/README.md) — SDK API and examples
 - [backend/README.md](backend/README.md) — Backend setup and endpoints
-- [transfer_hooks/blacklist/README.md](transfer_hooks/blacklist/README.md) — Anchor program architecture
+- [demo/README.md](demo/README.md) — React demo app
 
 ## Tech Stack
 

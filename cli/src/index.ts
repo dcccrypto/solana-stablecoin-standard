@@ -28,9 +28,9 @@ import {
 const program = new Command();
 
 program
-  .name("sss-token")
-  .description("CLI for managers of Solana stablecoins built on the Stablecoin Standard")
-  .version("0.1.0");
+  .name("solana-stable")
+  .description("CLI for the Solana Stablecoin Standard — deploy and manage SSS-1/SSS-2 stablecoins")
+  .version("0.2.0");
 
 const init = program
   .command("init")

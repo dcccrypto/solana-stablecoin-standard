@@ -1,6 +1,10 @@
-# `sss-token` CLI
+# `solana-stable` CLI
 
 A command-line tool for **stablecoin managers** on Solana. Use it to deploy and operate SPL tokens that follow the [Solana Stablecoin Standard](https://superteam.fun/earn/listing/build-the-solana-stablecoin-standard-bounty) (SSS), with support for Token-2022 and extensions (metadata, freeze, pause, transfer-hook blacklist, etc.).
+
+> **Architecture**: The CLI is a thin wrapper around the [sss-token-sdk](../sdk/). All on-chain logic (transaction building, instruction encoding, PDA derivation) is delegated to the SDK. The CLI handles config parsing, keypair loading, and user interaction.
+
+The binary is available as both `solana-stable` (preferred) and `sss-token` (legacy alias).
 
 ---
 
@@ -30,7 +34,7 @@ npm run build
 Run the CLI:
 
 ```bash
-npx sss-token --help
+npx solana-stable --help
 ```
 
 For development (no build step):
@@ -67,7 +71,8 @@ All commands are **config-driven**: by default the CLI looks for `sss-token.conf
 | Mint / freeze / metadata authorities | Required | Required |
 | Token-2022 (SPL Token Extensions) | Required | Required |
 | Transfer hook (blacklist program) | - | Required |
-| Blacklist add / remove / check | - | Yes |
+| Blacklist add / remove / check / close | - | Yes |
+| Two-step admin transfer | - | Yes |
 | Pausable extension | Optional | Optional |
 | Permanent delegate extension | Optional | Optional |
 
@@ -82,7 +87,7 @@ This walkthrough creates a new Token-2022 mint with metadata (name, symbol, URI)
 ### Step 1: Create a config from a preset
 
 ```bash
-sss-token init --preset sss-1
+solana-stable init --preset sss-1
 ```
 
 This creates `sss-token.config.toml` in the current directory with:
@@ -111,7 +116,7 @@ For a full list of options, see `example.config.toml`.
 ### Step 3: Deploy the mint
 
 ```bash
-sss-token init --custom sss-token.config.toml
+solana-stable init --custom sss-token.config.toml
 ```
 
 The CLI will:
@@ -120,21 +125,6 @@ The CLI will:
 2. Initialize the base mint (decimals, mint authority, freeze authority).
 3. Call `tokenMetadataInitialize` to add name, symbol, and URI on-chain.
 4. Write the new mint address into the config's `[stablecoin] mint` field.
-
-Example output:
-
-```
-=== SSS deploy ===
-Standard: sss-1
-Cluster: devnet
-Token program: spl-token-2022
-Name / symbol / decimals: MyUSD MUSD 6
-Metadata extension: enabled (on-mint name, symbol, uri)
-
-Created mint: 7NDkaMubatXw8fHQ2zNU4eid8Nkh5vG9SxQMSzUyE9SM
-Updated config with mint address: /path/to/sss-token.config.toml
-Deployment complete.
-```
 
 After this, the same config file is ready for all management commands.
 
@@ -157,7 +147,7 @@ anchor deploy          # note the program ID printed
 ### Step 1: Create a config
 
 ```bash
-sss-token init --preset sss-2
+solana-stable init --preset sss-2
 ```
 
 ### Step 2: Fill in the hook program ID
@@ -175,7 +165,7 @@ Also verify that `[authorities] blacklist` points to the keypair that should act
 ### Step 3: Deploy
 
 ```bash
-sss-token init --custom sss-token.config.toml
+solana-stable init --custom sss-token.config.toml
 ```
 
 The CLI will:
@@ -186,36 +176,17 @@ The CLI will:
 4. Initialize the **ExtraAccountMetaList PDA** (tells Token-2022 which extra accounts the hook needs at transfer time).
 5. Write the new mint address into the config.
 
-Example output:
-
-```
-=== SSS deploy ===
-Standard: sss-2
-Cluster: devnet
-Token program: spl-token-2022
-Name / symbol / decimals: MyUSD MUSD 6
-Metadata extension: enabled (on-mint name, symbol, uri)
-Transfer hook extension: enabled (program: 84rPjkmm...)
-
-Created mint: 9Xz...abc
-Initializing blacklist hook on-chain...
-Initialized blacklist config PDA: Cfg...xyz
-Initialized extra-account-metas PDA: Ext...xyz
-Updated config with mint address: /path/to/sss-token.config.toml
-Deployment complete.
-```
-
 ### Step 4: Use blacklist commands
 
 ```bash
 # Block a wallet from sending or receiving the stablecoin
-sss-token blacklist add <wallet-address>
+solana-stable blacklist add <wallet-address>
 
 # Unblock a wallet
-sss-token blacklist remove <wallet-address>
+solana-stable blacklist remove <wallet-address>
 
 # Check if a wallet is blacklisted
-sss-token blacklist check <wallet-address>
+solana-stable blacklist check <wallet-address>
 ```
 
 All other operations (`mint`, `burn`, `freeze`, `thaw`, `status`, etc.) work exactly like SSS-1.
@@ -261,7 +232,7 @@ The CLI expects a TOML file with the following structure.
 | `decimals`     | Number of decimals (e.g. `6`). |
 | `tokenProgram` | `"spl-token-2022"` (recommended) or `"spl-token"`. |
 | `uri`          | Optional. URI for Token-2022 metadata (e.g. JSON URL). |
-| `mint`         | Mint address. Empty before deploy; filled by `sss-token init --custom`. |
+| `mint`         | Mint address. Empty before deploy; filled by `solana-stable init --custom`. |
 
 ### `[authorities]`
 
@@ -294,9 +265,9 @@ See `example.config.toml` for a full sample.
 ### `init` -- Create config or deploy mint
 
 ```bash
-sss-token init --preset sss-1
-sss-token init --preset sss-2
-sss-token init --custom <path-to-config.toml>
+solana-stable init --preset sss-1
+solana-stable init --preset sss-2
+solana-stable init --custom <path-to-config.toml>
 ```
 
 - **`--preset sss-1`** / **`--preset sss-2`**
@@ -309,10 +280,10 @@ sss-token init --custom <path-to-config.toml>
 ### `mint` -- Mint tokens to a recipient
 
 ```bash
-sss-token mint <recipient> <amount> [--config <path>]
+solana-stable mint <recipient> <amount> [--config <path>]
 ```
 
-- **`<recipient>`** -- Solana wallet address (base58). The CLI creates the associated token account (ATA) for the mint if it does not exist.
+- **`<recipient>`** -- Solana wallet address (base58). Creates the ATA if it doesn't exist.
 - **`<amount>`** -- Amount in **raw units** (smallest decimals). For 6 decimals, `1000000` = 1 token.
 
 ---
@@ -320,29 +291,29 @@ sss-token mint <recipient> <amount> [--config <path>]
 ### `burn` -- Burn tokens
 
 ```bash
-sss-token burn <amount> [--config <path>]
+solana-stable burn <amount> [--config <path>]
 ```
 
-Burns `<amount>` (raw units) from the **mint authority's** token account for this mint.
+Burns `<amount>` (raw units) from the **mint authority's** token account.
 
 ---
 
 ### `freeze` / `thaw` -- Freeze or unfreeze a token account
 
 ```bash
-sss-token freeze <address> [--config <path>]
-sss-token thaw <address> [--config <path>]
+solana-stable freeze <address> [--config <path>]
+solana-stable thaw <address> [--config <path>]
 ```
 
 - **`<address>`** -- The **token account** (not the wallet) to freeze or thaw.
 
 ---
 
-### `pause` / `unpause` -- Pause or resume mint activity (Token-2022 Pausable)
+### `pause` / `unpause` -- Pause or resume (Token-2022 Pausable)
 
 ```bash
-sss-token pause [--config <path>]
-sss-token unpause [--config <path>]
+solana-stable pause [--config <path>]
+solana-stable unpause [--config <path>]
 ```
 
 Only applies to mints with the Token-2022 **Pausable** extension.
@@ -358,7 +329,7 @@ These commands interact with the on-chain blacklist Anchor program. They require
 #### `blacklist add` -- Block a wallet
 
 ```bash
-sss-token blacklist add <wallet> [--config <path>]
+solana-stable blacklist add <wallet> [--config <path>]
 ```
 
 Adds the wallet to the blacklist. Future transfers to or from this wallet will be rejected by the transfer hook. If the wallet has never been blacklisted before, a new on-chain PDA is created. If it was previously unblacklisted, the existing PDA is updated.
@@ -366,7 +337,7 @@ Adds the wallet to the blacklist. Future transfers to or from this wallet will b
 #### `blacklist remove` -- Unblock a wallet
 
 ```bash
-sss-token blacklist remove <wallet> [--config <path>]
+solana-stable blacklist remove <wallet> [--config <path>]
 ```
 
 Sets the wallet's blacklist entry to `blocked = false`. The PDA remains on-chain so the transfer hook can still resolve it, but transfers are allowed again.
@@ -374,23 +345,15 @@ Sets the wallet's blacklist entry to `blocked = false`. The PDA remains on-chain
 #### `blacklist check` -- Query blacklist status
 
 ```bash
-sss-token blacklist check <wallet> [--config <path>]
+solana-stable blacklist check <wallet> [--config <path>]
 ```
 
 Reads the wallet's blacklist PDA and prints whether it is currently blocked. This is a **read-only** operation (no transaction, no authority needed).
 
-Example output:
-
-```
-Wallet: 9abc...xyz
-Blacklist PDA: BLk...pda
-Blacklisted: true
-```
-
 #### `blacklist close` -- Reclaim rent for an unblocked entry
 
 ```bash
-sss-token blacklist close <wallet> [--config <path>]
+solana-stable blacklist close <wallet> [--config <path>]
 ```
 
 Closes the BlacklistEntry PDA for a wallet that has `blocked = false`, reclaiming rent to the admin. Fails if the entry is still blocked — you must `blacklist remove` first.
@@ -398,7 +361,7 @@ Closes the BlacklistEntry PDA for a wallet that has `blocked = false`, reclaimin
 #### `blacklist transfer-admin` -- Nominate a new admin
 
 ```bash
-sss-token blacklist transfer-admin <new-admin-pubkey> [--config <path>]
+solana-stable blacklist transfer-admin <new-admin-pubkey> [--config <path>]
 ```
 
 Initiates a two-step admin transfer. The nominated admin must call `accept-admin` to finalize. The current admin remains active until the transfer is accepted.
@@ -406,7 +369,7 @@ Initiates a two-step admin transfer. The nominated admin must call `accept-admin
 #### `blacklist accept-admin` -- Accept admin role
 
 ```bash
-sss-token blacklist accept-admin <keypair-path> [--config <path>]
+solana-stable blacklist accept-admin <keypair-path> [--config <path>]
 ```
 
 Accepts a pending admin nomination. `<keypair-path>` is the path to the nominated admin's keypair JSON file. After acceptance, update your config's `[authorities] blacklist` to the new keypair path.
@@ -416,7 +379,7 @@ Accepts a pending admin nomination. `<keypair-path>` is the path to the nominate
 ### `status` -- Token and supply snapshot
 
 ```bash
-sss-token status [--config <path>]
+solana-stable status [--config <path>]
 ```
 
 Prints config (standard, cluster, mint) and on-chain info: supply, decimals, and current mint/freeze authorities.
@@ -426,7 +389,7 @@ Prints config (standard, cluster, mint) and on-chain info: supply, decimals, and
 ### `supply` -- Total supply only
 
 ```bash
-sss-token supply [--config <path>]
+solana-stable supply [--config <path>]
 ```
 
 Prints the current total supply (raw and human-readable) for the configured mint.
@@ -436,17 +399,17 @@ Prints the current total supply (raw and human-readable) for the configured mint
 ### `balance` -- Balance of an address
 
 ```bash
-sss-token balance <address> [--config <path>]
+solana-stable balance <address> [--config <path>]
 ```
 
-- **`<address>`** -- Wallet address (base58). The CLI resolves the **associated token account** for the configured mint and prints its balance. If the ATA does not exist, the balance is 0.
+- **`<address>`** -- Wallet address (base58). The CLI resolves the ATA and prints its balance.
 
 ---
 
 ### `set-authority` -- Update an authority
 
 ```bash
-sss-token set-authority <type> <new-authority> [--config <path>]
+solana-stable set-authority <type> <new-authority> [--config <path>]
 ```
 
 - **`<type>`** -- One of: `mint`, `freeze`, `metadata`, `metadata-pointer`, `pause`, `permanent-delegate`, `transfer-fee-config`, `close-mint`, `interest-rate`.
@@ -455,8 +418,8 @@ sss-token set-authority <type> <new-authority> [--config <path>]
 Examples:
 
 ```bash
-sss-token set-authority mint 9abc...xyz
-sss-token set-authority freeze none
+solana-stable set-authority mint 9abc...xyz
+solana-stable set-authority freeze none
 ```
 
 ---
@@ -464,11 +427,11 @@ sss-token set-authority freeze none
 ### `audit-log` -- Recent transactions for the mint
 
 ```bash
-sss-token audit-log [--limit <n>] [--config <path>] [--action <type>]
+solana-stable audit-log [--limit <n>] [--config <path>] [--action <type>]
 ```
 
 - **`--limit <n>`** -- How many recent signatures to fetch (default `20`, max `1000`).
-- **`--action <type>`** -- Reserved for future filtering. Currently informational only.
+- **`--action <type>`** -- Reserved for future filtering.
 
 ---
 
@@ -479,7 +442,7 @@ After deployment, you can change who can mint, freeze, update metadata, or pause
 1. Ensure the **current** authority keypair for that type is in your config.
 2. Run:
    ```bash
-   sss-token set-authority <type> <new-pubkey>
+   solana-stable set-authority <type> <new-pubkey>
    ```
 3. Update your config to point to the new keypair path for future CLI commands. The on-chain mint already has the new authority; the config only tells the CLI which keypair to use when signing.
 

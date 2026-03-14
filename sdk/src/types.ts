@@ -58,6 +58,8 @@ export interface LoadOptions {
   tokenProgramId?: PublicKey;
   /** Transfer-hook program ID (for blacklist operations). */
   transferHookProgramId?: PublicKey;
+  /** SSS-Core program ID (for RBAC, quotas, pause, seize). */
+  ssCoreProgramId?: PublicKey;
 }
 
 // ─── Operation options ───────────────────────────────────────────────────────

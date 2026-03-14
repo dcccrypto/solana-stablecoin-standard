@@ -40,6 +40,7 @@ import {
 import { pause, resume } from "@solana/spl-token";
 
 import { Compliance } from "./compliance";
+import { SssCoreClient } from "./core";
 import type {
   CreateOptions,
   LoadOptions,
@@ -101,20 +102,31 @@ export class SolanaStablecoin {
   readonly mint: PublicKey;
   readonly tokenProgramId: PublicKey;
   readonly compliance: Compliance | null;
+  /**
+   * SSS-Core program client. Available when `ssCoreProgramId` is provided
+   * on load, or after `create()` with sss-core integration.
+   * Provides RBAC-gated operations (mint, burn, freeze, seize, pause, roles).
+   */
+  readonly core: SssCoreClient | null;
 
   private _decimals: number | null = null;
+  private _cachedStatus: TokenStatus | null = null;
 
-  private constructor(
+  protected constructor(
     connection: Connection,
     mint: PublicKey,
     tokenProgramId: PublicKey,
     hookProgramId: PublicKey | null,
+    ssCoreProgramId: PublicKey | null = null,
   ) {
     this.connection = connection;
     this.mint = mint;
     this.tokenProgramId = tokenProgramId;
     this.compliance = hookProgramId
       ? new Compliance(connection, mint, hookProgramId)
+      : null;
+    this.core = ssCoreProgramId
+      ? new SssCoreClient(connection, mint, ssCoreProgramId, tokenProgramId)
       : null;
   }
 
@@ -282,7 +294,7 @@ export class SolanaStablecoin {
     const hookProgramId = transferHookEnabled
       ? transferHookCfg.programId
       : null;
-    return new SolanaStablecoin(connection, mintPk, tokenProgramId, hookProgramId);
+    return new SolanaStablecoin(connection, mintPk, tokenProgramId, hookProgramId, null);
   }
 
   static load(connection: Connection, opts: LoadOptions): SolanaStablecoin {
@@ -292,7 +304,46 @@ export class SolanaStablecoin {
       opts.mint,
       tokenProgramId,
       opts.transferHookProgramId ?? null,
+      opts.ssCoreProgramId ?? null,
     );
+  }
+
+  // ─── State caching (vault standard pattern) ───────────────────────────────
+
+  /**
+   * Refresh cached state from the chain (mint info + sss-core config if available).
+   */
+  async refresh(): Promise<void> {
+    const mintInfo = await getMint(
+      this.connection,
+      this.mint,
+      undefined,
+      this.tokenProgramId,
+    );
+    const dec = mintInfo.decimals;
+    this._decimals = dec;
+    this._cachedStatus = {
+      mint: this.mint,
+      supply: {
+        raw: mintInfo.supply,
+        uiAmount: Number(mintInfo.supply) / Math.pow(10, dec),
+        uiAmountString: formatUiAmount(mintInfo.supply, dec),
+        decimals: dec,
+      },
+      mintAuthority: mintInfo.mintAuthority,
+      freezeAuthority: mintInfo.freezeAuthority,
+    };
+
+    if (this.core) {
+      await this.core.refresh();
+    }
+  }
+
+  /**
+   * Return last cached state (call `refresh()` first, or methods that auto-refresh).
+   */
+  getState(): TokenStatus | null {
+    return this._cachedStatus;
   }
 
   // ─── Token operations ──────────────────────────────────────────────────────

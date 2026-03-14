@@ -1,5 +1,11 @@
 import path from "path";
-import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
+import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import {
+  SolanaStablecoin,
+  Presets,
+  type TransferHookConfig,
+} from "sss-token-sdk";
 import {
   loadConfig,
   updateConfigMint,
@@ -7,31 +13,9 @@ import {
   type SssConfig,
 } from "../config";
 import { getConnection, loadKeypair } from "../solana-helpers";
-import {
-  createMint,
-  createInitializeMint2Instruction,
-  createInitializeMetadataPointerInstruction,
-  createInitializeTransferHookInstruction,
-  createInitializePermanentDelegateInstruction,
-  createInitializePausableConfigInstruction,
-  tokenMetadataInitialize,
-  TOKEN_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
-  ExtensionType,
-  getMintLen,
-} from "@solana/spl-token";
-import { sendAndConfirmTransaction } from "@solana/web3.js";
-import { initializeBlacklistHook } from "./blacklist";
 
 /**
- * Deploys a new SPL mint from config: creates the mint on-chain (with optional
- * Token-2022 extensions), then updates the config file with the new mint address.
- *
- * Token-2022 with metadata follows the working pattern:
- * - Allocate only for extensions; fund with enough lamports for the final size
- *   (metadata reallocs, so we use a generous estimate for rent).
- * - Tx1: CreateAccount → extension inits → InitializeMint2.
- * - Tx2: tokenMetadataInitialize (reallocs mint and writes name/symbol/uri).
+ * Deploys a new stablecoin via the SDK, then writes the mint address back to config.
  */
 export async function deployStablecoinFromConfig(
   configPath?: string,
@@ -49,9 +33,6 @@ export async function deployStablecoinFromConfig(
 
   const connection = getConnection(cfg);
   const payer = loadKeypair(cfg.authorities.mint);
-  const mintAuthority = payer.publicKey;
-  const freezeKeypair = loadKeypair(cfg.authorities.freeze);
-  const freezeAuthority = freezeKeypair.publicKey;
   const decimals = cfg.stablecoin.decimals;
   const name = cfg.stablecoin.name;
   const symbol = cfg.stablecoin.symbol;
@@ -84,161 +65,53 @@ export async function deployStablecoinFromConfig(
     );
   }
 
-  const programId = useToken2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
-
   console.log("=== SSS deploy ===");
   console.log("Standard:", cfg.standard);
   console.log("Cluster:", cfg.cluster);
   console.log("Token program:", cfg.stablecoin.tokenProgram);
-  console.log(
-    "Name / symbol / decimals:",
+  console.log("Name / symbol / decimals:", name, symbol, decimals);
+  if (metadataEnabled) console.log("Metadata extension: enabled");
+  if (transferHookEnabled) console.log("Transfer hook extension: enabled (program:", transferHookProgramId!.toBase58() + ")");
+  if (pausableEnabled) console.log("Pausable extension: enabled");
+  if (permanentDelegateEnabled) console.log("Permanent delegate extension: enabled");
+  console.log("");
+
+  const preset = cfg.standard === "sss-2" ? Presets.SSS_2 : Presets.SSS_1;
+
+  let transferHookConfig: TransferHookConfig | undefined;
+  if (transferHookEnabled) {
+    const hookAdmin = cfg.authorities.blacklist?.trim()
+      ? loadKeypair(cfg.authorities.blacklist)
+      : payer;
+    transferHookConfig = {
+      programId: transferHookProgramId!,
+      admin: hookAdmin,
+    };
+  }
+
+  const freezeAuthority = loadKeypair(cfg.authorities.freeze);
+  const metadataAuthority = metadataEnabled
+    ? loadKeypair(cfg.authorities.metadata)
+    : undefined;
+
+  const stable = await SolanaStablecoin.create(connection, {
+    preset,
     name,
     symbol,
     decimals,
-  );
-  if (metadataEnabled) {
-    console.log("Metadata extension: enabled (on-mint name, symbol, uri)");
-  }
-  if (transferHookEnabled) {
-    console.log("Transfer hook extension: enabled (program:", transferHookProgramId!.toBase58() + ")");
-  }
-  if (pausableEnabled) {
-    console.log("Pausable extension: enabled");
-  }
-  if (permanentDelegateEnabled) {
-    console.log("Permanent delegate extension: enabled");
-  }
-  console.log("");
+    uri,
+    authority: payer,
+    freezeAuthority: freezeAuthority.publicKey,
+    metadataAuthority: metadataAuthority?.publicKey,
+    extensions: {
+      metadata: metadataEnabled,
+      pausable: pausableEnabled,
+      permanentDelegate: permanentDelegateEnabled,
+      transferHook: transferHookConfig ?? false,
+    },
+  });
 
-  let mintAddress: string;
-
-  const needsExtensions = metadataEnabled || transferHookEnabled || pausableEnabled || permanentDelegateEnabled;
-  if (needsExtensions) {
-    const metadataAuthority = metadataEnabled
-      ? loadKeypair(cfg.authorities.metadata).publicKey
-      : null;
-    const mintKeypair = Keypair.generate();
-    const mint = mintKeypair.publicKey;
-
-    const extensions: ExtensionType[] = [];
-    if (metadataEnabled) extensions.push(ExtensionType.MetadataPointer);
-    if (transferHookEnabled) extensions.push(ExtensionType.TransferHook);
-    if (pausableEnabled) extensions.push(ExtensionType.PausableConfig);
-    if (permanentDelegateEnabled) extensions.push(ExtensionType.PermanentDelegate);
-
-    const mintSpace = getMintLen(extensions);
-    // Use generous rent for metadata realloc; metadata init will expand the account
-    const rentSize = metadataEnabled ? Math.max(mintSpace, 4096) : mintSpace;
-    const lamports = await connection.getMinimumBalanceForRentExemption(rentSize);
-
-    const tx = new Transaction().add(
-      SystemProgram.createAccount({
-        fromPubkey: payer.publicKey,
-        newAccountPubkey: mint,
-        space: mintSpace,
-        lamports,
-        programId: TOKEN_2022_PROGRAM_ID,
-      }),
-    );
-
-    if (metadataEnabled) {
-      tx.add(
-        createInitializeMetadataPointerInstruction(
-          mint,
-          metadataAuthority!,
-          mint,
-          TOKEN_2022_PROGRAM_ID,
-        ),
-      );
-    }
-
-    if (transferHookEnabled) {
-      const hookAuthority = cfg.authorities.blacklist?.trim()
-        ? loadKeypair(cfg.authorities.blacklist).publicKey
-        : payer.publicKey;
-      tx.add(
-        createInitializeTransferHookInstruction(
-          mint,
-          hookAuthority,
-          transferHookProgramId!,
-          TOKEN_2022_PROGRAM_ID,
-        ),
-      );
-    }
-
-    if (permanentDelegateEnabled) {
-      tx.add(
-        createInitializePermanentDelegateInstruction(
-          mint,
-          payer.publicKey,
-          TOKEN_2022_PROGRAM_ID,
-        ),
-      );
-    }
-
-    if (pausableEnabled) {
-      tx.add(
-        createInitializePausableConfigInstruction(
-          mint,
-          payer.publicKey,
-          TOKEN_2022_PROGRAM_ID,
-        ),
-      );
-    }
-
-    tx.add(
-      createInitializeMint2Instruction(
-        mint,
-        decimals,
-        mintAuthority,
-        freezeAuthority,
-        TOKEN_2022_PROGRAM_ID,
-      ),
-    );
-
-    await sendAndConfirmTransaction(connection, tx, [payer, mintKeypair], {
-      commitment: "confirmed",
-    });
-
-    if (metadataEnabled) {
-      await tokenMetadataInitialize(
-        connection,
-        payer,
-        mint,
-        metadataAuthority!,
-        payer,
-        name,
-        symbol,
-        uri,
-        [],
-        { commitment: "confirmed" },
-        TOKEN_2022_PROGRAM_ID,
-      );
-    }
-
-    if (transferHookEnabled) {
-      console.log("Initializing blacklist hook on-chain...");
-      const blacklistAdmin = cfg.authorities.blacklist?.trim()
-        ? loadKeypair(cfg.authorities.blacklist)
-        : payer;
-      await initializeBlacklistHook(connection, transferHookProgramId!, blacklistAdmin, mint);
-    }
-
-    mintAddress = mint.toBase58();
-  } else {
-    const mint = await createMint(
-      connection,
-      payer,
-      mintAuthority,
-      freezeAuthority,
-      decimals,
-      undefined,
-      undefined,
-      programId,
-    );
-    mintAddress = mint.toBase58();
-  }
-
+  const mintAddress = stable.mint.toBase58();
   console.log("Created mint:", mintAddress);
 
   updateConfigMint(filePath, mintAddress);
