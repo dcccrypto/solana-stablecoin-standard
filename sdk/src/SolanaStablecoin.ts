@@ -28,9 +28,12 @@ import {
   FreezeParams,
   MintParams,
   MinterConfig,
+  RevokeMinterParams,
   SdkOptions,
   SssConfig,
   StablecoinInfo,
+  UpdateMinterParams,
+  UpdateRolesParams,
 } from './types';
 
 /** Deployed program IDs (devnet + localnet) — matches Anchor.toml */
@@ -245,6 +248,115 @@ export class SolanaStablecoin {
       { commitment: 'confirmed' },
       TOKEN_2022_PROGRAM_ID
     );
+  }
+
+  /**
+   * Pause the stablecoin — rejects all mint operations while paused.
+   * Caller must be the admin authority.
+   *
+   * This builds and sends the on-chain `pause` instruction via the
+   * sss-token program's config PDA.
+   */
+  async pause(): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    return (program as any).methods
+      .pause()
+      .accounts({ config: this.configPda, admin: this.provider.wallet.publicKey })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Unpause the stablecoin — re-enables minting.
+   * Caller must be the admin authority.
+   */
+  async unpause(): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    return (program as any).methods
+      .unpause()
+      .accounts({ config: this.configPda, admin: this.provider.wallet.publicKey })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Register or update a minter with a cap.
+   * Caller must be the admin authority.
+   *
+   * @param params.minter  - The public key to authorize as a minter.
+   * @param params.cap     - Maximum tokens (in base units) this minter may
+   *                         mint in total. Pass `0n` for unlimited.
+   */
+  async updateMinter(params: UpdateMinterParams): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    const [minterPda] = SolanaStablecoin.getMinterPda(
+      this.configPda,
+      params.minter,
+      this.programId
+    );
+    return (program as any).methods
+      .updateMinter(new BN(params.cap.toString()))
+      .accounts({
+        admin: this.provider.wallet.publicKey,
+        config: this.configPda,
+        minterInfo: minterPda,
+        minterAuthority: params.minter,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Revoke a minter — closes the minter PDA and removes their authorization.
+   * Caller must be the admin authority.
+   */
+  async revokeMinter(params: RevokeMinterParams): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    const [minterPda] = SolanaStablecoin.getMinterPda(
+      this.configPda,
+      params.minter,
+      this.programId
+    );
+    return (program as any).methods
+      .revokeMinter()
+      .accounts({
+        admin: this.provider.wallet.publicKey,
+        config: this.configPda,
+        minterInfo: minterPda,
+        minterAuthority: params.minter,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Transfer the admin or compliance authority to a new keypair.
+   * Caller must be the current admin authority.
+   *
+   * Pass only the fields you want to update — omitted fields are left unchanged.
+   */
+  async updateRoles(params: UpdateRolesParams): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    return (program as any).methods
+      .updateRoles(
+        params.newAuthority ?? null,
+        params.newComplianceAuthority ?? null
+      )
+      .accounts({
+        admin: this.provider.wallet.publicKey,
+        config: this.configPda,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Load the Anchor program instance (lazy, cached per instance).
+   * @internal
+   */
+  private _program: any | null = null;
+  private async _loadProgram(): Promise<any> {
+    if (this._program) return this._program;
+    const { Program } = await import('@coral-xyz/anchor');
+    const idl = await import('../../idl/sss_token.json');
+    this._program = new Program(idl as any, this.provider);
+    return this._program;
   }
 
   /**

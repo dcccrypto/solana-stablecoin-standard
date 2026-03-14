@@ -42,6 +42,25 @@ export interface MinterConfig {
   cap?: bigint;
 }
 
+export interface UpdateMinterParams {
+  /** The minter public key to register or update */
+  minter: PublicKey;
+  /** Maximum mint cap in base units (0 = unlimited) */
+  cap: bigint;
+}
+
+export interface RevokeMinterParams {
+  /** The minter public key to revoke */
+  minter: PublicKey;
+}
+
+export interface UpdateRolesParams {
+  /** New admin authority (omit to leave unchanged) */
+  newAuthority?: PublicKey;
+  /** New compliance authority (omit to leave unchanged) */
+  newComplianceAuthority?: PublicKey;
+}
+
 export interface StablecoinInfo {
   mint: PublicKey;
   authority: PublicKey;
