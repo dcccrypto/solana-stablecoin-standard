@@ -167,11 +167,9 @@ jobs:
         run: |
           # Solana 2.3 ships cargo/rustc 1.86 — generates lockfile v4, which is
           # fully supported by the bundled Solana cargo. No v3 downgrade needed.
-          # NOTE: [patch.crates-io] cannot patch crates.io with crates.io itself,
-          # so we use `cargo update --precise` on the generated lockfile instead.
+          # blake3: Cargo 1.86 supports edition2024, so the blake3 >=1.8.0 pin
+          # is no longer needed (CodeRabbit review suggestion — verified by CI).
           cargo generate-lockfile
-          # blake3 >=1.8.0 requires edition2024 (Cargo >=1.85); pin to last edition2021 release.
-          cargo update blake3 --precise 1.7.0
 
       - name: Anchor build
         # Anchor 0.32 uses idl-build feature (stable Rust) for IDL generation —
