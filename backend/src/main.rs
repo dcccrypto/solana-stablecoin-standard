@@ -881,14 +881,18 @@ mod qa_tests {
         // Unfiltered — should return at least 2 entries
         let (status, json) = get_json(app.clone(), "/api/compliance/audit", &key).await;
         assert_eq!(status, StatusCode::OK);
-        let all = json["data"].as_array().unwrap().len();
+        // Response shape: { data: { entries: [...], page: { total, offset, limit } } }
+        let all = json["data"]["entries"].as_array().unwrap().len();
         assert!(all >= 2, "expected at least 2 audit entries, got {}", all);
+        // page metadata must be present
+        assert!(json["data"]["page"]["total"].as_u64().unwrap() >= 2);
+        assert_eq!(json["data"]["page"]["offset"].as_u64().unwrap(), 0);
 
         // Filter by address — should return only addr_a entries
         let uri_a = format!("/api/compliance/audit?address={}", addr_a);
         let (status_a, json_a) = get_json(app.clone(), &uri_a, &key).await;
         assert_eq!(status_a, StatusCode::OK);
-        let entries_a = json_a["data"].as_array().unwrap();
+        let entries_a = json_a["data"]["entries"].as_array().unwrap();
         assert!(!entries_a.is_empty(), "should have entries for addr_a");
         for entry in entries_a {
             assert_eq!(entry["address"], addr_a, "all entries should match addr_a");
@@ -898,17 +902,29 @@ mod qa_tests {
         let (status_ac, json_ac) =
             get_json(app.clone(), "/api/compliance/audit?action=BLACKLIST_ADD", &key).await;
         assert_eq!(status_ac, StatusCode::OK);
-        let entries_ac = json_ac["data"].as_array().unwrap();
+        let entries_ac = json_ac["data"]["entries"].as_array().unwrap();
         assert!(!entries_ac.is_empty(), "should have BLACKLIST_ADD entries");
         for entry in entries_ac {
             assert_eq!(entry["action"], "BLACKLIST_ADD");
         }
 
-        // limit=1 — should return exactly one entry
+        // limit=1 — should return exactly one entry, total should still show the full count
         let (status_lim, json_lim) =
             get_json(app.clone(), "/api/compliance/audit?limit=1", &key).await;
         assert_eq!(status_lim, StatusCode::OK);
-        let entries_lim = json_lim["data"].as_array().unwrap();
+        let entries_lim = json_lim["data"]["entries"].as_array().unwrap();
         assert_eq!(entries_lim.len(), 1, "limit=1 should return exactly 1 entry");
+        assert!(
+            json_lim["data"]["page"]["total"].as_u64().unwrap() >= 2,
+            "page.total should reflect the full untruncated count"
+        );
+
+        // offset=1, limit=1 — should skip the first entry
+        let (status_off, json_off) =
+            get_json(app.clone(), "/api/compliance/audit?limit=1&offset=1", &key).await;
+        assert_eq!(status_off, StatusCode::OK);
+        let entries_off = json_off["data"]["entries"].as_array().unwrap();
+        assert_eq!(entries_off.len(), 1, "offset=1 limit=1 should return exactly 1 entry");
+        assert_eq!(json_off["data"]["page"]["offset"].as_u64().unwrap(), 1);
     }
 }

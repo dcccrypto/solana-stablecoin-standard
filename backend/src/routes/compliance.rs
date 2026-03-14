@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::{
     error::AppError,
-    models::{ApiResponse, AuditEntry, AuditQuery, BlacklistEntry, BlacklistRequest},
+    models::{ApiResponse, AuditPageResponse, AuditQuery, BlacklistEntry, BlacklistRequest, PageMeta},
     state::AppState,
 };
 
@@ -53,15 +53,31 @@ pub async fn remove_blacklist(
     }
 }
 
+/// `GET /api/compliance/audit`
+///
+/// Query parameters:
+/// - `address` — filter by wallet/contract address (optional)
+/// - `action`  — filter by action type, e.g. `BLACKLIST_ADD` (optional)
+/// - `limit`   — page size, default 50, max 1000
+/// - `offset`  — zero-based record offset, default 0
+///
+/// Response includes a `page` metadata object with `total`, `offset`, and `limit`.
 pub async fn get_audit(
     State(state): State<AppState>,
     Query(query): Query<AuditQuery>,
-) -> Result<Json<ApiResponse<Vec<AuditEntry>>>, AppError> {
-    let limit = query.limit.unwrap_or(100).min(1000);
+) -> Result<Json<ApiResponse<AuditPageResponse>>, AppError> {
+    let limit = query.limit.unwrap_or(50).min(1000);
+    let offset = query.offset.unwrap_or(0);
+
+    let total = state.db.count_audit_log(query.address.as_deref(), query.action.as_deref())?;
     let entries = state.db.get_audit_log(
         query.address.as_deref(),
         query.action.as_deref(),
         limit,
+        offset,
     )?;
-    Ok(Json(ApiResponse::ok(entries)))
+    Ok(Json(ApiResponse::ok(AuditPageResponse {
+        entries,
+        page: PageMeta { total, offset, limit },
+    })))
 }

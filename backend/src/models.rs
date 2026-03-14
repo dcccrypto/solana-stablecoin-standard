@@ -51,11 +51,7 @@ pub struct SupplyResponse {
     pub circulating_supply: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct EventsResponse {
-    pub mint_events: Vec<MintEvent>,
-    pub burn_events: Vec<BurnEvent>,
-}
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BlacklistRequest {
@@ -136,7 +132,30 @@ pub struct SupplyQuery {
 #[derive(Debug, Deserialize)]
 pub struct EventsQuery {
     pub token_mint: Option<String>,
+    /// Maximum number of events to return per page (default: 50, max: 500).
     pub limit: Option<u32>,
+    /// Zero-based offset for pagination (default: 0).
+    pub offset: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PageMeta {
+    /// Total number of matching records in the database.
+    pub total: u32,
+    /// Zero-based offset used for this page.
+    pub offset: u32,
+    /// Page size applied to this page.
+    pub limit: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EventsPageResponse {
+    pub mint_events: Vec<MintEvent>,
+    pub burn_events: Vec<BurnEvent>,
+    /// Pagination metadata for mint_events.
+    pub mint_page: PageMeta,
+    /// Pagination metadata for burn_events.
+    pub burn_page: PageMeta,
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,6 +164,14 @@ pub struct AuditQuery {
     pub address: Option<String>,
     /// Filter by action type (e.g. BLACKLIST_ADD, BLACKLIST_REMOVE)
     pub action: Option<String>,
-    /// Maximum number of entries to return (default: 100, max: 1000)
+    /// Maximum number of entries to return (default: 50, max: 1000).
     pub limit: Option<u32>,
+    /// Zero-based offset for pagination (default: 0).
+    pub offset: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuditPageResponse {
+    pub entries: Vec<AuditEntry>,
+    pub page: PageMeta,
 }

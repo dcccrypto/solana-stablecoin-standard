@@ -150,17 +150,47 @@ impl Database {
         Ok((total_minted as u64, total_burned as u64))
     }
 
-    pub fn list_mint_events(&self, token_mint: Option<&str>, limit: u32) -> Result<Vec<MintEvent>, AppError> {
+    /// Count mint events, optionally filtered by token_mint.
+    pub fn count_mint_events(&self, token_mint: Option<&str>) -> Result<u32, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let count: i64 = if let Some(mint) = token_mint {
+            conn.query_row(
+                "SELECT COUNT(*) FROM mint_events WHERE token_mint = ?1",
+                params![mint],
+                |row| row.get(0),
+            )?
+        } else {
+            conn.query_row("SELECT COUNT(*) FROM mint_events", [], |row| row.get(0))?
+        };
+        Ok(count as u32)
+    }
+
+    /// Count burn events, optionally filtered by token_mint.
+    pub fn count_burn_events(&self, token_mint: Option<&str>) -> Result<u32, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let count: i64 = if let Some(mint) = token_mint {
+            conn.query_row(
+                "SELECT COUNT(*) FROM burn_events WHERE token_mint = ?1",
+                params![mint],
+                |row| row.get(0),
+            )?
+        } else {
+            conn.query_row("SELECT COUNT(*) FROM burn_events", [], |row| row.get(0))?
+        };
+        Ok(count as u32)
+    }
+
+    pub fn list_mint_events(&self, token_mint: Option<&str>, limit: u32, offset: u32) -> Result<Vec<MintEvent>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let mut stmt = if let Some(mint) = token_mint {
             conn.prepare(&format!(
-                "SELECT id, token_mint, amount, recipient, tx_signature, created_at FROM mint_events WHERE token_mint = '{}' ORDER BY created_at DESC LIMIT {}",
-                mint.replace('\'', "''"), limit
+                "SELECT id, token_mint, amount, recipient, tx_signature, created_at FROM mint_events WHERE token_mint = '{}' ORDER BY created_at DESC LIMIT {} OFFSET {}",
+                mint.replace('\'', "''"), limit, offset
             ))?
         } else {
             conn.prepare(&format!(
-                "SELECT id, token_mint, amount, recipient, tx_signature, created_at FROM mint_events ORDER BY created_at DESC LIMIT {}",
-                limit
+                "SELECT id, token_mint, amount, recipient, tx_signature, created_at FROM mint_events ORDER BY created_at DESC LIMIT {} OFFSET {}",
+                limit, offset
             ))?
         };
 
@@ -178,17 +208,17 @@ impl Database {
         Ok(events)
     }
 
-    pub fn list_burn_events(&self, token_mint: Option<&str>, limit: u32) -> Result<Vec<BurnEvent>, AppError> {
+    pub fn list_burn_events(&self, token_mint: Option<&str>, limit: u32, offset: u32) -> Result<Vec<BurnEvent>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let mut stmt = if let Some(mint) = token_mint {
             conn.prepare(&format!(
-                "SELECT id, token_mint, amount, source, tx_signature, created_at FROM burn_events WHERE token_mint = '{}' ORDER BY created_at DESC LIMIT {}",
-                mint.replace('\'', "''"), limit
+                "SELECT id, token_mint, amount, source, tx_signature, created_at FROM burn_events WHERE token_mint = '{}' ORDER BY created_at DESC LIMIT {} OFFSET {}",
+                mint.replace('\'', "''"), limit, offset
             ))?
         } else {
             conn.prepare(&format!(
-                "SELECT id, token_mint, amount, source, tx_signature, created_at FROM burn_events ORDER BY created_at DESC LIMIT {}",
-                limit
+                "SELECT id, token_mint, amount, source, tx_signature, created_at FROM burn_events ORDER BY created_at DESC LIMIT {} OFFSET {}",
+                limit, offset
             ))?
         };
 
@@ -271,11 +301,33 @@ impl Database {
         })
     }
 
+    /// Count audit log entries matching the given filters.
+    pub fn count_audit_log(&self, address: Option<&str>, action: Option<&str>) -> Result<u32, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = String::from("SELECT COUNT(*) FROM audit_log WHERE 1=1");
+        let mut param_values: Vec<String> = Vec::new();
+        if let Some(a) = address {
+            sql.push_str(&format!(" AND address = ?{}", param_values.len() + 1));
+            param_values.push(a.to_string());
+        }
+        if let Some(ac) = action {
+            sql.push_str(&format!(" AND action = ?{}", param_values.len() + 1));
+            param_values.push(ac.to_string());
+        }
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
+            .iter()
+            .map(|s| s as &dyn rusqlite::types::ToSql)
+            .collect();
+        let count: i64 = conn.query_row(&sql, params_refs.as_slice(), |row| row.get(0))?;
+        Ok(count as u32)
+    }
+
     pub fn get_audit_log(
         &self,
         address: Option<&str>,
         action: Option<&str>,
         limit: u32,
+        offset: u32,
     ) -> Result<Vec<AuditEntry>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -283,35 +335,24 @@ impl Database {
         let mut sql = String::from(
             "SELECT id, action, address, details, created_at FROM audit_log WHERE 1=1",
         );
-        if address.is_some() {
-            sql.push_str(" AND address = ?1");
+        let mut param_values: Vec<String> = Vec::new();
+        if let Some(a) = address {
+            sql.push_str(&format!(" AND address = ?{}", param_values.len() + 1));
+            param_values.push(a.to_string());
         }
-        if action.is_some() {
-            sql.push_str(if address.is_some() {
-                " AND action = ?2"
-            } else {
-                " AND action = ?1"
-            });
+        if let Some(ac) = action {
+            sql.push_str(&format!(" AND action = ?{}", param_values.len() + 1));
+            param_values.push(ac.to_string());
         }
-        sql.push_str(" ORDER BY created_at DESC LIMIT ?");
-        // Append the limit placeholder index
-        let limit_idx = 1 + address.is_some() as usize + action.is_some() as usize;
-        // Replace the trailing `?` with the correct placeholder index
-        let sql = sql.replace(" LIMIT ?", &format!(" LIMIT ?{}", limit_idx));
+        // LIMIT and OFFSET as inline literals — safe because they are u32 (no injection risk).
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT {} OFFSET {}", limit, offset));
 
         let mut stmt = conn.prepare(&sql)?;
 
-        // We need to bind params in order; use a Vec of boxed ToSql values.
-        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-        if let Some(a) = address {
-            params.push(Box::new(a.to_string()));
-        }
-        if let Some(ac) = action {
-            params.push(Box::new(ac.to_string()));
-        }
-        params.push(Box::new(limit));
-
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values
+            .iter()
+            .map(|s| s as &dyn rusqlite::types::ToSql)
+            .collect();
 
         let entries = stmt.query_map(params_refs.as_slice(), |row| {
             Ok(AuditEntry {
