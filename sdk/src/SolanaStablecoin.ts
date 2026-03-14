@@ -1,24 +1,17 @@
 import {
-  Connection,
   Keypair,
   PublicKey,
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
-  Transaction,
   TransactionSignature,
 } from '@solana/web3.js';
 import {
   AnchorProvider,
   BN,
-  Program,
-  web3,
 } from '@coral-xyz/anchor';
 import {
   TOKEN_2022_PROGRAM_ID,
-  createMint,
   getOrCreateAssociatedTokenAccount,
-  mintTo,
-  burn,
   freezeAccount,
   thawAccount,
 } from '@solana/spl-token';
@@ -27,11 +20,9 @@ import {
   BurnParams,
   FreezeParams,
   MintParams,
-  MinterConfig,
   RevokeMinterParams,
   SdkOptions,
   SssConfig,
-  StablecoinInfo,
   UpdateMinterParams,
   UpdateRolesParams,
 } from './types';
@@ -120,7 +111,13 @@ export class SolanaStablecoin {
   }
 
   /**
-   * Create and initialize a new stablecoin mint.
+   * Create and initialize a new stablecoin mint via the on-chain program.
+   *
+   * Calls the `initialize` instruction which:
+   *  - Creates the Token-2022 mint account
+   *  - Initialises the StablecoinConfig PDA
+   *  - Stores preset, authorities, decimals, and optional transfer hook
+   *
    * This is the primary entry point — it handles both SSS-1 and SSS-2.
    */
   static async create(
@@ -129,31 +126,51 @@ export class SolanaStablecoin {
     options: Partial<SdkOptions> = {}
   ): Promise<SolanaStablecoin> {
     const programId = options.programId ?? SSS_TOKEN_PROGRAM_ID;
-    const connection = provider.connection;
     const payer = provider.wallet.publicKey;
     const decimals = config.decimals ?? 6;
 
-    // Create Token-2022 mint
+    // Generate a fresh mint keypair — passed as a signer to initialize
     const mintKeypair = Keypair.generate();
     const mint = mintKeypair.publicKey;
 
     // Derive config PDA
     const [configPda] = SolanaStablecoin.getConfigPda(mint, programId);
 
-    // For now, create the mint directly via SPL Token-2022
-    // (Full Anchor CPI integration requires IDL — see programs/sss-token)
-    await createMint(
-      connection,
-      provider.wallet as any,
-      payer,
-      payer,
-      decimals,
-      mintKeypair,
-      { commitment: 'confirmed' },
-      TOKEN_2022_PROGRAM_ID
-    );
+    // Load the Anchor program
+    const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
+    const idl = await import('./idl/sss_token.json');
+    const program = new AnchorProgram(idl as any, provider) as any;
 
-    return new SolanaStablecoin(provider, mint, configPda, config, programId);
+    // Build InitializeParams matching the IDL struct
+    const presetNum = config.preset === 'SSS-1' ? 1 : 2;
+    const initParams = {
+      preset: presetNum,
+      decimals,
+      name: config.name,
+      symbol: config.symbol,
+      uri: config.uri ?? '',
+      transfer_hook_program:
+        config.preset === 'SSS-2' && config.transferHookProgram
+          ? config.transferHookProgram
+          : null,
+    };
+
+    await program.methods
+      .initialize(initParams)
+      .accounts({
+        payer,
+        mint,
+        config: configPda,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([mintKeypair])
+      .rpc({ commitment: 'confirmed' });
+
+    const instance = new SolanaStablecoin(provider, mint, configPda, config, programId);
+    instance._program = program;
+    return instance;
   }
 
   /**
@@ -171,15 +188,19 @@ export class SolanaStablecoin {
   }
 
   /**
-   * Mint tokens to a recipient.
+   * Mint tokens to a recipient via the on-chain `mint` instruction.
+   *
+   * The caller (provider.wallet) must be a registered minter with sufficient
+   * remaining cap. The recipient ATA is created if it does not yet exist.
    */
   async mintTo(params: MintParams): Promise<TransactionSignature> {
     const connection = this.provider.connection;
-    const mintAuthority = this.provider.wallet;
+    const minter = this.provider.wallet.publicKey;
 
+    // Ensure recipient has a Token-2022 ATA
     const recipientAta = await getOrCreateAssociatedTokenAccount(
       connection,
-      mintAuthority as any,
+      this.provider.wallet as any,
       params.mint,
       params.recipient,
       false,
@@ -188,38 +209,50 @@ export class SolanaStablecoin {
       TOKEN_2022_PROGRAM_ID
     );
 
-    return mintTo(
-      connection,
-      mintAuthority as any,
-      params.mint,
-      recipientAta.address,
-      mintAuthority.publicKey,
-      params.amount,
-      [],
-      { commitment: 'confirmed' },
-      TOKEN_2022_PROGRAM_ID
-    );
+    const [configPda] = SolanaStablecoin.getConfigPda(params.mint, this.programId);
+    const [minterPda] = SolanaStablecoin.getMinterPda(configPda, minter, this.programId);
+
+    const program = await this._loadProgram();
+    return program.methods
+      .mint(new BN(params.amount.toString()))
+      .accounts({
+        minter,
+        config: configPda,
+        mint: params.mint,
+        minterInfo: minterPda,
+        recipientTokenAccount: recipientAta.address,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: 'confirmed' });
   }
 
   /**
-   * Burn tokens from a source account.
+   * Burn tokens from a source account via the on-chain `burn` instruction.
+   *
+   * The caller (provider.wallet) must be a registered minter.
    */
   async burnFrom(params: BurnParams): Promise<TransactionSignature> {
-    return burn(
-      this.provider.connection,
-      this.provider.wallet as any,
-      params.source,
-      params.mint,
-      this.provider.wallet.publicKey,
-      params.amount,
-      [],
-      { commitment: 'confirmed' },
-      TOKEN_2022_PROGRAM_ID
-    );
+    const minter = this.provider.wallet.publicKey;
+    const [configPda] = SolanaStablecoin.getConfigPda(params.mint, this.programId);
+    const [minterPda] = SolanaStablecoin.getMinterPda(configPda, minter, this.programId);
+
+    const program = await this._loadProgram();
+    return program.methods
+      .burn(new BN(params.amount.toString()))
+      .accounts({
+        minter,
+        config: configPda,
+        mint: params.mint,
+        minterInfo: minterPda,
+        sourceTokenAccount: params.source,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: 'confirmed' });
   }
 
   /**
    * Freeze a token account (compliance action).
+   * Uses the Token-2022 freeze authority (held by the compliance authority).
    */
   async freeze(params: FreezeParams): Promise<TransactionSignature> {
     return freezeAccount(
@@ -253,13 +286,10 @@ export class SolanaStablecoin {
   /**
    * Pause the stablecoin — rejects all mint operations while paused.
    * Caller must be the admin authority.
-   *
-   * This builds and sends the on-chain `pause` instruction via the
-   * sss-token program's config PDA.
    */
   async pause(): Promise<TransactionSignature> {
     const program = await this._loadProgram();
-    return (program as any).methods
+    return program.methods
       .pause()
       .accounts({ config: this.configPda, admin: this.provider.wallet.publicKey })
       .rpc({ commitment: 'confirmed' });
@@ -271,7 +301,7 @@ export class SolanaStablecoin {
    */
   async unpause(): Promise<TransactionSignature> {
     const program = await this._loadProgram();
-    return (program as any).methods
+    return program.methods
       .unpause()
       .accounts({ config: this.configPda, admin: this.provider.wallet.publicKey })
       .rpc({ commitment: 'confirmed' });
@@ -292,7 +322,7 @@ export class SolanaStablecoin {
       params.minter,
       this.programId
     );
-    return (program as any).methods
+    return program.methods
       .updateMinter(new BN(params.cap.toString()))
       .accounts({
         admin: this.provider.wallet.publicKey,
@@ -315,7 +345,7 @@ export class SolanaStablecoin {
       params.minter,
       this.programId
     );
-    return (program as any).methods
+    return program.methods
       .revokeMinter()
       .accounts({
         admin: this.provider.wallet.publicKey,
@@ -334,7 +364,7 @@ export class SolanaStablecoin {
    */
   async updateRoles(params: UpdateRolesParams): Promise<TransactionSignature> {
     const program = await this._loadProgram();
-    return (program as any).methods
+    return program.methods
       .updateRoles(
         params.newAuthority ?? null,
         params.newComplianceAuthority ?? null
@@ -353,31 +383,47 @@ export class SolanaStablecoin {
   private _program: any | null = null;
   private async _loadProgram(): Promise<any> {
     if (this._program) return this._program;
-    const { Program } = await import('@coral-xyz/anchor');
+    const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
     const idl = await import('./idl/sss_token.json');
-    this._program = new Program(idl as any, this.provider);
+    this._program = new AnchorProgram(idl as any, this.provider) as any;
     return this._program;
   }
 
   /**
-   * Get the total supply info for this mint.
+   * Get the total supply info for this mint by reading the on-chain
+   * StablecoinConfig PDA.  Falls back to the raw Token-2022 mint supply if
+   * the config account does not yet exist (e.g. unit-test environments where
+   * the program has not been initialised).
    */
   async getTotalSupply(): Promise<{
     totalMinted: bigint;
     totalBurned: bigint;
     circulatingSupply: bigint;
   }> {
-    const conn = this.provider.connection;
-    const mintInfo = await conn.getParsedAccountInfo(this.mint);
-    if (!mintInfo.value) throw new Error(`Mint ${this.mint} not found`);
-
-    const data = (mintInfo.value.data as any).parsed?.info;
-    const supply = BigInt(data?.supply ?? 0);
-
-    return {
-      totalMinted: supply,
-      totalBurned: 0n,
-      circulatingSupply: supply,
-    };
+    try {
+      const program = await this._loadProgram();
+      const configAccount = await program.account.stablecoinConfig.fetch(
+        this.configPda
+      );
+      const totalMinted = BigInt(configAccount.totalMinted.toString());
+      const totalBurned = BigInt(configAccount.totalBurned.toString());
+      return {
+        totalMinted,
+        totalBurned,
+        circulatingSupply: totalMinted - totalBurned,
+      };
+    } catch {
+      // Fallback: read from the Token-2022 mint account directly
+      const conn = this.provider.connection;
+      const mintInfo = await conn.getParsedAccountInfo(this.mint);
+      if (!mintInfo.value) throw new Error(`Mint ${this.mint} not found`);
+      const data = (mintInfo.value.data as any).parsed?.info;
+      const supply = BigInt(data?.supply ?? 0);
+      return {
+        totalMinted: supply,
+        totalBurned: 0n,
+        circulatingSupply: supply,
+      };
+    }
   }
 }
