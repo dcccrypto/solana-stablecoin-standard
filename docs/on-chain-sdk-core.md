@@ -124,7 +124,7 @@ Loads an already-deployed stablecoin by its mint address. Use this when you know
 **Example:**
 
 ```typescript
-const mintAddress = new PublicKey('4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN');
+const mintAddress = new PublicKey('AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat');
 
 const stablecoin = await SolanaStablecoin.load(provider, mintAddress, {
   preset: 'SSS-1',
@@ -338,8 +338,8 @@ import { SSS_TOKEN_PROGRAM_ID, SSS_TRANSFER_HOOK_PROGRAM_ID } from '@stbr/sss-to
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `SSS_TOKEN_PROGRAM_ID` | `4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN` | `sss-token` program (devnet + localnet) |
-| `SSS_TRANSFER_HOOK_PROGRAM_ID` | `8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj` | Transfer hook program (SSS-2 only) |
+| `SSS_TOKEN_PROGRAM_ID` | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` | `sss-token` program (devnet + localnet) |
+| `SSS_TRANSFER_HOOK_PROGRAM_ID` | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` | Transfer hook program (SSS-2 only) |
 
 ---
 

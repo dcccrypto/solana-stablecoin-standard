@@ -1,7 +1,7 @@
 # SSS — Transfer Hook Program
 
 > **Feature:** SSS-2 (Compliant preset)
-> **Program ID:** `8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj`
+> **Program ID:** `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp`
 > **Scope:** On-chain blacklist enforcement via Token-2022 Transfer Hook interface
 
 ---
@@ -137,7 +137,7 @@ import { Program, AnchorProvider, web3 } from '@coral-xyz/anchor';
 import { PublicKey } from '@solana/web3.js';
 
 const TRANSFER_HOOK_PROGRAM_ID = new PublicKey(
-  '8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj'
+  'phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp'
 );
 
 // Derive BlacklistState PDA
