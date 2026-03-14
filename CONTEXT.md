@@ -1,10 +1,10 @@
 # Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 07:12 UTC
+**Updated:** 2026-03-14 07:38 UTC
 
 ## Status
 - Phase: ACTIVE DOCS / MONITORING
-- All PRs open, no reviews yet as of 07:12 UTC
-- Competition: 83+ total open PRs in upstream (solanabr/solana-stablecoin-standard), highest is PR #96 (ours)
+- All PRs open, no reviews yet as of 07:38 UTC
+- Competition: 86 total open PRs in upstream (solanabr/solana-stablecoin-standard), highest is PR #98 (ours)
 - All tests green: 102/102 SDK + 19/19 Anchor + 31/31 backend
 
 ## Architecture
@@ -43,6 +43,7 @@
 - **SSS-027** (error handling & troubleshooting guide) — PR #95 open
 - **SSS-028** (migration guide) — PR #96 open
 - **SSS-029** (FAQ doc) — PR #97 open
+- **SSS-030** (compute benchmarks + example app) — PR #98 open
 
 ### SDK (@stbr/sss-token)
 - SolanaStablecoin class: full on-chain coverage via Anchor IDL
@@ -79,10 +80,11 @@
 - PR #95: docs(errors): SSS-027 — error handling & troubleshooting guide
 - PR #96: docs(migration): SSS-028 — migration guide (SPL Token → SSS-1/2/3, backend, pitfalls)
 - PR #97: docs(faq): SSS-029 — FAQ doc (presets, SDK, programs, backend, errors, security, migration)
+- PR #98: docs(benchmarks): SSS-030 — compute unit benchmarks + example mint-demo app
 
 ## Competition Landscape
-- Total open PRs in upstream (solanabr): 84+ (as of 07:20 UTC)
-- Highest PR number is #97 (ours) — most recent submission
+- Total open PRs in upstream (solanabr): 86 (as of 07:38 UTC)
+- Highest PR number is #98 (ours) — most recent submission
 - No reviews on any of our PRs yet
 - Other teams: ~66 competing PRs + misc issue-based submissions
 
@@ -91,4 +93,4 @@
 - After PRs merge: tag release, update npm package version
 - Ensure SUBMISSION.md reflects 102/102 SDK + 19/19 Anchor + 31/31 backend (PR #88 has this update)
 - IDL not yet generated locally (programs/sss-token/target/idl/ missing) — will generate if Anchor build runs
-- Remaining potential: example apps (simple mint script), changelog polishing
+- All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ — primarily monitoring phase
