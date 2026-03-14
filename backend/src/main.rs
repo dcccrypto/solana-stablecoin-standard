@@ -911,4 +911,159 @@ mod qa_tests {
         let entries_lim = json_lim["data"].as_array().unwrap();
         assert_eq!(entries_lim.len(), 1, "limit=1 should return exactly 1 entry");
     }
+
+    // ── SSS-014: Event date-range filtering ──────────────────────────────────
+
+    #[tokio::test]
+    async fn test_event_date_range_filter_from() {
+        let (app, key) = build_app();
+
+        // Create a mint event
+        post_json(
+            app.clone(),
+            "/api/mint",
+            &key,
+            serde_json::json!({
+                "token_mint": "DateMintAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "amount": 1000,
+                "recipient": "RecipAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            }),
+        )
+        .await;
+
+        // from=far-future should return no events
+        let (status, json) = get_json(
+            app.clone(),
+            "/api/events?from=2099-01-01T00:00:00Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let mint_events = json["data"]["mint_events"].as_array().unwrap();
+        assert_eq!(
+            mint_events.len(),
+            0,
+            "from=2099 should return 0 mint events"
+        );
+
+        // from=past should return at least our event
+        let (status2, json2) = get_json(
+            app.clone(),
+            "/api/events?from=2000-01-01T00:00:00Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status2, StatusCode::OK);
+        let mint_events2 = json2["data"]["mint_events"].as_array().unwrap();
+        assert!(
+            !mint_events2.is_empty(),
+            "from=2000 should return at least 1 mint event"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_event_date_range_filter_to() {
+        let (app, key) = build_app();
+
+        // Create a burn event
+        post_json(
+            app.clone(),
+            "/api/burn",
+            &key,
+            serde_json::json!({
+                "token_mint": "DateBurnAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "amount": 500,
+                "source": "SrcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            }),
+        )
+        .await;
+
+        // to=far-past should return no burn events
+        let (status, json) = get_json(
+            app.clone(),
+            "/api/events?to=2000-01-01T00:00:00Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let burn_events = json["data"]["burn_events"].as_array().unwrap();
+        assert_eq!(
+            burn_events.len(),
+            0,
+            "to=2000 should return 0 burn events"
+        );
+
+        // to=far-future should include our event
+        let (status2, json2) = get_json(
+            app.clone(),
+            "/api/events?to=2099-12-31T23:59:59Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status2, StatusCode::OK);
+        let burn_events2 = json2["data"]["burn_events"].as_array().unwrap();
+        assert!(
+            !burn_events2.is_empty(),
+            "to=2099 should return at least 1 burn event"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_event_date_range_filter_from_to() {
+        let (app, key) = build_app();
+
+        // Create a mint event (now)
+        post_json(
+            app.clone(),
+            "/api/mint",
+            &key,
+            serde_json::json!({
+                "token_mint": "RangeMintAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "amount": 250,
+                "recipient": "RecipAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            }),
+        )
+        .await;
+
+        // from+to spanning now — should include the event
+        let (status, json) = get_json(
+            app.clone(),
+            "/api/events?from=2000-01-01T00:00:00Z&to=2099-12-31T23:59:59Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let mint_events = json["data"]["mint_events"].as_array().unwrap();
+        assert!(
+            !mint_events.is_empty(),
+            "from=2000&to=2099 should return at least 1 mint event"
+        );
+
+        // narrow window that excludes everything
+        let (status2, json2) = get_json(
+            app.clone(),
+            "/api/events?from=2050-01-01T00:00:00Z&to=2050-12-31T23:59:59Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status2, StatusCode::OK);
+        let mint_events2 = json2["data"]["mint_events"].as_array().unwrap();
+        assert_eq!(
+            mint_events2.len(),
+            0,
+            "narrow 2050 window should return 0 events"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_event_limit_cap() {
+        // Verify limit is capped at 1000 (no panic, valid response)
+        let (app, key) = build_app();
+        let (status, json) =
+            get_json(app.clone(), "/api/events?limit=99999", &key).await;
+        assert_eq!(status, StatusCode::OK);
+        // Response is valid JSON with mint/burn arrays
+        assert!(json["data"]["mint_events"].is_array());
+        assert!(json["data"]["burn_events"].is_array());
+    }
 }

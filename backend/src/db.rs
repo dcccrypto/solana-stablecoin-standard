@@ -150,21 +150,39 @@ impl Database {
         Ok((total_minted as u64, total_burned as u64))
     }
 
-    pub fn list_mint_events(&self, token_mint: Option<&str>, limit: u32) -> Result<Vec<MintEvent>, AppError> {
+    pub fn list_mint_events(
+        &self,
+        token_mint: Option<&str>,
+        limit: u32,
+        from: Option<&str>,
+        to: Option<&str>,
+    ) -> Result<Vec<MintEvent>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let mut stmt = if let Some(mint) = token_mint {
-            conn.prepare(&format!(
-                "SELECT id, token_mint, amount, recipient, tx_signature, created_at FROM mint_events WHERE token_mint = '{}' ORDER BY created_at DESC LIMIT {}",
-                mint.replace('\'', "''"), limit
-            ))?
-        } else {
-            conn.prepare(&format!(
-                "SELECT id, token_mint, amount, recipient, tx_signature, created_at FROM mint_events ORDER BY created_at DESC LIMIT {}",
-                limit
-            ))?
-        };
 
-        let events = stmt.query_map([], |row| {
+        let mut sql = String::from(
+            "SELECT id, token_mint, amount, recipient, tx_signature, created_at FROM mint_events WHERE 1=1",
+        );
+        let mut bind: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(mint) = token_mint {
+            sql.push_str(&format!(" AND token_mint = ?{}", bind.len() + 1));
+            bind.push(Box::new(mint.to_string()));
+        }
+        if let Some(f) = from {
+            sql.push_str(&format!(" AND created_at >= ?{}", bind.len() + 1));
+            bind.push(Box::new(f.to_string()));
+        }
+        if let Some(t) = to {
+            sql.push_str(&format!(" AND created_at <= ?{}", bind.len() + 1));
+            bind.push(Box::new(t.to_string()));
+        }
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", bind.len() + 1));
+        bind.push(Box::new(limit));
+
+        let mut stmt = conn.prepare(&sql)?;
+        let refs: Vec<&dyn rusqlite::types::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
+
+        let events = stmt.query_map(refs.as_slice(), |row| {
             Ok(MintEvent {
                 id: row.get(0)?,
                 token_mint: row.get(1)?,
@@ -178,21 +196,39 @@ impl Database {
         Ok(events)
     }
 
-    pub fn list_burn_events(&self, token_mint: Option<&str>, limit: u32) -> Result<Vec<BurnEvent>, AppError> {
+    pub fn list_burn_events(
+        &self,
+        token_mint: Option<&str>,
+        limit: u32,
+        from: Option<&str>,
+        to: Option<&str>,
+    ) -> Result<Vec<BurnEvent>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let mut stmt = if let Some(mint) = token_mint {
-            conn.prepare(&format!(
-                "SELECT id, token_mint, amount, source, tx_signature, created_at FROM burn_events WHERE token_mint = '{}' ORDER BY created_at DESC LIMIT {}",
-                mint.replace('\'', "''"), limit
-            ))?
-        } else {
-            conn.prepare(&format!(
-                "SELECT id, token_mint, amount, source, tx_signature, created_at FROM burn_events ORDER BY created_at DESC LIMIT {}",
-                limit
-            ))?
-        };
 
-        let events = stmt.query_map([], |row| {
+        let mut sql = String::from(
+            "SELECT id, token_mint, amount, source, tx_signature, created_at FROM burn_events WHERE 1=1",
+        );
+        let mut bind: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(mint) = token_mint {
+            sql.push_str(&format!(" AND token_mint = ?{}", bind.len() + 1));
+            bind.push(Box::new(mint.to_string()));
+        }
+        if let Some(f) = from {
+            sql.push_str(&format!(" AND created_at >= ?{}", bind.len() + 1));
+            bind.push(Box::new(f.to_string()));
+        }
+        if let Some(t) = to {
+            sql.push_str(&format!(" AND created_at <= ?{}", bind.len() + 1));
+            bind.push(Box::new(t.to_string()));
+        }
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", bind.len() + 1));
+        bind.push(Box::new(limit));
+
+        let mut stmt = conn.prepare(&sql)?;
+        let refs: Vec<&dyn rusqlite::types::ToSql> = bind.iter().map(|b| b.as_ref()).collect();
+
+        let events = stmt.query_map(refs.as_slice(), |row| {
             Ok(BurnEvent {
                 id: row.get(0)?,
                 token_mint: row.get(1)?,
