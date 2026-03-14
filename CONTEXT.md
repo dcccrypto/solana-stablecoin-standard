@@ -4,27 +4,46 @@ _Last updated: 2026-03-14 03:17 UTC_
 
 ## Current Status
 
-**CI is green on main.** Multiple open PRs in queue.
+**CI is green on main.** Multiple open PRs in queue including a wave of external competition/grant submissions (PRs #51–#81).
 
 ### Open PRs (our team — priority order)
 
 | # | Title | Branch | Status |
 |---|-------|--------|--------|
-| #39 | feat(compliance): wire ComplianceModule to transfer-hook IDL — SSS-017 | feat/sss-017-compliance-module-anchor-wiring | CI ✅ all 4 green, mergeable |
-| #40 | docs(formal-verification): Kani proof reference — 7 invariants documented | docs/formal-verification | CI running (TS ✅, Anchor/Backend in-progress), merge conflict — resolved in latest push |
-| #41 | feat(sss-3): SSS-3 reserve-backed preset — wire deposit_collateral + redeem into Anchor program | docs/formal-verification | CI running, mergeable |
-| #42 | feat(sdk): ComplianceModule.getBlacklist() — fetch full on-chain blacklist via Anchor (SSS-018) | feat/sss-018-compliance-get-blacklist | CI pending, base: PR #39 |
+| #39 | feat(compliance): wire ComplianceModule to transfer-hook IDL — SSS-017 | feat/sss-017-compliance-module-anchor-wiring | CI ✅ all green, mergeable |
+| #40 | docs(formal-verification): Kani proof reference — 7 invariants documented | docs/formal-verification | Open, mergeable |
+| #41 | feat(sss-3): SSS-3 reserve-backed preset — wire deposit_collateral + redeem into Anchor program | docs/formal-verification | Open, mergeable |
+| #42 | feat(sdk): ComplianceModule.getBlacklist() — fetch full on-chain blacklist via Anchor (SSS-018) | feat/sss-018-compliance-get-blacklist | Base: PR #39 |
 | #73 | docs: ComplianceModule SDK reference (SSS-017) | docs/compliance-module | Needs review |
 | #76 | docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update | docs/architecture-presets-submission | Needs review |
 | #77 | feat(proofs): Kani formal verification — 7 mathematical proofs | feat/kani-formal-proofs | Needs review |
+| #83 | docs(sss3-events): SSS-3 reserve-backed preset reference + Anchor events guide | docs/sss3-events-maxsupply | **NEW — just opened** |
+
+## Working Tree (unstaged — sss-token program)
+
+Significant in-progress changes on main (16 modified/untracked files) implementing SSS-3/4 and improvements:
+
+### New Instructions
+- `programs/sss-token/src/instructions/deposit_collateral.rs` — deposit collateral into reserve vault (SSS-3/4)
+- `programs/sss-token/src/instructions/redeem.rs` — burn SSS tokens → release collateral from vault (SSS-3/4)
+- `programs/sss-token/src/instructions/accept_authority.rs` — two-step authority acceptance (both admin + compliance variants)
+
+### New/Modified Files
+- `programs/sss-token/src/events.rs` — **NEW**: 10 Anchor events (TokenInitialized, TokensMinted, TokensBurned, AccountFrozen, AccountThawed, MintPausedEvent, CollateralDeposited, CollateralRedeemed, AuthorityProposed, AuthorityAccepted)
+- `programs/sss-token/src/state.rs` — expanded StablecoinConfig: `pending_authority`, `pending_compliance_authority`, `max_supply`, `collateral_mint`, `reserve_vault`, `total_collateral`; new helpers `net_supply()`, `reserve_ratio_bps()`, `has_reserve()`, `has_hook()`
+- `programs/sss-token/src/error.rs` — new errors: InsufficientReserves, InvalidCollateralMint, InvalidVault, MaxSupplyExceeded, NoPendingAuthority, NoPendingComplianceAuthority, ReserveVaultRequired
+- `programs/sss-token/src/instructions/initialize.rs` — supports presets 1/2/3/4; emits TokenInitialized event
+- `programs/sss-token/src/instructions/mint.rs` — max_supply check, SSS-3/4 vault balance check, emits TokensMinted
+- `programs/sss-token/src/instructions/update_roles.rs` — now two-step: sets pending_authority, emits AuthorityProposed
+
+**Next step:** These program changes need to be committed to a feat branch (e.g. `feat/sss3-reserve-backed-program`) and a PR opened. The working tree is unstaged on main.
 
 ## Recently Completed (this session)
 
 | PR | Title | Notes |
 |----|-------|-------|
 | #38 | feat(sdk): wire Anchor IDL for initialize/mint/burn + getTotalSupply reads config PDA (SSS-016) | Merged |
-| #39 | feat(compliance): wire ComplianceModule to transfer-hook IDL — SSS-017 | Open, CI ✅ all green |
-| #42 | feat(sdk): ComplianceModule.getBlacklist() | New PR, 84/84 tests |
+| #83 | docs(sss3-events): SSS-3 reserve-backed preset reference + Anchor events guide | Just opened |
 
 ## What SSS-017 Does (PR #39)
 
@@ -58,21 +77,6 @@ All three CI jobs consistently green on main:
 - Anchor Programs ✅
 - SDK Integration Tests ✅
 
-Root cause of anchor test CI failure (exit 127, solana-keygen not found in TypeScript SDK job):
-→ Added `**/tests/anchor/**` to vitest.config.ts exclude list (commit ecbf67a on docs/formal-verification).
+## External PR Wave
 
-## After PRs #39 and #42 Merge
-
-Next tasks (priority order):
-1. **Anchor Programs: minter cap enforcement test** — verify `MinterInfo.cap` is checked in `mint` instruction
-2. **Integration test for ComplianceModule blacklist** — devnet Anchor integration test calling `addToBlacklist` / `removeFromBlacklist` / `isBlacklisted` / `getBlacklist()` in sequence
-3. **SDK: devnet smoke test script** — call `getBlacklist()` against devnet to verify program IDs are live
-
-## Key Technical Notes
-
-- `anchor build -- --locked` does NOT work with anchor-cli 0.32 — use `anchor build` with committed Cargo.lock
-- `blake3 = "=1.7.0"` in `[workspace.dependencies]` is INSUFFICIENT if no workspace member directly depends on blake3 — must pin via committed Cargo.lock
-- Both IDLs are lazy-loaded and cached per SDK instance
-- `ComplianceModule` program caching: safe to call multiple methods in sequence without re-loading IDL
-- Anchor tests must NOT run in the TypeScript SDK CI job — use `npm run test:anchor` (dedicated job with Solana toolchain)
-- vitest.config.ts must exclude both `tests/integration/**` AND `tests/anchor/**`
+PRs #51–#81 are external competition/grant submissions from other developers. These are not ours to merge.
