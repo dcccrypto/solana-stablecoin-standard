@@ -34,6 +34,61 @@ export class ComplianceModule {
   }
 
   /**
+   * Initialize the blacklist state PDA for this mint.
+   * Must be called once after deploying an SSS-2 stablecoin before
+   * `addToBlacklist` / `removeFromBlacklist` can be used.
+   * Caller must be the compliance authority.
+   */
+  async initializeBlacklist(): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    const [blacklistState] = this.getBlacklistPda();
+    return program.methods
+      .initializeExtraAccountMetaList()
+      .accounts({
+        authority: this.provider.wallet.publicKey,
+        mint: this.mint,
+        blacklistState,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Add an address to the on-chain blacklist.
+   * Calls `blacklist_add` on the transfer-hook program via Anchor.
+   * Caller must be the compliance authority recorded in `BlacklistState`.
+   */
+  async addToBlacklist(address: PublicKey): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    const [blacklistState] = this.getBlacklistPda();
+    return program.methods
+      .blacklistAdd(address)
+      .accounts({
+        authority: this.provider.wallet.publicKey,
+        mint: this.mint,
+        blacklistState,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Remove an address from the on-chain blacklist.
+   * Calls `blacklist_remove` on the transfer-hook program via Anchor.
+   * Caller must be the compliance authority recorded in `BlacklistState`.
+   */
+  async removeFromBlacklist(address: PublicKey): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    const [blacklistState] = this.getBlacklistPda();
+    return program.methods
+      .blacklistRemove(address)
+      .accounts({
+        authority: this.provider.wallet.publicKey,
+        mint: this.mint,
+        blacklistState,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
    * Freeze a token account — prevents any transfers.
    * Uses the Token-2022 freeze authority (held by the compliance authority).
    */
@@ -99,5 +154,18 @@ export class ComplianceModule {
     }
 
     return false;
+  }
+
+  /**
+   * Load the Anchor program instance for the transfer-hook (lazy, cached).
+   * @internal
+   */
+  private _program: any | null = null;
+  private async _loadProgram(): Promise<any> {
+    if (this._program) return this._program;
+    const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
+    const idl = await import('./idl/sss_transfer_hook.json');
+    this._program = new AnchorProgram(idl as any, this.provider) as any;
+    return this._program;
   }
 }
