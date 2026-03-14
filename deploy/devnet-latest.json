@@ -1,0 +1,13 @@
+{
+  "cluster": "devnet",
+  "deployedAt": "2026-03-14T04:07:11Z",
+  "wallet": "ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB",
+  "programs": {
+    "sssToken": "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
+    "transferHook": "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp"
+  },
+  "explorerLinks": {
+    "sssToken": "https://explorer.solana.com/address/AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat?cluster=devnet",
+    "transferHook": "https://explorer.solana.com/address/phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp?cluster=devnet"
+  }
+}
