@@ -1,6 +1,6 @@
 # SSS Project Context
 
-_Last updated: 2026-03-14 02:03 UTC_
+_Last updated: 2026-03-14 02:05 UTC_
 
 ## Current Status
 
@@ -14,7 +14,7 @@ four CI jobs now pass on main. Active PRs below are awaiting CI completion.
 | #38 | feat(sdk): wire Anchor IDL for initialize/mint/burn + getTotalSupply reads config PDA (SSS-016) | feat/sss-016-anchor-idl-wiring | CI pending (Backend + Anchor running) |
 | #34 | fix(anchor): 13/13 anchor tests passing on localnet | fix/anchor-13-tests-passing | CI pending (Anchor + SDK Integration running) |
 | #35 | docs(anchor-testing): update toolchain versions | docs/update-anchor-testing-ci-notes | Docs only |
-| #36 | docs(on-chain-sdk-core): core methods reference | docs/on-chain-sdk-core | Docs only |
+| #36 | docs(on-chain-sdk-core): core methods reference | docs/on-chain-sdk-core | Updated getTotalSupply for SSS-016 at 02:05 UTC |
 | #33 | docs(on-chain-sdk-admin): admin methods reference | docs/on-chain-sdk-admin | Conflict resolved at 02:03 UTC, pushed |
 
 ## Recently Merged
