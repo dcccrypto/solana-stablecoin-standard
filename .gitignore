@@ -18,6 +18,7 @@ test-ledger/
 !package.json
 !tsconfig.json
 !Anchor.toml
+!devnet-program-ids.json
 !idl/*.json
 !sdk/src/idl/*.json
 
