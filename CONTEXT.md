@@ -42,6 +42,7 @@
 - **SSS-026** (TypeScript types reference) — PR #94 open
 - **SSS-027** (error handling & troubleshooting guide) — PR #95 open
 - **SSS-028** (migration guide) — PR #96 open
+- **SSS-029** (FAQ doc) — PR #97 open
 
 ### SDK (@stbr/sss-token)
 - SolanaStablecoin class: full on-chain coverage via Anchor IDL
@@ -58,7 +59,7 @@
 - Commands: health, mint, burn, supply, events, blacklist list/add/remove, audit, webhook list/add/delete, key list/create/delete
 - JSON output, SSSError → stderr + exit 1
 
-## Open PRs (as of 07:12 UTC) — upstream solanabr/solana-stablecoin-standard
+## Open PRs (as of 07:20 UTC) — upstream solanabr/solana-stablecoin-standard
 - PR #72: feat: Full Solana Stablecoin Standard — SSS-1, SSS-2, SDK, Backend, CLI, Devnet ✅
 - PR #73: docs: ComplianceModule SDK reference (SSS-017)
 - PR #76: docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update
@@ -77,10 +78,11 @@
 - PR #94: docs(sdk): SSS-026 — TypeScript types reference
 - PR #95: docs(errors): SSS-027 — error handling & troubleshooting guide
 - PR #96: docs(migration): SSS-028 — migration guide (SPL Token → SSS-1/2/3, backend, pitfalls)
+- PR #97: docs(faq): SSS-029 — FAQ doc (presets, SDK, programs, backend, errors, security, migration)
 
 ## Competition Landscape
-- Total open PRs in upstream (solanabr): 83+ (as of 07:12 UTC)
-- Highest PR number is #96 (ours) — most recent submission
+- Total open PRs in upstream (solanabr): 84+ (as of 07:20 UTC)
+- Highest PR number is #97 (ours) — most recent submission
 - No reviews on any of our PRs yet
 - Other teams: ~66 competing PRs + misc issue-based submissions
 
@@ -89,4 +91,4 @@
 - After PRs merge: tag release, update npm package version
 - Ensure SUBMISSION.md reflects 102/102 SDK + 19/19 Anchor + 31/31 backend (PR #88 has this update)
 - IDL not yet generated locally (programs/sss-token/target/idl/ missing) — will generate if Anchor build runs
-- Remaining potential: FAQ doc, example apps, changelog improvements
+- Remaining potential: example apps (simple mint script), changelog polishing
