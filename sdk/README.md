@@ -80,6 +80,7 @@ SolanaStablecoin
 ├── burn(opts)                      Burn tokens
 ├── freeze(opts)                    Freeze a token account
 ├── thaw(opts)                      Thaw a frozen token account
+├── seize(opts)                     Seize tokens (burn+mint, permanent delegate)
 ├── pause(authority)                Pause the mint (Pausable ext.)
 ├── unpause(authority)              Unpause the mint
 ├── setAuthority(opts)              Change an on-chain authority
@@ -265,6 +266,22 @@ await stablecoin.setAuthority({
   newAuthority: newFreezePublicKey, // or null to revoke
 });
 ```
+
+### Seize (Permanent Delegate)
+
+Seize tokens from a frozen account using burn+mint (requires permanent delegate + freeze authority):
+
+```typescript
+const ata = getAssociatedTokenAddressSync(stablecoin.mint, targetWallet, false, stablecoin.tokenProgramId);
+await stablecoin.seize({
+  targetTokenAccount: ata,
+  treasury: treasuryPubkey,
+  amount: 1_000_000n,
+  authority: adminKeypair,
+});
+```
+
+Executes atomically: thaw → burn → mint to treasury → re-freeze.
 
 ### Transfer (SSS-2)
 

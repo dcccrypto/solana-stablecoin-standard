@@ -19,9 +19,13 @@ import {
   createInitializeMint2Instruction,
   createInitializeMetadataPointerInstruction,
   createInitializeTransferHookInstruction,
+  createInitializePermanentDelegateInstruction,
+  createInitializePausableConfigInstruction,
   createSetAuthorityInstruction,
   createMintToInstruction,
   createBurnInstruction,
+  createFreezeAccountInstruction,
+  createThawAccountInstruction,
   createTransferCheckedWithTransferHookInstruction,
   tokenMetadataInitialize,
   createMint,
@@ -53,8 +57,6 @@ import type {
   TransferHookConfig,
   Presets,
 } from "./types";
-
-const ASSUMED_FINAL_MINT_SIZE = 4096;
 
 const AUTHORITY_TYPE_MAP: Record<string, AuthorityType> = {
   mint: AuthorityType.MintTokens,
@@ -138,6 +140,8 @@ export class SolanaStablecoin {
     const preset = opts.preset;
     const ext = opts.extensions ?? {};
     const metadataEnabled = ext.metadata !== false;
+    const pausableEnabled = ext.pausable === true;
+    const permanentDelegateEnabled = ext.permanentDelegate === true;
     const transferHookCfg = resolveTransferHook(ext.transferHook, preset);
     const transferHookEnabled = transferHookCfg !== null;
 
@@ -147,7 +151,8 @@ export class SolanaStablecoin {
       );
     }
 
-    const useExtensions = metadataEnabled || transferHookEnabled;
+    const useExtensions =
+      metadataEnabled || transferHookEnabled || pausableEnabled || permanentDelegateEnabled;
     const tokenProgramId = useExtensions
       ? TOKEN_2022_PROGRAM_ID
       : TOKEN_PROGRAM_ID;
@@ -161,11 +166,11 @@ export class SolanaStablecoin {
       const extensionTypes: ExtensionType[] = [];
       if (metadataEnabled) extensionTypes.push(ExtensionType.MetadataPointer);
       if (transferHookEnabled) extensionTypes.push(ExtensionType.TransferHook);
+      if (pausableEnabled) extensionTypes.push(ExtensionType.PausableConfig);
+      if (permanentDelegateEnabled) extensionTypes.push(ExtensionType.PermanentDelegate);
 
       const mintSpace = getMintLen(extensionTypes);
-      const lamports = await connection.getMinimumBalanceForRentExemption(
-        ASSUMED_FINAL_MINT_SIZE,
-      );
+      const lamports = await connection.getMinimumBalanceForRentExemption(mintSpace);
 
       const tx = new Transaction().add(
         SystemProgram.createAccount({
@@ -197,6 +202,26 @@ export class SolanaStablecoin {
             mintPk,
             hookAuthority,
             transferHookCfg.programId,
+            TOKEN_2022_PROGRAM_ID,
+          ),
+        );
+      }
+
+      if (permanentDelegateEnabled) {
+        tx.add(
+          createInitializePermanentDelegateInstruction(
+            mintPk,
+            payer.publicKey,
+            TOKEN_2022_PROGRAM_ID,
+          ),
+        );
+      }
+
+      if (pausableEnabled) {
+        tx.add(
+          createInitializePausableConfigInstruction(
+            mintPk,
+            payer.publicKey,
             TOKEN_2022_PROGRAM_ID,
           ),
         );
@@ -505,6 +530,88 @@ export class SolanaStablecoin {
     );
   }
 
+  /**
+   * Seize tokens from a frozen account using the burn+mint pattern.
+   * Requires the authority to be the permanent delegate and freeze authority.
+   * Flow: thaw → burn (via permanent delegate) → mint to treasury → re-freeze.
+   */
+  async seize(opts: SeizeOptions): Promise<string> {
+    const dec = await this.getDecimals();
+
+    const treasuryAta = getAssociatedTokenAddressSync(
+      this.mint,
+      opts.treasury,
+      false,
+      this.tokenProgramId,
+    );
+
+    const tx = new Transaction();
+
+    // Create treasury ATA if needed
+    const treasuryInfo = await this.connection.getAccountInfo(treasuryAta);
+    if (!treasuryInfo) {
+      tx.add(
+        createAssociatedTokenAccountInstruction(
+          opts.authority.publicKey,
+          treasuryAta,
+          opts.treasury,
+          this.mint,
+          this.tokenProgramId,
+        ),
+      );
+    }
+
+    // 1. Thaw the frozen account
+    tx.add(
+      createThawAccountInstruction(
+        opts.targetTokenAccount,
+        this.mint,
+        opts.authority.publicKey,
+        [],
+        this.tokenProgramId,
+      ),
+    );
+
+    // 2. Burn from target (permanent delegate can burn from any account)
+    tx.add(
+      createBurnInstruction(
+        opts.targetTokenAccount,
+        this.mint,
+        opts.authority.publicKey,
+        opts.amount,
+        [],
+        this.tokenProgramId,
+      ),
+    );
+
+    // 3. Mint to treasury
+    tx.add(
+      createMintToInstruction(
+        this.mint,
+        treasuryAta,
+        opts.authority.publicKey,
+        opts.amount,
+        [],
+        this.tokenProgramId,
+      ),
+    );
+
+    // 4. Re-freeze the target account
+    tx.add(
+      createFreezeAccountInstruction(
+        opts.targetTokenAccount,
+        this.mint,
+        opts.authority.publicKey,
+        [],
+        this.tokenProgramId,
+      ),
+    );
+
+    return sendAndConfirmTransaction(this.connection, tx, [opts.authority], {
+      commitment: "confirmed",
+    });
+  }
+
   async pause(authority: Keypair): Promise<string> {
     return pause(
       this.connection,
@@ -513,7 +620,7 @@ export class SolanaStablecoin {
       authority,
       [],
       { commitment: "confirmed" },
-      TOKEN_2022_PROGRAM_ID,
+      this.tokenProgramId,
     );
   }
 
@@ -525,7 +632,7 @@ export class SolanaStablecoin {
       authority,
       [],
       { commitment: "confirmed" },
-      TOKEN_2022_PROGRAM_ID,
+      this.tokenProgramId,
     );
   }
 
