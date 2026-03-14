@@ -142,7 +142,7 @@ export class SolanaStablecoin {
     const program = new AnchorProgram(idl as any, provider) as any;
 
     // Build InitializeParams matching the IDL struct
-    const presetNum = config.preset === 'SSS-1' ? 1 : 2;
+    const presetNum = config.preset === 'SSS-1' ? 1 : config.preset === 'SSS-2' ? 2 : 3;
     const initParams = {
       preset: presetNum,
       decimals,
@@ -155,6 +155,10 @@ export class SolanaStablecoin {
         config.preset === 'SSS-2' && config.transferHookProgram
           ? config.transferHookProgram
           : null,
+      // SSS-3 reserve-backed fields (null for SSS-1/SSS-2)
+      collateralMint: (config as any).collateralMint ?? null,
+      reserveVault: (config as any).reserveVault ?? null,
+      maxSupply: (config as any).maxSupply ?? null,
     };
 
     await program.methods

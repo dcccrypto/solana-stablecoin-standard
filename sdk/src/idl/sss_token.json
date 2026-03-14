@@ -4,15 +4,148 @@
     "name": "sss_token",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "Solana Stablecoin Standard \u2014 SSS-1 (Minimal) and SSS-2 (Compliant) presets"
+    "description": "Solana Stablecoin Standard — SSS-1 (Minimal) and SSS-2 (Compliant) presets"
   },
   "docs": [
-    "Solana Stablecoin Standard \u2014 SSS-1 (Minimal) + SSS-2 (Compliant)",
+    "Solana Stablecoin Standard — SSS-1 (Minimal) + SSS-2 (Compliant) + SSS-3 (Reserve-Backed)",
     "",
     "SSS-1: Token-2022 mint with freeze authority + metadata",
-    "SSS-2: SSS-1 + permanent delegate + transfer hook + blacklist enforcement"
+    "SSS-2: SSS-1 + permanent delegate + transfer hook + blacklist enforcement",
+    "SSS-3: SSS-1 + collateral reserve vault (deposit/redeem against on-chain reserves)"
   ],
   "instructions": [
+    {
+      "name": "accept_authority",
+      "docs": [
+        "Accept a pending authority transfer (two-step). Caller must be pending_authority."
+      ],
+      "discriminator": [
+        107,
+        86,
+        198,
+        91,
+        33,
+        12,
+        107,
+        160
+      ],
+      "accounts": [
+        {
+          "name": "pending",
+          "docs": [
+            "Must be the pending_authority"
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "accept_compliance_authority",
+      "docs": [
+        "Accept a pending compliance authority transfer. Caller must be pending_compliance_authority."
+      ],
+      "discriminator": [
+        183,
+        155,
+        151,
+        103,
+        8,
+        95,
+        21,
+        1
+      ],
+      "accounts": [
+        {
+          "name": "pending",
+          "docs": [
+            "Must be the pending_compliance_authority"
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
     {
       "name": "burn",
       "docs": [
@@ -119,6 +252,97 @@
       ]
     },
     {
+      "name": "deposit_collateral",
+      "docs": [
+        "Deposit collateral into the reserve vault (SSS-3 only)."
+      ],
+      "discriminator": [
+        156,
+        131,
+        142,
+        116,
+        146,
+        247,
+        162,
+        120
+      ],
+      "accounts": [
+        {
+          "name": "depositor",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sss_mint",
+          "docs": [
+            "The SSS stablecoin mint (identifies which config to update)"
+          ]
+        },
+        {
+          "name": "collateral_mint",
+          "docs": [
+            "The collateral token mint (e.g. USDC)"
+          ]
+        },
+        {
+          "name": "depositor_collateral",
+          "docs": [
+            "Depositor's collateral token account (source)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "reserve_vault",
+          "docs": [
+            "The reserve vault — holds collateral on behalf of the stablecoin config PDA"
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "freeze_account",
       "docs": [
         "Freeze an account (compliance action). Caller must be compliance authority."
@@ -211,7 +435,7 @@
         {
           "name": "mint",
           "docs": [
-            "The new Token-2022 mint"
+            "The new Token-2022 mint — authority is the config PDA so the program controls minting"
           ],
           "writable": true,
           "signer": true
@@ -443,6 +667,114 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "redeem",
+      "docs": [
+        "Redeem SSS tokens by burning them and releasing collateral (SSS-3 only)."
+      ],
+      "discriminator": [
+        184,
+        12,
+        86,
+        149,
+        70,
+        196,
+        97,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "redeemer",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sss_mint",
+          "docs": [
+            "The SSS stablecoin mint"
+          ],
+          "writable": true
+        },
+        {
+          "name": "redeemer_sss_account",
+          "docs": [
+            "Redeemer's SSS stablecoin token account (will be burned from)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "collateral_mint",
+          "docs": [
+            "The collateral token mint (e.g. USDC)"
+          ]
+        },
+        {
+          "name": "reserve_vault",
+          "docs": [
+            "Reserve vault — releases collateral to redeemer (PDA-controlled)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "redeemer_collateral",
+          "docs": [
+            "Redeemer's collateral token account (receives collateral)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "sss_token_program",
+          "docs": [
+            "Token program for the SSS stablecoin (Token-2022)"
+          ]
+        },
+        {
+          "name": "collateral_token_program",
+          "docs": [
+            "Token program for the collateral mint (may be Token or Token-2022)"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "revoke_minter",
@@ -879,6 +1211,138 @@
       ]
     }
   ],
+  "events": [
+    {
+      "name": "AccountFrozen",
+      "discriminator": [
+        221,
+        214,
+        59,
+        29,
+        246,
+        50,
+        119,
+        206
+      ]
+    },
+    {
+      "name": "AccountThawed",
+      "discriminator": [
+        49,
+        63,
+        73,
+        105,
+        129,
+        190,
+        40,
+        119
+      ]
+    },
+    {
+      "name": "AuthorityAccepted",
+      "discriminator": [
+        166,
+        192,
+        219,
+        188,
+        41,
+        209,
+        195,
+        26
+      ]
+    },
+    {
+      "name": "AuthorityProposed",
+      "discriminator": [
+        244,
+        117,
+        94,
+        112,
+        53,
+        151,
+        35,
+        89
+      ]
+    },
+    {
+      "name": "CollateralDeposited",
+      "discriminator": [
+        244,
+        62,
+        77,
+        11,
+        135,
+        112,
+        61,
+        96
+      ]
+    },
+    {
+      "name": "CollateralRedeemed",
+      "discriminator": [
+        247,
+        125,
+        175,
+        32,
+        74,
+        19,
+        85,
+        113
+      ]
+    },
+    {
+      "name": "MintPausedEvent",
+      "discriminator": [
+        255,
+        83,
+        227,
+        219,
+        77,
+        154,
+        73,
+        221
+      ]
+    },
+    {
+      "name": "TokenInitialized",
+      "discriminator": [
+        77,
+        70,
+        233,
+        124,
+        236,
+        92,
+        204,
+        0
+      ]
+    },
+    {
+      "name": "TokensBurned",
+      "discriminator": [
+        230,
+        255,
+        34,
+        113,
+        226,
+        53,
+        227,
+        9
+      ]
+    },
+    {
+      "name": "TokensMinted",
+      "discriminator": [
+        207,
+        212,
+        128,
+        194,
+        175,
+        54,
+        64,
+        24
+      ]
+    }
+  ],
   "errors": [
     {
       "code": 6000,
@@ -918,15 +1382,170 @@
     {
       "code": 6007,
       "name": "InvalidPreset",
-      "msg": "Invalid preset: must be 1 (SSS-1) or 2 (SSS-2)"
+      "msg": "Invalid preset: must be 1 (SSS-1), 2 (SSS-2), or 3 (SSS-3)"
     },
     {
       "code": 6008,
       "name": "ZeroAmount",
       "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6009,
+      "name": "InsufficientReserves",
+      "msg": "Insufficient collateral in reserve vault to mint"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidCollateralMint",
+      "msg": "Invalid collateral mint for this stablecoin"
+    },
+    {
+      "code": 6011,
+      "name": "InvalidVault",
+      "msg": "Invalid reserve vault account"
+    },
+    {
+      "code": 6012,
+      "name": "MaxSupplyExceeded",
+      "msg": "Max supply would be exceeded"
+    },
+    {
+      "code": 6013,
+      "name": "NoPendingAuthority",
+      "msg": "No pending authority transfer to accept"
+    },
+    {
+      "code": 6014,
+      "name": "NoPendingComplianceAuthority",
+      "msg": "No pending compliance authority transfer to accept"
+    },
+    {
+      "code": 6015,
+      "name": "ReserveVaultRequired",
+      "msg": "Reserve vault is required for SSS-3"
     }
   ],
   "types": [
+    {
+      "name": "AccountFrozen",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "account",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AccountThawed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "account",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AuthorityAccepted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_compliance",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AuthorityProposed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "proposed",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_compliance",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CollateralDeposited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "depositor",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "total_collateral",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CollateralRedeemed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "redeemer",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "total_collateral",
+            "type": "u64"
+          }
+        ]
+      }
+    },
     {
       "name": "InitializeParams",
       "docs": [
@@ -938,7 +1557,7 @@
           {
             "name": "preset",
             "docs": [
-              "1 = SSS-1, 2 = SSS-2"
+              "1 = SSS-1, 2 = SSS-2, 3 = SSS-3 (reserve-backed)"
             ],
             "type": "u8"
           },
@@ -978,6 +1597,49 @@
             "type": {
               "option": "pubkey"
             }
+          },
+          {
+            "name": "collateral_mint",
+            "docs": [
+              "SSS-3: collateral token mint (e.g. USDC mint address)"
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "reserve_vault",
+            "docs": [
+              "SSS-3: reserve vault token account address"
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "max_supply",
+            "docs": [
+              "Maximum token supply (None or 0 = unlimited)"
+            ],
+            "type": {
+              "option": "u64"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MintPausedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
           }
         ]
       }
@@ -985,7 +1647,7 @@
     {
       "name": "MinterInfo",
       "docs": [
-        "Per-minter configuration \u2014 minters are PDAs keyed by [config, minter_pubkey]."
+        "Per-minter configuration — minters are PDAs keyed by [config, minter_pubkey]."
       ],
       "type": {
         "kind": "struct",
@@ -1085,13 +1747,131 @@
           {
             "name": "transfer_hook_program",
             "docs": [
-              "Transfer hook program (SSS-2 only; Pubkey::default if SSS-1)"
+              "Transfer hook program (SSS-2 only; Pubkey::default if SSS-1/3)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "collateral_mint",
+            "docs": [
+              "SSS-3: collateral token mint (e.g. USDC; Pubkey::default if SSS-1/2)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "reserve_vault",
+            "docs": [
+              "SSS-3: reserve vault token account address (Pubkey::default if SSS-1/2)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "total_collateral",
+            "docs": [
+              "SSS-3: total collateral deposited into the reserve vault"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_supply",
+            "docs": [
+              "Maximum token supply (0 = unlimited)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "pending_authority",
+            "docs": [
+              "Pending authority for two-step authority transfer (Pubkey::default if none)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_compliance_authority",
+            "docs": [
+              "Pending compliance authority for two-step transfer (Pubkey::default if none)"
             ],
             "type": "pubkey"
           },
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokenInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "preset",
+            "type": "u8"
+          },
+          {
+            "name": "max_supply",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokensBurned",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "minter",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "total_burned",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokensMinted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "minter",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "total_minted",
+            "type": "u64"
           }
         ]
       }

@@ -4,97 +4,303 @@
     "name": "sss_transfer_hook",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "SSS-2 Transfer Hook — enforces blacklist on every token transfer"
+    "description": "SSS-2 transfer hook — blacklist enforcement on-chain"
   },
+  "docs": [
+    "SSS-2 Transfer Hook — enforces blacklist on every token transfer.",
+    "",
+    "This program is invoked by Token-2022 on every transfer for mints",
+    "that have registered this as their transfer hook."
+  ],
   "instructions": [
     {
-      "name": "transferHook",
-      "discriminator": [105, 37, 101, 197, 75, 251, 102, 26],
+      "name": "blacklist_add",
+      "docs": [
+        "Add an address to the blacklist."
+      ],
+      "discriminator": [
+        254,
+        184,
+        131,
+        200,
+        145,
+        50,
+        43,
+        244
+      ],
       "accounts": [
-        { "name": "sourceTokenAccount", "writable": false, "signer": false },
-        { "name": "mint", "writable": false, "signer": false },
-        { "name": "destinationTokenAccount", "writable": false, "signer": false },
-        { "name": "owner", "writable": false, "signer": false },
         {
-          "name": "blacklistState",
-          "writable": false,
-          "signer": false,
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "blacklist_state",
+          "writable": true,
           "pda": {
             "seeds": [
-              { "kind": "const", "value": [98, 108, 97, 99, 107, 108, 105, 115, 116, 45, 115, 116, 97, 116, 101] },
-              { "kind": "account", "path": "mint" }
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  108,
+                  97,
+                  99,
+                  107,
+                  108,
+                  105,
+                  115,
+                  116,
+                  45,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
             ]
           }
         }
       ],
-      "args": [{ "name": "amount", "type": "u64" }]
+      "args": [
+        {
+          "name": "address",
+          "type": "pubkey"
+        }
+      ]
     },
     {
-      "name": "initializeExtraAccountMetaList",
-      "discriminator": [92, 197, 174, 197, 41, 124, 19, 3],
+      "name": "blacklist_remove",
+      "docs": [
+        "Remove an address from the blacklist."
+      ],
+      "discriminator": [
+        17,
+        38,
+        226,
+        44,
+        19,
+        143,
+        89,
+        27
+      ],
       "accounts": [
-        { "name": "authority", "writable": true, "signer": true },
-        { "name": "mint", "writable": false, "signer": false },
         {
-          "name": "blacklistState",
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "blacklist_state",
           "writable": true,
-          "signer": false,
           "pda": {
             "seeds": [
-              { "kind": "const", "value": [98, 108, 97, 99, 107, 108, 105, 115, 116, 45, 115, 116, 97, 116, 101] },
-              { "kind": "account", "path": "mint" }
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  108,
+                  97,
+                  99,
+                  107,
+                  108,
+                  105,
+                  115,
+                  116,
+                  45,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "address",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "initialize_extra_account_meta_list",
+      "docs": [
+        "Initialize blacklist state PDA for a given mint."
+      ],
+      "discriminator": [
+        92,
+        197,
+        174,
+        197,
+        41,
+        124,
+        19,
+        3
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "blacklist_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  108,
+                  97,
+                  99,
+                  107,
+                  108,
+                  105,
+                  115,
+                  116,
+                  45,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
             ]
           }
         },
-        { "name": "systemProgram", "address": "11111111111111111111111111111111" }
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
       ],
       "args": []
     },
     {
-      "name": "blacklistAdd",
-      "discriminator": [152, 9, 77, 251, 94, 239, 15, 164],
+      "name": "transfer_hook",
+      "docs": [
+        "Called by Token-2022 on every transfer.",
+        "Checks that neither sender nor receiver is on the blacklist."
+      ],
+      "discriminator": [
+        220,
+        57,
+        220,
+        152,
+        126,
+        125,
+        97,
+        168
+      ],
       "accounts": [
-        { "name": "authority", "writable": false, "signer": true },
-        { "name": "mint", "writable": false, "signer": false },
         {
-          "name": "blacklistState",
-          "writable": true,
-          "signer": false,
+          "name": "source_token_account"
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "destination_token_account"
+        },
+        {
+          "name": "owner"
+        },
+        {
+          "name": "blacklist_state",
           "pda": {
             "seeds": [
-              { "kind": "const", "value": [98, 108, 97, 99, 107, 108, 105, 115, 116, 45, 115, 116, 97, 116, 101] },
-              { "kind": "account", "path": "mint" }
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  108,
+                  97,
+                  99,
+                  107,
+                  108,
+                  105,
+                  115,
+                  116,
+                  45,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
             ]
           }
         }
       ],
-      "args": [{ "name": "address", "type": "pubkey" }]
-    },
-    {
-      "name": "blacklistRemove",
-      "discriminator": [67, 13, 176, 127, 84, 130, 52, 39],
-      "accounts": [
-        { "name": "authority", "writable": false, "signer": true },
-        { "name": "mint", "writable": false, "signer": false },
+      "args": [
         {
-          "name": "blacklistState",
-          "writable": true,
-          "signer": false,
-          "pda": {
-            "seeds": [
-              { "kind": "const", "value": [98, 108, 97, 99, 107, 108, 105, 115, 116, 45, 115, 116, 97, 116, 101] },
-              { "kind": "account", "path": "mint" }
-            ]
-          }
+          "name": "amount",
+          "type": "u64"
         }
-      ],
-      "args": [{ "name": "address", "type": "pubkey" }]
+      ]
     }
   ],
   "accounts": [
     {
       "name": "BlacklistState",
-      "discriminator": [111, 88, 147, 52, 184, 70, 8, 87]
+      "discriminator": [
+        110,
+        66,
+        97,
+        146,
+        105,
+        222,
+        190,
+        217
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "SenderBlacklisted",
+      "msg": "Sender is blacklisted"
+    },
+    {
+      "code": 6001,
+      "name": "ReceiverBlacklisted",
+      "msg": "Receiver is blacklisted"
+    },
+    {
+      "code": 6002,
+      "name": "Unauthorized",
+      "msg": "Unauthorized"
     }
   ],
   "types": [
@@ -103,17 +309,26 @@
       "type": {
         "kind": "struct",
         "fields": [
-          { "name": "mint", "type": "pubkey" },
-          { "name": "authority", "type": "pubkey" },
-          { "name": "blacklisted", "type": { "vec": "pubkey" } },
-          { "name": "bump", "type": "u8" }
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "blacklisted",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
         ]
       }
     }
-  ],
-  "errors": [
-    { "code": 6000, "name": "SenderBlacklisted", "msg": "Sender is blacklisted" },
-    { "code": 6001, "name": "ReceiverBlacklisted", "msg": "Receiver is blacklisted" },
-    { "code": 6002, "name": "Unauthorized", "msg": "Unauthorized" }
   ]
 }
