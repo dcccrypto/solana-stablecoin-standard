@@ -173,14 +173,22 @@ jobs:
           # blake3 >=1.8.0 requires edition2024 (Cargo >=1.85); pin to last edition2021 release.
           cargo update blake3 --precise 1.7.0
           # borsh >=1.6.0 requires rustc 1.77.0; Solana 1.18 ships rustc 1.75. Pin to 1.5.1.
-          cargo update borsh --precise 1.5.1 2>/dev/null || true
+          # Use pkg@ver syntax (cargo >=1.82) to target the 1.x line only; fallback for older cargo.
+          cargo update "borsh@1.6.0" --precise 1.5.1 2>/dev/null || \
+            cargo update borsh --precise 1.5.1 2>/dev/null || true
           # proc-macro-crate >=3.2.0 pulls toml_edit that requires rustc 1.82.
           # 3.1.0 uses toml_edit ^0.21 which works on rustc 1.75.
-          cargo update "proc-macro-crate" --precise 3.1.0 2>/dev/null || true
+          cargo update "proc-macro-crate@3" --precise 3.1.0 2>/dev/null || \
+            cargo update "proc-macro-crate" --precise 3.1.0 2>/dev/null || true
           # indexmap >=2.12.0 requires rustc 1.82; pin to last compatible release.
-          cargo update "indexmap" --precise 2.11.4 2>/dev/null || true
+          cargo update "indexmap@2" --precise 2.11.4 2>/dev/null || \
+            cargo update "indexmap" --precise 2.11.4 2>/dev/null || true
           # toml_datetime >=1.0.0 requires rustc 1.76; Solana 1.18 ships rustc 1.75. Pin to 0.6.9.
-          cargo update "toml_datetime" --precise 0.6.9 2>/dev/null || true
+          cargo update "toml_datetime@1" --precise 0.6.9 2>/dev/null || \
+            cargo update "toml_datetime" --precise 0.6.9 2>/dev/null || true
+          # toml_edit >=0.22 pulls toml_datetime 1.x; pin to last version using toml_datetime 0.6.x.
+          cargo update "toml_edit@0.22" --precise 0.21.1 2>/dev/null || \
+            cargo update "toml_edit" --precise 0.21.1 2>/dev/null || true
           sed -i 's/^version = 4$/version = 3/' Cargo.lock
 
       - name: Anchor build
