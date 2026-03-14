@@ -51,6 +51,14 @@ export interface CreateOptions {
   metadataAuthority?: Keypair | PublicKey;
   /** Extensions to enable. Presets supply sensible defaults. */
   extensions?: ExtensionsConfig;
+  /**
+   * SSS-Core program ID. When provided, `create()` automatically initializes
+   * the StablecoinConfig PDA after deploying the mint, transferring mint and
+   * freeze authority to the config PDA.
+   */
+  ssCoreProgramId?: PublicKey;
+  /** Optional supply cap enforced by sss-core. Only used when `ssCoreProgramId` is set. */
+  supplyCap?: bigint;
 }
 
 export interface LoadOptions {

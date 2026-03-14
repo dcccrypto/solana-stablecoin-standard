@@ -80,6 +80,7 @@ export interface SssConfigState {
   mint: PublicKey;
   preset: number;
   paused: boolean;
+  complianceEnabled: boolean;
   totalMinted: bigint;
   totalBurned: bigint;
   totalSeized: bigint;
@@ -116,6 +117,8 @@ function parseConfigAccount(data: Buffer): SssConfigState {
   offset += 1;
   const paused = data[offset] !== 0;
   offset += 1;
+  const complianceEnabled = data[offset] !== 0;
+  offset += 1;
 
   const totalMinted = data.readBigUInt64LE(offset);
   offset += 8;
@@ -138,6 +141,7 @@ function parseConfigAccount(data: Buffer): SssConfigState {
     mint,
     preset,
     paused,
+    complianceEnabled,
     totalMinted,
     totalBurned,
     totalSeized,
@@ -217,6 +221,7 @@ export class SssCoreClient {
     authority: Keypair,
     preset: number,
     supplyCap: bigint | null = null,
+    complianceEnabled = false,
   ): Promise<string> {
     const data = Buffer.concat([
       disc("initialize"),
@@ -224,6 +229,7 @@ export class SssCoreClient {
       supplyCap !== null
         ? Buffer.concat([Buffer.from([1]), encodeBN(supplyCap)])
         : Buffer.concat([Buffer.from([0]), encodeBN(0n)]),
+      Buffer.from([complianceEnabled ? 1 : 0]),
     ]);
 
     const ix = new TransactionInstruction({
@@ -637,6 +643,117 @@ export class SssCoreClient {
       this.connection,
       new Transaction().add(ix),
       [newAuthority],
+      { commitment: "confirmed" },
+    );
+    await this.refresh();
+    return sig;
+  }
+
+  // ── Metadata update ────────────────────────────────────────────────
+
+  async updateMetadata(
+    authority: Keypair,
+    field: "name" | "symbol" | "uri",
+    value: string,
+  ): Promise<string> {
+    const fieldBytes = Buffer.from(field, "utf8");
+    const fieldLen = Buffer.alloc(4);
+    fieldLen.writeUInt32LE(fieldBytes.length);
+
+    const valueBytes = Buffer.from(value, "utf8");
+    const valueLen = Buffer.alloc(4);
+    valueLen.writeUInt32LE(valueBytes.length);
+
+    const data = Buffer.concat([
+      disc("update_metadata"),
+      fieldLen,
+      fieldBytes,
+      valueLen,
+      valueBytes,
+    ]);
+
+    const ix = new TransactionInstruction({
+      keys: [
+        { pubkey: authority.publicKey, isSigner: true, isWritable: false },
+        { pubkey: this.configPda, isSigner: false, isWritable: false },
+        { pubkey: this.mint, isSigner: false, isWritable: true },
+        { pubkey: this.tokenProgramId, isSigner: false, isWritable: false },
+      ],
+      programId: this.programId,
+      data,
+    });
+
+    return sendAndConfirmTransaction(
+      this.connection,
+      new Transaction().add(ix),
+      [authority],
+      { commitment: "confirmed" },
+    );
+  }
+
+  // ── Burn from any account (permanent delegate) ────────────────────
+
+  async burnFrom(
+    burner: Keypair,
+    targetAta: PublicKey,
+    amount: bigint,
+  ): Promise<string> {
+    const [rolePda] = getRoleAddress(
+      this.configPda,
+      burner.publicKey,
+      ROLE_BURNER,
+      this.programId,
+    );
+
+    const data = Buffer.concat([disc("burn_from"), encodeBN(amount)]);
+
+    const ix = new TransactionInstruction({
+      keys: [
+        { pubkey: burner.publicKey, isSigner: true, isWritable: false },
+        { pubkey: this.configPda, isSigner: false, isWritable: true },
+        { pubkey: rolePda, isSigner: false, isWritable: false },
+        { pubkey: this.mint, isSigner: false, isWritable: true },
+        { pubkey: targetAta, isSigner: false, isWritable: true },
+        { pubkey: this.tokenProgramId, isSigner: false, isWritable: false },
+      ],
+      programId: this.programId,
+      data,
+    });
+
+    const sig = await sendAndConfirmTransaction(
+      this.connection,
+      new Transaction().add(ix),
+      [burner],
+      { commitment: "confirmed" },
+    );
+    await this.refresh();
+    return sig;
+  }
+
+  // ── Compliance toggle ─────────────────────────────────────────────
+
+  async setCompliance(
+    authority: Keypair,
+    enabled: boolean,
+  ): Promise<string> {
+    const data = Buffer.concat([
+      disc("set_compliance"),
+      Buffer.from([enabled ? 1 : 0]),
+    ]);
+
+    const ix = new TransactionInstruction({
+      keys: [
+        { pubkey: authority.publicKey, isSigner: true, isWritable: false },
+        { pubkey: this.configPda, isSigner: false, isWritable: true },
+      ],
+      programId: this.programId,
+      data,
+    });
+
+    const sig = await sendAndConfirmTransaction(
+      this.connection,
+      new Transaction().add(ix),
+      [authority],
       { commitment: "confirmed" },
     );
     await this.refresh();

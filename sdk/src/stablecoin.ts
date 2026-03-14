@@ -311,7 +311,27 @@ export class SolanaStablecoin {
     const hookProgramId = transferHookEnabled
       ? transferHookCfg.programId
       : null;
-    return new SolanaStablecoin(connection, mintPk, tokenProgramId, hookProgramId, null);
+
+    const ssCoreProgramId = opts.ssCoreProgramId ?? null;
+
+    if (ssCoreProgramId) {
+      const coreClient = new SssCoreClient(
+        connection,
+        mintPk,
+        ssCoreProgramId,
+        tokenProgramId,
+      );
+      const presetNum = preset === ("sss-2" as Presets) ? 2 : 1;
+      const complianceEnabled = preset === ("sss-2" as Presets);
+      await coreClient.initialize(
+        payer,
+        presetNum,
+        opts.supplyCap ?? null,
+        complianceEnabled,
+      );
+    }
+
+    return new SolanaStablecoin(connection, mintPk, tokenProgramId, hookProgramId, ssCoreProgramId);
   }
 
   static load(connection: Connection, opts: LoadOptions): SolanaStablecoin {
