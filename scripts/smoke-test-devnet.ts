@@ -3,7 +3,7 @@
  * smoke-test-devnet.ts — SSS-013 devnet smoke test
  *
  * Exercises the full SSS-1 lifecycle on devnet:
- *   1. Create a throwaway funded wallet
+ *   1. Load the local Solana CLI keypair (avoids airdrop rate limits)
  *   2. Initialize an SSS-1 stablecoin
  *   3. Mint 1,000 tokens to a recipient wallet
  *   4. Assert circulating supply matches
@@ -12,14 +12,15 @@
  *   npx ts-node scripts/smoke-test-devnet.ts
  *
  * Reads program IDs from deploy/devnet-latest.json (or falls back to Anchor.toml defaults).
+ * Uses ~/.config/solana/id.json as payer (must be funded with ≥0.1 SOL on devnet).
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import {
   Connection,
   Keypair,
-  LAMPORTS_PER_SOL,
   PublicKey,
 } from '@solana/web3.js';
 import { AnchorProvider, Wallet } from '@coral-xyz/anchor';
@@ -27,6 +28,7 @@ import { SolanaStablecoin, SSS_TOKEN_PROGRAM_ID, sss1Config } from '../sdk/src';
 
 const DEVNET_RPC = 'https://api.devnet.solana.com';
 const DEPLOY_MANIFEST = path.join(__dirname, '..', 'deploy', 'devnet-latest.json');
+const SOLANA_CLI_KEYPAIR = path.join(os.homedir(), '.config', 'solana', 'id.json');
 const MINT_AMOUNT = 1_000n;
 const DECIMALS = 6;
 
@@ -36,6 +38,11 @@ function explorerLink(sig: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function loadKeypair(keypairPath: string): Keypair {
+  const raw = JSON.parse(fs.readFileSync(keypairPath, 'utf8')) as number[];
+  return Keypair.fromSecretKey(Uint8Array.from(raw));
 }
 
 async function main(): Promise<void> {
@@ -61,19 +68,26 @@ async function main(): Promise<void> {
   // ── Connection & funded payer ────────────────────────────────────────────
 
   const connection = new Connection(DEVNET_RPC, 'confirmed');
-  const payer = Keypair.generate();
+
+  // Load the local Solana CLI keypair — avoids airdrop rate limits.
+  // Must be pre-funded with ≥0.1 SOL. Run `solana airdrop 1` manually if needed.
+  if (!fs.existsSync(SOLANA_CLI_KEYPAIR)) {
+    throw new Error(
+      `Solana CLI keypair not found at ${SOLANA_CLI_KEYPAIR}. ` +
+      'Run `solana-keygen new --no-bip39-passphrase` to create one.'
+    );
+  }
+  const payer = loadKeypair(SOLANA_CLI_KEYPAIR);
   const recipient = Keypair.generate();
 
-  console.log(`🔑  Payer:     ${payer.publicKey.toBase58()}`);
-  console.log(`🔑  Recipient: ${recipient.publicKey.toBase58()}`);
+  console.log(`🔑  Payer:     ${payer.publicKey.toBase58()} (local Solana CLI keypair)`);
+  console.log(`🔑  Recipient: ${recipient.publicKey.toBase58()} (ephemeral)`);
 
-  console.log('');
-  console.log('💸  Requesting airdrop for payer (1 SOL)...');
-  const sig1 = await connection.requestAirdrop(payer.publicKey, LAMPORTS_PER_SOL);
-  await connection.confirmTransaction(sig1, 'confirmed');
-  console.log(`    ✅  ${explorerLink(sig1)}`);
-
-  await sleep(2000); // let devnet settle
+  const balance = await connection.getBalance(payer.publicKey);
+  console.log(`💰  Payer balance: ${(balance / 1e9).toFixed(4)} SOL`);
+  if (balance < 0.05 * 1e9) {
+    throw new Error('Payer balance too low. Run `solana airdrop 1 --url devnet` to fund it.');
+  }
 
   // ── Create AnchorProvider ────────────────────────────────────────────────
 

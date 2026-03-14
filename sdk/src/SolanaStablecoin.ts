@@ -139,10 +139,12 @@ export class SolanaStablecoin {
     // Derive config PDA
     const [configPda] = SolanaStablecoin.getConfigPda(mint, programId);
 
-    // Load the Anchor program
+    // Load the Anchor program — pass programId explicitly so the on-chain
+    // program address matches PDA derivation when using non-default IDs
+    // (e.g. custom devnet deploy vs the declare_id! default in the IDL).
     const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
     const idl = await import('./idl/sss_token.json');
-    const program = new AnchorProgram(idl as any, provider) as any;
+    const program = new AnchorProgram({ ...idl as any, address: programId.toBase58() }, provider) as any;
 
     // Build InitializeParams matching the IDL struct
     const presetNum = config.preset === 'SSS-1' ? 1 : config.preset === 'SSS-2' ? 2 : 3;
@@ -535,7 +537,9 @@ export class SolanaStablecoin {
     if (this._program) return this._program;
     const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
     const idl = await import('./idl/sss_token.json');
-    this._program = new AnchorProgram(idl as any, this.provider) as any;
+    // Override address in IDL so program calls go to the correct deployment
+    // (e.g. a custom devnet deploy) rather than the declare_id! default.
+    this._program = new AnchorProgram({ ...idl as any, address: this.programId.toBase58() }, this.provider) as any;
     return this._program;
   }
 
