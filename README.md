@@ -4,19 +4,22 @@ A modular, production-ready stablecoin SDK for Solana with two opinionated prese
 
 ## Presets
 
-| Feature | SSS-1 (Minimal) | SSS-2 (Compliant) |
-|---------|-----------------|-------------------|
-| Token-2022 mint | ✅ | ✅ |
-| Freeze authority | ✅ | ✅ |
-| Metadata extension | ✅ | ✅ |
-| Permanent delegate | ❌ | ✅ |
-| Transfer hook | ❌ | ✅ |
-| On-chain blacklist | ❌ | ✅ |
-| Pause/unpause | ✅ | ✅ |
-| Minter caps | ✅ | ✅ |
+| Feature | SSS-1 Minimal | SSS-2 Compliant | SSS-3 Trustless |
+|---------|:---:|:---:|:---:|
+| Token-2022 mint | ✅ | ✅ | ✅ |
+| Freeze authority | ✅ | ✅ | ✅ |
+| Metadata extension | ✅ | ✅ | ✅ |
+| Pause/unpause | ✅ | ✅ | ✅ |
+| Minter caps | ✅ | ✅ | ✅ |
+| Permanent delegate | ❌ | ✅ | ✅ |
+| Transfer hook | ❌ | ✅ | ✅ |
+| On-chain blacklist | ❌ | ✅ | ✅ |
+| Collateral vault (no oracle) | ❌ | ❌ | ✅ |
+| Confidential transfers (ZK) | ❌ | ❌ | ✅ |
 
 **SSS-1** — For internal tokens, DAO treasuries, ecosystem settlement.  
-**SSS-2** — For regulated stablecoins (USDC/USDT-class). Compliant by default.
+**SSS-2** — For regulated stablecoins (USDC/USDT-class). Compliant by default.  
+**SSS-3** — Trustless collateral-backed: on-chain collateral enforcement + ZK transfer privacy. [Reference design →](docs/SSS-3.md)
 
 ## Quick Start
 
@@ -129,10 +132,17 @@ Endpoints:
 | [Webhooks](docs/api.md#webhooks) | Event-driven webhook delivery for mint/burn events |
 | [Compliance & Audit Log](docs/compliance-audit-log.md) | Blacklist management and audit log query API (SSS-014) |
 | [On-Chain SDK: Core Methods](docs/on-chain-sdk-core.md) | `SolanaStablecoin` class — create, load, mintTo, burnFrom, freeze/thaw, supply query |
+| [ComplianceModule](docs/compliance-module.md) | `ComplianceModule` SDK — blacklist management (addToBlacklist, removeFromBlacklist, isBlacklisted) + freeze/thaw |
 | [Transfer Hook Program](docs/transfer-hook.md) | On-chain blacklist enforcement via Token-2022 transfer hook (SSS-2) |
+| [Preset: SSS-1 Minimal](docs/SSS-1.md) | SSS-1 preset specification |
+| [Preset: SSS-2 Compliant](docs/SSS-2.md) | SSS-2 preset specification |
+| [Preset: SSS-3 Trustless](docs/SSS-3.md) | SSS-3 trustless collateral-backed reference design |
+| [Architecture](docs/ARCHITECTURE.md) | Three-layer system architecture |
+| [Submission](docs/SUBMISSION.md) | Bounty submission — what was built, how to run, what makes it innovative |
 | [Devnet Deployment](docs/devnet-deploy.md) | Deploying and smoke-testing on Solana devnet |
 | [Integration Testing](docs/integration-testing.md) | Running the full integration test suite and CI setup |
 | [Anchor Program Tests](docs/anchor-program-testing.md) | Running the Anchor on-chain test suite locally and in CI (SSS-015) |
+| [Formal Verification](docs/formal-verification.md) | Kani mathematical proofs — 7/7 invariants verified for all possible inputs |
 
 ## Judging Criteria
 

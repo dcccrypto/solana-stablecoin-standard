@@ -183,3 +183,129 @@ jobs:
         # Spawns a local validator, deploys the program, runs tests/sss-token.ts,
         # then tears the validator down. 13 tests covering initialize, mint, burn,
         # pause/unpause, freeze/thaw, update_roles, and revoke_minter.
+
+  sdk-anchor:
+    name: SDK Anchor Integration Tests (SSS-017)
+    runs-on: ubuntu-latest
+    needs: [anchor]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Cache Solana
+        uses: actions/cache@v4
+        id: cache-solana-sdk-anchor
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ env.SOLANA_VERSION }}
+
+      - name: Install Solana
+        if: steps.cache-solana-sdk-anchor.outputs.cache-hit != 'true'
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v${{ env.SOLANA_VERSION }}/install)"
+
+      - name: Add Solana to PATH
+        run: echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install Anchor CLI
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+          avm install ${{ env.ANCHOR_VERSION }}
+          avm use ${{ env.ANCHOR_VERSION }}
+
+      - name: Generate keypair
+        run: solana-keygen new --no-bip39-passphrase --silent
+
+      - name: Anchor build
+        # Recompile so deploy artifact is available in this job's workspace.
+        run: anchor build
+
+      - name: Install SDK dependencies
+        working-directory: sdk
+        run: npm install
+
+      - name: Start localnet validator with program deployed
+        run: |
+          solana-test-validator \
+            --bpf-program AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat \
+            target/deploy/sss_token.so \
+            --reset \
+            --quiet &
+          VALIDATOR_PID=$!
+          echo "VALIDATOR_PID=$VALIDATOR_PID" >> $GITHUB_ENV
+          # Wait up to 30 s for the validator to accept RPC calls
+          for i in $(seq 1 30); do
+            solana cluster-version --url http://127.0.0.1:8899 2>/dev/null && break
+            sleep 1
+          done
+          # Fund the generated test wallet
+          solana airdrop 10 --url http://127.0.0.1:8899
+
+      - name: Run SDK Anchor integration tests
+        working-directory: sdk
+        env:
+          ANCHOR_PROVIDER_URL: http://127.0.0.1:8899
+        run: npm run test:anchor
+
+      - name: Stop validator
+        if: always()
+        run: kill "$VALIDATOR_PID" || true
+
+  sdk-anchor-integration:
+    name: SDK Anchor Localnet Integration (SSS-017)
+    runs-on: ubuntu-latest
+    needs: [anchor]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: sdk/package.json
+
+      - name: Cache Solana
+        uses: actions/cache@v4
+        id: cache-solana
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ env.SOLANA_VERSION }}
+
+      - name: Install Solana
+        if: steps.cache-solana.outputs.cache-hit != 'true'
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v${{ env.SOLANA_VERSION }}/install)"
+
+      - name: Add Solana to PATH
+        run: echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install Anchor CLI
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+          avm install ${{ env.ANCHOR_VERSION }}
+          avm use ${{ env.ANCHOR_VERSION }}
+
+      - name: Generate Solana keypair
+        run: solana-keygen new --no-bip39-passphrase --silent
+
+      - name: Build Anchor programs
+        # Produces target/deploy/sss_token.so and sss_transfer_hook.so
+        run: anchor build
+
+      - name: Install SDK dependencies
+        working-directory: sdk
+        run: npm install
+
+      - name: Run SDK Anchor localnet integration tests (SSS-017)
+        working-directory: sdk
+        run: npm run test:anchor

@@ -2,16 +2,18 @@ use anchor_lang::prelude::*;
 
 pub mod error;
 pub mod instructions;
+pub mod proofs;
 pub mod state;
 
 use instructions::*;
 
 declare_id!("AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat");
 
-/// Solana Stablecoin Standard — SSS-1 (Minimal) + SSS-2 (Compliant)
+/// Solana Stablecoin Standard — SSS-1 (Minimal) + SSS-2 (Compliant) + SSS-3 (Reserve-Backed)
 ///
 /// SSS-1: Token-2022 mint with freeze authority + metadata
 /// SSS-2: SSS-1 + permanent delegate + transfer hook + blacklist enforcement
+/// SSS-3: SSS-1 + collateral reserve vault (deposit/redeem against on-chain reserves)
 #[program]
 pub mod sss_token {
     use super::*;
@@ -66,5 +68,15 @@ pub mod sss_token {
     /// Transfer admin/compliance authorities.
     pub fn update_roles(ctx: Context<UpdateRoles>, params: UpdateRolesParams) -> Result<()> {
         instructions::update_roles::handler(ctx, params)
+    }
+
+    /// Deposit collateral into the reserve vault (SSS-3 only).
+    pub fn deposit_collateral(ctx: Context<DepositCollateralCtx>, amount: u64) -> Result<()> {
+        instructions::deposit_collateral::deposit_collateral_handler(ctx, amount)
+    }
+
+    /// Redeem SSS tokens by burning them and releasing collateral (SSS-3 only).
+    pub fn redeem(ctx: Context<RedeemCtx>, amount: u64) -> Result<()> {
+        instructions::redeem::redeem_handler(ctx, amount)
     }
 }

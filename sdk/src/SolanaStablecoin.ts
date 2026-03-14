@@ -149,7 +149,9 @@ export class SolanaStablecoin {
       name: config.name,
       symbol: config.symbol,
       uri: config.uri ?? '',
-      transfer_hook_program:
+      // Anchor JS serializes struct fields using camelCase names matching the
+      // generated TypeScript types — use transferHookProgram, not transfer_hook_program.
+      transferHookProgram:
         config.preset === 'SSS-2' && config.transferHookProgram
           ? config.transferHookProgram
           : null,
@@ -291,7 +293,12 @@ export class SolanaStablecoin {
     const program = await this._loadProgram();
     return program.methods
       .pause()
-      .accounts({ config: this.configPda, admin: this.provider.wallet.publicKey })
+      .accounts({
+        authority: this.provider.wallet.publicKey,
+        config: this.configPda,
+        mint: this.mint,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
       .rpc({ commitment: 'confirmed' });
   }
 
@@ -303,7 +310,12 @@ export class SolanaStablecoin {
     const program = await this._loadProgram();
     return program.methods
       .unpause()
-      .accounts({ config: this.configPda, admin: this.provider.wallet.publicKey })
+      .accounts({
+        authority: this.provider.wallet.publicKey,
+        config: this.configPda,
+        mint: this.mint,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
       .rpc({ commitment: 'confirmed' });
   }
 
@@ -325,10 +337,12 @@ export class SolanaStablecoin {
     return program.methods
       .updateMinter(new BN(params.cap.toString()))
       .accounts({
-        admin: this.provider.wallet.publicKey,
+        authority: this.provider.wallet.publicKey,
         config: this.configPda,
+        mint: this.mint,
+        minter: params.minter,
         minterInfo: minterPda,
-        minterAuthority: params.minter,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
       .rpc({ commitment: 'confirmed' });
@@ -348,10 +362,12 @@ export class SolanaStablecoin {
     return program.methods
       .revokeMinter()
       .accounts({
-        admin: this.provider.wallet.publicKey,
+        authority: this.provider.wallet.publicKey,
         config: this.configPda,
+        mint: this.mint,
+        minter: params.minter,
         minterInfo: minterPda,
-        minterAuthority: params.minter,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc({ commitment: 'confirmed' });
   }
@@ -370,8 +386,10 @@ export class SolanaStablecoin {
         params.newComplianceAuthority ?? null
       )
       .accounts({
-        admin: this.provider.wallet.publicKey,
+        authority: this.provider.wallet.publicKey,
         config: this.configPda,
+        mint: this.mint,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc({ commitment: 'confirmed' });
   }
