@@ -178,6 +178,9 @@ jobs:
           cargo update -p borsh --precise 1.5.1 2>/dev/null || true
           # proc-macro-crate >=3.2.0 pulls toml_edit that requires rustc 1.82.
           # 3.1.0 uses toml_edit ^0.21 which works on rustc 1.75.
+          # NOTE: anchor-lang/anchor-spl are pinned to =0.32.0 (exact) in Cargo.toml to prevent
+          # resolution to 0.32.1 which depends on proc-macro-crate 3.5.0+ (incompatible with
+          # rustc 1.75 via toml_datetime 1.0.0). This cargo update is belt-and-suspenders.
           cargo update -p proc-macro-crate --precise 3.1.0 2>/dev/null || true
           # indexmap >=2.12.0 requires rustc 1.82; pin to last compatible release.
           cargo update -p indexmap --precise 2.11.4 2>/dev/null || true
