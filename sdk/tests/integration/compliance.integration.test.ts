@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { SSSClient } from "../../src/client";
 import { SSSError } from "../../src/error";
-import { BASE_URL, API_KEY } from "./setup";
+import { BASE_URL, API_KEY, TOKEN_MINT } from "./setup";
 
-// Use a dedicated mint for compliance tests so the shared TOKEN_MINT supply
-// totals are not polluted by the successful mint at the end of this suite.
-const COMPLIANCE_MINT = "ComplianceMint1111111111111111111111111111";
+// Use the shared TOKEN_MINT fixture — it is a valid base58 Solana pubkey
+// seeded by the test backend, so compliance checks exercise real on-chain logic.
+const COMPLIANCE_MINT = TOKEN_MINT;
 
 describe("Integration: compliance (blacklist enforcement)", () => {
   const client = new SSSClient(BASE_URL, API_KEY);
