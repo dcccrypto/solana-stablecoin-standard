@@ -118,6 +118,20 @@ Endpoints:
 | GET | `/api/compliance/audit` | Audit log |
 | GET/POST | `/api/webhooks` | Manage webhooks |
 
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [API Reference](docs/api.md) | Full REST API reference for all backend endpoints |
+| [Authentication](docs/authentication.md) | API key creation and management |
+| [SDK & CLI](docs/sdk-cli.md) | TypeScript SDK and `sss-token` CLI usage |
+| [Rate Limiting](docs/rate-limiting.md) | Token-bucket rate limiter configuration and `Retry-After` behaviour |
+| [Webhooks](docs/api.md#webhooks) | Event-driven webhook delivery for mint/burn events |
+| [Compliance & Audit Log](docs/compliance-audit-log.md) | Blacklist management and audit log query API (SSS-014) |
+| [Transfer Hook Program](docs/transfer-hook.md) | On-chain blacklist enforcement via Token-2022 transfer hook (SSS-2) |
+| [Devnet Deployment](docs/devnet-deploy.md) | Deploying and smoke-testing on Solana devnet |
+| [Integration Testing](docs/integration-testing.md) | Running the full integration test suite and CI setup |
+
 ## Judging Criteria
 
 - **SDK Design & Modularity**: Layer-based architecture, clean preset API
