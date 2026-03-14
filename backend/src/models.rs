@@ -1,13 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct HealthResponse {
-    pub status: String,
-    pub version: String,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct MintRequest {
     pub token_mint: String,
     pub amount: u64,

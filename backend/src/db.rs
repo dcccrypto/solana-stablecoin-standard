@@ -415,4 +415,11 @@ impl Database {
         let rows = conn.execute("DELETE FROM api_keys WHERE id = ?1", params![id])?;
         Ok(rows > 0)
     }
+
+    /// Lightweight connectivity check — executes `SELECT 1`.
+    pub fn ping(&self) -> Result<(), AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute_batch("SELECT 1")?;
+        Ok(())
+    }
 }

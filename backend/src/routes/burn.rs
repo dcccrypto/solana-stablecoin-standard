@@ -42,6 +42,7 @@ pub async fn burn(
         "Burn event recorded"
     );
 
+    state.metrics.inc_burn(req.amount);
     webhook_dispatch::dispatch(&state.db, "burn", serde_json::to_value(&event).unwrap_or_default());
 
     Ok(Json(ApiResponse::ok(event)))

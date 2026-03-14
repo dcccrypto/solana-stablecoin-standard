@@ -51,6 +51,7 @@ pub async fn mint(
         "Mint event recorded"
     );
 
+    state.metrics.inc_mint(req.amount);
     webhook_dispatch::dispatch(&state.db, "mint", serde_json::to_value(&event).unwrap_or_default());
 
     Ok(Json(ApiResponse::ok(event)))

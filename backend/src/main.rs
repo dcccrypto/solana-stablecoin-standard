@@ -1,6 +1,7 @@
 mod auth;
 mod db;
 mod error;
+mod metrics;
 mod models;
 mod rate_limit;
 mod routes;
@@ -25,6 +26,7 @@ use routes::{
     compliance::{add_blacklist, get_audit, get_blacklist, remove_blacklist},
     events::events,
     health::health,
+    metrics::get_metrics,
     mint::mint,
     burn::burn,
     supply::supply,
@@ -94,6 +96,7 @@ async fn main() {
         .route("/api/webhooks/:id", delete(delete_webhook))
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
+        .route("/api/metrics", get(get_metrics))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
@@ -154,6 +157,7 @@ mod tests {
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
             .route("/api/admin/keys/:id", delete(delete_api_key))
+            .route("/api/metrics", get(get_metrics))
             .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
             .layer(cors)
             .with_state(state);
@@ -183,6 +187,56 @@ mod tests {
             .with_state(state);
 
         (app, test_key)
+    }
+
+    #[tokio::test]
+    async fn test_metrics_endpoint() {
+        use axum::body::to_bytes;
+
+        let (app, key) = build_app();
+
+        // Mint to populate counters
+        let mint_body = serde_json::json!({
+            "token_mint": "MetricsMintMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM",
+            "amount": 250u64,
+            "recipient": "RecipMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM"
+        });
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/mint")
+                    .header("content-type", "application/json")
+                    .header("X-Api-Key", &key)
+                    .body(Body::from(mint_body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // GET /api/metrics
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/metrics")
+                    .header("X-Api-Key", &key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "metrics endpoint should return 200");
+
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["success"], true);
+        let data = &json["data"];
+        assert_eq!(data["mint_total"], 1u64, "one mint should be counted");
+        assert_eq!(data["mint_amount_total"], 250u64, "mint amount should be 250");
+        assert_eq!(data["burn_total"], 0u64, "no burns");
+        assert!(data["uptime_seconds"].as_u64().unwrap_or(0) < 60, "uptime should be < 60s in tests");
     }
 
     #[tokio::test]
@@ -524,6 +578,7 @@ mod qa_tests {
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
             .route("/api/admin/keys/:id", delete(delete_api_key))
+            .route("/api/metrics", get(get_metrics))
             .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
             .with_state(state);
         (app, test_key)

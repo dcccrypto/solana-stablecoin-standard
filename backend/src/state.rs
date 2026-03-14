@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::db::Database;
+use crate::metrics::MetricsState;
 use crate::rate_limit::RateLimiter;
 
 /// Shared application state threaded through Axum's router.
@@ -8,6 +9,7 @@ use crate::rate_limit::RateLimiter;
 pub struct AppState {
     pub db: Arc<Database>,
     pub rate_limiter: Arc<RateLimiter>,
+    pub metrics: MetricsState,
 }
 
 impl AppState {
@@ -15,6 +17,7 @@ impl AppState {
         Self {
             db: Arc::new(db),
             rate_limiter: Arc::new(RateLimiter::from_env()),
+            metrics: MetricsState::new(),
         }
     }
 
@@ -25,6 +28,7 @@ impl AppState {
         Self {
             db: Arc::new(db),
             rate_limiter: Arc::new(rate_limiter),
+            metrics: MetricsState::new(),
         }
     }
 }
