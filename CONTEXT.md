@@ -1,6 +1,6 @@
 # SSS Project Context
 
-_Last updated: 2026-03-14 04:23 UTC_
+_Last updated: 2026-03-14 04:36 UTC_
 
 ## Current Status
 
@@ -33,7 +33,7 @@ _Last updated: 2026-03-14 04:23 UTC_
 
 ## SDK State
 
-- **Tests**: 89/89 passing (6 test files)
+- **Tests**: 84/84 passing on main (6 test files); 89/89 on feat/sss-019-idl-sync-new-instructions (PR #87)
 - **TypeScript**: zero errors
 - **IDLs in sdk/src/idl/**: sss_token.json + sss_transfer_hook.json
 - **Program IDs** (devnet + localnet):
@@ -73,3 +73,8 @@ Smoke test: compile passed, airdrop faucet returned internal error (devnet rate-
 - PR #86 (pagination docs) — merge after #85 lands
 - PR #87 (SSS-019 IDL sync) — needs review + merge after #84
 - Smoke test devnet after faucet stabilises (re-run `npx ts-node --compiler-options '{"target":"ES2020","lib":["ES2020","DOM"]}' scripts/smoke-test-devnet.ts`)
+- Clean up stale local branches (30+ old feature branches, consider `git branch | grep -v main | xargs git branch -D` after verifying all merged to origin)
+
+## Heartbeat Log
+
+- 2026-03-14 04:36 UTC: Cleaned up stale fix/sss-017-idl-sync-initialize-params branch (superseded by PR #87). SDK: 84/84 tests green. Backend: 31/31 tests green. All PRs open, no CI failures detected.
