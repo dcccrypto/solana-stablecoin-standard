@@ -11,13 +11,13 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
 
-    /// The new Token-2022 mint
+    /// The new Token-2022 mint — authority is the config PDA so the program controls minting
     #[account(
         init,
         payer = payer,
         mint::decimals = params.decimals,
-        mint::authority = payer.key(),
-        mint::freeze_authority = payer.key(),
+        mint::authority = config,
+        mint::freeze_authority = config,
         mint::token_program = token_program,
     )]
     pub mint: InterfaceAccount<'info, Mint>,

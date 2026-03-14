@@ -15,13 +15,18 @@ pub mod sss_transfer_hook {
     pub fn transfer_hook(ctx: Context<TransferHook>, amount: u64) -> Result<()> {
         let blacklist = &ctx.accounts.blacklist_state;
         // Check sender
+        // Parse owner from source token account data (Token-2022 layout: owner is at offset 32)
+        let src_data = ctx.accounts.source_token_account.try_borrow_data()?;
+        let src_owner = Pubkey::try_from(&src_data[32..64]).map_err(|_| error!(HookError::SenderBlacklisted))?;
         require!(
-            !blacklist.is_blacklisted(ctx.accounts.source_token_account.owner),
+            !blacklist.is_blacklisted(&src_owner),
             HookError::SenderBlacklisted
         );
         // Check receiver
+        let dst_data = ctx.accounts.destination_token_account.try_borrow_data()?;
+        let dst_owner = Pubkey::try_from(&dst_data[32..64]).map_err(|_| error!(HookError::ReceiverBlacklisted))?;
         require!(
-            !blacklist.is_blacklisted(ctx.accounts.destination_token_account.owner),
+            !blacklist.is_blacklisted(&dst_owner),
             HookError::ReceiverBlacklisted
         );
         msg!("Transfer hook: {} tokens OK", amount);
@@ -79,8 +84,8 @@ pub struct BlacklistState {
 impl BlacklistState {
     pub const SEED: &'static [u8] = b"blacklist-state";
 
-    pub fn is_blacklisted(&self, address: Pubkey) -> bool {
-        self.blacklisted.contains(&address)
+    pub fn is_blacklisted(&self, address: &Pubkey) -> bool {
+        self.blacklisted.contains(address)
     }
 
     /// Space: discriminator(8) + mint(32) + authority(32) + vec_len(4) + 100*32 + u8(1)
