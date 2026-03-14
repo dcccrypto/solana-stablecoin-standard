@@ -16,6 +16,10 @@ export interface SssConfig {
   uri?: string;
   /** Transfer hook program (required for SSS-2) */
   transferHookProgram?: PublicKey;
+  /** SSS-3: collateral token mint (e.g. USDC mint address) */
+  collateralMint?: PublicKey | null;
+  /** SSS-3: reserve vault token account address */
+  reserveVault?: PublicKey | null;
 }
 
 export interface MintParams {

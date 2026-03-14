@@ -155,6 +155,10 @@ export class SolanaStablecoin {
         config.preset === 'SSS-2' && config.transferHookProgram
           ? config.transferHookProgram
           : null,
+      // SSS-3 fields — required by the updated on-chain InitializeParams struct.
+      // Pass null for SSS-1/SSS-2 presets where these are not used.
+      collateralMint: config.collateralMint ?? null,
+      reserveVault: config.reserveVault ?? null,
     };
 
     await program.methods
