@@ -167,9 +167,11 @@ jobs:
         run: |
           # Solana 2.3 ships cargo/rustc 1.86 — generates lockfile v4, which is
           # fully supported by the bundled Solana cargo. No v3 downgrade needed.
-          # blake3: Cargo 1.86 supports edition2024, so the blake3 >=1.8.0 pin
-          # is no longer needed (CodeRabbit review suggestion — verified by CI).
           cargo generate-lockfile
+          # solana-zk-token-sdk v2.3.x has an internal source-level compile error
+          # (PedersenCommitment / Pedersen types moved in the 2.3 release). Pin to
+          # the last known-good version that compiles with rustc 1.86.
+          cargo update -p solana-zk-token-sdk --precise 2.1.21 2>/dev/null || true
 
       - name: Anchor build
         # Anchor 0.32 uses idl-build feature (stable Rust) for IDL generation —
