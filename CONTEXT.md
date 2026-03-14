@@ -93,5 +93,5 @@
 - After PRs merge: tag release, update npm package version
 - All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ, OpenAPI spec
 
-# heartbeat 18:12
-<!-- heartbeat: 2026-03-14T18:26:01Z -->
+# heartbeat 18:42
+<!-- heartbeat: 2026-03-14T18:42:00Z -->
