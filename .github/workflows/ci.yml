@@ -172,9 +172,9 @@ jobs:
 
       - name: Anchor build
         # Anchor 0.32 uses idl-build feature (stable Rust) for IDL generation.
-        # `-- --locked` is forwarded to cargo build-sbf so it uses the committed
-        # Cargo.lock instead of re-resolving (avoids platform-specific resolution).
-        run: anchor build -- --locked
+        # Cargo.lock is committed (not gitignored) — anchor build will use the
+        # checked-in lockfile without regenerating it.
+        run: anchor build
 
       - name: Anchor test (localnet)
         # --skip-build reuses the artifacts from the "Anchor build" step above,
