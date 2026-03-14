@@ -46,7 +46,7 @@ describe("SSS-017: SolanaStablecoin SDK ↔ Anchor localnet", () => {
     });
 
     expect(stablecoin.mint).toBeDefined();
-    expect(stablecoin.mint.toBase58()).toHaveLength(44);
+    expect(stablecoin.mint.toBase58().length).toBeGreaterThanOrEqual(43);
     expect(stablecoin.configPda).toBeDefined();
   }, 30_000);
 
