@@ -20,8 +20,8 @@ The Anchor test suite (`tests/sss-token.ts`) deploys the `sss-token` program to 
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Rust (stable) | ≥ 1.75 | `rustup update stable` |
-| Solana CLI | 1.18.x or Agave 3.x | [anza.xyz/install](https://release.anza.xyz) |
+| Rust (stable) | ≥ 1.86 | `rustup update stable` |
+| Solana CLI | Agave 2.3.x | [anza.xyz/install](https://release.anza.xyz) |
 | Anchor CLI | 0.32.0 | `cargo install avm --locked && avm install 0.32.0 && avm use 0.32.0` |
 | Node.js | ≥ 18 | [nodejs.org](https://nodejs.org) |
 
@@ -115,19 +115,23 @@ Anchor tests run in the **`Anchor Programs`** CI job (`.github/workflows/ci.yml`
 2. Downloads and caches Solana CLI (`~/.local/share/solana`).
 3. Installs Anchor 0.32.0 via AVM (`cargo install avm && avm install/use`).
 4. Generates a fresh ephemeral keypair.
-5. Regenerates `Cargo.lock` (v3) compatible with the Solana 1.18 / rustc 1.75 toolchain and pins `blake3 =1.7.0` (last `edition2021` release).
+5. Regenerates `Cargo.lock` with dependency pins required for the Solana platform-tools Cargo (1.84) bundled with Agave 2.3.x.
 6. Runs `anchor build` — compiles `sss_token.so` and generates the IDL.
-7. Runs `anchor test` — spawns a local validator, deploys, tests, tears down.
+7. Runs `anchor test --skip-build` — spawns a local validator, deploys, tests, tears down.
 
 ### Notes on Anchor 0.32 IDL generation
 
-Anchor 0.32 uses the **`idl-build`** compile-time feature (stable Rust ≥ 1.89) for IDL generation, replacing the old `cargo +nightly test` approach used in 0.30.x. No nightly toolchain or `RUSTUP_TOOLCHAIN` override is required.
+Anchor 0.32 uses the **`idl-build`** compile-time feature (stable Rust ≥ 1.86) for IDL generation, replacing the old `cargo +nightly test` approach used in 0.30.x. No nightly toolchain or `RUSTUP_TOOLCHAIN` override is required.
 
-### Cargo.lock compatibility
+### Cargo.lock and dependency pins
 
-The Solana 1.18 BPF toolchain ships cargo ~1.75, which cannot parse lockfile v4. The CI regenerates a v3-compatible `Cargo.lock` on each run using `cargo generate-lockfile` followed by `sed -i 's/^version = 4$/version = 3/' Cargo.lock`.
+Solana Agave 2.3.x ships with platform-tools Cargo 1.84. This version has two pinning requirements:
 
-The `blake3` pin (`=1.7.0`) is required because `blake3 ≥ 1.8.0` uses the `edition2024` resolver feature, which requires Cargo ≥ 1.85 — not available with Cargo 1.75.
+**`blake3 =1.7.0`** — `blake3 ≥ 1.8.0` uses the `edition2024` Cargo resolver feature, which requires Cargo ≥ 1.85. Platform-tools Cargo 1.84 will reject it. Pin to the last `edition2021`-compatible release.
+
+**`spl-token-confidential-transfer-ciphertext-arithmetic =0.3.0` and `spl-token-confidential-transfer-proof-generation =0.4.0`** — versions 0.3.1 and 0.4.1 transitively pull `solana-zk-token-sdk@2.3.x`, which has internal compile errors due to type renames between Solana releases (`PedersenCommitment`/`Pedersen` moved crates). The prior patch versions (0.3.0 / 0.4.0) use `solana-zk-sdk@^2.2.0` and avoid this graph.
+
+The CI regenerates `Cargo.lock` on each run and applies all three `cargo update --precise` pins before building. Lockfile version is v4 (fully supported by Cargo 1.84+) — no v3 downgrade is needed.
 
 ---
 
@@ -135,11 +139,23 @@ The `blake3` pin (`=1.7.0`) is required because `blake3 ≥ 1.8.0` uses the `edi
 
 ### `anchor build` fails with `edition2024` error
 
-Ensure `blake3` is pinned to `=1.7.0` in `Cargo.lock`. Regenerate the lockfile:
+Ensure `blake3` is pinned to `=1.7.0` in `Cargo.lock`. Regenerate the lockfile with all required pins:
 
 ```bash
 cargo generate-lockfile
 cargo update blake3 --precise 1.7.0
+cargo update spl-token-confidential-transfer-ciphertext-arithmetic --precise 0.3.0
+cargo update spl-token-confidential-transfer-proof-generation --precise 0.4.0
+```
+
+### `error[E0412]: cannot find type PedersenCommitment` (or `Pedersen`) during build
+
+This is caused by `spl-token-confidential-transfer-ciphertext-arithmetic ≥ 0.3.1` or `spl-token-confidential-transfer-proof-generation ≥ 0.4.1` pulling `solana-zk-token-sdk@2.3.x` into the graph. Pin both crates and regenerate the lockfile:
+
+```bash
+cargo generate-lockfile
+cargo update spl-token-confidential-transfer-ciphertext-arithmetic --precise 0.3.0
+cargo update spl-token-confidential-transfer-proof-generation --precise 0.4.0
 ```
 
 ### `anchor: command not found`
