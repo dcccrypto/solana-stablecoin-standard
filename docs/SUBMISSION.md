@@ -32,7 +32,7 @@ A specification for a stablecoin with on-chain collateral enforcement (no oracle
 
 ## Test Results
 
-**Anchor Programs (localnet):** 13/13 passing
+**Anchor Programs (localnet):** 19/19 passing
 **TypeScript SDK:** 102/102 passing (6 test files)
 **Backend (Rust/axum):** 35/35 passing
 **CI:** All 4 jobs green on main ✅
@@ -92,7 +92,7 @@ sss-anchor
     ✔ Blacklist check — sender side
     ✔ Non-authority cannot modify blacklist
 
-13 passing
+19 passing
 ```
 
 ### 3. Run SDK tests
