@@ -18,8 +18,11 @@ import {
 
 import {
   BurnParams,
+  DepositCollateralParams,
   FreezeParams,
   MintParams,
+  ProposeAuthorityParams,
+  RedeemParams,
   RevokeMinterParams,
   SdkOptions,
   SssConfig,
@@ -142,7 +145,7 @@ export class SolanaStablecoin {
     const program = new AnchorProgram(idl as any, provider) as any;
 
     // Build InitializeParams matching the IDL struct
-    const presetNum = config.preset === 'SSS-1' ? 1 : 2;
+    const presetNum = config.preset === 'SSS-1' ? 1 : config.preset === 'SSS-2' ? 2 : 3;
     const initParams = {
       preset: presetNum,
       decimals,
@@ -155,6 +158,12 @@ export class SolanaStablecoin {
         config.preset === 'SSS-2' && config.transferHookProgram
           ? config.transferHookProgram
           : null,
+      // SSS-3 fields
+      collateralMint: config.collateralMint ?? null,
+      reserveVault: config.reserveVault ?? null,
+      maxSupply: config.maxSupply !== undefined && config.maxSupply > 0n
+        ? new BN(config.maxSupply.toString())
+        : null,
     };
 
     await program.methods
@@ -377,6 +386,9 @@ export class SolanaStablecoin {
    * Caller must be the current admin authority.
    *
    * Pass only the fields you want to update — omitted fields are left unchanged.
+   *
+   * @deprecated For two-step authority transfer, use `proposeAuthority` +
+   * `acceptAuthority` / `acceptComplianceAuthority` instead.
    */
   async updateRoles(params: UpdateRolesParams): Promise<TransactionSignature> {
     const program = await this._loadProgram();
@@ -390,6 +402,126 @@ export class SolanaStablecoin {
         config: this.configPda,
         mint: this.mint,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Propose a new admin or compliance authority (step 1 of two-step transfer).
+   *
+   * Sets `pending_authority` or `pending_compliance_authority` in the config PDA.
+   * The proposed party must call `acceptAuthority` / `acceptComplianceAuthority`
+   * to complete the transfer.
+   *
+   * @param params.proposed - The proposed new authority public key.
+   * @param isCompliance    - `true` to propose a new compliance authority;
+   *                          `false` (default) to propose a new admin authority.
+   */
+  async proposeAuthority(
+    params: ProposeAuthorityParams,
+    isCompliance = false
+  ): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    // update_roles with ONE field set initiates a two-step proposal:
+    // the on-chain program stores it in pending_authority /
+    // pending_compliance_authority and emits AuthorityProposed.
+    return program.methods
+      .updateRoles(
+        isCompliance ? null : params.proposed,
+        isCompliance ? params.proposed : null
+      )
+      .accounts({
+        authority: this.provider.wallet.publicKey,
+        config: this.configPda,
+        mint: this.mint,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Accept a pending admin authority transfer (step 2 of two-step transfer).
+   *
+   * Must be called by the wallet that was set as `pending_authority`.
+   * Completes the transfer and emits `AuthorityAccepted`.
+   */
+  async acceptAuthority(): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    return program.methods
+      .acceptAuthority()
+      .accounts({
+        pending: this.provider.wallet.publicKey,
+        config: this.configPda,
+        mint: this.mint,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Accept a pending compliance authority transfer (step 2 of two-step transfer).
+   *
+   * Must be called by the wallet that was set as `pending_compliance_authority`.
+   * Completes the transfer and emits `AuthorityAccepted` with `is_compliance = true`.
+   */
+  async acceptComplianceAuthority(): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    return program.methods
+      .acceptComplianceAuthority()
+      .accounts({
+        pending: this.provider.wallet.publicKey,
+        config: this.configPda,
+        mint: this.mint,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Deposit collateral into the reserve vault (SSS-3 only).
+   *
+   * Caller (provider.wallet) must be a registered minter.
+   * Emits `CollateralDeposited`.
+   */
+  async depositCollateral(
+    params: DepositCollateralParams
+  ): Promise<TransactionSignature> {
+    const program = await this._loadProgram();
+    return program.methods
+      .depositCollateral(new BN(params.amount.toString()))
+      .accounts({
+        depositor: this.provider.wallet.publicKey,
+        config: this.configPda,
+        sssMint: this.mint,
+        collateralMint: params.collateralMint,
+        depositorCollateral: params.depositorCollateral,
+        reserveVault: params.reserveVault,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Redeem SSS tokens for collateral from the reserve vault (SSS-3 only).
+   *
+   * Burns `amount` SSS tokens and transfers proportional collateral back to
+   * the redeemer.  Emits `CollateralRedeemed`.
+   */
+  async redeem(params: RedeemParams): Promise<TransactionSignature> {
+    const { TOKEN_PROGRAM_ID } = await import('@solana/spl-token');
+    const program = await this._loadProgram();
+    return program.methods
+      .redeem(new BN(params.amount.toString()))
+      .accounts({
+        redeemer: this.provider.wallet.publicKey,
+        config: this.configPda,
+        sssMint: this.mint,
+        redeemerSssAccount: params.redeemerSssAccount,
+        collateralMint: params.collateralMint,
+        reserveVault: params.reserveVault,
+        redeemerCollateral: params.redeemerCollateral,
+        sssTokenProgram: TOKEN_2022_PROGRAM_ID,
+        collateralTokenProgram: params.collateralTokenProgram ?? TOKEN_PROGRAM_ID,
       })
       .rpc({ commitment: 'confirmed' });
   }

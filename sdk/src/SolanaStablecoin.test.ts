@@ -360,6 +360,132 @@ describe('SolanaStablecoin — Anchor IDL wiring', () => {
     });
   });
 
+  // ── acceptAuthority() + acceptComplianceAuthority() ─────────────────────
+
+  describe('acceptAuthority()', () => {
+    async function makeStablecoin() {
+      const provider = makeMockProvider();
+      const stablecoin = await SolanaStablecoin.create(provider, {
+        preset: 'SSS-1',
+        name: 'T',
+        symbol: 'T',
+      });
+      (stablecoin as any)._program = null;
+      mockProgram = makeMockProgram();
+      const anchor = await import('@coral-xyz/anchor');
+      (anchor.Program as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+        () => mockProgram
+      );
+      return { stablecoin, provider };
+    }
+
+    it('calls program.methods.acceptAuthority with pending + config + mint accounts', async () => {
+      const { stablecoin, provider } = await makeStablecoin();
+
+      await stablecoin.acceptAuthority();
+
+      expect(mockProgram._methodCalls.acceptAuthority).toHaveBeenCalledOnce();
+      const accountsCallArgs = mockProgram._builder.accounts.mock.calls[0][0];
+      expect(accountsCallArgs.pending).toEqual(provider.wallet.publicKey);
+      expect(accountsCallArgs.config).toEqual(stablecoin.configPda);
+      expect(accountsCallArgs.mint).toEqual(stablecoin.mint);
+    });
+
+    it('calls program.methods.acceptComplianceAuthority with correct accounts', async () => {
+      const { stablecoin, provider } = await makeStablecoin();
+
+      await stablecoin.acceptComplianceAuthority();
+
+      expect(mockProgram._methodCalls.acceptComplianceAuthority).toHaveBeenCalledOnce();
+      const accountsCallArgs = mockProgram._builder.accounts.mock.calls[0][0];
+      expect(accountsCallArgs.pending).toEqual(provider.wallet.publicKey);
+      expect(accountsCallArgs.config).toEqual(stablecoin.configPda);
+    });
+  });
+
+  // ── SSS-3: create() with SSS-3 preset ────────────────────────────────────
+
+  describe('create() with SSS-3 preset', () => {
+    it('calls initialize with preset=3 and SSS-3 fields', async () => {
+      const provider = makeMockProvider();
+      const collateralMint = new PublicKey('So11111111111111111111111111111111111111112');
+      const reserveVault = new PublicKey('11111111111111111111111111111111');
+
+      await SolanaStablecoin.create(provider, {
+        preset: 'SSS-3',
+        name: 'Reserve USD',
+        symbol: 'RUSD',
+        decimals: 6,
+        collateralMint,
+        reserveVault,
+        maxSupply: 1_000_000_000n,
+      });
+
+      expect(mockProgram._methodCalls.initialize).toHaveBeenCalledOnce();
+      const [initParams] = mockProgram._methodCalls.initialize.mock.calls[0];
+      expect(initParams.preset).toBe(3);
+      expect(initParams.collateralMint).toEqual(collateralMint);
+      expect(initParams.reserveVault).toEqual(reserveVault);
+      expect(initParams.maxSupply?.toString()).toBe('1000000000');
+    });
+
+    it('sets maxSupply to null when not specified', async () => {
+      const provider = makeMockProvider();
+
+      await SolanaStablecoin.create(provider, {
+        preset: 'SSS-1',
+        name: 'No Max',
+        symbol: 'NM',
+      });
+
+      const [initParams] = mockProgram._methodCalls.initialize.mock.calls[0];
+      expect(initParams.maxSupply).toBeNull();
+    });
+  });
+
+  // ── depositCollateral() ───────────────────────────────────────────────────
+
+  describe('depositCollateral()', () => {
+    async function makeStablecoin() {
+      const provider = makeMockProvider();
+      const stablecoin = await SolanaStablecoin.create(provider, {
+        preset: 'SSS-3',
+        name: 'T',
+        symbol: 'T',
+      });
+      (stablecoin as any)._program = null;
+      mockProgram = makeMockProgram();
+      const anchor = await import('@coral-xyz/anchor');
+      (anchor.Program as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+        () => mockProgram
+      );
+      return { stablecoin, provider };
+    }
+
+    it('calls program.methods.depositCollateral with correct amount as BN', async () => {
+      const { stablecoin } = await makeStablecoin();
+      const collateralMint = new PublicKey('So11111111111111111111111111111111111111112');
+      const reserveVault = new PublicKey('11111111111111111111111111111111');
+      const depositorCollateral = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+
+      await stablecoin.depositCollateral({
+        amount: 500_000n,
+        collateralMint,
+        reserveVault,
+        depositorCollateral,
+      });
+
+      expect(mockProgram._methodCalls.depositCollateral).toHaveBeenCalledOnce();
+      const [amountArg] = mockProgram._methodCalls.depositCollateral.mock.calls[0];
+      expect(amountArg.toString()).toBe('500000');
+
+      const accountsCallArgs = mockProgram._builder.accounts.mock.calls[0][0];
+      expect(accountsCallArgs.collateralMint).toEqual(collateralMint);
+      expect(accountsCallArgs.reserveVault).toEqual(reserveVault);
+      expect(accountsCallArgs.depositorCollateral).toEqual(depositorCollateral);
+    });
+  });
+
   // ── PDA derivation ────────────────────────────────────────────────────────
 
   describe('PDA derivation', () => {
