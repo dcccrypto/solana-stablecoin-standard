@@ -179,6 +179,8 @@ jobs:
           cargo update "proc-macro-crate" --precise 3.1.0 2>/dev/null || true
           # indexmap >=2.12.0 requires rustc 1.82; pin to last compatible release.
           cargo update "indexmap" --precise 2.11.4 2>/dev/null || true
+          # toml_datetime >=1.0.0 requires rustc 1.76; Solana 1.18 ships rustc 1.75. Pin to 0.6.9.
+          cargo update "toml_datetime" --precise 0.6.9 2>/dev/null || true
           sed -i 's/^version = 4$/version = 3/' Cargo.lock
 
       - name: Anchor build
