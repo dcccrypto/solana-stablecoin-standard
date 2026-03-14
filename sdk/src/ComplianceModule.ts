@@ -126,6 +126,23 @@ export class ComplianceModule {
   }
 
   /**
+   * Fetch the full on-chain blacklist as an array of PublicKeys.
+   * Reads the `BlacklistState` account via the Anchor IDL account fetch.
+   * Returns an empty array if the blacklist has not been initialized yet.
+   */
+  async getBlacklist(): Promise<PublicKey[]> {
+    const program = await this._loadProgram();
+    const [pda] = this.getBlacklistPda();
+    try {
+      const state = await program.account.blacklistState.fetch(pda);
+      return state.blacklisted as PublicKey[];
+    } catch {
+      // Account doesn't exist yet (not initialized) — return empty list
+      return [];
+    }
+  }
+
+  /**
    * Check if an address is on the on-chain blacklist.
    * Reads the blacklist PDA account data from the transfer hook program.
    */
