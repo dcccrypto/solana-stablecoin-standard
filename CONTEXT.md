@@ -55,8 +55,21 @@
 ## Recent Fixes (this session)
 - Fixed Anchor programId override in SolanaStablecoin.ts (both create() and _getProgram())
 - Updated smoke-test-devnet.ts to use local ~/.config/solana/id.json (avoids airdrop rate limits)
+- SSS-023: full devnet smoke test passing — register minter + explicit ATA creation + funded keypair (PR #91)
+- Fixed stale devnet-latest.json program IDs (pointed to non-existent account)
+- Devnet smoke test PASSED: Mint 5o7yFNTxDK1kAffPqBi3jDwNBXTgssYQEtGm3zfDv9si, 1000 SUSD minted + supply verified
+
+## Open PRs
+- PR #84: feat(program): two-step authority transfer + Anchor events + max_supply
+- PR #85: feat(backend): SSS-011 — pagination backend
+- PR #86: docs(pagination): SSS-011 — pagination guide
+- PR #87: feat(sdk): SSS-019 — IDL sync + new instructions
+- PR #88: docs(submission): SUBMISSION.md v2
+- PR #89: docs(sdk): SSS-022 — authority + collateral SDK reference
+- PR #90: feat: Solana Stablecoin Standard (SSS) — SSS-1 Minimal + SSS-2 Compliant (competition entry)
+- PR #91: fix(smoke-test): SSS-023 — devnet smoke test fully passing ← NEW
 
 ## Next
-- Monitor CI on PR #87, #88, #89, #90
-- Consider SSS-016: add streaming events endpoint or retry logic for webhook consumer
+- Monitor CI on PRs #84–#91
+- Monitor upstream for reviews
 - After PRs merge: tag release, update npm package version
