@@ -314,7 +314,7 @@ describe("sss-token", () => {
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    await program.methods
+    const freezeTx = await program.methods
       .freezeAccount()
       .accounts({
         complianceAuthority: authority.publicKey,
@@ -323,9 +323,15 @@ describe("sss-token", () => {
         targetTokenAccount: ata,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
-      .rpc();
+      .transaction();
+    const { blockhash, lastValidBlockHeight } =
+      await provider.connection.getLatestBlockhash("confirmed");
+    freezeTx.recentBlockhash = blockhash;
+    freezeTx.lastValidBlockHeight = lastValidBlockHeight;
+    freezeTx.feePayer = authority.publicKey;
+    await provider.sendAndConfirm(freezeTx, [], { commitment: "confirmed", skipPreflight: true });
 
-    // Post-condition: verify the token account is now frozen
+    // Post-condition: token account should be frozen
     const tokenAccount = await getAccount(
       program.provider.connection,
       ata,
@@ -343,7 +349,7 @@ describe("sss-token", () => {
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    await program.methods
+    const thawTx = await program.methods
       .thawAccount()
       .accounts({
         complianceAuthority: authority.publicKey,
@@ -352,9 +358,15 @@ describe("sss-token", () => {
         targetTokenAccount: ata,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
-      .rpc();
+      .transaction();
+    const { blockhash: thawBh, lastValidBlockHeight: thawLvbh } =
+      await provider.connection.getLatestBlockhash("confirmed");
+    thawTx.recentBlockhash = thawBh;
+    thawTx.lastValidBlockHeight = thawLvbh;
+    thawTx.feePayer = authority.publicKey;
+    await provider.sendAndConfirm(thawTx, [], { commitment: "confirmed" });
 
-    // Post-condition: verify the token account is no longer frozen
+    // Post-condition: token account should no longer be frozen
     const tokenAccount = await getAccount(
       program.provider.connection,
       ata,

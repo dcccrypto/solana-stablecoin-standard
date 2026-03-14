@@ -49,23 +49,23 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
         );
     }
 
-    // Mint via Token-2022
-    let config_key = ctx.accounts.config.key();
+    // Mint via Token-2022 — authority is the config PDA, sign with seeds
     let mint_key = ctx.accounts.mint.key();
     let seeds = &[
         StablecoinConfig::SEED,
         mint_key.as_ref(),
         &[ctx.accounts.config.bump],
     ];
-    // Authority is the minter themselves (not a PDA) — config holds metadata
+    let signer_seeds = &[&seeds[..]];
     mint_to(
-        CpiContext::new(
+        CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             MintTo {
                 mint: ctx.accounts.mint.to_account_info(),
                 to: ctx.accounts.recipient_token_account.to_account_info(),
-                authority: ctx.accounts.minter.to_account_info(),
+                authority: ctx.accounts.config.to_account_info(),
             },
+            signer_seeds,
         ),
         amount,
     )?;

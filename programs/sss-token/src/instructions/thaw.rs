@@ -28,14 +28,18 @@ pub struct ThawAccount<'info> {
 }
 
 pub fn handler(ctx: Context<ThawAccount>) -> Result<()> {
+    let mint_key = ctx.accounts.mint.key();
+    let seeds = &[StablecoinConfig::SEED, mint_key.as_ref(), &[ctx.accounts.config.bump]];
+    let signer_seeds = &[&seeds[..]];
     thaw_account(
-        CpiContext::new(
+        CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             ThawAccountCpi {
                 account: ctx.accounts.target_token_account.to_account_info(),
                 mint: ctx.accounts.mint.to_account_info(),
-                authority: ctx.accounts.compliance_authority.to_account_info(),
+                authority: ctx.accounts.config.to_account_info(),
             },
+            signer_seeds,
         ),
     )?;
     msg!("Thawed account {}", ctx.accounts.target_token_account.key());

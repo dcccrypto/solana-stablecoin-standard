@@ -20,5 +20,6 @@ codegen-units = 1
 anchor-lang = "=0.32.0"
 anchor-spl = { version = "=0.32.0", features = ["token_2022", "token_2022_extensions"] }
 spl-token-2022 = { version = "8", features = ["no-entrypoint"] }
-spl-tlv-account-resolution = "0.7"
-spl-transfer-hook-interface = "0.7"
+spl-tlv-account-resolution = "0.10"
+spl-transfer-hook-interface = "0.10"
+blake3 = "=1.7.0"
