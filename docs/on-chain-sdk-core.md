@@ -67,12 +67,14 @@ Creates and initialises a new stablecoin mint on-chain. This is the primary entr
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `preset` | `'SSS-1' \| 'SSS-2'` | ✓ | Token standard preset |
+| `preset` | `'SSS-1' \| 'SSS-2' \| 'SSS-3'` | ✓ | Token standard preset |
 | `name` | `string` | ✓ | Token name (e.g. `"USD Stable"`) |
 | `symbol` | `string` | ✓ | Token symbol (e.g. `"USDS"`) |
 | `decimals` | `number` | | Token decimals (default: `6`) |
 | `uri` | `string` | | Metadata URI |
 | `transferHookProgram` | `PublicKey` | SSS-2 only | Transfer hook program ID for compliance enforcement |
+| `collateralMint` | `PublicKey \| null` | SSS-3 only | Mint of the collateral token (e.g. USDC mint address) |
+| `reserveVault` | `PublicKey \| null` | SSS-3 only | Reserve vault token account address (PDA-owned) |
 
 **Returns:** `Promise<SolanaStablecoin>`
 
