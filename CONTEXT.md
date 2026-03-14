@@ -1,10 +1,10 @@
 # Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 05:45 UTC
+**Updated:** 2026-03-14 06:08 UTC
 
 ## Status
 - Phase: MONITORING / WAITING FOR REVIEWS
-- All PRs open, no reviews yet as of 05:45 UTC
-- Competition active: 80+ PRs from other teams
+- All PRs open, no reviews yet as of 06:08 UTC
+- Competition active: 79 PRs from other teams open (upstream repo, per API)
 - All tests green, backend builds clean
 
 ## Architecture
@@ -52,7 +52,7 @@
 - Commands: health, mint, burn, supply, events, blacklist list/add/remove, audit, webhook list/add/delete, key list/create/delete
 - JSON output, SSSError → stderr + exit 1
 
-## Open PRs
+## Open PRs (as of 06:08 UTC)
 - PR #77: feat(proofs): Kani formal verification — 7 mathematical proofs
 - PR #83: docs(sss3-events): SSS-3 reserve-backed preset reference + Anchor events guide
 - PR #84: feat(program): two-step authority transfer + Anchor events + max_supply
@@ -64,16 +64,14 @@
 - PR #90: feat: Solana Stablecoin Standard (SSS) — SSS-1 Minimal + SSS-2 Compliant (competition entry)
 - PR #91: fix(smoke-test): SSS-023 — devnet smoke test fully passing
 
-## Recent Fixes (prior session)
-- Fixed Anchor programId override in SolanaStablecoin.ts (both create() and _getProgram())
-- Updated smoke-test-devnet.ts to use local ~/.config/solana/id.json (avoids airdrop rate limits)
-- SSS-023: full devnet smoke test passing — register minter + explicit ATA creation + funded keypair (PR #91)
-- Fixed stale devnet-latest.json program IDs (pointed to non-existent account)
-- Devnet smoke test PASSED: Mint 5o7yFNTxDK1kAffPqBi3jDwNBXTgssYQEtGm3zfDv9si, 1000 SUSD minted + supply verified
+## Competition Landscape
+- Total open PRs in upstream: 79 (as of 06:08 UTC, via API)
+- No reviews on any of our PRs yet
+- Other teams have submitted full-stack entries with frontend/TUI/oracle extras
 
 ## Next
 - Monitor PRs for review comments — respond and iterate quickly
-- Competition is active with 80+ other teams' PRs open
 - After PRs merge: tag release, update npm package version
 - Ensure SUBMISSION.md reflects 102/102 SDK + 19/19 Anchor + 31/31 backend (PR #88 has this update)
 - No new backlog items; all planned work is in open PRs
+- IDL not yet generated locally (programs/sss-token/target/idl/ missing) — will generate if Anchor build runs
