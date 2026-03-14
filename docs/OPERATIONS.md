@@ -184,6 +184,41 @@ npx sss-token blacklist check <wallet>
 
 Read-only — reports whether the wallet is currently blocked.
 
+### Close a Blacklist Entry (Reclaim Rent)
+
+```bash
+npx sss-token blacklist close <wallet>
+```
+
+Closes an unblocked (`blocked = false`) BlacklistEntry PDA and reclaims rent to the admin. Fails if the entry is still blocked.
+
+### Transfer Blacklist Admin (Two-Step)
+
+```bash
+# Step 1: Current admin nominates the new admin
+npx sss-token blacklist transfer-admin <new-admin-pubkey>
+
+# Step 2: New admin accepts the role
+npx sss-token blacklist accept-admin <keypair-path>
+```
+
+The current admin remains active until the new admin accepts.
+
+### Seize Tokens (SDK Only)
+
+Seize tokens from a frozen account using the burn+mint pattern (requires permanent delegate):
+
+```typescript
+await stable.seize({
+  targetTokenAccount: frozenAta,
+  treasury: treasuryWallet,
+  amount: 1_000_000n,
+  authority: adminKeypair,
+});
+```
+
+This thaws the account, burns the specified amount (via permanent delegate), mints the same amount to the treasury, and re-freezes the account.
+
 ---
 
 ## Audit & Monitoring

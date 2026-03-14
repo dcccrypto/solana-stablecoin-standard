@@ -167,6 +167,23 @@ await stable.transfer({
 });
 ```
 
+### Seize Tokens (Permanent Delegate)
+
+Seize tokens from a frozen account using the burn+mint pattern. The authority must be both the permanent delegate and the freeze authority:
+
+```typescript
+const ata = getAssociatedTokenAddressSync(stable.mint, targetWallet, false, stable.tokenProgramId);
+
+await stable.seize({
+  targetTokenAccount: ata,
+  treasury: treasuryPubkey,
+  amount: 1_000_000n,
+  authority: adminKeypair,  // must be permanent delegate + freeze authority
+});
+```
+
+This executes atomically in a single transaction: thaw → burn → mint to treasury → re-freeze.
+
 ### Build Unsigned Transactions (Wallet Adapter / Phantom)
 
 For browser environments where the wallet signs:

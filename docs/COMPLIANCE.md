@@ -71,6 +71,9 @@ Every compliance action is a Solana transaction with a permanent, immutable sign
 |--------|---------------------|
 | `blacklist add <wallet>` | Calls `add_to_blacklist` on the hook program. Creates or updates a BlacklistEntry PDA. |
 | `blacklist remove <wallet>` | Calls `remove_from_blacklist` on the hook program. Updates the BlacklistEntry PDA. |
+| `blacklist close <wallet>` | Calls `close_blacklist_entry`. Reclaims rent for an unblocked entry. |
+| `blacklist transfer-admin` | Calls `transfer_admin`. Nominates a new blacklist admin. |
+| `blacklist accept-admin` | Calls `accept_admin`. Finalizes the two-step admin transfer. |
 | `freeze <account>` | Calls `FreezeAccount` on Token-2022. |
 | `thaw <account>` | Calls `ThawAccount` on Token-2022. |
 | `set-authority <type> <new>` | Calls `SetAuthority` on Token-2022. |
@@ -139,8 +142,8 @@ const [pda] = PublicKey.findProgramAddressSync(
   hookProgramId,
 );
 const info = await connection.getAccountInfo(pda);
-// Anchor layout: 8-byte discriminator + 32-byte wallet + 1-byte blocked + 1-byte bump
-const blocked = info && info.data.length >= 41 ? info.data[40] !== 0 : false;
+// Anchor layout: 8-byte discriminator + 32-byte wallet + 32-byte mint + 1-byte blocked + 1-byte bump
+const blocked = info && info.data.length >= 73 ? info.data[72] !== 0 : false;
 ```
 
 **CLI:**
