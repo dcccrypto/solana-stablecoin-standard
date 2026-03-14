@@ -16,8 +16,14 @@ pub enum SssError {
     WrongPreset,
     #[msg("Transfer hook program required for SSS-2")]
     MissingTransferHook,
-    #[msg("Invalid preset: must be 1 (SSS-1) or 2 (SSS-2)")]
+    #[msg("Invalid preset: must be 1 (SSS-1), 2 (SSS-2), or 3 (SSS-3)")]
     InvalidPreset,
     #[msg("Amount must be greater than zero")]
     ZeroAmount,
+    #[msg("Insufficient collateral in reserve vault to mint")]
+    InsufficientReserves,
+    #[msg("Invalid collateral mint for this stablecoin")]
+    InvalidCollateralMint,
+    #[msg("Invalid reserve vault account")]
+    InvalidVault,
 }
