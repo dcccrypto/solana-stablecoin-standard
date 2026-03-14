@@ -38,10 +38,10 @@ import {
 
 /** Deployed program IDs (devnet + localnet) — matches Anchor.toml */
 export const SSS_TOKEN_PROGRAM_ID = new PublicKey(
-  '4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN'
+  'AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat'
 );
 export const SSS_TRANSFER_HOOK_PROGRAM_ID = new PublicKey(
-  '8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj'
+  'phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp'
 );
 
 const CONFIG_SEED = Buffer.from('stablecoin-config');

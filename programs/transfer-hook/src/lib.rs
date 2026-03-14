@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj");
+declare_id!("phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp");
 
 /// SSS-2 Transfer Hook — enforces blacklist on every token transfer.
 ///

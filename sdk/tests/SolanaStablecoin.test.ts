@@ -23,13 +23,13 @@ import type {
 describe('program ID constants', () => {
   it('SSS_TOKEN_PROGRAM_ID is a valid PublicKey', () => {
     expect(SSS_TOKEN_PROGRAM_ID).toBeInstanceOf(PublicKey);
-    expect(SSS_TOKEN_PROGRAM_ID.toBase58()).toBe('4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofN');
+    expect(SSS_TOKEN_PROGRAM_ID.toBase58()).toBe('AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat');
   });
 
   it('SSS_TRANSFER_HOOK_PROGRAM_ID is a valid PublicKey', () => {
     expect(SSS_TRANSFER_HOOK_PROGRAM_ID).toBeInstanceOf(PublicKey);
     expect(SSS_TRANSFER_HOOK_PROGRAM_ID.toBase58()).toBe(
-      '8opHzTAnfzRpPEx21XtnrVTX28YQuCpAjcn1PczScKj'
+      'phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp'
     );
   });
 });
