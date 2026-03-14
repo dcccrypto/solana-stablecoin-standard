@@ -132,6 +132,7 @@ Endpoints:
 | [Devnet Deployment](docs/devnet-deploy.md) | Deploying and smoke-testing on Solana devnet |
 | [Integration Testing](docs/integration-testing.md) | Running the full integration test suite and CI setup |
 | [Anchor Program Tests](docs/anchor-program-testing.md) | Running the Anchor on-chain test suite locally and in CI (SSS-015) |
+| [On-Chain SDK: Admin & Governance](docs/on-chain-sdk-admin.md) | pause/unpause, minter management, and authority transfer via the `SolanaStablecoin` class |
 
 ## Judging Criteria
 
