@@ -27,6 +27,7 @@ use routes::{
     health::health,
     mint::mint,
     burn::burn,
+    openapi::{openapi_json, swagger_ui},
     supply::supply,
     webhooks::{delete_webhook, list_webhooks, register_webhook},
 };
@@ -80,9 +81,8 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    // Build router
-    let app = Router::new()
-        .route("/api/health", get(health))
+    // Build router — public routes (no auth), then authenticated routes
+    let authenticated = Router::new()
         .route("/api/mint", post(mint))
         .route("/api/burn", post(burn))
         .route("/api/supply", get(supply))
@@ -94,7 +94,13 @@ async fn main() {
         .route("/api/webhooks/:id", delete(delete_webhook))
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
-        .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+        .layer(middleware::from_fn_with_state(state.clone(), require_api_key));
+
+    let app = Router::new()
+        .route("/api/health", get(health))
+        .route("/api/openapi.json", get(openapi_json))
+        .route("/api/docs", get(swagger_ui))
+        .merge(authenticated)
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state);
@@ -127,6 +133,7 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::rate_limit::RateLimiter;
+    use crate::routes::openapi::{openapi_json, swagger_ui};
 
     fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
@@ -141,8 +148,7 @@ mod tests {
             .allow_methods(Any)
             .allow_headers(Any);
 
-        let app = Router::new()
-            .route("/api/health", get(health))
+        let authenticated = Router::new()
             .route("/api/mint", post(mint))
             .route("/api/burn", post(burn))
             .route("/api/supply", get(supply))
@@ -154,7 +160,13 @@ mod tests {
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
             .route("/api/admin/keys/:id", delete(delete_api_key))
-            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key));
+
+        let app = Router::new()
+            .route("/api/health", get(health))
+            .route("/api/openapi.json", get(openapi_json))
+            .route("/api/docs", get(swagger_ui))
+            .merge(authenticated)
             .layer(cors)
             .with_state(state);
 
@@ -175,10 +187,13 @@ mod tests {
             .allow_methods(Any)
             .allow_headers(Any);
 
+        let authenticated = Router::new()
+            .route("/api/supply", get(supply))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key));
+
         let app = Router::new()
             .route("/api/health", get(health))
-            .route("/api/supply", get(supply))
-            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .merge(authenticated)
             .layer(cors)
             .with_state(state);
 
@@ -490,6 +505,49 @@ mod tests {
             .expect("Retry-After should be a non-negative integer");
         assert!(val >= 1, "Retry-After should be at least 1 second");
     }
+
+    // ── OpenAPI / docs endpoints are public ─────────────────────────────────
+
+    #[tokio::test]
+    async fn test_openapi_json_public() {
+        let (app, _key) = build_app();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/openapi.json")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "/api/openapi.json must be public");
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["openapi"], "3.1.0", "spec must be OpenAPI 3.1");
+        assert!(json["paths"]["/api/mint"].is_object(), "paths must include /api/mint");
+        assert!(json["paths"]["/api/compliance/blacklist"].is_object(), "paths must include blacklist");
+    }
+
+    #[tokio::test]
+    async fn test_swagger_ui_public() {
+        let (app, _key) = build_app();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/docs")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "/api/docs must be public");
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let html = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(html.contains("swagger-ui"), "docs must return Swagger UI HTML");
+        assert!(html.contains("/api/openapi.json"), "docs must reference openapi.json");
+    }
 }
 
 // ─── QA Integration Tests ─────────────────────────────────────────────────────
@@ -506,14 +564,14 @@ mod qa_tests {
     use tokio::sync::Mutex;
     use tower::ServiceExt;
     use serde_json::Value;
+    use crate::routes::openapi::{openapi_json, swagger_ui};
 
     fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
         let key_entry = db.create_api_key("qa-test").expect("create key");
         let test_key = key_entry.key.clone();
         let state = AppState::new(db);
-        let app = Router::new()
-            .route("/api/health", get(health))
+        let authenticated = Router::new()
             .route("/api/mint", post(mint))
             .route("/api/burn", post(burn))
             .route("/api/supply", get(supply))
@@ -524,7 +582,12 @@ mod qa_tests {
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
             .route("/api/admin/keys/:id", delete(delete_api_key))
-            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key));
+        let app = Router::new()
+            .route("/api/health", get(health))
+            .route("/api/openapi.json", get(openapi_json))
+            .route("/api/docs", get(swagger_ui))
+            .merge(authenticated)
             .with_state(state);
         (app, test_key)
     }
