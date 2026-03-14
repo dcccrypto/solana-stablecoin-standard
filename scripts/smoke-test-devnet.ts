@@ -5,8 +5,10 @@
  * Exercises the full SSS-1 lifecycle on devnet:
  *   1. Load the local Solana CLI keypair (avoids airdrop rate limits)
  *   2. Initialize an SSS-1 stablecoin
- *   3. Mint 1,000 tokens to a recipient wallet
- *   4. Assert circulating supply matches
+ *   3. Register payer as minter
+ *   4. Create recipient Token-2022 ATA
+ *   5. Mint 1,000 tokens to recipient
+ *   6. Assert circulating supply matches
  *
  * Usage:
  *   npx ts-node scripts/smoke-test-devnet.ts
@@ -22,7 +24,15 @@ import {
   Connection,
   Keypair,
   PublicKey,
+  sendAndConfirmTransaction,
+  Transaction,
 } from '@solana/web3.js';
+import {
+  createAssociatedTokenAccountInstruction,
+  getAssociatedTokenAddressSync,
+  TOKEN_2022_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+} from '@solana/spl-token';
 import { AnchorProvider, Wallet } from '@coral-xyz/anchor';
 import { SolanaStablecoin, SSS_TOKEN_PROGRAM_ID, sss1Config } from '../sdk/src';
 
@@ -31,6 +41,7 @@ const DEPLOY_MANIFEST = path.join(__dirname, '..', 'deploy', 'devnet-latest.json
 const SOLANA_CLI_KEYPAIR = path.join(os.homedir(), '.config', 'solana', 'id.json');
 const MINT_AMOUNT = 1_000n;
 const DECIMALS = 6;
+const MINTER_CAP = 1_000_000_000n * 10n ** BigInt(DECIMALS); // 1B cap
 
 function explorerLink(sig: string): string {
   return `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
@@ -108,6 +119,47 @@ async function main(): Promise<void> {
   );
   console.log(`    ✅  Mint: ${stablecoin.mint.toBase58()}`);
   console.log(`    ✅  Config PDA: ${stablecoin.configPda.toBase58()}`);
+
+  await sleep(3000); // let devnet settle
+
+  // ── Register payer as minter ─────────────────────────────────────────────
+
+  console.log('');
+  console.log('📝  Registering payer as minter...');
+  const updateMinterSig = await stablecoin.updateMinter({
+    minter: payer.publicKey,
+    cap: MINTER_CAP,
+  });
+  console.log(`    ✅  ${explorerLink(updateMinterSig)}`);
+
+  await sleep(2000);
+
+  // ── Create recipient Token-2022 ATA ──────────────────────────────────────
+
+  console.log('');
+  console.log('🏦  Creating recipient Token-2022 ATA...');
+  const recipientAta = getAssociatedTokenAddressSync(
+    stablecoin.mint,
+    recipient.publicKey,
+    false,
+    TOKEN_2022_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+  const createAtaTx = new Transaction().add(
+    createAssociatedTokenAccountInstruction(
+      payer.publicKey,
+      recipientAta,
+      recipient.publicKey,
+      stablecoin.mint,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    )
+  );
+  const ataSig = await sendAndConfirmTransaction(connection, createAtaTx, [payer], {
+    commitment: 'confirmed',
+  });
+  console.log(`    ✅  ATA: ${recipientAta.toBase58()}`);
+  console.log(`    ✅  ${explorerLink(ataSig)}`);
 
   await sleep(2000);
 
