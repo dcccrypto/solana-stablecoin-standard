@@ -105,7 +105,7 @@ npx vitest run
 Expected output:
 ```
 Test Files  6 passed (6)
-Tests       81 passed (81)
+Tests       102 passed (102)
 ```
 
 ### 4. Run the backend
