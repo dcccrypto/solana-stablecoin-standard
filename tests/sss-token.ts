@@ -109,6 +109,183 @@ describe("sss-token", () => {
     }
   });
 
+  // ---------- SSS-020: max_supply enforcement ----------
+
+  it("initializes an SSS-1 stablecoin with max_supply", async () => {
+    const cappedMint = Keypair.generate();
+    const [cappedConfig] = PublicKey.findProgramAddressSync(
+      [Buffer.from("stablecoin-config"), cappedMint.publicKey.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .initialize({
+        preset: 1,
+        decimals: 6,
+        name: "Capped USD",
+        symbol: "CUSD",
+        uri: "https://example.com/cusd.json",
+        transferHookProgram: null,
+        collateralMint: null,
+        reserveVault: null,
+        maxSupply: new anchor.BN(1_000_000),
+      })
+      .accounts({
+        payer: authority.publicKey,
+        mint: cappedMint.publicKey,
+        config: cappedConfig,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([cappedMint])
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(cappedConfig);
+    expect(config.maxSupply.toNumber()).to.equal(1_000_000);
+  });
+
+  it("rejects mint exceeding max_supply", async () => {
+    // Set up a fresh mint with tiny max_supply and attempt to exceed it
+    const capMint = Keypair.generate();
+    const [capConfig] = PublicKey.findProgramAddressSync(
+      [Buffer.from("stablecoin-config"), capMint.publicKey.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .initialize({
+        preset: 1,
+        decimals: 6,
+        name: "Hard Cap",
+        symbol: "HCAP",
+        uri: "",
+        transferHookProgram: null,
+        collateralMint: null,
+        reserveVault: null,
+        maxSupply: new anchor.BN(500),
+      })
+      .accounts({
+        payer: authority.publicKey,
+        mint: capMint.publicKey,
+        config: capConfig,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([capMint])
+      .rpc();
+
+    // Register a minter
+    const capMinter = Keypair.generate();
+    const [capMinterInfo] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("minter-info"),
+        capConfig.toBuffer(),
+        capMinter.publicKey.toBuffer(),
+      ],
+      program.programId
+    );
+    await program.methods
+      .updateMinter(new anchor.BN(10_000))
+      .accounts({
+        authority: authority.publicKey,
+        config: capConfig,
+        mint: capMint.publicKey,
+        minter: capMinter.publicKey,
+        minterInfo: capMinterInfo,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Fund minter
+    const airdropSig = await provider.connection.requestAirdrop(
+      capMinter.publicKey,
+      2 * LAMPORTS_PER_SOL
+    );
+    await provider.connection.confirmTransaction(airdropSig);
+
+    // Create ATA for minter
+    const capAta = getAssociatedTokenAddressSync(
+      capMint.publicKey,
+      capMinter.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    const createAtaIx = createAssociatedTokenAccountInstruction(
+      authority.publicKey,
+      capAta,
+      capMinter.publicKey,
+      capMint.publicKey,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction().add(createAtaIx)
+    );
+
+    // Try to mint 501 (exceeds max_supply of 500)
+    try {
+      await program.methods
+        .mint(new anchor.BN(501))
+        .accounts({
+          minter: capMinter.publicKey,
+          config: capConfig,
+          mint: capMint.publicKey,
+          minterInfo: capMinterInfo,
+          recipientTokenAccount: capAta,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([capMinter])
+        .rpc();
+      expect.fail("should have thrown MaxSupplyExceeded");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.contain(
+        "MaxSupplyExceeded"
+      );
+    }
+
+    // Minting exactly at cap should succeed
+    await program.methods
+      .mint(new anchor.BN(500))
+      .accounts({
+        minter: capMinter.publicKey,
+        config: capConfig,
+        mint: capMint.publicKey,
+        minterInfo: capMinterInfo,
+        recipientTokenAccount: capAta,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .signers([capMinter])
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(capConfig);
+    expect(config.totalMinted.toNumber()).to.equal(500);
+
+    // One more token must fail now that supply is at max
+    try {
+      await program.methods
+        .mint(new anchor.BN(1))
+        .accounts({
+          minter: capMinter.publicKey,
+          config: capConfig,
+          mint: capMint.publicKey,
+          minterInfo: capMinterInfo,
+          recipientTokenAccount: capAta,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([capMinter])
+        .rpc();
+      expect.fail("should have thrown MaxSupplyExceeded");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.contain(
+        "MaxSupplyExceeded"
+      );
+    }
+  });
+
   // ---------- Update Minter ----------
 
   const minterKeypair = Keypair.generate();
@@ -142,6 +319,49 @@ describe("sss-token", () => {
     expect(info.minter.toBase58()).to.equal(
       minterKeypair.publicKey.toBase58()
     );
+  });
+
+  // ---------- SSS-020: unauthorized minter update rejection ----------
+
+  it("rejects update_minter from non-authority", async () => {
+    const attacker = Keypair.generate();
+    const sig = await provider.connection.requestAirdrop(
+      attacker.publicKey,
+      1 * LAMPORTS_PER_SOL
+    );
+    await provider.connection.confirmTransaction(sig);
+
+    const fakeMinter = Keypair.generate();
+    const [fakeMinterInfo] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("minter-info"),
+        configPda.toBuffer(),
+        fakeMinter.publicKey.toBuffer(),
+      ],
+      program.programId
+    );
+
+    try {
+      await program.methods
+        .updateMinter(new anchor.BN(999_999))
+        .accounts({
+          authority: attacker.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          minter: fakeMinter.publicKey,
+          minterInfo: fakeMinterInfo,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([attacker])
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (err: any) {
+      // Anchor constraint violation or Unauthorized
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /Unauthorized|ConstraintHasOne|constraint/i
+      );
+    }
   });
 
   // ---------- Mint ----------
@@ -474,6 +694,192 @@ describe("sss-token", () => {
     );
   });
 
+  // ---------- SSS-020: two-step compliance authority transfer ----------
+
+  it("transfers compliance authority (two-step: propose then accept)", async () => {
+    const newCompliance = Keypair.generate();
+
+    // Step 1: Propose compliance authority transfer
+    await program.methods
+      .updateRoles({
+        newAuthority: null,
+        newComplianceAuthority: newCompliance.publicKey,
+      })
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const configAfterProposal = await program.account.stablecoinConfig.fetch(configPda);
+    expect(configAfterProposal.pendingComplianceAuthority.toBase58()).to.equal(
+      newCompliance.publicKey.toBase58()
+    );
+    // Current compliance authority should still be the old one
+    expect(configAfterProposal.complianceAuthority.toBase58()).to.equal(
+      authority.publicKey.toBase58()
+    );
+
+    // Fund new compliance authority
+    const airdropSig = await provider.connection.requestAirdrop(
+      newCompliance.publicKey,
+      1_000_000_000
+    );
+    await provider.connection.confirmTransaction(airdropSig, "confirmed");
+
+    // Step 2: New compliance authority accepts
+    await program.methods
+      .acceptComplianceAuthority()
+      .accounts({
+        pending: newCompliance.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .signers([newCompliance])
+      .rpc();
+
+    const configAfterAccept = await program.account.stablecoinConfig.fetch(configPda);
+    expect(configAfterAccept.complianceAuthority.toBase58()).to.equal(
+      newCompliance.publicKey.toBase58()
+    );
+    expect(configAfterAccept.pendingComplianceAuthority.toBase58()).to.equal(
+      anchor.web3.PublicKey.default.toBase58()
+    );
+
+    // Transfer compliance authority back using newCompliance as current authority proposer
+    // (authority proposes; newCompliance must accept once back)
+    // First, newCompliance proposes transfer back to authority.publicKey using updateRoles...
+    // but updateRoles requires the main authority signer — so authority proposes this
+    await program.methods
+      .updateRoles({
+        newAuthority: null,
+        newComplianceAuthority: authority.publicKey,
+      })
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    await program.methods
+      .acceptComplianceAuthority()
+      .accounts({
+        pending: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const configRestored = await program.account.stablecoinConfig.fetch(configPda);
+    expect(configRestored.complianceAuthority.toBase58()).to.equal(
+      authority.publicKey.toBase58()
+    );
+  });
+
+  // ---------- SSS-020: reject wrong pending authority accepting ----------
+
+  it("rejects accept_authority from wrong signer", async () => {
+    const legitimate = Keypair.generate();
+    const impostor = Keypair.generate();
+
+    // Propose transfer to legitimate
+    await program.methods
+      .updateRoles({
+        newAuthority: legitimate.publicKey,
+        newComplianceAuthority: null,
+      })
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const impostorSig = await provider.connection.requestAirdrop(
+      impostor.publicKey,
+      1_000_000_000
+    );
+    await provider.connection.confirmTransaction(impostorSig, "confirmed");
+
+    // Impostor tries to accept — should fail
+    try {
+      await program.methods
+        .acceptAuthority()
+        .accounts({
+          pending: impostor.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([impostor])
+        .rpc();
+      expect.fail("impostor should not be able to accept authority");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /Unauthorized|ConstraintRaw|constraint/i
+      );
+    }
+
+    // Clean up: legitimate accepts, then restores authority back
+    const legitSig = await provider.connection.requestAirdrop(
+      legitimate.publicKey,
+      1_000_000_000
+    );
+    await provider.connection.confirmTransaction(legitSig, "confirmed");
+
+    await program.methods
+      .acceptAuthority()
+      .accounts({
+        pending: legitimate.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .signers([legitimate])
+      .rpc();
+
+    // Restore to original authority
+    await program.methods
+      .updateRoles({
+        newAuthority: authority.publicKey,
+        newComplianceAuthority: null,
+      })
+      .accounts({
+        authority: legitimate.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .signers([legitimate])
+      .rpc();
+
+    const restoreAirdrop = await provider.connection.requestAirdrop(
+      authority.publicKey,
+      500_000_000
+    );
+    await provider.connection.confirmTransaction(restoreAirdrop, "confirmed");
+
+    await program.methods
+      .acceptAuthority()
+      .accounts({
+        pending: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const final = await program.account.stablecoinConfig.fetch(configPda);
+    expect(final.authority.toBase58()).to.equal(authority.publicKey.toBase58());
+  });
+
   // ---------- Revoke Minter ----------
 
   it("revokes a minter", async () => {
@@ -492,5 +898,37 @@ describe("sss-token", () => {
     // minterInfo account should be closed
     const info = await provider.connection.getAccountInfo(minterInfoPda);
     expect(info).to.be.null;
+  });
+
+  // ---------- SSS-020: burn after revoke should fail (no minterInfo) ----------
+
+  it("rejects burn after minter is revoked", async () => {
+    const ata = getAssociatedTokenAddressSync(
+      mintKeypair.publicKey,
+      minterKeypair.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    try {
+      await program.methods
+        .burn(new anchor.BN(1))
+        .accounts({
+          minter: minterKeypair.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          minterInfo: minterInfoPda,
+          sourceTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([minterKeypair])
+        .rpc();
+      expect.fail("should have thrown — minterInfo is closed");
+    } catch (err: any) {
+      // Account closed or constraint violation
+      expect(err.message || err.toString()).to.match(
+        /AccountNotInitialized|account.*not.*initialized|Error|failed/i
+      );
+    }
   });
 });
