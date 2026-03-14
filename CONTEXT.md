@@ -80,3 +80,29 @@ All three CI jobs consistently green on main:
 ## External PR Wave
 
 PRs #51–#81 are external competition/grant submissions from other developers. These are not ours to merge.
+
+## Heartbeat 2026-03-14 03:25 UTC — Merge Wave
+
+### PRs Merged This Cycle
+
+- **PR #39** (SSS-017): `feat(compliance): wire ComplianceModule to transfer-hook IDL` → merged ✅
+  - All 5 CI checks passed (Anchor Programs, Backend, TypeScript SDK, SDK Integration, CodeRabbit)
+- **PR #42** (SSS-018): `feat(sdk): ComplianceModule.getBlacklist()` → merged ✅
+  - Rebased onto main after PR #39 merged; squash-merged clean
+- **PR #43** (CI fix): `fix(tests): add collateralMint/reserveVault null fields for SSS-3 compat` → merged ✅
+  - Fixes `InstructionDidNotDeserialize` on all 13 Anchor tests caused by new SSS-3 `InitializeParams` fields
+- **PR #41** (SSS-3 + docs + Kani proofs): `feat(sss-3): reserve-backed preset + formal verification docs` → merged ✅
+  - Includes SSS-3 program (deposit_collateral, redeem), Kani proof harnesses, architecture docs
+- **PR #40** (docs): closed as superseded by PR #41 (same branch content already in main)
+
+### No Open PRs Remaining
+
+All open PRs cleared. Main branch is fully up to date.
+
+### SSS-3 Status
+
+- SSS-3 (reserve-backed preset) program code now on main
+- `deposit_collateral` and `redeem` instructions live
+- Kani formal verification: 7/7 invariants proven
+- Tests: 13/13 Anchor tests pass (with test params fix)
+- **TODO**: Deploy updated programs to devnet with SSS-3 support
