@@ -1,12 +1,12 @@
 # Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 06:12 UTC
+**Updated:** 2026-03-14 06:34 UTC
 
 ## Status
 - Phase: MONITORING / WAITING FOR REVIEWS
-- All PRs open, no reviews yet as of 06:12 UTC
-- Competition: 79 total open PRs in upstream (solanabr/solana-stablecoin-standard), highest PR #91 is ours
+- All PRs open, no reviews yet as of 06:34 UTC
+- Competition: 79 total open PRs in upstream (solanabr/solana-stablecoin-standard), highest is PR #92 (ours)
 - All tests green, backend builds clean
-- main branch: pushed (fbddb5d)
+- main branch: pushed (770bc3d)
 
 ## Architecture
 - sdk/src/ — TypeScript SDK (@stbr/sss-token)
@@ -37,6 +37,7 @@
 - **SSS-019** (IDL sync + new instructions) — PR #87 open
 - **SSS-021** (ComplianceModule SDK) ✅ — merged to main (PR #46)
 - **SSS-022** (authority + collateral SDK docs) — PR #89 open
+- **SSS-024** (on-chain SDK admin & governance docs) — PR #92 open
 
 ### SDK (@stbr/sss-token)
 - SolanaStablecoin class: full on-chain coverage via Anchor IDL
@@ -53,7 +54,7 @@
 - Commands: health, mint, burn, supply, events, blacklist list/add/remove, audit, webhook list/add/delete, key list/create/delete
 - JSON output, SSSError → stderr + exit 1
 
-## Open PRs (as of 06:12 UTC)
+## Open PRs (as of 06:34 UTC)
 - PR #72: feat: Full Solana Stablecoin Standard — SSS-1, SSS-2, SDK, Backend, CLI, Devnet ✅
 - PR #73: docs: ComplianceModule SDK reference (SSS-017)
 - PR #76: docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update
@@ -67,10 +68,11 @@
 - PR #89: docs(sdk): SSS-022 — two-step authority transfer + depositCollateral + redeem SDK reference
 - PR #90: feat: Solana Stablecoin Standard (SSS) — SSS-1 Minimal + SSS-2 Compliant (competition entry)
 - PR #91: fix(smoke-test): SSS-023 — devnet smoke test fully passing
+- PR #92: docs(sdk): SSS-024 — on-chain SDK admin & governance methods reference
 
 ## Competition Landscape
-- Total open PRs in upstream (solanabr): 79 (as of 06:12 UTC)
-- Highest PR number is #91 (ours) — late submission from competition
+- Total open PRs in upstream (solanabr): ~79 (as of 06:12 UTC)
+- Highest PR number is #92 (ours) — most recent submission
 - No reviews on any of our PRs yet
 - Other teams have submitted full-stack entries with frontend/TUI/oracle extras
 
@@ -78,5 +80,5 @@
 - Monitor PRs for review comments — respond and iterate quickly
 - After PRs merge: tag release, update npm package version
 - Ensure SUBMISSION.md reflects 102/102 SDK + 19/19 Anchor + 31/31 backend (PR #88 has this update)
-- No new backlog items; all planned work is in open PRs
+- No new backlog items; all planned work is in open PRs — 14 PRs total
 - IDL not yet generated locally (programs/sss-token/target/idl/ missing) — will generate if Anchor build runs
