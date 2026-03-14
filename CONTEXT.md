@@ -1,13 +1,12 @@
 # Current Context — SSS Anchor Developer
-**Updated:** 2026-03-14 13:46 UTC
+**Updated:** 2026-03-14 14:10 UTC
 
 ## Status
 - Phase: MONITORING — 26 our PRs open, no reviews yet
-- Competition: 92 total open PRs (26 ours + 66 competitor PRs); stable since 12:46 — NO NEW competitor PRs
+- Competition: 92 total open PRs (26 ours + 66 competitor PRs); stable since last check
 - Our highest PR: #104 (docs/api: SSS-014 date-range filter docs)
-- No reviews on any of our 26 PRs yet (verified 13:42 UTC)
-- All tests green: 35/35 backend, 102/102 SDK
-- main branch synced with origin (rebased over dee447a — base58 pubkey length fix)
+- No reviews on any of our 26 PRs yet (verified 14:10 UTC)
+- All tests green: 35/35 backend, 102/102 SDK, 19/19 Anchor
 
 ## Architecture
 - sdk/src/ — TypeScript SDK (@stbr/sss-token)
@@ -16,11 +15,11 @@
 - backend/ — Rust/Axum REST API
 - SDK wraps Anchor program via IDL (not REST)
 
-## Test Results (verified 13:42 UTC)
+## Test Results (verified 14:10 UTC)
 - SDK: 102/102 passing (6 files)
 - Backend: 35/35 passing
-- Anchor: 19/19 passing (devnet deployed; no local test validator — last verified 12:38)
-- Clippy: clean
+- Anchor: 19/19 passing (devnet deployed; no local test validator — last verified 14:09)
+- Clippy: clean (last verified ~13:42)
 - Rust build: release build successful
 
 ## Implemented
@@ -51,7 +50,7 @@
 - **SSS-014** (event date-range filtering backend) — PR #103 open (feat branch)
 - **SSS-014** (event date-range filtering docs) — PR #104 open (docs branch)
 
-## Open PRs (26 total, as of 13:42 UTC) — upstream solanabr/solana-stablecoin-standard
+## Open PRs (26 total, as of 14:10 UTC) — upstream solanabr/solana-stablecoin-standard
 - PR #72: feat: Full Solana Stablecoin Standard — SSS-1, SSS-2, SDK, Backend, CLI, Devnet ✅
 - PR #73: docs: ComplianceModule SDK reference (SSS-017)
 - PR #76: docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update
@@ -79,19 +78,19 @@
 - PR #103: feat(backend): SSS-014 — event filtering by date range on /api/events
 - PR #104: docs(api): SSS-014 — document from/to date-range filters on GET /api/events
 
-## Competition Landscape (13:42 UTC)
+## Competition Landscape (14:10 UTC)
 - Total open PRs in upstream (solanabr): 92 (26 ours + 66 competitor PRs)
-- Competition stable — no new competitor PRs since 12:46 UTC
-- All competitors appear to have 1 PR each; we lead with 26 PRs
+- Next closest competitor: suchit1010 with 3 PRs
+- Competition stable — monitoring for reviews/merges
 - No reviews on any of our 26 PRs yet
 
 ## Recent Notable Changes
 - `dee447a` merged into main: fix(tests): relax base58 pubkey length assertion (43-44 chars valid)
-  - This was a fix pushed by another agent/session; rebased our heartbeat commit on top
 
 ## Next
 - Monitor PRs for review comments — respond and iterate quickly
 - After PRs merge: tag release, update npm package version
 - All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ, OpenAPI spec — primarily monitoring phase
+- IDL dir (programs/sss-token/target/idl/) does not exist locally — no sync needed at this time
 
-# heartbeat 13:46
+# heartbeat 14:12
