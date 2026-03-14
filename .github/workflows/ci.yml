@@ -9,7 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  SOLANA_VERSION: "2.1.21"
+  SOLANA_VERSION: "2.3.13"
   ANCHOR_VERSION: "0.32.0"
   NODE_VERSION: "20"
 
@@ -163,45 +163,15 @@ jobs:
       - name: Generate keypair
         run: solana-keygen new --no-bip39-passphrase --silent
 
-      - name: Generate compatible Cargo.lock (v3)
+      - name: Generate Cargo.lock
         run: |
-          # Solana 1.18 ships cargo ~1.75 which cannot parse lockfile v4.
-          # Generate a fresh v3 lockfile so Anchor build succeeds.
+          # Solana 2.3 ships cargo/rustc 1.86 — generates lockfile v4, which is
+          # fully supported by the bundled Solana cargo. No v3 downgrade needed.
           # NOTE: [patch.crates-io] cannot patch crates.io with crates.io itself,
-          # so we pin via `cargo update` on the generated lockfile instead.
+          # so we use `cargo update --precise` on the generated lockfile instead.
           cargo generate-lockfile
           # blake3 >=1.8.0 requires edition2024 (Cargo >=1.85); pin to last edition2021 release.
           cargo update blake3 --precise 1.7.0
-          # borsh >=1.6.0 requires rustc 1.77.0; Solana 1.18 ships rustc 1.75. Pin to 1.5.1.
-          # Use -p (package-name) form so the pin works regardless of the resolved version
-          # in the lockfile; pkg@ver syntax requires an exact lockfile match.
-          cargo update -p borsh --precise 1.5.1 2>/dev/null || true
-          # proc-macro-crate >=3.2.0 pulls toml_edit that requires rustc 1.82.
-          # 3.1.0 uses toml_edit ^0.21 which works on rustc 1.75.
-          # NOTE: anchor-lang/anchor-spl are pinned to =0.32.0 (exact) in Cargo.toml to prevent
-          # resolution to 0.32.1 which depends on proc-macro-crate 3.5.0+ (incompatible with
-          # rustc 1.75 via toml_datetime 1.0.0). This cargo update is belt-and-suspenders.
-          cargo update -p proc-macro-crate --precise 3.1.0 2>/dev/null || true
-          # anchor-attribute-error 0.32.1 pulls proc-macro-crate 3.5.0+ (requires rustc 1.82).
-          # Pin all anchor-* attribute/procedural crates to 0.32.0 to match anchor-lang =0.32.0.
-          cargo update -p anchor-attribute-error --precise 0.32.0 2>/dev/null || true
-          cargo update -p anchor-attribute-event --precise 0.32.0 2>/dev/null || true
-          cargo update -p anchor-attribute-access-control --precise 0.32.0 2>/dev/null || true
-          cargo update -p anchor-attribute-account --precise 0.32.0 2>/dev/null || true
-          cargo update -p anchor-attribute-constant --precise 0.32.0 2>/dev/null || true
-          cargo update -p anchor-attribute-interface --precise 0.32.0 2>/dev/null || true
-          cargo update -p anchor-attribute-program --precise 0.32.0 2>/dev/null || true
-          cargo update -p anchor-attribute-state --precise 0.32.0 2>/dev/null || true
-          cargo update -p anchor-derive-accounts --precise 0.32.0 2>/dev/null || true
-          cargo update -p anchor-derive-space --precise 0.32.0 2>/dev/null || true
-          cargo update -p anchor-syn --precise 0.32.0 2>/dev/null || true
-          # indexmap >=2.12.0 requires rustc 1.82; pin to last compatible release.
-          cargo update -p indexmap --precise 2.11.4 2>/dev/null || true
-          # toml_datetime >=1.0.0 requires rustc 1.76; Solana 1.18 ships rustc 1.75. Pin to 0.6.9.
-          cargo update -p toml_datetime --precise 0.6.9 2>/dev/null || true
-          # toml_edit >=0.22 pulls toml_datetime 1.x; pin to last version using toml_datetime 0.6.x.
-          cargo update -p toml_edit --precise 0.21.1 2>/dev/null || true
-          sed -i 's/^version = 4$/version = 3/' Cargo.lock
 
       - name: Anchor build
         # Anchor 0.32 uses idl-build feature (stable Rust) for IDL generation —
