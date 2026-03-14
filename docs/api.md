@@ -178,7 +178,13 @@ List mint and burn events, most-recent first.
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `token_mint` | string | ✗ | all | Filter by mint |
-| `limit` | u32 | ✗ | 100 | Max events per type (mint, burn) |
+| `limit` | u32 | ✗ | 100 | Max events per type (mint, burn); capped at 1000 |
+| `from` | string (ISO-8601) | ✗ | — | Include only events at or after this timestamp (e.g. `2026-01-01T00:00:00Z`) |
+| `to` | string (ISO-8601) | ✗ | — | Include only events at or before this timestamp |
+
+All parameters are optional and combinable. `from` and `to` accept RFC-3339 / ISO-8601 timestamps; both UTC (`Z` suffix) and offset formats are accepted.
+
+**Example:** `/api/events?token_mint=So11…112&from=2026-03-01T00:00:00Z&to=2026-03-14T23:59:59Z&limit=50`
 
 **Response 200**
 
