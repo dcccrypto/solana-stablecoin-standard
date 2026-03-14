@@ -48,6 +48,7 @@ describe("sss-token", () => {
         transferHookProgram: null,
         collateralMint: null,
         reserveVault: null,
+        maxSupply: null,
       })
       .accounts({
         payer: authority.publicKey,
@@ -88,6 +89,7 @@ describe("sss-token", () => {
           transferHookProgram: null,
           collateralMint: null,
           reserveVault: null,
+          maxSupply: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -382,8 +384,10 @@ describe("sss-token", () => {
 
   // ---------- Update Roles ----------
 
-  it("updates authority", async () => {
+  it("updates authority (two-step: propose then accept)", async () => {
     const newAuthority = Keypair.generate();
+
+    // Step 1: Propose the authority transfer
     await program.methods
       .updateRoles({
         newAuthority: newAuthority.publicKey,
@@ -397,12 +401,43 @@ describe("sss-token", () => {
       })
       .rpc();
 
-    const config = await program.account.stablecoinConfig.fetch(configPda);
-    expect(config.authority.toBase58()).to.equal(
+    // After proposal: authority unchanged, pendingAuthority set
+    const configAfterProposal = await program.account.stablecoinConfig.fetch(configPda);
+    expect(configAfterProposal.authority.toBase58()).to.equal(
+      authority.publicKey.toBase58()
+    );
+    expect(configAfterProposal.pendingAuthority.toBase58()).to.equal(
       newAuthority.publicKey.toBase58()
     );
 
-    // Transfer back for subsequent tests
+    // Fund newAuthority so it can pay for tx
+    const airdropSig = await provider.connection.requestAirdrop(
+      newAuthority.publicKey,
+      1_000_000_000
+    );
+    await provider.connection.confirmTransaction(airdropSig, "confirmed");
+
+    // Step 2: newAuthority accepts
+    await program.methods
+      .acceptAuthority()
+      .accounts({
+        pending: newAuthority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .signers([newAuthority])
+      .rpc();
+
+    const configAfterAccept = await program.account.stablecoinConfig.fetch(configPda);
+    expect(configAfterAccept.authority.toBase58()).to.equal(
+      newAuthority.publicKey.toBase58()
+    );
+    expect(configAfterAccept.pendingAuthority.toBase58()).to.equal(
+      anchor.web3.PublicKey.default.toBase58()
+    );
+
+    // Transfer back for subsequent tests (two-step again)
     await program.methods
       .updateRoles({
         newAuthority: authority.publicKey,
@@ -416,6 +451,27 @@ describe("sss-token", () => {
       })
       .signers([newAuthority])
       .rpc();
+
+    const airdropSig2 = await provider.connection.requestAirdrop(
+      authority.publicKey,
+      500_000_000
+    );
+    await provider.connection.confirmTransaction(airdropSig2, "confirmed");
+
+    await program.methods
+      .acceptAuthority()
+      .accounts({
+        pending: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const configRestored = await program.account.stablecoinConfig.fetch(configPda);
+    expect(configRestored.authority.toBase58()).to.equal(
+      authority.publicKey.toBase58()
+    );
   });
 
   // ---------- Revoke Minter ----------

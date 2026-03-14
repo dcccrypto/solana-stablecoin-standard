@@ -1,3 +1,4 @@
+pub mod accept_authority;
 pub mod burn;
 pub mod deposit_collateral;
 pub mod freeze;
@@ -10,6 +11,7 @@ pub mod thaw;
 pub mod update_minter;
 pub mod update_roles;
 
+pub use accept_authority::*;
 pub use burn::*;
 pub use deposit_collateral::*;
 pub use freeze::*;

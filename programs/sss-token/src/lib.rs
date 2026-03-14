@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 pub mod error;
+pub mod events;
 pub mod instructions;
 pub mod proofs;
 pub mod state;
@@ -78,5 +79,15 @@ pub mod sss_token {
     /// Redeem SSS tokens by burning them and releasing collateral (SSS-3 only).
     pub fn redeem(ctx: Context<RedeemCtx>, amount: u64) -> Result<()> {
         instructions::redeem::redeem_handler(ctx, amount)
+    }
+
+    /// Accept a pending authority transfer (two-step). Caller must be pending_authority.
+    pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
+        instructions::accept_authority::accept_authority_handler(ctx)
+    }
+
+    /// Accept a pending compliance authority transfer. Caller must be pending_compliance_authority.
+    pub fn accept_compliance_authority(ctx: Context<AcceptComplianceAuthority>) -> Result<()> {
+        instructions::accept_authority::accept_compliance_authority_handler(ctx)
     }
 }

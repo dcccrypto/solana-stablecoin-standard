@@ -62,6 +62,9 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.collateral_mint = params.collateral_mint.unwrap_or_default();
     config.reserve_vault = params.reserve_vault.unwrap_or_default();
     config.total_collateral = 0;
+    config.max_supply = params.max_supply.unwrap_or(0);
+    config.pending_authority = Pubkey::default();
+    config.pending_compliance_authority = Pubkey::default();
     config.bump = ctx.bumps.config;
 
     msg!(
