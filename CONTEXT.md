@@ -1,6 +1,6 @@
 # SSS Project Context
 
-_Last updated: 2026-03-14 04:14 UTC_
+_Last updated: 2026-03-14 04:23 UTC_
 
 ## Current Status
 
@@ -10,11 +10,10 @@ _Last updated: 2026-03-14 04:14 UTC_
 
 | # | Title | Branch | Status |
 |---|-------|--------|--------|
-| #45 (fork) | feat(tests): SSS-020 — Expanded Anchor test suite 13→19 passing | feat/sss-020-expanded-anchor-tests | Open, needs review |
 | #87 | feat(sdk): SSS-019 — sync IDL + wire accept_authority, depositCollateral, redeem, SSS-3 max_supply | feat/sss-019-idl-sync-new-instructions | Open, needs review |
 | #86 | docs(pagination): SSS-011 — offset-based pagination guide + api.md + audit-log updates | docs/sss-011-pagination | Open, needs review |
-| #85 | feat(backend): SSS-011 — offset-based pagination for /api/events and /api/compliance/audit | feat/sss-011-pagination | Open, needs review |
-| #84 | feat(program): two-step authority transfer + Anchor events + max_supply | feat/sss-two-step-authority-events | Open, needs review |
+| #85 | feat(backend): SSS-011 — offset-based pagination for /api/events and /api/compliance/audit | feat/sss-011-pagination | Open, CI pending |
+| #84 | feat(program): two-step authority transfer + Anchor events + max_supply | feat/sss-two-step-authority-events | Open, CI pending |
 | #83 | docs(sss3-events): SSS-3 reserve-backed preset reference + Anchor events guide | docs/sss3-events-maxsupply | Open, needs review |
 | #77 | feat(proofs): Kani formal verification — 7 mathematical proofs | feat/kani-formal-proofs | Open, needs review |
 | #76 | docs: ARCHITECTURE, SSS-1/2/3, SUBMISSION, CHANGELOG, README update | docs/architecture-presets-submission | Open, needs review |
@@ -32,11 +31,10 @@ _Last updated: 2026-03-14 04:14 UTC_
 - Transfer hook integration (sss_transfer_hook program)
 - Kani formal verification: 7/7 invariants proven
 
-## Test State
+## SDK State
 
-- **Anchor (on-chain)**: 19/19 passing (SSS-020: was 13)
-- **TypeScript SDK**: 84/84 passing (6 test files)
-- **Backend (Rust/axum)**: 31/31 passing
+- **Tests**: 89/89 passing (6 test files)
+- **TypeScript**: zero errors
 - **IDLs in sdk/src/idl/**: sss_token.json + sss_transfer_hook.json
 - **Program IDs** (devnet + localnet):
   - sss-token: AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat
@@ -55,8 +53,7 @@ Upstream (solanabr/solana-stablecoin-standard) only has "Initial commit". All ou
 
 ## External PR Wave
 
-PRs #51–#82 are external competition/grant submissions. PR #83+ are ours (upstream numbering).
-Fork-internal PRs: #44, #45 (SSS-020).
+PRs #51–#82 are external competition/grant submissions. PR #83+ are ours.
 
 ## Devnet Deploy (latest)
 
@@ -71,9 +68,8 @@ Smoke test: compile passed, airdrop faucet returned internal error (devnet rate-
 
 ## TODO
 
-- Merge SSS-020 PR (fork #45) → bump into upstream PR as part of next wave
-- Monitor PR #84–#87 CI → merge when green
+- Monitor PR #84 CI → merge when green (two-step authority + events)
+- Monitor PR #85 CI → merge when green (SSS-011 pagination backend)
 - PR #86 (pagination docs) — merge after #85 lands
 - PR #87 (SSS-019 IDL sync) — needs review + merge after #84
 - Smoke test devnet after faucet stabilises (re-run `npx ts-node --compiler-options '{"target":"ES2020","lib":["ES2020","DOM"]}' scripts/smoke-test-devnet.ts`)
-- Consider SSS-021: SDK tests for two-step authority + max_supply enforcement (TypeScript layer)
