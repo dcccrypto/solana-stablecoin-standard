@@ -228,6 +228,14 @@ jobs:
         # Recompile so deploy artifact is available in this job's workspace.
         run: anchor build
 
+      - name: Sync generated IDLs to SDK
+        # Ensures sdk/src/idl/*.json matches the freshly built programs.
+        # Without this, any drift between the checked-in IDL and the compiled .so
+        # causes InstructionDidNotDeserialize (Anchor error 102) at runtime.
+        run: |
+          cp target/idl/sss_token.json sdk/src/idl/sss_token.json
+          cp target/idl/sss_transfer_hook.json sdk/src/idl/sss_transfer_hook.json
+
       - name: Install SDK dependencies
         working-directory: sdk
         run: npm install
@@ -301,6 +309,14 @@ jobs:
       - name: Build Anchor programs
         # Produces target/deploy/sss_token.so and sss_transfer_hook.so
         run: anchor build
+
+      - name: Sync generated IDLs to SDK
+        # Ensures sdk/src/idl/*.json matches the freshly built programs.
+        # Without this, any drift between the checked-in IDL and the compiled .so
+        # causes InstructionDidNotDeserialize (Anchor error 102) at runtime.
+        run: |
+          cp target/idl/sss_token.json sdk/src/idl/sss_token.json
+          cp target/idl/sss_transfer_hook.json sdk/src/idl/sss_transfer_hook.json
 
       - name: Install SDK dependencies
         working-directory: sdk
