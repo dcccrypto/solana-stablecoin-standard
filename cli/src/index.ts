@@ -6,6 +6,7 @@ import { deployStablecoinFromConfig } from "./stablecoin/deploy";
 import {
   runMint,
   runBurn,
+  runTransfer,
   runFreeze,
   runThaw,
   runPause,
@@ -88,6 +89,22 @@ program
     try {
       const cfg = loadConfig(opts.config);
       await runBurn(cfg, BigInt(amountStr));
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("transfer")
+  .description("Transfer tokens to a recipient (supports transfer hooks)")
+  .argument("<recipient>", "Recipient wallet address (base58)")
+  .argument("<amount>", "Amount in raw units")
+  .option("--config <path>", "Path to config TOML")
+  .action(async (recipient: string, amountStr: string, opts: { config?: string }) => {
+    try {
+      const cfg = loadConfig(opts.config);
+      await runTransfer(cfg, recipient, BigInt(amountStr));
     } catch (err) {
       console.error((err as Error).message);
       process.exitCode = 1;

@@ -51,6 +51,26 @@ export async function runMint(
   console.log("Tx:", sig);
 }
 
+export async function runTransfer(
+  cfg: SssConfig,
+  recipientStr: string,
+  amountRaw: bigint,
+): Promise<void> {
+  const stable = loadStablecoin(cfg);
+  const payer = loadKeypair(cfg.authorities.mint);
+  const recipient = new PublicKey(recipientStr);
+  const decimals = await stable.getDecimals();
+
+  const sig = await stable.transfer({
+    owner: payer,
+    destination: recipient,
+    amount: amountRaw,
+    decimals,
+  });
+  console.log("Transferred:", amountRaw.toString(), "raw units to", recipientStr);
+  console.log("Tx:", sig);
+}
+
 export async function runBurn(cfg: SssConfig, amountRaw: bigint): Promise<void> {
   const stable = loadStablecoin(cfg);
   const payer = loadKeypair(cfg.authorities.mint);
