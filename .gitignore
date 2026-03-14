@@ -1,7 +1,9 @@
 # Rust
 target/
 **/*.rs.bk
-Cargo.lock
+# Cargo.lock is committed so CI can use --locked instead of regenerating
+# (avoids Agave-bundled cargo resolving stale/broken crate versions)
+# Cargo.lock
 
 # Node
 node_modules/
