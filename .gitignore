@@ -16,6 +16,8 @@ test-ledger/
 !package.json
 !tsconfig.json
 !Anchor.toml
+!idl/*.json
+!sdk/src/idl/*.json
 
 # Secrets
 *.pem

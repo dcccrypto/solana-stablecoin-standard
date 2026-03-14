@@ -354,7 +354,7 @@ export class SolanaStablecoin {
   private async _loadProgram(): Promise<any> {
     if (this._program) return this._program;
     const { Program } = await import('@coral-xyz/anchor');
-    const idl = await import('../../idl/sss_token.json');
+    const idl = await import('./idl/sss_token.json');
     this._program = new Program(idl as any, this.provider);
     return this._program;
   }
