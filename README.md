@@ -125,15 +125,22 @@ Endpoints:
 
 | Guide | Description |
 |-------|-------------|
+| [FAQ](docs/faq.md) | Common questions about presets, SDK, programs, and troubleshooting |
+| [Quickstart](docs/quickstart.md) | End-to-end walkthrough: deploy, mint, blacklist, query events |
 | [API Reference](docs/api.md) | Full REST API reference for all backend endpoints |
 | [Authentication](docs/authentication.md) | API key creation and management |
 | [SDK & CLI](docs/sdk-cli.md) | TypeScript SDK and `sss-token` CLI usage |
+| [TypeScript Types Reference](docs/sdk-types.md) | All exported SDK types and interfaces |
 | [Rate Limiting](docs/rate-limiting.md) | Token-bucket rate limiter configuration and `Retry-After` behaviour |
 | [Webhooks](docs/api.md#webhooks) | Event-driven webhook delivery for mint/burn events |
 | [Compliance & Audit Log](docs/compliance-audit-log.md) | Blacklist management and audit log query API (SSS-014) |
 | [On-Chain SDK: Core Methods](docs/on-chain-sdk-core.md) | `SolanaStablecoin` class — create, load, mintTo, burnFrom, freeze/thaw, supply query |
+| [On-Chain SDK: Admin & Governance](docs/on-chain-sdk-admin.md) | Authority transfer, minter management, pause/unpause |
+| [On-Chain SDK: Authority & Collateral](docs/on-chain-sdk-authority-collateral.md) | Two-step authority transfer, depositCollateral, redeem |
 | [ComplianceModule](docs/compliance-module.md) | `ComplianceModule` SDK — blacklist management (addToBlacklist, removeFromBlacklist, isBlacklisted) + freeze/thaw |
 | [Transfer Hook Program](docs/transfer-hook.md) | On-chain blacklist enforcement via Token-2022 transfer hook (SSS-2) |
+| [Error Handling & Troubleshooting](docs/error-handling.md) | Error catalog, SSSError codes, Anchor errors, common fixes |
+| [Migration Guide](docs/migration-guide.md) | Migrating from SPL Token to SSS-1/2/3 |
 | [Preset: SSS-1 Minimal](docs/SSS-1.md) | SSS-1 preset specification |
 | [Preset: SSS-2 Compliant](docs/SSS-2.md) | SSS-2 preset specification |
 | [Preset: SSS-3 Trustless](docs/SSS-3.md) | SSS-3 trustless collateral-backed reference design |

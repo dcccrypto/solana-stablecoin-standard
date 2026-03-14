@@ -7,6 +7,8 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 ## [Unreleased]
 
 ### Added
+- `docs/faq.md` — Frequently Asked Questions (SSS-029): presets, SDK, programs, backend, errors, security, migration
+- `README.md` — documentation table expanded with FAQ, Quickstart, TypeScript Types, Admin/Governance, Authority/Collateral, Error Handling, Migration Guide links
 - `docs/compliance-module.md` — full SDK reference for `ComplianceModule` (SSS-017) [PR #73]
 - `docs/ARCHITECTURE.md` — three-layer architecture reference
 - `docs/SSS-1.md` — minimal preset specification
