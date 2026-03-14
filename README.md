@@ -131,6 +131,7 @@ Endpoints:
 | [Transfer Hook Program](docs/transfer-hook.md) | On-chain blacklist enforcement via Token-2022 transfer hook (SSS-2) |
 | [Devnet Deployment](docs/devnet-deploy.md) | Deploying and smoke-testing on Solana devnet |
 | [Integration Testing](docs/integration-testing.md) | Running the full integration test suite and CI setup |
+| [Anchor Program Tests](docs/anchor-program-testing.md) | Running the Anchor on-chain test suite locally and in CI (SSS-015) |
 
 ## Judging Criteria
 
