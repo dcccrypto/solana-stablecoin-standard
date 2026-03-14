@@ -270,7 +270,9 @@ console.log('Thaw tx:', sig);
 
 ### `getTotalSupply()`
 
-Returns the current supply figures for this mint by querying the on-chain mint account.
+Returns the current supply figures for this mint. As of **SSS-016**, supply data is read from the on-chain **`StablecoinConfig` PDA** — the same account that `mintTo()` and `burnFrom()` update transactionally. This gives accurate cumulative `totalMinted` and `totalBurned` figures rather than just the net Token-2022 balance.
+
+Falls back to the raw Token-2022 mint supply (with `totalBurned: 0n`) if the config account does not yet exist (e.g. unit-test environments where the program has not been initialised).
 
 **Returns:**
 
@@ -284,20 +286,20 @@ Promise<{
 
 | Field | Description |
 |-------|-------------|
-| `totalMinted` | Cumulative tokens minted (equals current supply in this implementation) |
-| `totalBurned` | Always `0n` in the current implementation (supply reflects net balance) |
-| `circulatingSupply` | Current total supply from the Token-2022 mint account |
+| `totalMinted` | Cumulative tokens minted, tracked on-chain in `StablecoinConfig.total_minted` |
+| `totalBurned` | Cumulative tokens burned, tracked on-chain in `StablecoinConfig.total_burned` |
+| `circulatingSupply` | `totalMinted - totalBurned` — net circulating supply |
 
 **Example:**
 
 ```typescript
-const { circulatingSupply } = await stablecoin.getTotalSupply();
-console.log(`Supply: ${circulatingSupply} base units`);
-// For 6 decimals: divide by 1_000_000n for human-readable value
-console.log(`Supply: ${Number(circulatingSupply) / 1e6} USDS`);
+const { totalMinted, totalBurned, circulatingSupply } = await stablecoin.getTotalSupply();
+console.log(`Minted: ${Number(totalMinted) / 1e6} USDS`);
+console.log(`Burned: ${Number(totalBurned) / 1e6} USDS`);
+console.log(`Circulating: ${Number(circulatingSupply) / 1e6} USDS`);
 ```
 
-> **Note:** `totalBurned` is always `0n`. The `circulatingSupply` is the authoritative supply figure — it already reflects burned tokens because burns reduce the on-chain supply directly.
+> **Note:** `totalMinted` and `totalBurned` reflect the cumulative history recorded by the `sss-token` program — they are monotonically increasing. `circulatingSupply` is the net figure. If the `StablecoinConfig` PDA is absent (pre-SSS-016 deploys or test environments), the method falls back to the Token-2022 mint supply as `circulatingSupply` with `totalBurned: 0n`.
 
 ---
 
