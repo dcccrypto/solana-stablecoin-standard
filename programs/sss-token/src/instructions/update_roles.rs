@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenInterface};
 
 use crate::error::SssError;
+use crate::events::AuthorityProposed;
 use crate::state::{StablecoinConfig, UpdateRolesParams};
 
 #[derive(Accounts)]
@@ -24,13 +25,23 @@ pub struct UpdateRoles<'info> {
 
 pub fn handler(ctx: Context<UpdateRoles>, params: UpdateRolesParams) -> Result<()> {
     let config = &mut ctx.accounts.config;
-    if let Some(new_authority) = params.new_authority {
-        config.authority = new_authority;
-        msg!("Authority updated to {}", new_authority);
+    if let Some(proposed) = params.new_authority {
+        config.pending_authority = proposed;
+        emit!(AuthorityProposed {
+            mint: config.mint,
+            proposed,
+            is_compliance: false,
+        });
+        msg!("Authority transfer proposed to {}", proposed);
     }
-    if let Some(new_compliance) = params.new_compliance_authority {
-        config.compliance_authority = new_compliance;
-        msg!("Compliance authority updated to {}", new_compliance);
+    if let Some(proposed) = params.new_compliance_authority {
+        config.pending_compliance_authority = proposed;
+        emit!(AuthorityProposed {
+            mint: config.mint,
+            proposed,
+            is_compliance: true,
+        });
+        msg!("Compliance authority transfer proposed to {}", proposed);
     }
     Ok(())
 }

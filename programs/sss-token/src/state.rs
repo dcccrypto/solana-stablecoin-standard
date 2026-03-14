@@ -26,6 +26,12 @@ pub struct StablecoinConfig {
     pub reserve_vault: Pubkey,
     /// SSS-3: total collateral deposited into the reserve vault
     pub total_collateral: u64,
+    /// Maximum token supply (0 = unlimited)
+    pub max_supply: u64,
+    /// Pending authority for two-step authority transfer (Pubkey::default if none)
+    pub pending_authority: Pubkey,
+    /// Pending compliance authority for two-step transfer (Pubkey::default if none)
+    pub pending_compliance_authority: Pubkey,
     pub bump: u8,
 }
 
@@ -44,6 +50,16 @@ impl StablecoinConfig {
             return 10_000;
         }
         self.total_collateral.saturating_mul(10_000) / supply
+    }
+
+    /// Returns true if this token is SSS-3 (has a reserve vault).
+    pub fn has_reserve(&self) -> bool {
+        self.reserve_vault != Pubkey::default()
+    }
+
+    /// Returns true if this token has a transfer hook (SSS-2).
+    pub fn has_hook(&self) -> bool {
+        self.transfer_hook_program != Pubkey::default()
     }
 }
 
@@ -69,7 +85,7 @@ impl MinterInfo {
 /// Parameters for initializing a new stablecoin.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct InitializeParams {
-    /// 1 = SSS-1, 2 = SSS-2
+    /// 1 = SSS-1, 2 = SSS-2, 3 = SSS-3 (reserve-backed)
     pub preset: u8,
     /// Token decimals
     pub decimals: u8,
@@ -85,6 +101,8 @@ pub struct InitializeParams {
     pub collateral_mint: Option<Pubkey>,
     /// SSS-3: reserve vault token account address
     pub reserve_vault: Option<Pubkey>,
+    /// Maximum token supply (None or 0 = unlimited)
+    pub max_supply: Option<u64>,
 }
 
 /// Parameters for updating authorities.

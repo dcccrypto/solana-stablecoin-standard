@@ -26,4 +26,12 @@ pub enum SssError {
     InvalidCollateralMint,
     #[msg("Invalid reserve vault account")]
     InvalidVault,
+    #[msg("Max supply would be exceeded")]
+    MaxSupplyExceeded,
+    #[msg("No pending authority transfer to accept")]
+    NoPendingAuthority,
+    #[msg("No pending compliance authority transfer to accept")]
+    NoPendingComplianceAuthority,
+    #[msg("Reserve vault is required for SSS-3")]
+    ReserveVaultRequired,
 }

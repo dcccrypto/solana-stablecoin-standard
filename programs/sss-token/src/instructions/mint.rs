@@ -49,6 +49,15 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
         );
     }
 
+    // Check max supply constraint (0 = unlimited)
+    let config = &ctx.accounts.config;
+    if config.max_supply > 0 {
+        require!(
+            config.net_supply().checked_add(amount).unwrap() <= config.max_supply,
+            SssError::MaxSupplyExceeded
+        );
+    }
+
     // Mint via Token-2022 — authority is the config PDA, sign with seeds
     let mint_key = ctx.accounts.mint.key();
     let seeds = &[
