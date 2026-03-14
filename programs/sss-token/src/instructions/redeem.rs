@@ -40,6 +40,7 @@ pub struct RedeemCtx<'info> {
     /// The collateral token mint (e.g. USDC)
     #[account(
         constraint = collateral_mint.key() == config.collateral_mint @ SssError::InvalidCollateralMint,
+        constraint = collateral_mint.decimals == sss_mint.decimals @ SssError::DecimalMismatch,
     )]
     pub collateral_mint: InterfaceAccount<'info, Mint>,
 
@@ -113,8 +114,8 @@ pub fn redeem_handler(ctx: Context<RedeemCtx>, amount: u64) -> Result<()> {
 
     // 3. Update config state
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(amount).unwrap();
-    config.total_collateral = config.total_collateral.checked_sub(amount).unwrap();
+    config.total_burned = config.total_burned.checked_add(amount).ok_or(SssError::Overflow)?;
+    config.total_collateral = config.total_collateral.checked_sub(amount).ok_or(SssError::Underflow)?;
 
     msg!(
         "Redeemed {} SSS tokens for {} collateral. New collateral: {}",

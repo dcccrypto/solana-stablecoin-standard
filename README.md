@@ -12,10 +12,10 @@ A modular, production-ready stablecoin SDK for Solana with two opinionated prese
 | Pause/unpause | ✅ | ✅ | ✅ |
 | Minter caps | ✅ | ✅ | ✅ |
 | Permanent delegate | ❌ | ✅ | ✅ |
-| Transfer hook | ❌ | ✅ | ✅ |
-| On-chain blacklist | ❌ | ✅ | ✅ |
+| Transfer hook | ❌ | 🚧 | ✅ |
+| On-chain blacklist | ❌ | 🚧 | ✅ |
 | Collateral vault (no oracle) | ❌ | ❌ | ✅ |
-| Confidential transfers (ZK) | ❌ | ❌ | ✅ |
+| Confidential transfers (ZK) | ❌ | ❌ | 🚧 |
 
 **SSS-1** — For internal tokens, DAO treasuries, ecosystem settlement.  
 **SSS-2** — For regulated stablecoins (USDC/USDT-class). Compliant by default.  

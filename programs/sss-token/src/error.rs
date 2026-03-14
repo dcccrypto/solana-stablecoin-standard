@@ -26,4 +26,10 @@ pub enum SssError {
     InvalidCollateralMint,
     #[msg("Invalid reserve vault account")]
     InvalidVault,
+    #[msg("Arithmetic overflow")]
+    Overflow,
+    #[msg("Arithmetic underflow")]
+    Underflow,
+    #[msg("Collateral mint decimals must match SSS mint decimals")]
+    DecimalMismatch,
 }

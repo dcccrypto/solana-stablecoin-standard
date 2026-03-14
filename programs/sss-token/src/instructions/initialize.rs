@@ -48,6 +48,10 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     if params.preset == 3 {
         require!(params.collateral_mint.is_some(), SssError::InvalidCollateralMint);
         require!(params.reserve_vault.is_some(), SssError::InvalidVault);
+        let cm = params.collateral_mint.ok_or(SssError::InvalidCollateralMint)?;
+        require!(cm != Pubkey::default(), SssError::InvalidCollateralMint);
+        let rv = params.reserve_vault.ok_or(SssError::InvalidVault)?;
+        require!(rv != Pubkey::default(), SssError::InvalidVault);
     }
 
     let config = &mut ctx.accounts.config;

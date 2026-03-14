@@ -70,7 +70,7 @@ pub fn deposit_collateral_handler(ctx: Context<DepositCollateralCtx>, amount: u6
         .config
         .total_collateral
         .checked_add(amount)
-        .unwrap();
+        .ok_or(SssError::Overflow)?;
 
     msg!(
         "Deposited {} collateral. Vault total: {}",
