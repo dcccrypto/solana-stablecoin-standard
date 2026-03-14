@@ -172,9 +172,12 @@ jobs:
           # supported by Cargo 1.84.0 bundled with Solana platform-tools.
           # Pin to last known-good version. Do NOT remove this pin.
           cargo update blake3 --precise 1.7.0
-          # solana-zk-token-sdk is no longer a transitive dependency — we upgraded
-          # spl-tlv-account-resolution and spl-transfer-hook-interface to 0.10,
-          # which uses spl-pod 0.5 (depends on solana-zk-sdk, not zk-token-sdk).
+          # Solana platform-tools cargo (1.84) resolves spl-token-confidential-transfer-*
+          # to 0.3.1/0.4.1 which transitively pull solana-zk-token-sdk@2.3.13 — a crate
+          # with internal compile errors (PedersenCommitment/Pedersen types moved).
+          # Pin to the last versions that use solana-zk-sdk@^2.2.0 instead.
+          cargo update spl-token-confidential-transfer-ciphertext-arithmetic --precise 0.3.0
+          cargo update spl-token-confidential-transfer-proof-generation --precise 0.4.0
 
       - name: Anchor build
         # Anchor 0.32 uses idl-build feature (stable Rust) for IDL generation —
