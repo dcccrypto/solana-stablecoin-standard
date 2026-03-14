@@ -4,6 +4,14 @@ A complete, production-grade toolkit for deploying and managing stablecoins on S
 
 The project defines two compliance presets — **SSS-1** (minimal) and **SSS-2** (compliant with blacklist enforcement) — and provides everything needed to go from zero to a fully operational stablecoin: a CLI for operators, a TypeScript SDK for integrators, a REST backend for infrastructure, an on-chain Anchor program for transfer-hook compliance, and a React demo that ties it all together.
 
+### Live Demo & On-Chain References
+
+- [Video Demo](https://youtu.be/3y86hHGvMO4) — Full walkthrough of the CLI, SDK, backend, and React demo
+- [SSS-2 Stablecoin (devnet)](https://solscan.io/token/2wEDPGcCUW78VJVBRFtLcuj6M4xaXp5mD2pDwFyfVUta?cluster=devnet) — Deployed token with blacklist transfer hook
+- [Blacklist Transfer Hook Program (devnet)](https://solscan.io/account/84rPjkmmoP3oYZVxjtL2rdcT6hC5Rts6N5XzJTFcJEk6?cluster=devnet) — The on-chain Anchor program
+- [Mint Transaction (devnet)](https://solscan.io/tx/5KXqaMqXKgSnvxxeU8QHmCkd1bYDjcuyBugDW5xotSq5A2qp7ibGR6u5Vu1addEWi6tTb47RqEbCQJ58GGrT4Yay?cluster=devnet) — Example of minting tokens to a recipient
+- [Blacklisting Transaction (devnet)](https://solscan.io/tx/473RP6JDv69566hDt1reoCmBKgVPcC4te1rMsZpXmEXeLsrxzeTCdy9ePUhXpUMBJK4Yp1fTGJPkcZh5d7CHKbYH?cluster=devnet) — Example of a wallet being added to the blacklist
+
 ## Repository Structure
 
 ```
