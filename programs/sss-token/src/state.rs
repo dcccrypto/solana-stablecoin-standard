@@ -95,6 +95,12 @@ pub struct StablecoinConfig {
     pub bump: u8,
 }
 
+/// SSS-085: Timelocked admin operation kind discriminants.
+pub const ADMIN_OP_NONE: u8 = 0;
+pub const ADMIN_OP_TRANSFER_AUTHORITY: u8 = 1;
+pub const ADMIN_OP_SET_FEATURE_FLAG: u8 = 2;
+pub const ADMIN_OP_CLEAR_FEATURE_FLAG: u8 = 3;
+
 impl StablecoinConfig {
     pub const SEED: &'static [u8] = b"stablecoin-config";
 
