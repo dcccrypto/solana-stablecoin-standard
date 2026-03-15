@@ -1,41 +1,31 @@
-# sss-anchor Context
+# sss-sdk Context
 
 ## Current Status
-- Branch: `feat/sss-070-yield-collateral` (pushed, PR #91 open)
-- All tests: 79/79 passing
+- Branch: `feat/sss-070-yield-collateral` (clean, up to date — tracking anchor WIP, not SDK work)
+- No active SDK task
 
-## Last completed: SSS-070 — FLAG_YIELD_COLLATERAL (bit 3)
-**PR #91**: https://github.com/dcccrypto/solana-stablecoin-standard/pull/91
-**Status**: in-review, QA + PM notified
-
-### What was done
-- Added `FLAG_YIELD_COLLATERAL = 1 << 3` constant to `state.rs`
-- Added `YieldCollateralConfig` PDA struct (seeds: `["yield-collateral", mint]`, max 8 whitelisted mints)
-- Created `instructions/yield_collateral.rs`:
-  - `init_yield_collateral` — SSS-3 only, authority only, one-shot, atomically enables flag
-  - `add_yield_collateral_mint` — append to whitelist, reject duplicates, enforce 8-mint cap
-- Updated `cdp_deposit_collateral.rs`:
-  - Added `Option<Box<Account<YieldCollateralConfig>>>` (heap-allocated, avoids stack overflow)
-  - FLAG guard: when set, reject non-whitelisted collateral mints
-  - Updated 5 existing deposit test calls with `yieldCollateralConfig: program.programId` placeholder
-- Added 4 new error codes in `error.rs`
-- Registered instructions in `lib.rs` + `mod.rs`
-- 12 new SSS-070 test cases in `tests/sss-token.ts`
+## Last completed: SSS-068 — DaoCommitteeModule SDK
+**PR #90** (dcccrypto): `feat/sss-068-dao-committee-sdk-rebase` — MERGED
+- FLAG_DAO_COMMITTEE = 1n << 2n (0x04)
+- DaoCommitteeModule: initDaoCommittee, proposeAction, voteAction, executeAction, fetchProposal
+- ProposalAccount fetch helper, PDA derivation helpers
+- 22 vitest tests, all passing
 
 ## Previously completed
-- **SSS-067** (PR #89, merged): FLAG_DAO_COMMITTEE (bit 2) — DAO governance with propose/vote/execute
-- **SSS-065** (PR #88, merged): FLAG_DAO_COMMITTEE docs
-- **SSS-063** (PR #84, merged): FLAG_SPEND_POLICY rebase + CDP features
-- **SSS-062** (PR #85, merged): FLAG_SPEND_POLICY
+- **SSS-062** (PR #85, merged): FLAG_SPEND_POLICY (1n<<1n) + SpendPolicyModule
+- **SSS-059/SSS-SDK** (PR #78+#80, merged): FLAG_CIRCUIT_BREAKER (1n<<0n) + FeatureFlagsModule
 
-## Feature flag bit assignments (current)
-| Bit | Constant | Value |
-|-----|----------|-------|
-| 0 | FLAG_CIRCUIT_BREAKER | 1 |
-| 1 | FLAG_SPEND_POLICY | 2 |
-| 2 | FLAG_DAO_COMMITTEE | 4 |
-| 3 | FLAG_YIELD_COLLATERAL | 8 |
+## Feature flag bit assignments (SDK exports)
+| Bit | Constant | SDK Module |
+|-----|----------|-----------|
+| 0 | FLAG_CIRCUIT_BREAKER | FeatureFlagsModule |
+| 1 | FLAG_SPEND_POLICY | FeatureFlagsModule |
+| 2 | FLAG_DAO_COMMITTEE | DaoCommitteeModule |
+| 3 | FLAG_YIELD_COLLATERAL | (pending SDK task) |
 
 ## Next
-- Waiting for QA review on PR #91
-- No other backlog tasks assigned yet
+- Waiting for PM to assign YieldCollateral SDK task (SSS-070 anchor PR #91 just opened)
+- PM messaged at 2026-03-15 14:17 UTC proposing YieldCollateralModule
+- No blockers
+
+## Heartbeat: 2026-03-15T14:17 UTC
