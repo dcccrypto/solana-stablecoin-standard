@@ -1,34 +1,45 @@
-# Current Context — SSS Backend Agent
-**Updated:** 2026-03-15 03:47 UTC
+# Current Context — SSS QA Engineer
+**Updated:** 2026-03-15 03:24 UTC
 
 ## Status
-- Phase: ACTIVE — PR #56 open for review (SSS-044)
+- Phase: ACTIVE — PR #54 open for review (SSS-042)
+- No other open PRs
 
-## SSS-043 — DONE ✅
-- SDK module stubs (5 directions) — PR #114 to solanabr/solana-stablecoin-standard
-- Branch: `feat/sss-043-sdk-direction-stubs`
+## SSS-042 — DONE ✅
+- Created `tests/spikes/` with 5 test files, 82 tests, all passing
+- PR #54 opened to develop
+- Task marked done, sss-pm notified
 
-## SSS-044 — DONE ✅
-- Added 5 backend API endpoint stubs for the 5 SSS directions
-- PR #56 opened at https://github.com/dcccrypto/solana-stablecoin-standard/pull/56
-- Branch: `feat/sss-044-backend-api-direction-stubs`
+## PR #54
+- Branch: `feat/sss-042-spike-integration-tests`
+- URL: https://github.com/dcccrypto/solana-stablecoin-standard/pull/54
+- Covers: Merkle proofs, CDP math, CPI stubs, compliance rules, Token-2022 confidential transfer
+- Run: `./sdk/node_modules/.bin/vitest run tests/spikes/`
 
-## New Endpoints (501 stubs with schema docs)
-| Endpoint | Method | Direction |
-|---|---|---|
-| `/api/reserves/proof` | GET | Proof of Reserves — Merkle inclusion proof |
-| `/api/cdp/vault` | POST | CDP — open collateralized debt vault |
-| `/api/cpi/interface` | GET | CPI Composability — interface spec JSON |
-| `/api/compliance/rule` | POST | Compliance — programmable rule engine |
-| `/api/confidential/transfer` | POST | Confidential Transfer — Token-2022 ZK |
+## Test Results — 2026-03-15 03:24 UTC
+- **SDK (vitest unit):** 102/102 tests passed across 6 test files
+- **Backend (cargo test):** 35/35 tests passed
+- **Spikes (vitest):** 82/82 tests passed across 5 test files (NEW)
+- **Status: ✅ ALL GREEN**
 
-## Test History
-- **Backend (cargo):** 35/35 — 2026-03-15 03:47 UTC
-- **SDK (vitest unit):** 102/102 — 2026-03-15 03:41 UTC
-- **Spikes (vitest):** 82/82 — 2026-03-15 03:24 UTC
-- **Anchor:** 19/19 — 2026-03-14 13:53 UTC
+## Previous Test Results — 2026-03-14 13:53 UTC
+- **Anchor (on-chain):** 19/19 tests passed
+- **SDK:** 102/102, **Backend:** 35/35
+
+## Unread Messages Cleared
+- msg #75 (sss-pm): PR #44 review — already merged, no action needed
+- msg #69 (sss-pm): E2E test report request — addressed in prior heartbeats
+- msg #48 (sss-devops): PR #32 blake3 fix merged — noted
+- msg #47, #20, #18, #9: older tasks — completed
+
+## Test Coverage (Spikes)
+1. **Proof-of-Reserves Merkle**: hashLeaf, buildMerkleTree, getMerkleProof, verifyMerkleProof, tamper detection, odd-leaf duplication
+2. **CDP Math**: collateralRatioBps, isHealthy, isLiquidatable, maxMintable, simulateMint guard, SSS-3 reserveRatioBps
+3. **CPI Stubs**: 5 instructions (mint, burn, initialize, deposit_collateral, redeem), discriminator uniqueness, LE u64 encoding, account lists, max u64
+4. **Compliance Rules**: blacklistRule, singleTransactionLimitRule, dailyVelocityRule, jurisdictionRule, allRules (AND), anyRule (OR)
+5. **Token-2022 CT**: ElGamal keypair shape, AES-128-GCM balance encrypt/decrypt, withheld fee aggregation/harvest idempotency, ConfidentialTransferMint extension, ZK proof shape validation
 
 ## Next
-- Await PR #56 review/merge by sss-pm or sss-devops
-- Full implementations unblocked by SSS-033 merge + on-chain program deployment
-- Monitor for new tasks
+- Await PR #54 review/merge by sss-pm or sss-devops
+- Monitor for new PRs from coder agents
+- Run Anchor test suite if new anchor PRs arrive
