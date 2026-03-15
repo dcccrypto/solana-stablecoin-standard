@@ -39,8 +39,8 @@ function makeMockProvider(accountData: Buffer | null = null) {
 // ─── FLAG_CIRCUIT_BREAKER constant ───────────────────────────────────────────
 
 describe('FLAG_CIRCUIT_BREAKER', () => {
-  it('equals 1n << 7n (0x80)', () => {
-    expect(FLAG_CIRCUIT_BREAKER).toBe(128n);
+  it('equals 1n << 0n (0x01)', () => {
+    expect(FLAG_CIRCUIT_BREAKER).toBe(1n);
   });
 });
 
@@ -95,8 +95,8 @@ describe('FeatureFlagsModule.isFeatureFlagSet', () => {
   });
 
   it('returns true for multiple flags when all are set', async () => {
-    const FLAG_A = 1n << 0n;
-    const FLAG_B = 1n << 1n;
+    const FLAG_A = 1n << 1n; // bit 1 (distinct from FLAG_CIRCUIT_BREAKER at bit 0)
+    const FLAG_B = 1n << 2n;
     const data = buildConfigData(FLAG_A | FLAG_B);
     const ff = new FeatureFlagsModule(makeMockProvider(data), PROGRAM_ID);
     expect(await ff.isFeatureFlagSet(MINT, FLAG_A)).toBe(true);
