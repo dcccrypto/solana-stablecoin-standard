@@ -104,4 +104,8 @@ pub enum SssError {
     VerificationRecordNotExpired,
     #[msg("ZK verification record is missing for this user")]
     VerificationRecordMissing,
+    #[msg("ZK proof submission requires a verifier co-signature (verifier_pubkey is set)")]
+    ZkVerifierRequired,
+    #[msg("ZK proof verifier account does not match the configured verifier_pubkey")]
+    ZkVerifierMismatch,
 }

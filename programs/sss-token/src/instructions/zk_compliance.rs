@@ -44,11 +44,14 @@ pub struct InitZkCompliance<'info> {
 /// Initialize the ZkComplianceConfig PDA for a stablecoin mint.
 ///
 /// Sets up ZK compliance enforcement with the specified `ttl_slots` (default 1500).
+/// Optionally binds a `verifier_pubkey` (compliance oracle) that must co-sign
+/// every `submit_zk_proof` call — prevents self-issued proofs.
 /// Atomically enables FLAG_ZK_COMPLIANCE on the config.
 /// Only valid for SSS-2 (compliant) stablecoins — requires a transfer hook.
 pub fn init_zk_compliance_handler(
     ctx: Context<InitZkCompliance>,
     ttl_slots: u64,
+    verifier_pubkey: Option<Pubkey>,
 ) -> Result<()> {
     let effective_ttl = if ttl_slots == 0 {
         ZkComplianceConfig::DEFAULT_TTL_SLOTS
@@ -59,6 +62,7 @@ pub fn init_zk_compliance_handler(
     let zk_config = &mut ctx.accounts.zk_compliance_config;
     zk_config.sss_mint = ctx.accounts.mint.key();
     zk_config.ttl_slots = effective_ttl;
+    zk_config.verifier_pubkey = verifier_pubkey;
     zk_config.bump = ctx.bumps.zk_compliance_config;
 
     // Atomically enable the flag
@@ -66,9 +70,10 @@ pub fn init_zk_compliance_handler(
     config.feature_flags |= FLAG_ZK_COMPLIANCE;
 
     msg!(
-        "ZkCompliance: initialized for mint {}. ttl_slots={}. FLAG_ZK_COMPLIANCE enabled (flags=0x{:016x})",
+        "ZkCompliance: initialized for mint {}. ttl_slots={}. verifier={:?}. FLAG_ZK_COMPLIANCE enabled (flags=0x{:016x})",
         ctx.accounts.mint.key(),
         effective_ttl,
+        verifier_pubkey,
         config.feature_flags,
     );
     Ok(())
@@ -80,6 +85,8 @@ pub fn init_zk_compliance_handler(
 
 /// Accounts for submitting a ZK proof.
 /// Any user may call this to obtain or refresh their VerificationRecord.
+/// If `ZkComplianceConfig.verifier_pubkey` is set, the `verifier` account
+/// must be a Signer matching that pubkey (compliance oracle co-signature).
 #[derive(Accounts)]
 pub struct SubmitZkProof<'info> {
     #[account(mut)]
@@ -110,6 +117,10 @@ pub struct SubmitZkProof<'info> {
     )]
     pub verification_record: Account<'info, VerificationRecord>,
 
+    /// CHECK: Optional compliance oracle verifier. Required (and must sign) when
+    /// `ZkComplianceConfig.verifier_pubkey` is Some(_). Ignored otherwise.
+    pub verifier: Option<Signer<'info>>,
+
     pub system_program: Program<'info, System>,
 }
 
@@ -118,11 +129,26 @@ pub struct SubmitZkProof<'info> {
 /// Creates or updates the `VerificationRecord` PDA with an expiry of
 /// `Clock::get().slot + zk_compliance_config.ttl_slots`.
 ///
-/// In a production deployment, this would verify a zero-knowledge proof
-/// passed as instruction data. For the SSS standard, the instruction
-/// represents the proof-submission interface; actual ZK verification
-/// is performed off-chain by the compliance oracle before calling this.
+/// When `ZkComplianceConfig.verifier_pubkey` is set, the `verifier` account
+/// must be provided and must sign the transaction — this represents the
+/// compliance oracle attesting that the user has passed off-chain verification.
+/// When `verifier_pubkey` is `None`, any user may self-submit (open mode).
 pub fn submit_zk_proof_handler(ctx: Context<SubmitZkProof>) -> Result<()> {
+    // Enforce verifier co-signature if configured
+    if let Some(required_vk) = ctx.accounts.zk_compliance_config.verifier_pubkey {
+        match &ctx.accounts.verifier {
+            Some(v) => {
+                require!(
+                    v.key() == required_vk,
+                    SssError::ZkVerifierMismatch
+                );
+            }
+            None => {
+                return err!(SssError::ZkVerifierRequired);
+            }
+        }
+    }
+
     let clock = Clock::get()?;
     let ttl = ctx.accounts.zk_compliance_config.ttl_slots;
     let expires_at = clock.slot.saturating_add(ttl);
@@ -134,12 +160,13 @@ pub fn submit_zk_proof_handler(ctx: Context<SubmitZkProof>) -> Result<()> {
     record.bump = ctx.bumps.verification_record;
 
     msg!(
-        "ZkCompliance: proof submitted for user {} on mint {}. expires_at_slot={} (current={}, ttl={})",
+        "ZkCompliance: proof submitted for user {} on mint {}. expires_at_slot={} (current={}, ttl={}). verifier_required={}",
         ctx.accounts.user.key(),
         ctx.accounts.mint.key(),
         expires_at,
         clock.slot,
         ttl,
+        ctx.accounts.zk_compliance_config.verifier_pubkey.is_some(),
     );
     Ok(())
 }

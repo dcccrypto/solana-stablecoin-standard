@@ -259,8 +259,9 @@ pub mod sss_token {
     pub fn init_zk_compliance(
         ctx: Context<InitZkCompliance>,
         ttl_slots: u64,
+        verifier_pubkey: Option<Pubkey>,
     ) -> Result<()> {
-        instructions::zk_compliance::init_zk_compliance_handler(ctx, ttl_slots)
+        instructions::zk_compliance::init_zk_compliance_handler(ctx, ttl_slots, verifier_pubkey)
     }
 
     /// Submit or refresh a ZK compliance proof for the calling user.

@@ -173,11 +173,15 @@ pub mod sss_transfer_hook {
             if feature_flags & FLAG_ZK_COMPLIANCE != 0 {
                 let vr_account = &ctx.accounts.verification_record;
                 // Verify the PDA address
+                // Use the transfer authority (owner at account index 3) for VR PDA derivation.
+                // For delegated transfers, index 3 is the delegate — the party
+                // executing the transfer and required to hold a valid VerificationRecord.
+                // This matches the ExtraAccountMeta registration which uses index 3.
                 let (expected_vr_pda, _bump) = Pubkey::find_program_address(
                     &[
                         ZK_VERIFICATION_SEED,
                         ctx.accounts.mint.key().as_ref(),
-                        src_owner.as_ref(),
+                        ctx.accounts.owner.key().as_ref(),
                     ],
                     &sss_token_program::ID,
                 );
@@ -277,29 +281,35 @@ pub mod sss_transfer_hook {
         ];
 
         // Calculate space required for the ExtraAccountMetaList TLV data
-        let account_size = ExtraAccountMetaList::size_of(account_metas.len())? as u64;
+        let account_size = ExtraAccountMetaList::size_of(account_metas.len())? as usize;
 
-        // Fund the extra_account_meta_list PDA
+        // Create the extra_account_meta_list account with the correct size upfront.
+        // Using create_account (not transfer+realloc) so the account is allocated
+        // and owned by this program in a single CPI, avoiding the two-step
+        // "transfer then realloc" which fails on system-owned accounts.
         let rent = Rent::get()?;
-        let lamports = rent.minimum_balance(account_size as usize);
-
-        system_program::transfer(
-            CpiContext::new(
+        let lamports = rent.minimum_balance(account_size);
+        let (_, bump_seed) = Pubkey::find_program_address(
+            &[b"extra-account-metas", ctx.accounts.mint.key().as_ref()],
+            ctx.program_id,
+        );
+        system_program::create_account(
+            CpiContext::new_with_signer(
                 ctx.accounts.system_program.to_account_info(),
-                system_program::Transfer {
+                system_program::CreateAccount {
                     from: ctx.accounts.authority.to_account_info(),
                     to: ctx.accounts.extra_account_meta_list.to_account_info(),
                 },
+                &[&[
+                    b"extra-account-metas",
+                    ctx.accounts.mint.key().as_ref(),
+                    &[bump_seed],
+                ]],
             ),
             lamports,
+            account_size as u64,
+            ctx.program_id,
         )?;
-
-        // Allocate space
-        {
-            let extra_meta_info = ctx.accounts.extra_account_meta_list.to_account_info();
-            extra_meta_info.realloc(account_size as usize, false)
-                .map_err(|_| error!(HookError::SenderBlacklisted))?;
-        }
 
         // Write the ExtraAccountMetaList data
         {
@@ -341,6 +351,81 @@ pub mod sss_transfer_hook {
         let bl = &mut ctx.accounts.blacklist_state;
         bl.blacklisted.retain(|a| *a != address);
         msg!("Removed {} from blacklist", address);
+        Ok(())
+    }
+
+    /// Migrate the ExtraAccountMetaList to include the ZK VerificationRecord slot.
+    ///
+    /// Required for SSS-2 mints initialized before SSS-075 (ZK compliance).
+    /// The original ExtraAccountMetaList had 2 extra accounts; after migration
+    /// it has 3 (adding the verification_record PDA at index 7).
+    ///
+    /// Must be called by the blacklist authority before enabling FLAG_ZK_COMPLIANCE
+    /// on an existing mint.
+    pub fn migrate_hook_extra_accounts(ctx: Context<MigrateHookExtraAccounts>) -> Result<()> {
+        let account_metas = vec![
+            ExtraAccountMeta::new_with_seeds(
+                &[
+                    Seed::Literal { bytes: b"blacklist-state".to_vec() },
+                    Seed::AccountKey { index: 1 },
+                ],
+                false,
+                false,
+            )?,
+            ExtraAccountMeta::new_with_seeds(
+                &[
+                    Seed::Literal { bytes: b"stablecoin-config".to_vec() },
+                    Seed::AccountKey { index: 1 },
+                ],
+                false,
+                false,
+            )?,
+            ExtraAccountMeta::new_with_seeds(
+                &[
+                    Seed::Literal { bytes: b"zk-verification".to_vec() },
+                    Seed::AccountKey { index: 1 }, // mint
+                    Seed::AccountKey { index: 3 }, // owner/delegate
+                ],
+                false,
+                false,
+            )?,
+        ];
+
+        let new_size = ExtraAccountMetaList::size_of(account_metas.len())? as usize;
+        let extra_meta_info = ctx.accounts.extra_account_meta_list.to_account_info();
+        let current_size = extra_meta_info.data_len();
+
+        // Realloc and re-fund if necessary
+        if new_size > current_size {
+            let rent = Rent::get()?;
+            let current_lamports = extra_meta_info.lamports();
+            let required_lamports = rent.minimum_balance(new_size);
+            if required_lamports > current_lamports {
+                let diff = required_lamports.saturating_sub(current_lamports);
+                system_program::transfer(
+                    CpiContext::new(
+                        ctx.accounts.system_program.to_account_info(),
+                        system_program::Transfer {
+                            from: ctx.accounts.authority.to_account_info(),
+                            to: extra_meta_info.clone(),
+                        },
+                    ),
+                    diff,
+                )?;
+            }
+            extra_meta_info.realloc(new_size, false)
+                .map_err(|_| error!(HookError::InvalidConfig))?;
+        }
+
+        {
+            let mut data = ctx.accounts.extra_account_meta_list.try_borrow_mut_data()?;
+            ExtraAccountMetaList::init::<ExecuteInstruction>(&mut data, &account_metas)?;
+        }
+
+        msg!(
+            "TransferHook: migrated ExtraAccountMetaList for mint {} to include verification_record slot",
+            ctx.accounts.mint.key()
+        );
         Ok(())
     }
 }
@@ -485,4 +570,33 @@ pub struct ManageBlacklist<'info> {
         constraint = blacklist_state.authority == authority.key() @ HookError::Unauthorized,
     )]
     pub blacklist_state: Account<'info, BlacklistState>,
+}
+
+/// Accounts for migrating the ExtraAccountMetaList to include the ZK
+/// VerificationRecord slot (needed for mints initialized before SSS-075).
+#[derive(Accounts)]
+pub struct MigrateHookExtraAccounts<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    /// CHECK: The Token-2022 mint
+    pub mint: UncheckedAccount<'info>,
+
+    /// CHECK: The canonical extra-account-metas PDA. We rewrite it.
+    #[account(
+        mut,
+        seeds = [b"extra-account-metas", mint.key().as_ref()],
+        bump,
+    )]
+    pub extra_account_meta_list: UncheckedAccount<'info>,
+
+    /// Blacklist state — validates caller is the authority
+    #[account(
+        seeds = [BlacklistState::SEED, mint.key().as_ref()],
+        bump = blacklist_state.bump,
+        constraint = blacklist_state.authority == authority.key() @ HookError::Unauthorized,
+    )]
+    pub blacklist_state: Account<'info, BlacklistState>,
+
+    pub system_program: Program<'info, System>,
 }

@@ -362,6 +362,12 @@ pub struct ZkComplianceConfig {
     /// Number of slots a VerificationRecord is valid after submission.
     /// Default: 1500 slots (~10 minutes at 400ms/slot).
     pub ttl_slots: u64,
+    /// Optional compliance oracle / verifier pubkey.
+    ///
+    /// When `Some(vk)`, `submit_zk_proof` requires a co-signature from `vk`
+    /// to prevent self-issued proofs. When `None`, any caller may submit.
+    /// Set during `init_zk_compliance` and cannot be changed after init.
+    pub verifier_pubkey: Option<Pubkey>,
     pub bump: u8,
 }
 
