@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PublicKey } from '@solana/web3.js';
-import { FeatureFlagsModule, FLAG_CIRCUIT_BREAKER, FLAG_SPEND_POLICY } from './FeatureFlagsModule';
+import { FeatureFlagsModule, FLAG_CIRCUIT_BREAKER } from './FeatureFlagsModule';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -36,21 +36,11 @@ function makeMockProvider(accountData: Buffer | null = null) {
   } as any;
 }
 
-// ─── Flag constants ───────────────────────────────────────────────────────────
+// ─── FLAG_CIRCUIT_BREAKER constant ───────────────────────────────────────────
 
 describe('FLAG_CIRCUIT_BREAKER', () => {
-  it('equals 1n << 0n (0x01)', () => {
-    expect(FLAG_CIRCUIT_BREAKER).toBe(1n);
-  });
-});
-
-describe('FLAG_SPEND_POLICY', () => {
-  it('equals 1n << 1n (0x02)', () => {
-    expect(FLAG_SPEND_POLICY).toBe(2n);
-  });
-
-  it('does not overlap with FLAG_CIRCUIT_BREAKER', () => {
-    expect(FLAG_SPEND_POLICY & FLAG_CIRCUIT_BREAKER).toBe(0n);
+  it('equals 1n << 7n (0x80)', () => {
+    expect(FLAG_CIRCUIT_BREAKER).toBe(128n);
   });
 });
 
@@ -105,44 +95,13 @@ describe('FeatureFlagsModule.isFeatureFlagSet', () => {
   });
 
   it('returns true for multiple flags when all are set', async () => {
-    const FLAG_A = 1n << 1n; // bit 1 (distinct from FLAG_CIRCUIT_BREAKER at bit 0)
-    const FLAG_B = 1n << 2n;
+    const FLAG_A = 1n << 0n;
+    const FLAG_B = 1n << 1n;
     const data = buildConfigData(FLAG_A | FLAG_B);
     const ff = new FeatureFlagsModule(makeMockProvider(data), PROGRAM_ID);
     expect(await ff.isFeatureFlagSet(MINT, FLAG_A)).toBe(true);
     expect(await ff.isFeatureFlagSet(MINT, FLAG_B)).toBe(true);
     expect(await ff.isFeatureFlagSet(MINT, FLAG_CIRCUIT_BREAKER)).toBe(false);
-  });
-});
-
-// ─── FLAG_SPEND_POLICY isFeatureFlagSet ───────────────────────────────────────
-
-describe('FeatureFlagsModule.isFeatureFlagSet — FLAG_SPEND_POLICY', () => {
-  it('returns true when FLAG_SPEND_POLICY bit is set', async () => {
-    const data = buildConfigData(FLAG_SPEND_POLICY);
-    const ff = new FeatureFlagsModule(makeMockProvider(data), PROGRAM_ID);
-    expect(await ff.isFeatureFlagSet(MINT, FLAG_SPEND_POLICY)).toBe(true);
-  });
-
-  it('returns false when FLAG_SPEND_POLICY bit is NOT set', async () => {
-    const data = buildConfigData(0n);
-    const ff = new FeatureFlagsModule(makeMockProvider(data), PROGRAM_ID);
-    expect(await ff.isFeatureFlagSet(MINT, FLAG_SPEND_POLICY)).toBe(false);
-  });
-
-  it('FLAG_CIRCUIT_BREAKER and FLAG_SPEND_POLICY can both be set independently', async () => {
-    const both = FLAG_CIRCUIT_BREAKER | FLAG_SPEND_POLICY;
-    const data = buildConfigData(both);
-    const ff = new FeatureFlagsModule(makeMockProvider(data), PROGRAM_ID);
-    expect(await ff.isFeatureFlagSet(MINT, FLAG_CIRCUIT_BREAKER)).toBe(true);
-    expect(await ff.isFeatureFlagSet(MINT, FLAG_SPEND_POLICY)).toBe(true);
-  });
-
-  it('setting only FLAG_CIRCUIT_BREAKER does not affect FLAG_SPEND_POLICY', async () => {
-    const data = buildConfigData(FLAG_CIRCUIT_BREAKER);
-    const ff = new FeatureFlagsModule(makeMockProvider(data), PROGRAM_ID);
-    expect(await ff.isFeatureFlagSet(MINT, FLAG_CIRCUIT_BREAKER)).toBe(true);
-    expect(await ff.isFeatureFlagSet(MINT, FLAG_SPEND_POLICY)).toBe(false);
   });
 });
 
