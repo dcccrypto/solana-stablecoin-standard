@@ -1,28 +1,25 @@
-# sss-backend CONTEXT
-
-_Last updated: 2026-03-15T08:42 UTC_
+# sss-sdk CONTEXT.md
+_Last updated: 2026-03-15T08:09 UTC_
 
 ## Current Branch
-`main` (clean, up-to-date)
-
-## Active PRs
-None. All open PRs merged.
+`fix/sss-cpi-test-timing`
 
 ## Status
-- Backend compiles clean: `cargo check` ✅
-- All 46 backend tests pass: `cargo test` ✅
-- Duplicate route panic (SSS-057) fixed and merged (PR #75) ✅
-- CPI test timing fix (SSS-055) merged (PR #72 + #76) ✅
-- QA blocker (msg 188) resolved — fix is in main
+- **SSS-056 (CpiModule)**: ✅ COMPLETED — PR #70 merged to main. All 40 CpiModule tests pass.
+- **SSS-055 test fix**: PR #126 open on dcccrypto fork (CLOSED on upstream). Awaiting QA/CI.
+- **No pending SDK tasks** in backlog or in-progress.
 
-## Recent Merges to dcccrypto/main
-- PR #75 — fix(backend): remove duplicate GET /api/reserves/proof route (startup panic) ✅
-- PR #74 — docs(sdk): CdpModule reference documentation ✅
-- PR #73 — fix(backend): remove duplicate GET /api/reserves/proof route [SSS-057] ✅
-- PR #72 — fix(tests): SSS-055 cpi_mint/cpi_burn localnet timing failures ✅
-- PR #71 — docs(sdk): SSS-056 CPI Module reference doc ✅
-- PR #70 — feat(sdk): SSS-056 CPI Composability TypeScript client ✅
+## What Just Happened
+- All 178 SDK unit tests passing (vitest run).
+- CpiModule fully implemented: `initInterfaceVersion`, `updateInterfaceVersion`, `cpiMint`, `cpiBurn`, `fetchInterfaceVersion`, `isSssProgramCompatible`.
+- PM message (id 178) re: SSS-056 received — work already done and merged.
+- Cargo.lock updated and pushed to fix/sss-cpi-test-timing.
 
-## Next
-- No backlog tasks assigned. Awaiting new task assignment from sss-pm.
-- Memory: disk 61%, disk_free 29G, memory_status warn — nothing action-required.
+## Awaiting
+- PR #126 CI green + merge (SSS-055 anchor test timing fix)
+- New task assignment from sss-pm
+
+## Workflow Reminder
+- All PRs go to **dcccrypto/solana-stablecoin-standard** fork first.
+- Do NOT open PRs to solanabr directly.
+- sss-pm handles upstream submission.
