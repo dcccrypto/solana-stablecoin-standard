@@ -111,6 +111,10 @@ pub struct StablecoinConfig {
     /// Accrues on outstanding CDP debt; collected via `collect_stability_fee`.
     /// 0 = no stability fee (default).
     pub stability_fee_bps: u16,
+    /// SSS-093: PSM redemption fee in basis points (e.g. 10 = 0.1%).
+    /// Deducted from collateral released on `redeem`.  Fee stays in vault.
+    /// 0 = no fee (default).  Set via `set_psm_fee` (authority-only).
+    pub redemption_fee_bps: u16,
     pub bump: u8,
 }
 
@@ -159,6 +163,14 @@ pub struct MinterInfo {
     pub cap: u64,
     /// Total minted by this minter so far
     pub minted: u64,
+    /// SSS-093: Maximum tokens this minter may mint per epoch (0 = unlimited).
+    /// Prevents flash-mint attacks by rate-limiting per Solana epoch.
+    pub max_mint_per_epoch: u64,
+    /// SSS-093: Amount minted in the current epoch (resets when epoch advances).
+    pub minted_this_epoch: u64,
+    /// SSS-093: The epoch slot-number when `minted_this_epoch` was last reset.
+    /// Solana epoch = `clock.epoch` (u64).
+    pub last_epoch_reset: u64,
     pub bump: u8,
 }
 

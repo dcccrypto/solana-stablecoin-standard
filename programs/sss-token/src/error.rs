@@ -127,4 +127,9 @@ pub enum SssError {
     // SSS-092: Stability fee
     #[msg("Stability fee bps exceeds maximum allowed (2000 = 20% p.a.)")]
     StabilityFeeTooHigh,
+    // SSS-093: PSM fee + velocity
+    #[msg("Minter epoch velocity limit exceeded — too much minted in this epoch")]
+    MintVelocityExceeded,
+    #[msg("PSM redemption fee too high — max 1000 bps (10%)")]
+    InvalidPsmFee,
 }
