@@ -29,8 +29,8 @@ export type {
   SetPythFeedParams,
   PendingTimelockOp,
 } from './AdminTimelockModule';
-export { OracleParamsModule, DEFAULT_MAX_ORACLE_AGE_SECS, RECOMMENDED_MAX_ORACLE_CONF_BPS } from './OracleParamsModule';
-export type { SetOracleParamsArgs, OracleParams } from './OracleParamsModule';
+export { OracleParamsModule, DEFAULT_MAX_ORACLE_AGE_SECS, MAX_ORACLE_AGE_SECONDS, RECOMMENDED_MAX_ORACLE_CONF_BPS } from './OracleParamsModule';
+export type { SetOracleParamsArgs, OracleParams, OracleParamsConfig, OracleFeedValidation } from './OracleParamsModule';
 export { StabilityFeeModule, MAX_STABILITY_FEE_BPS, SECS_PER_YEAR } from './StabilityFeeModule';
 export type { SetStabilityFeeArgs, CollectStabilityFeeArgs, StabilityFeeConfig, CdpStabilityFeeState, StabilityFeePreview } from './StabilityFeeModule';
 export { SSSClient } from './client';
