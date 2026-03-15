@@ -16,6 +16,12 @@ pub const FLAG_SPEND_POLICY: u64 = 1 << 1;
 /// a passed on-chain proposal via `propose_action` / `vote_action` / `execute_action`.
 pub const FLAG_DAO_COMMITTEE: u64 = 1 << 2;
 
+/// Yield-bearing collateral flag (bit 3): when set, only whitelisted SPL tokens
+/// (e.g. stSOL, mSOL) recorded in `YieldCollateralConfig` may be deposited as
+/// CDP collateral.  Enables `init_yield_collateral` / `add_yield_collateral_mint`.
+/// External protocol risk applies — see docs/FEATURE-FLAGS-RESEARCH.md §Feature 2.
+pub const FLAG_YIELD_COLLATERAL: u64 = 1 << 3;
+
 /// Global stablecoin configuration (one per mint).
 #[account]
 #[derive(InitSpace)]
@@ -223,6 +229,32 @@ impl InterfaceVersion {
 
     /// The canonical namespace string used to derive discriminators.
     pub const NAMESPACE: &'static str = "sss_mint_interface";
+}
+
+// ─── SSS-070: Yield-Bearing Collateral ───────────────────────────────────────
+
+/// Yield-collateral config PDA — one per stablecoin mint.
+/// Seeds: [b"yield-collateral", sss_mint]
+///
+/// Stores a whitelist of SPL token mints that may be used as yield-bearing
+/// collateral in CDP deposits when FLAG_YIELD_COLLATERAL is enabled.
+/// Maximum 8 whitelisted mints — covers all practical yield-token variants
+/// (stSOL, mSOL, jitoSOL, bSOL, etc.) without unbounded Vec heap.
+#[account]
+#[derive(InitSpace)]
+pub struct YieldCollateralConfig {
+    /// The SSS stablecoin mint this config belongs to
+    pub sss_mint: Pubkey,
+    /// Whitelisted yield-bearing SPL token mints (max 8)
+    #[max_len(8)]
+    pub whitelisted_mints: Vec<Pubkey>,
+    pub bump: u8,
+}
+
+impl YieldCollateralConfig {
+    pub const SEED: &'static [u8] = b"yield-collateral";
+    /// Maximum number of whitelisted yield-bearing collateral mints
+    pub const MAX_MINTS: usize = 8;
 }
 
 // ─── SSS-067: DAO Committee Governance ───────────────────────────────────────

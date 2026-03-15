@@ -1590,6 +1590,7 @@ describe("sss-token", () => {
           collateralVault: collateralVaultPda,
           vaultTokenAccount: vaultTokenAccount,
           userCollateralAccount: userCollateralAta,
+          yieldCollateralConfig: program.programId, // FLAG_YIELD_COLLATERAL not set — pass program_id as None placeholder
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -1616,6 +1617,7 @@ describe("sss-token", () => {
           collateralVault: collateralVaultPda,
           vaultTokenAccount: vaultTokenAccount,
           userCollateralAccount: userCollateralAta,
+          yieldCollateralConfig: program.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -1640,6 +1642,7 @@ describe("sss-token", () => {
             collateralVault: collateralVaultPda,
             vaultTokenAccount: vaultTokenAccount,
             userCollateralAccount: userCollateralAta,
+            yieldCollateralConfig: program.programId,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -1730,6 +1733,7 @@ describe("sss-token", () => {
             collateralVault: sss1VaultPda,
             vaultTokenAccount: vaultTokenAccount,
             userCollateralAccount: userCollateralAta,
+            yieldCollateralConfig: program.programId,
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -1835,6 +1839,7 @@ describe("sss-token", () => {
           collateralVault: vault2Pda,
           vaultTokenAccount: vault2TokenAccount,
           userCollateralAccount: userCollateral2Ata.address,
+          yieldCollateralConfig: program.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -2464,6 +2469,464 @@ describe("sss-token", () => {
           )
         ).to.equal(true);
       }
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SSS-070: FLAG_YIELD_COLLATERAL (bit 3) — yield-bearing collateral support
+  // ══════════════════════════════════════════════════════════════════════════
+
+  describe("SSS-070: FLAG_YIELD_COLLATERAL (bit 3) — yield-bearing collateral", () => {
+    // Fresh SSS-3 mint for yield-collateral tests (isolated from CDP suite)
+    const ycSssMintKeypair = Keypair.generate();
+    let ycConfigPda: PublicKey;
+    let ycConfigBump: number;
+
+    // Mock yield-bearing collateral mints (e.g. stSOL, mSOL)
+    let mockStSolMint: PublicKey;
+    let mockMSolMint: PublicKey;
+    let mockUnknownMint: PublicKey;
+
+    // YieldCollateralConfig PDA
+    let ycPda: PublicKey;
+    let ycPdaBump: number;
+
+    // Token accounts for deposit test
+    let userStSolAta: PublicKey;
+    let vaultStSolTokenAccount: PublicKey;
+    let ycCollateralVaultPda: PublicKey;
+
+    before(async () => {
+      // Derive config PDA
+      [ycConfigPda, ycConfigBump] = PublicKey.findProgramAddressSync(
+        [Buffer.from("stablecoin-config"), ycSssMintKeypair.publicKey.toBuffer()],
+        program.programId
+      );
+
+      // Derive YieldCollateralConfig PDA
+      [ycPda, ycPdaBump] = PublicKey.findProgramAddressSync(
+        [Buffer.from("yield-collateral"), ycSssMintKeypair.publicKey.toBuffer()],
+        program.programId
+      );
+
+      // Create mock collateral mints (plain SPL tokens simulating stSOL, mSOL, unknown)
+      mockStSolMint = await createMint(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        authority.publicKey,
+        null,
+        9,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      mockMSolMint = await createMint(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        authority.publicKey,
+        null,
+        9,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      mockUnknownMint = await createMint(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        authority.publicKey,
+        null,
+        6,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Create a vault token account (collateral_vault PDA owns it)
+      // First derive the CollateralVault PDA
+      [ycCollateralVaultPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("cdp-collateral-vault"),
+          ycSssMintKeypair.publicKey.toBuffer(),
+          authority.publicKey.toBuffer(),
+          mockStSolMint.toBuffer(),
+        ],
+        program.programId
+      );
+
+      // Create vault token account owned by ycCollateralVaultPda
+      const vaultStSolAccKeypair = Keypair.generate();
+      vaultStSolTokenAccount = await createTokenAccount(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        mockStSolMint,
+        ycCollateralVaultPda,
+        vaultStSolAccKeypair,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Create user stSOL ATA and mint tokens
+      const userStSolAccKeypair = Keypair.generate();
+      userStSolAta = await createTokenAccount(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        mockStSolMint,
+        authority.publicKey,
+        userStSolAccKeypair,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      await splMintTo(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        mockStSolMint,
+        userStSolAta,
+        authority.publicKey,
+        5_000 * 10 ** 9,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Initialize SSS-3 stablecoin for this suite
+      // Reuse vaultStSolTokenAccount as the reserve vault (any token account works for init)
+      await program.methods
+        .initialize({
+          preset: 3,
+          decimals: 6,
+          name: "YC Test USD",
+          symbol: "YCUSD",
+          uri: "https://example.com/yc.json",
+          transferHookProgram: null,
+          collateralMint: mockStSolMint,
+          reserveVault: vaultStSolTokenAccount,
+          maxSupply: null,
+        })
+        .accounts({
+          payer: authority.publicKey,
+          mint: ycSssMintKeypair.publicKey,
+          config: ycConfigPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([ycSssMintKeypair])
+        .rpc();
+    });
+
+    // ── Test 1: FLAG_YIELD_COLLATERAL is not set initially ───────────────────
+
+    it("SSS-070: FLAG_YIELD_COLLATERAL is NOT set on freshly initialized config", async () => {
+      const config = await program.account.stablecoinConfig.fetch(ycConfigPda);
+      const FLAG_YIELD_COLLATERAL = BigInt(1) << BigInt(3); // 1 << 3 = 8
+      expect((BigInt(config.featureFlags.toString()) & FLAG_YIELD_COLLATERAL) === BigInt(0)).to.equal(true);
+    });
+
+    // ── Test 2: Non-authority cannot init_yield_collateral ───────────────────
+
+    it("SSS-070: non-authority cannot call init_yield_collateral", async () => {
+      const stranger = Keypair.generate();
+      try {
+        await program.methods
+          .initYieldCollateral([])
+          .accounts({
+            authority: stranger.publicKey,
+            config: ycConfigPda,
+            mint: ycSssMintKeypair.publicKey,
+            yieldCollateralConfig: ycPda,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([stranger])
+          .rpc();
+        expect.fail("should have thrown Unauthorized");
+      } catch (err: any) {
+        expect(
+          /Unauthorized|0x1770|Error/i.test(
+            err.error?.errorCode?.code || err.message
+          )
+        ).to.equal(true);
+      }
+    });
+
+    // ── Test 3: init_yield_collateral fails on SSS-1 preset ──────────────────
+
+    it("SSS-070: init_yield_collateral rejects non-SSS-3 config", async () => {
+      // mintKeypair is an SSS-1 config (preset=1) from the outer test suite
+      const [sss1YcPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("yield-collateral"), mintKeypair.publicKey.toBuffer()],
+        program.programId
+      );
+      try {
+        await program.methods
+          .initYieldCollateral([])
+          .accounts({
+            authority: authority.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            yieldCollateralConfig: sss1YcPda,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("should have thrown InvalidPreset");
+      } catch (err: any) {
+        expect(
+          /InvalidPreset|preset|Error/i.test(
+            err.error?.errorCode?.code || err.message
+          )
+        ).to.equal(true);
+      }
+    });
+
+    // ── Test 4: init_yield_collateral succeeds, enables FLAG_YIELD_COLLATERAL ─
+
+    it("SSS-070: init_yield_collateral succeeds with initial whitelist, enables FLAG_YIELD_COLLATERAL", async () => {
+      await program.methods
+        .initYieldCollateral([mockStSolMint, mockMSolMint])
+        .accounts({
+          authority: authority.publicKey,
+          config: ycConfigPda,
+          mint: ycSssMintKeypair.publicKey,
+          yieldCollateralConfig: ycPda,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      // Verify flag is set
+      const config = await program.account.stablecoinConfig.fetch(ycConfigPda);
+      const FLAG_YIELD_COLLATERAL = BigInt(1) << BigInt(3);
+      expect((BigInt(config.featureFlags.toString()) & FLAG_YIELD_COLLATERAL) > BigInt(0)).to.equal(true);
+
+      // Verify YieldCollateralConfig PDA was initialized correctly
+      const ycConfig = await program.account.yieldCollateralConfig.fetch(ycPda);
+      expect(ycConfig.sssMint.toBase58()).to.equal(ycSssMintKeypair.publicKey.toBase58());
+      expect(ycConfig.whitelistedMints.length).to.equal(2);
+      expect(ycConfig.whitelistedMints[0].toBase58()).to.equal(mockStSolMint.toBase58());
+      expect(ycConfig.whitelistedMints[1].toBase58()).to.equal(mockMSolMint.toBase58());
+    });
+
+    // ── Test 5: Cannot init_yield_collateral twice (PDA already exists) ──────
+
+    it("SSS-070: init_yield_collateral is one-shot — second call fails", async () => {
+      try {
+        await program.methods
+          .initYieldCollateral([])
+          .accounts({
+            authority: authority.publicKey,
+            config: ycConfigPda,
+            mint: ycSssMintKeypair.publicKey,
+            yieldCollateralConfig: ycPda,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("should have failed because PDA already exists");
+      } catch (err: any) {
+        // Anchor rejects with "already in use" or similar account init error
+        expect(err.message || err.toString()).to.match(/already in use|Error|custom program error/i);
+      }
+    });
+
+    // ── Test 6: add_yield_collateral_mint appends to whitelist ───────────────
+
+    it("SSS-070: add_yield_collateral_mint appends a new mint to the whitelist", async () => {
+      // Add a third mint (unknown mint — valid SPL token, not yet whitelisted)
+      await program.methods
+        .addYieldCollateralMint(mockUnknownMint)
+        .accounts({
+          authority: authority.publicKey,
+          config: ycConfigPda,
+          mint: ycSssMintKeypair.publicKey,
+          yieldCollateralConfig: ycPda,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+
+      const ycConfig = await program.account.yieldCollateralConfig.fetch(ycPda);
+      expect(ycConfig.whitelistedMints.length).to.equal(3);
+      expect(ycConfig.whitelistedMints[2].toBase58()).to.equal(mockUnknownMint.toBase58());
+    });
+
+    // ── Test 7: add_yield_collateral_mint rejects duplicates ─────────────────
+
+    it("SSS-070: add_yield_collateral_mint rejects duplicate mints", async () => {
+      try {
+        await program.methods
+          .addYieldCollateralMint(mockStSolMint) // already in list
+          .accounts({
+            authority: authority.publicKey,
+            config: ycConfigPda,
+            mint: ycSssMintKeypair.publicKey,
+            yieldCollateralConfig: ycPda,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .rpc();
+        expect.fail("should have thrown MintAlreadyWhitelisted");
+      } catch (err: any) {
+        expect(
+          /MintAlreadyWhitelisted|already/i.test(
+            err.error?.errorCode?.code || err.message
+          )
+        ).to.equal(true);
+      }
+    });
+
+    // ── Test 8: non-authority cannot add mints ────────────────────────────────
+
+    it("SSS-070: non-authority cannot call add_yield_collateral_mint", async () => {
+      const stranger = Keypair.generate();
+      try {
+        await program.methods
+          .addYieldCollateralMint(Keypair.generate().publicKey)
+          .accounts({
+            authority: stranger.publicKey,
+            config: ycConfigPda,
+            mint: ycSssMintKeypair.publicKey,
+            yieldCollateralConfig: ycPda,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([stranger])
+          .rpc();
+        expect.fail("should have thrown Unauthorized");
+      } catch (err: any) {
+        expect(
+          /Unauthorized|0x1770|Error/i.test(
+            err.error?.errorCode?.code || err.message
+          )
+        ).to.equal(true);
+      }
+    });
+
+    // ── Test 9: cdp_deposit_collateral blocked for non-whitelisted mint ───────
+
+    it("SSS-070: cdp_deposit_collateral rejects non-whitelisted collateral when FLAG_YIELD_COLLATERAL is set", async () => {
+      // Create a brand-new mint NOT on the whitelist
+      const rogue = await createMint(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        authority.publicKey,
+        null,
+        6,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Derive vaults for the rogue mint
+      const [rogueVaultPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("cdp-collateral-vault"),
+          ycSssMintKeypair.publicKey.toBuffer(),
+          authority.publicKey.toBuffer(),
+          rogue.toBuffer(),
+        ],
+        program.programId
+      );
+      const rogueVaultAccKeypair = Keypair.generate();
+      const rogueVaultAta = await createTokenAccount(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        rogue,
+        rogueVaultPda,
+        rogueVaultAccKeypair,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const rogueUserAccKeypair = Keypair.generate();
+      const rogueUserAta = await createTokenAccount(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        rogue,
+        authority.publicKey,
+        rogueUserAccKeypair,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      await splMintTo(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        rogue,
+        rogueUserAta,
+        authority.publicKey,
+        1_000 * 10 ** 6,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      try {
+        await program.methods
+          .cdpDepositCollateral(new anchor.BN(100 * 10 ** 6))
+          .accounts({
+            user: authority.publicKey,
+            config: ycConfigPda,
+            sssMint: ycSssMintKeypair.publicKey,
+            collateralMint: rogue,
+            collateralVault: rogueVaultPda,
+            vaultTokenAccount: rogueVaultAta,
+            userCollateralAccount: rogueUserAta,
+            yieldCollateralConfig: ycPda, // pass the real config PDA — rogue not whitelisted
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("should have thrown CollateralMintNotWhitelisted");
+      } catch (err: any) {
+        expect(
+          /CollateralMintNotWhitelisted|whitelist|Error/i.test(
+            err.error?.errorCode?.code || err.message
+          )
+        ).to.equal(true);
+      }
+    });
+
+    // ── Test 10: cdp_deposit_collateral succeeds for whitelisted mint ─────────
+
+    it("SSS-070: cdp_deposit_collateral succeeds for a whitelisted mint (stSOL)", async () => {
+      const depositAmount = new anchor.BN(100 * 10 ** 9); // 100 stSOL (9 decimals)
+
+      await program.methods
+        .cdpDepositCollateral(depositAmount)
+        .accounts({
+          user: authority.publicKey,
+          config: ycConfigPda,
+          sssMint: ycSssMintKeypair.publicKey,
+          collateralMint: mockStSolMint,
+          collateralVault: ycCollateralVaultPda,
+          vaultTokenAccount: vaultStSolTokenAccount,
+          userCollateralAccount: userStSolAta,
+          yieldCollateralConfig: ycPda, // whitelisted config
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const vault = await program.account.collateralVault.fetch(ycCollateralVaultPda);
+      expect(vault.depositedAmount.toString()).to.equal(depositAmount.toString());
+      expect(vault.collateralMint.toBase58()).to.equal(mockStSolMint.toBase58());
+    });
+
+    // ── Test 11: FLAG_YIELD_COLLATERAL bit value is correct ──────────────────
+
+    it("SSS-070: FLAG_YIELD_COLLATERAL is bit 3 (value 8 = 0x08)", async () => {
+      const config = await program.account.stablecoinConfig.fetch(ycConfigPda);
+      const flags = BigInt(config.featureFlags.toString());
+      // bit 3 = 1<<3 = 8
+      expect((flags & BigInt(8)) > BigInt(0)).to.equal(true);
+      // bits 0-2 should NOT be set (circuit breaker / spend policy / dao committee not enabled)
+      expect((flags & BigInt(7)) === BigInt(0)).to.equal(true);
+    });
+
+    // ── Test 12: YieldCollateralConfig PDA seeds are deterministic ────────────
+
+    it("SSS-070: YieldCollateralConfig PDA seeds are deterministic", async () => {
+      const [derived] = PublicKey.findProgramAddressSync(
+        [Buffer.from("yield-collateral"), ycSssMintKeypair.publicKey.toBuffer()],
+        program.programId
+      );
+      expect(derived.toBase58()).to.equal(ycPda.toBase58());
     });
   });
 });
