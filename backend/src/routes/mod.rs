@@ -1,8 +1,13 @@
 pub mod apikeys;
 pub mod burn;
+pub mod cdp;
 pub mod compliance;
+pub mod compliance_rules;
+pub mod confidential;
+pub mod cpi;
 pub mod events;
 pub mod health;
 pub mod mint;
+pub mod reserves;
 pub mod supply;
 pub mod webhooks;
