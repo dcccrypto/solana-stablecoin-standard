@@ -1,32 +1,30 @@
-# sss-sdk Context
+# sss-docs Context
 
 ## Current Status
-- Branch: `feat/sss-072-yield-collateral-sdk` (clean, pushed)
-- **PR #93** open: `feat/sss-072-yield-collateral-sdk` → dcccrypto fork
+- Branch: `docs/sss-074-yield-collateral-module` (pushed)
+- **PR #137** open (dcccrypto → solanabr:main): SSS-074 YieldCollateralModule docs
 
-## Last completed: SSS-072 — YieldCollateralModule SDK
-**PR #93** (dcccrypto fork):
-- FLAG_YIELD_COLLATERAL = 1n << 3n (0x08)
-- YieldCollateralModule: enableYieldCollateral, addWhitelistedMint, disableYieldCollateral, fetchYieldCollateralState, isYieldCollateralEnabled
-- getConfigPda / getYieldCollateralPda PDA helpers
-- 28 vitest tests, all passing (248/248 total suite)
-- Note: setYieldRate / accrueYield not yet in Anchor IDL — deferred until program extended
+## Last completed: SSS-074 — YieldCollateralModule reference docs
+**PR #137** (dcccrypto fork → solanabr:main):
+- New: docs/on-chain-sdk-yield.md — FLAG_YIELD_COLLATERAL constant, all 5 methods, PDA helpers, YieldCollateralState layout, LST risk caveats, TS end-to-end example, error codes
+- Updated: docs/feature-flags.md — FLAG_YIELD_COLLATERAL row added to constants table, reserved-bits note corrected (bits 4–63)
 
-## Previously completed
-- **SSS-068** (PR #90, merged): FLAG_DAO_COMMITTEE (1n<<2n) + DaoCommitteeModule
-- **SSS-062** (PR #85, merged): FLAG_SPEND_POLICY (1n<<1n) + SpendPolicyModule
-- **SSS-059/SSS-SDK** (PR #78+#80, merged): FLAG_CIRCUIT_BREAKER (1n<<0n) + FeatureFlagsModule
+## Previously completed (docs)
+- **SSS-065** (PR #88, merged): feature-flags.md FLAG_SPEND_POLICY section
+- **SSS-060** (PR ~#129, merged): feature-flags.md FLAG_CIRCUIT_BREAKER + admin methods re-push to fork
+- SSS-071 (on-chain-sdk-dao.md) — PM message received; appears completed based on repo state; awaiting PM confirmation
 
-## Feature flag bit assignments (SDK exports)
-| Bit | Constant | SDK Module |
-|-----|----------|-----------|
-| 0 | FLAG_CIRCUIT_BREAKER | FeatureFlagsModule |
-| 1 | FLAG_SPEND_POLICY | FeatureFlagsModule |
-| 2 | FLAG_DAO_COMMITTEE | DaoCommitteeModule |
-| 3 | FLAG_YIELD_COLLATERAL | YieldCollateralModule |
+## Feature flag bit assignments (docs coverage)
+| Bit | Constant | Doc file |
+|-----|----------|---------|
+| 0 | FLAG_CIRCUIT_BREAKER | feature-flags.md |
+| 1 | FLAG_SPEND_POLICY | feature-flags.md |
+| 2 | FLAG_DAO_COMMITTEE | feature-flags.md + on-chain-sdk-dao.md (TBC) |
+| 3 | FLAG_YIELD_COLLATERAL | feature-flags.md + on-chain-sdk-yield.md ✅ |
 
 ## Next
-- Awaiting PR #93 review + merge
-- No active tasks in backlog; waiting on new assignment from PM
+- Awaiting PR #137 review
+- SSS-071 (on-chain-sdk-dao.md) status to be confirmed by PM
+- No other active tasks in backlog
 
-## Heartbeat: 2026-03-15T14:49 UTC
+## Heartbeat: 2026-03-15T14:51 UTC
