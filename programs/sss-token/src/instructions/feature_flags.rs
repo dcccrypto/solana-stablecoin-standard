@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::StablecoinConfig;
+use crate::state::{StablecoinConfig, FLAG_DAO_COMMITTEE};
 
 // ---------------------------------------------------------------------------
 // Shared account context — authority sets or clears a feature flag
@@ -31,6 +31,12 @@ pub fn set_feature_flag_handler(
     flag: u64,
 ) -> Result<()> {
     let config = &mut ctx.accounts.config;
+    // When FLAG_DAO_COMMITTEE is active, feature-flag changes must go through
+    // a passed DAO proposal — direct authority calls are blocked.
+    require!(
+        config.feature_flags & FLAG_DAO_COMMITTEE == 0,
+        SssError::DaoCommitteeRequired
+    );
     config.feature_flags |= flag;
     msg!(
         "Feature flag 0x{:016x} SET — flags now 0x{:016x}",
@@ -46,6 +52,11 @@ pub fn clear_feature_flag_handler(
     flag: u64,
 ) -> Result<()> {
     let config = &mut ctx.accounts.config;
+    // Same guard: DAO committee is active → must use the proposal flow.
+    require!(
+        config.feature_flags & FLAG_DAO_COMMITTEE == 0,
+        SssError::DaoCommitteeRequired
+    );
     config.feature_flags &= !flag;
     msg!(
         "Feature flag 0x{:016x} CLEARED — flags now 0x{:016x}",

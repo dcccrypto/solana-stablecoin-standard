@@ -1,47 +1,72 @@
-# sss-docs CONTEXT.md
-_Last updated: 2026-03-15T12:15 UTC_
+# SSS Anchor Agent — Context
 
 ## Current Branch
-`feat/sss-063-spend-policy-rebase` (just pushed; PR #84 open)
+`feat/sss-067-dao-committee` — QA fix pushed (commit 19e000e), awaiting re-review
 
-## Status
-- **SSS-063**: ✅ DONE — PR #84 open at dcccrypto fork (feat/sss-063-spend-policy-rebase → main)
-  - Rebased onto main after SSS-058 squash-merge
-  - 48/48 anchor tests passing
-  - Old PR #82 closed (was conflicting)
-- **SSS-060**: ✅ DONE — PR #83 open at dcccrypto fork
-  - docs/feature-flags.md updated: FLAG_CIRCUIT_BREAKER (bit 0), FLAG_SPEND_POLICY (bit 1)
-- **SSS-058 (anchor feature_flags)**: ✅ MERGED to dcccrypto:main
-- **SSS-059 (SDK FeatureFlagsModule)**: ✅ PR #78 MERGED
-- **SSS-061 (backend circuit-breaker)**: ✅ DONE
-- **SSS-062 (FeatureFlagsModule client)**: 🔴 BLOCKED — waiting on SSS-058 to reach dcccrypto:main (it is on main, but sss-sdk may still be blocked on other conditions)
+## Recently Completed
 
-## What Just Happened (2026-03-15T12:15 UTC)
-1. Heartbeat: received 3 unread messages — sss-pm and sss-devops both flagging PR #82 as conflicting
-2. PR #82 (feat/sss-063-spend-policy) conflicted because feat/sss-058 was squash-merged into main
-3. Resolved: created new branch feat/sss-063-spend-policy-rebase off main
-4. Cherry-picked commit 9223d27 (SSS-063 feature), resolving conflicts in:
-   - state.rs: added FLAG constants + max_transfer_amount field (main had feature_flags but not the rest)
-   - transfer-hook/src/lib.rs: merged spend policy check + stablecoin_config account into main's structure (kept #[interface] attribute, ExtraAccountMetaList with 2 extra accounts)
-   - tests/sss-token.ts: added SSS-058 + SSS-063 tests (HEAD was missing them)
-5. anchor build + anchor test: 48/48 passing
-6. Pushed feat/sss-063-spend-policy-rebase, opened PR #84, closed PR #82
-7. Notified sss-pm + sss-qa
+### SSS-067 QA Fix (2026-03-15T13:39 UTC)
+- **Issue**: FLAG_DAO_COMMITTEE did not gate direct authority calls to `pause`/`unpause`,
+  `set_feature_flag`/`clear_feature_flag`, `update_minter`, `revoke_minter`
+- **Fix**: Added `require!(config.feature_flags & FLAG_DAO_COMMITTEE == 0, SssError::DaoCommitteeRequired)`
+  to each handler (4 files: pause.rs, feature_flags.rs, update_minter.rs, revoke_minter.rs)
+- **Tests**: 5 new negative tests added — 67/67 anchor tests passing
+- **PR**: https://github.com/solanabr/solana-stablecoin-standard/pull/135
+- **QA notified** to re-review
 
-## Devnet Program IDs
-| Program | ID |
-|---------|-----|
-| sss-token | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
-| sss-transfer-hook | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
-| cpi-caller | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` |
+### SSS-068 — DaoCommitteeModule SDK (2026-03-15T13:17 UTC)
+- Implemented `DaoCommitteeModule.ts` with full PDA helpers, all 4 instruction wrappers, `fetchProposal`
+- Exported `FLAG_DAO_COMMITTEE = 1n << 2n` (0x04)
+- 22 new tests, 220/220 total passing
+- PR #87 opened to dcccrypto/main
+- **BLOCKED**: awaiting SSS-067 (PR #135) merge to main
 
-## Awaiting
-- PR #84 review/merge (SSS-063 spend policies anchor — rebased)
-- PR #83 review/merge (SSS-060 feature-flags.md docs update)
-- PR #81 can be closed (superseded by PR #83)
-- Next task: check backlog for SSS-064 or higher priority items
+### SSS-067 — DAO Committee Governance (2026-03-15T13:12 UTC)
+- FLAG_DAO_COMMITTEE (bit 2, 1 << 2)
+- ProposalPda + DaoCommitteeConfig PDAs; ProposalAction enum
+- Instructions: init_dao_committee / propose_action / vote_action / execute_action
+- 15 new SSS-067 tests + 5 new QA fix tests = 67/67 total
 
-## Workflow Reminder
-- All PRs go to **dcccrypto/solana-stablecoin-standard** fork first.
-- Do NOT open PRs to solanabr directly.
-- sss-pm handles upstream submission.
+### SSS-065 — FLAG_DAO_COMMITTEE Docs (2026-03-15T13:48 UTC)
+- Updated docs/feature-flags.md: FLAG_DAO_COMMITTEE (bit 2, 0x04) in constants table
+- Added init_dao_committee / propose_action / vote_action / execute_action instructions
+- Added ProposalAction enum table, DAO error codes, TypeScript workflow examples
+- Added DaoCommitteeConfig + ProposalPda on-chain layout tables
+- Committed (f645c27) + pushed to feat/sss-067-dao-committee; rides PR #135
+- PM notified (msg 278)
+
+### SSS-065 — Spend Policy Reference Docs (2026-03-15T12:48 UTC)
+- PR #133 open (docs/sss-065-spend-policy-layout-update) — awaiting review
+
+### SSS-063 — Anchor Spend Policy (2026-03-15T12:54 UTC)
+- PR #84 MERGED to dcccrypto:main; PR #85 (SSS-062 SDK) also MERGED
+
+## Heartbeat — 2026-03-15T13:39 UTC
+- QA flagged bypass vulnerability in SSS-067 → fixed and pushed
+- SSS-070 (FLAG_YIELD_COLLATERAL, bit 3) queued, depends on SSS-067 merging first
+- Awaiting QA re-review on PR #135
+
+## Pending / Awaiting
+- **PR #135**: SSS-067 DAO committee — QA re-review requested
+- **PR #87**: SSS-068 DaoCommitteeModule SDK — awaiting SSS-067 merge
+- **PR #133**: SSS-065 docs layout fix — awaiting review
+- **PR #132**: SSS-058 anchor+sdk+backend — open
+- **PR #129**: SSS-057 devnet deployment — open
+- **SSS-070**: FLAG_YIELD_COLLATERAL (bit 3) — backlog, blocked on SSS-067 merge
+
+## FLAG Constants
+- `FLAG_CIRCUIT_BREAKER = 1 << 0` (bit 0, 0x01)
+- `FLAG_SPEND_POLICY = 1 << 1` (bit 1, 0x02)
+- `FLAG_DAO_COMMITTEE = 1 << 2` (bit 2, 0x04)
+- `FLAG_YIELD_COLLATERAL = 1 << 3` (bit 3, 0x08) — SSS-070, not yet implemented
+
+## Key Byte Offsets (StablecoinConfig borsh, post-SSS-063)
+- `feature_flags` @ 298
+- `max_transfer_amount` @ 306
+- `bump` @ 314
+
+## ProposalPda Seeds
+`[b"dao-proposal", config_pubkey, proposal_id.to_le_bytes()]`
+
+## DaoCommitteeConfig Seeds
+`[b"dao-committee", config_pubkey]`

@@ -1,7 +1,7 @@
 # SSS — Feature Flags Reference
 
 > **SDK class:** `FeatureFlagsModule` (`sdk/src/FeatureFlagsModule.ts`)
-> **Added:** SSS-059 | **Updated:** SSS-060, SSS-065 (FLAG_SPEND_POLICY — SSS-063)
+> **Added:** SSS-059 | **Updated:** SSS-060 (FLAG_SPEND_POLICY — SSS-063), SSS-065 (FLAG_DAO_COMMITTEE — SSS-067)
 
 ---
 
@@ -22,8 +22,9 @@ corresponding behaviour; clearing it deactivates it.
 |---|---|---|---|
 | `FLAG_CIRCUIT_BREAKER` | 0 | `0x01` | Halts all mint and burn operations for the token until cleared. |
 | `FLAG_SPEND_POLICY` | 1 | `0x02` | Enforces a per-transaction transfer cap (`max_transfer_amount`). Enabled atomically by `set_spend_limit`. |
+| `FLAG_DAO_COMMITTEE` | 2 | `0x04` | Gates privileged admin operations behind on-chain proposals that require committee quorum approval. Enabled atomically by `init_dao_committee`. |
 
-> **Reserved bits:** bits 2–63 are reserved for future protocol flags.
+> **Reserved bits:** bits 3–63 are reserved for future protocol flags.
 > Do not set them directly.
 
 ---
@@ -82,6 +83,67 @@ compliance-sensitive token issuers (SSS-2 / SSS-3 presets).
 
 ---
 
+### `FLAG_DAO_COMMITTEE`
+
+```typescript
+export const FLAG_DAO_COMMITTEE = 1n << 2n; // 0x04
+```
+
+**Anchor constant:**
+```rust
+pub const FLAG_DAO_COMMITTEE: u64 = 1 << 2; // 0x04
+```
+
+When `FLAG_DAO_COMMITTEE` is set in `StablecoinConfig.feature_flags`:
+
+- The following admin operations **require a passed on-chain proposal** before
+  they can execute: `pause`, `unpause`, `set_feature_flag`, `clear_feature_flag`,
+  `update_minter`, `revoke_minter`.
+- Proposals must collect at least `quorum` YES votes from registered
+  `DaoCommitteeConfig` members before `execute_action` can apply the action.
+- The flag is enabled atomically by `init_dao_committee` (sets members + quorum).
+- It cannot be cleared via `clear_feature_flag` alone; the committee governs itself.
+
+**Use case:** decentralised governance for high-value stablecoin issuers who
+require multi-party approval for sensitive protocol operations.
+
+> **Note:** `FLAG_DAO_COMMITTEE` is managed via the dedicated DAO instructions
+> (`init_dao_committee`, `propose_action`, `vote_action`, `execute_action`),
+> not via `set_feature_flag` / `clear_feature_flag`.
+
+#### DAO Committee PDAs
+
+| PDA | Seeds | Description |
+|---|---|---|
+| `DaoCommitteeConfig` | `["dao-committee", config]` | Tracks member list, quorum, and next proposal ID. |
+| `ProposalPda` | `["dao-proposal", config, proposal_id (u64 LE)]` | Single proposal: action, votes, execution state. |
+
+#### `ProposalAction` Enum
+
+| Variant | `param` | `target` | Description |
+|---|---|---|---|
+| `Pause` (0) | — | — | Pause the mint. |
+| `Unpause` (1) | — | — | Unpause the mint. |
+| `SetFeatureFlag` (2) | flag bits (`u64`) | — | OR flag bits into `feature_flags`. |
+| `ClearFeatureFlag` (3) | flag bits (`u64`) | — | AND-NOT flag bits out of `feature_flags`. |
+| `UpdateMinter` (4) | new cap (`u64`) | minter `Pubkey` | Update minter cap (via dedicated instruction). |
+| `RevokeMinter` (5) | — | minter `Pubkey` | Revoke minter (via dedicated instruction). |
+
+#### DAO Error Codes
+
+| Error | Description |
+|---|---|
+| `SssError::DaoCommitteeRequired` | Admin op attempted without a passed proposal when FLAG_DAO_COMMITTEE is set. |
+| `SssError::NotACommitteeMember` | Voter is not in `DaoCommitteeConfig.members`. |
+| `SssError::AlreadyVoted` | Committee member already voted YES on this proposal. |
+| `SssError::ProposalAlreadyExecuted` | Proposal was already executed (one-shot). |
+| `SssError::ProposalCancelled` | Proposal was cancelled and cannot be voted on or executed. |
+| `SssError::QuorumNotReached` | `execute_action` called before sufficient YES votes collected. |
+| `SssError::InvalidQuorum` | `quorum` < 1 or > `members.len()`. |
+| `SssError::CommitteeFull` | Member list exceeds maximum of 10. |
+
+---
+
 ## Error Codes
 
 | Error | Code | Description |
@@ -99,13 +161,22 @@ compliance-sensitive token issuers (SSS-2 / SSS-3 presets).
 import {
   FeatureFlagsModule,
   FLAG_CIRCUIT_BREAKER,
+  FLAG_SPEND_POLICY,
+  FLAG_DAO_COMMITTEE,
 } from '@stbr/sss-token';
 // or, from the SDK source directly:
 import {
   FeatureFlagsModule,
   FLAG_CIRCUIT_BREAKER,
+  FLAG_SPEND_POLICY,
+  FLAG_DAO_COMMITTEE,
 } from '@sss/sdk';
 ```
+
+> **Note:** `FLAG_DAO_COMMITTEE` is exported from `@stbr/sss-token` but the
+> DAO committee instructions (`init_dao_committee`, `propose_action`,
+> `vote_action`, `execute_action`) are called directly via the Anchor
+> `Program` object (no SDK module wrapper in this release).
 
 ---
 
@@ -353,10 +424,90 @@ console.assert(spendPolicyActive === false);
 const flags = await ff.getFeatureFlags(mint);
 const circuitBreakerOn = (flags & FLAG_CIRCUIT_BREAKER) !== 0n;
 const spendPolicyOn    = (flags & FLAG_SPEND_POLICY) !== 0n;
+const daoCommitteeOn   = (flags & FLAG_DAO_COMMITTEE) !== 0n;
 
 console.log(`Circuit breaker: ${circuitBreakerOn}`);
 console.log(`Spend policy:    ${spendPolicyOn}`);
+console.log(`DAO committee:   ${daoCommitteeOn}`);
 console.log(`Raw bitmask:     0x${flags.toString(16).padStart(16, '0')}`);
+```
+
+---
+
+## DAO Committee Workflow
+
+### Initialising the committee
+
+```typescript
+import { Program, BN } from '@coral-xyz/anchor';
+
+const program = new Program(idl, provider);
+const [config] = PublicKey.findProgramAddressSync(
+  [Buffer.from('stablecoin-config'), mint.toBuffer()],
+  programId
+);
+
+const member1 = new PublicKey('...');
+const member2 = new PublicKey('...');
+const member3 = new PublicKey('...');
+
+// 2-of-3 quorum; atomically enables FLAG_DAO_COMMITTEE
+await program.methods
+  .initDaoCommittee([member1, member2, member3], 2)
+  .accounts({ authority: provider.wallet.publicKey, mint, config })
+  .rpc({ commitment: 'confirmed' });
+```
+
+After this call `StablecoinConfig.feature_flags` has `FLAG_DAO_COMMITTEE` set,
+and the `DaoCommitteeConfig` PDA is created with the member list and quorum.
+
+### Creating a proposal
+
+```typescript
+import { ProposalAction } from '@sss/sdk'; // enum from Anchor IDL types
+
+const [committee] = PublicKey.findProgramAddressSync(
+  [Buffer.from('dao-committee'), config.toBuffer()],
+  programId
+);
+
+// Open a proposal to pause the mint
+await program.methods
+  .proposeAction({ pause: {} }, new BN(0), PublicKey.default)
+  .accounts({ proposer: provider.wallet.publicKey, mint, config, committee })
+  .rpc({ commitment: 'confirmed' });
+// proposal_id = 0 (first proposal)
+```
+
+### Voting on a proposal
+
+```typescript
+const proposalId = new BN(0);
+const [proposal] = PublicKey.findProgramAddressSync(
+  [
+    Buffer.from('dao-proposal'),
+    config.toBuffer(),
+    proposalId.toArrayLike(Buffer, 'le', 8),
+  ],
+  programId
+);
+
+// Each committee member calls this
+await program.methods
+  .voteAction(proposalId)
+  .accounts({ voter: memberWallet.publicKey, mint, config, committee, proposal })
+  .rpc({ commitment: 'confirmed' });
+```
+
+### Executing a passed proposal
+
+```typescript
+// Once quorum is reached (e.g. 2 of 3 members voted), anyone can execute
+await program.methods
+  .executeAction(proposalId)
+  .accounts({ executor: provider.wallet.publicKey, mint, config, committee, proposal })
+  .rpc({ commitment: 'confirmed' });
+// config.paused is now true
 ```
 
 ---
@@ -390,6 +541,34 @@ and reordered the tail fields.
 
 The `feature_flags` field is read as little-endian `u64`.
 The `max_transfer_amount` field is non-zero only when `FLAG_SPEND_POLICY` is active.
+
+#### `DaoCommitteeConfig` PDA
+
+Seeds: `["dao-committee", config_pubkey]`
+
+| Field | Type | Description |
+|---|---|---|
+| `config` | `Pubkey` | The stablecoin config this committee governs. |
+| `members` | `Vec<Pubkey>` (max 10) | Registered committee member pubkeys. |
+| `quorum` | `u8` | Minimum YES votes required to pass a proposal. |
+| `next_proposal_id` | `u64` | Auto-incremented proposal counter. |
+
+#### `ProposalPda` PDA
+
+Seeds: `["dao-proposal", config_pubkey, proposal_id (u64 LE)]`
+
+| Field | Type | Description |
+|---|---|---|
+| `config` | `Pubkey` | The stablecoin config being governed. |
+| `proposal_id` | `u64` | Monotonically increasing proposal index (0-based). |
+| `proposer` | `Pubkey` | Authority that opened the proposal. |
+| `action` | `ProposalAction` | Action to execute on quorum. |
+| `param` | `u64` | Flag bits or minter cap (0 if unused). |
+| `target` | `Pubkey` | Minter key for UpdateMinter/RevokeMinter; default otherwise. |
+| `votes` | `Vec<Pubkey>` (max 10) | Committee members who voted YES. |
+| `quorum` | `u8` | Snapshot of required quorum at proposal creation time. |
+| `executed` | `bool` | True once `execute_action` has been called successfully. |
+| `cancelled` | `bool` | True if the proposal was cancelled. |
 
 ---
 

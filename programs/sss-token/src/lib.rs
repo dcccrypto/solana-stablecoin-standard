@@ -173,4 +173,49 @@ pub mod sss_token {
     pub fn clear_spend_limit(ctx: Context<UpdateSpendLimit>) -> Result<()> {
         instructions::spend_policy::clear_spend_limit_handler(ctx)
     }
+
+    // ─── SSS-067: DAO Committee Governance ───────────────────────────────────
+
+    /// Initialize the DAO committee for a stablecoin config.
+    ///
+    /// Registers `members` (1–10 pubkeys) as committee voters and sets the
+    /// `quorum` threshold.  Atomically enables FLAG_DAO_COMMITTEE.
+    /// Authority only; can only be called once per config (PDA is `init`).
+    pub fn init_dao_committee(
+        ctx: Context<InitDaoCommittee>,
+        members: Vec<Pubkey>,
+        quorum: u8,
+    ) -> Result<()> {
+        instructions::dao_committee::init_dao_committee_handler(ctx, members, quorum)
+    }
+
+    /// Open a governance proposal.
+    ///
+    /// Authority opens a proposal for a specific `action` + optional `param`
+    /// and `target`.  The proposal collects YES votes from committee members
+    /// before it can be executed.
+    pub fn propose_action(
+        ctx: Context<ProposeAction>,
+        action: crate::state::ProposalAction,
+        param: u64,
+        target: Pubkey,
+    ) -> Result<()> {
+        instructions::dao_committee::propose_action_handler(ctx, action, param, target)
+    }
+
+    /// Cast a YES vote on a governance proposal.
+    ///
+    /// Caller must be a registered committee member.  Duplicate votes are rejected.
+    pub fn vote_action(ctx: Context<VoteAction>, proposal_id: u64) -> Result<()> {
+        instructions::dao_committee::vote_action_handler(ctx, proposal_id)
+    }
+
+    /// Execute a passed governance proposal.
+    ///
+    /// Verifies that `votes.len() >= quorum` and then applies the action
+    /// (pause, feature flag change, etc.) to the StablecoinConfig.
+    /// Can be called by anyone once quorum is reached; one-shot (idempotent after execution).
+    pub fn execute_action(ctx: Context<ExecuteAction>, proposal_id: u64) -> Result<()> {
+        instructions::dao_committee::execute_action_handler(ctx, proposal_id)
+    }
 }
