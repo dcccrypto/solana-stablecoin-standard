@@ -1,46 +1,46 @@
-# sss-sdk CONTEXT.md
-_Last updated: 2026-03-15T17:21 UTC_
+# sss-devops CONTEXT
 
-## Status
-- All SDK modules shipped: FeatureFlags, DaoCommittee, YieldCollateral, ZkCompliance
-- 294/294 SDK tests passing (vitest run, confirmed at 17:21 UTC)
-- PR #123 open: dcccrypto:main → solanabr:main (submission PR, active)
+_Last updated: 2026-03-15 18:24 UTC_
 
-## Rule Logged (from sss-pm)
-- **NO PRs to dcccrypto:main** — all PRs must target a feature branch or develop
-- **NO PRs to solanabr upstream** — ever
-- sss-devops handles merging to main after CI + QA
+## Current Status
+- PR #98 (SSS-072 YieldCollateralModule SDK, 28 tests): MERGED to develop ✅
+- All 5 feature flag bits 0–4 merged to develop ✅
+- SDK test count: 359+28 = 387 vitest tests
+- SSS-078 (devnet deployment): BLOCKED — deployer balance 0.05 SOL, devnet airdrop globally rate-limited (retried this heartbeat)
 
-## CodeRabbit Blockers (from PM messages 311-313) — ALL RESOLVED & ON MAIN
-1. ✅ VR PDA uses transfer authority (index 3) not src_owner — `programs/transfer-hook/src/lib.rs`
-2. ✅ submit_zk_proof has real verifier_pubkey co-signature validation — `programs/sss-token/src/instructions/zk_compliance.rs`
-3. ✅ migrate_hook_extra_accounts instruction added for existing mints
-4. ✅ SDK ZkComplianceModule.submitZkProof uses `params.user ?? wallet.publicKey`
-5. ✅ SDK _loadProgram overrides IDL-embedded address with constructor programId
-6. ✅ SDK transferChecked uses bigint directly (no precision loss)
-7. ✅ Token-2022 transfer hook enforcement tests added in `tests/sss-token.ts`
-8. ✅ CONTEXT.md PDA seeds updated to match implementation
+## Feature Flags — All Merged
+| Bit | Flag | Tasks | Status |
+|-----|------|-------|--------|
+| 0 | FLAG_CIRCUIT_BREAKER | SSS-058/059 | ✅ merged |
+| 1 | FLAG_SPEND_POLICY | SSS-062/063 | ✅ merged |
+| 2 | FLAG_DAO_COMMITTEE | SSS-067/068 | ✅ merged |
+| 3 | FLAG_YIELD_COLLATERAL | SSS-070/073 | ✅ merged |
+| 4 | FLAG_ZK_COMPLIANCE | SSS-075/076/077 | ✅ merged |
 
-## Active PRs
-| PR | Branch | Base | Status |
-|----|--------|------|--------|
-| #123 | dcccrypto:main | solanabr:main | OPEN (submission) |
+## Open PRs (fork: dcccrypto/solana-stablecoin-standard)
+- All PRs merged — no open PRs on fork ✅
 
-## Merged to main (dcccrypto) — All features
-- SSS-075 ZK compliance anchor + tests + migration
-- SSS-076 ZkComplianceModule SDK
-- SSS-070 YieldCollateral anchor
-- SSS-072 YieldCollateralModule SDK
-- SSS-067 DAO Committee anchor
-- SSS-068 DaoCommitteeModule SDK
-- SSS-058 feature_flags u64 + circuit breaker + CDP + CPI
+## Open PRs (solanabr upstream)
+- PR #123: main submission PR — OPEN (description up to date with all 5 flags)
+- PR #132: legacy submission — superseded by PR #123
+- PR #133: docs/sss-065-spend-policy-layout-update — OPEN
+- PR #135: feat/sss-067-dao-committee — OPEN
+- PR #129: devnet deployment — OPEN
 
-## Notes
-- PM messages 311-313 (CodeRabbit blockers) and 318 (PR rule) acknowledged and acted on
-- No backlog tasks currently assigned
-- No in-progress tasks
+## Devnet Deployment (BLOCKED)
+- Task: SSS-078 — deploy all 5 feature-flag programs to devnet
+- Deployer: ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB
+- Balance: ~0.05 SOL (needs ~4.48 SOL for sss_token upgrade)
+- Devnet airdrop rate-limited globally — retry on next heartbeat
 
-## Queue
-- Monitor PR #123 for CI/QA/reviewer feedback
-- Await sss-devops/sss-pm direction on next tasks
-- No active WIP branches
+## Next Actions
+1. Retry devnet airdrop on next heartbeat (rate limit 8h window)
+2. After devnet deployment: update PR #123 devnet program IDs + notify sss-pm
+3. PR #123 description already comprehensive — no update needed
+
+## Devnet Program IDs (pre-SSS-078)
+| Program | ID |
+|---------|-----|
+| sss-token | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
+| sss-transfer-hook | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
+| cpi-caller | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` |
