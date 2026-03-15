@@ -1,20 +1,27 @@
 import { PublicKey, TransactionSignature } from '@solana/web3.js';
-import { AnchorProvider } from '@coral-xyz/anchor';
+import { AnchorProvider, BN } from '@coral-xyz/anchor';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /**
- * Bit flag for the yield-bearing collateral feature (SSS-072).
+ * Bit flag for the yield-bearing collateral feature (bit 3 = 0x08).
  *
- * When this flag is set in `StablecoinConfig.feature_flags`, yield-bearing
- * SPL token mints (e.g. stSOL, mSOL, jitoSOL) may be deposited as CDP
- * collateral via the whitelisted mints recorded in `YieldCollateralConfig`.
+ * When this flag is set in `StablecoinConfig.feature_flags`, the CDP module
+ * accepts whitelisted yield-bearing tokens (e.g., stSOL, mSOL) as collateral.
  *
- * Matches `FLAG_YIELD_COLLATERAL` in the Anchor program (bit 3 = 0x08).
+ * Matches `FLAG_YIELD_COLLATERAL` in the Anchor program (bit 3 = 0x08) per
+ * `programs/sss-token/src/state.rs`.
+ *
+ * Only valid for SSS-3 (reserve-backed) stablecoins.
  *
  * @example
  * ```ts
- * const active = featureFlags.isFeatureFlagSet(mint, FLAG_YIELD_COLLATERAL);
+ * import { YieldCollateralModule, FLAG_YIELD_COLLATERAL } from '@sss/sdk';
+ *
+ * const yc = new YieldCollateralModule(provider, programId);
+ * await yc.initYieldCollateral({ mint, initialMints: [stSOLMint] });
+ * const active = await yc.isActive(mint);
+ * const whitelist = await yc.getWhitelistedMints(mint);
  * ```
  */
 export const FLAG_YIELD_COLLATERAL = 1n << 3n; // 0x08
@@ -22,51 +29,35 @@ export const FLAG_YIELD_COLLATERAL = 1n << 3n; // 0x08
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
- * On-chain state of a `YieldCollateralConfig` PDA, as decoded from account data.
- *
- * Seeds: `[b"yield-collateral", sss_mint]`
+ * Parameters for `initYieldCollateral`.
  */
-export interface YieldCollateralState {
-  /** The SSS stablecoin mint this config belongs to. */
-  sssMint: PublicKey;
-  /** Whitelisted yield-bearing SPL token mints (max 8). */
-  whitelistedMints: PublicKey[];
-  /** PDA bump. */
-  bump: number;
-}
-
-/**
- * Parameters for `enableYieldCollateral` (wraps `init_yield_collateral`).
- */
-export interface EnableYieldCollateralParams {
-  /** The stablecoin mint (must be SSS-3 / preset 3). */
+export interface InitYieldCollateralParams {
+  /** The SSS-3 stablecoin mint to enable yield collateral for. */
   mint: PublicKey;
   /**
-   * Optional initial list of yield-bearing SPL token mints to whitelist
-   * immediately (e.g. stSOL, mSOL).  Max 8 total.  Defaults to `[]`.
+   * Optional initial whitelist of yield-bearing token mints.
+   * Max 10 entries (enforced on-chain). Defaults to empty.
    */
   initialMints?: PublicKey[];
 }
 
 /**
- * Parameters for `disableYieldCollateral`.
- *
- * Clears `FLAG_YIELD_COLLATERAL` via `clear_feature_flag`.  The
- * `YieldCollateralConfig` PDA is left intact on-chain (re-enable with
- * `set_feature_flag` directly if the PDA already exists).
+ * Parameters for `addCollateralMint`.
  */
-export interface DisableYieldCollateralParams {
-  /** The stablecoin mint. */
+export interface AddYieldCollateralMintParams {
+  /** The stablecoin mint whose YieldCollateralConfig to update. */
   mint: PublicKey;
+  /** The yield-bearing collateral token mint to whitelist. */
+  collateralMint: PublicKey;
 }
 
 /**
- * Parameters for `addWhitelistedMint` (wraps `add_yield_collateral_mint`).
+ * Parameters for `removeCollateralMint`.
  */
-export interface AddWhitelistedMintParams {
-  /** The stablecoin mint. */
+export interface RemoveYieldCollateralMintParams {
+  /** The stablecoin mint whose YieldCollateralConfig to update. */
   mint: PublicKey;
-  /** The yield-bearing collateral SPL token mint to whitelist. */
+  /** The yield-bearing collateral token mint to remove from the whitelist. */
   collateralMint: PublicKey;
 }
 
@@ -74,38 +65,33 @@ export interface AddWhitelistedMintParams {
 
 /**
  * YieldCollateralModule — SDK client for the SSS yield-bearing collateral
- * feature (SSS-072).
+ * feature (SSS-070).
  *
- * Wraps `init_yield_collateral` and `add_yield_collateral_mint` Anchor
- * instructions.  Also provides `disableYieldCollateral` (via
- * `clear_feature_flag`) and a `fetchYieldCollateralState` account reader.
+ * Manages the `YieldCollateralConfig` PDA, which holds a whitelist of
+ * yield-bearing token mints (e.g., stSOL, mSOL) accepted as CDP collateral.
+ * Wraps `init_yield_collateral`, `add_yield_collateral_mint`, and
+ * `remove_yield_collateral_mint` Anchor instructions.
  *
- * ## Workflow
- * 1. Admin calls `enableYieldCollateral` to create the `YieldCollateralConfig`
- *    PDA and atomically set `FLAG_YIELD_COLLATERAL` on the config.
- * 2. Admin calls `addWhitelistedMint` for each yield-bearing token to accept
- *    (stSOL, mSOL, jitoSOL, bSOL, etc.).  Max 8 mints.
- * 3. CDP borrowers can now deposit whitelisted mints as collateral.
- * 4. Admin calls `disableYieldCollateral` to clear the flag (PDA preserved).
+ * **Preset restriction**: Only SSS-3 (reserve-backed) stablecoins can enable
+ * this feature. The on-chain program enforces `config.preset == 3`.
  *
  * @example
  * ```ts
- * import { YieldCollateralModule, FLAG_YIELD_COLLATERAL } from '@sss/sdk';
+ * import { YieldCollateralModule } from '@sss/sdk';
  *
  * const yc = new YieldCollateralModule(provider, programId);
  *
- * // 1. Enable with initial whitelist
- * await yc.enableYieldCollateral({ mint, initialMints: [stSolMint, mSolMint] });
+ * // Initialize with stSOL whitelisted
+ * await yc.initYieldCollateral({ mint, initialMints: [stSOLMint] });
  *
- * // 2. Add another mint later
- * await yc.addWhitelistedMint({ mint, collateralMint: jitoSolMint });
+ * // Add mSOL later
+ * await yc.addCollateralMint({ mint, collateralMint: mSOLMint });
  *
- * // 3. Inspect state
- * const state = await yc.fetchYieldCollateralState(mint);
- * console.log(state?.whitelistedMints.map(m => m.toBase58()));
+ * // Remove stSOL
+ * await yc.removeCollateralMint({ mint, collateralMint: stSOLMint });
  *
- * // 4. Disable
- * await yc.disableYieldCollateral({ mint });
+ * // Check whitelist
+ * const whitelist = await yc.getWhitelistedMints(mint);
  * ```
  */
 export class YieldCollateralModule {
@@ -113,10 +99,10 @@ export class YieldCollateralModule {
   private readonly programId: PublicKey;
 
   static readonly CONFIG_SEED = Buffer.from('stablecoin-config');
-  static readonly YIELD_COLLATERAL_SEED = Buffer.from('yield-collateral');
+  static readonly YIELD_COLLATERAL_SEED = Buffer.from('yield-collateral-config');
 
   /**
-   * @param provider   Anchor provider (wallet must be the authority for write ops).
+   * @param provider   Anchor provider (wallet must be the admin authority).
    * @param programId  SSS token program ID.
    */
   constructor(provider: AnchorProvider, programId: PublicKey) {
@@ -128,8 +114,6 @@ export class YieldCollateralModule {
 
   /**
    * Derive the `StablecoinConfig` PDA for the given mint.
-   *
-   * Seeds: `[b"stablecoin-config", mint]`
    */
   getConfigPda(mint: PublicKey): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
@@ -141,9 +125,9 @@ export class YieldCollateralModule {
   /**
    * Derive the `YieldCollateralConfig` PDA for the given mint.
    *
-   * Seeds: `[b"yield-collateral", mint]`
+   * This is initialized by `initYieldCollateral` and stores the whitelist.
    */
-  getYieldCollateralPda(mint: PublicKey): [PublicKey, number] {
+  getYieldCollateralConfigPda(mint: PublicKey): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
       [YieldCollateralModule.YIELD_COLLATERAL_SEED, mint.toBuffer()],
       this.programId
@@ -153,89 +137,77 @@ export class YieldCollateralModule {
   // ─── Writes ──────────────────────────────────────────────────────────────
 
   /**
-   * Enable yield-bearing collateral for this mint.
+   * Initialize yield-bearing collateral support for an SSS-3 mint.
    *
-   * Calls `init_yield_collateral` — creates the `YieldCollateralConfig` PDA
-   * and atomically sets `FLAG_YIELD_COLLATERAL` on the `StablecoinConfig`.
+   * Creates the `YieldCollateralConfig` PDA and atomically sets
+   * `FLAG_YIELD_COLLATERAL` on the `StablecoinConfig`. One-time operation
+   * per stablecoin.
    *
-   * Only valid for SSS-3 (reserve-backed) stablecoins.  Authority only.
-   * Fails if the PDA already exists (call `set_feature_flag` directly to
-   * re-enable without re-initialising).
-   *
-   * @param params  `{ mint, initialMints? }`
+   * @param params  `{ mint, initialMints? }` — mint and optional initial whitelist.
    * @returns       Transaction signature.
+   * @throws        If mint is not SSS-3 preset or the authority is not admin.
    */
-  async enableYieldCollateral(params: EnableYieldCollateralParams): Promise<TransactionSignature> {
+  async initYieldCollateral(params: InitYieldCollateralParams): Promise<TransactionSignature> {
     const { mint, initialMints = [] } = params;
     const program = await this._loadProgram();
     const [config] = this.getConfigPda(mint);
-    const [yieldCollateralConfig] = this.getYieldCollateralPda(mint);
+    const [yieldCollateralConfig] = this.getYieldCollateralConfigPda(mint);
 
     return program.methods
       .initYieldCollateral(initialMints)
       .accounts({
         authority: this.provider.wallet.publicKey,
-        mint,
         config,
+        mint,
         yieldCollateralConfig,
-        tokenProgram: this._tokenProgramId(),
-        systemProgram: PublicKey.default,
       })
       .rpc({ commitment: 'confirmed' });
   }
 
   /**
-   * Disable yield-bearing collateral for this mint.
+   * Add a yield-bearing token mint to the collateral whitelist.
    *
-   * Calls `clear_feature_flag` with `FLAG_YIELD_COLLATERAL`.  The
-   * `YieldCollateralConfig` PDA is **not** closed — it remains on-chain so
-   * the whitelist is preserved if the feature is re-enabled later.
-   *
-   * Authority only.
-   *
-   * @param params  `{ mint }`
+   * @param params  `{ mint, collateralMint }` — stablecoin mint and collateral mint to add.
    * @returns       Transaction signature.
+   * @throws        If whitelist is full (max 10) or authority is not admin.
    */
-  async disableYieldCollateral(params: DisableYieldCollateralParams): Promise<TransactionSignature> {
-    const { mint } = params;
-    const program = await this._loadProgram();
-    const [config] = this.getConfigPda(mint);
-
-    return program.methods
-      .clearFeatureFlag(FLAG_YIELD_COLLATERAL.toString())
-      .accounts({
-        authority: this.provider.wallet.publicKey,
-        mint,
-        config,
-      })
-      .rpc({ commitment: 'confirmed' });
-  }
-
-  /**
-   * Add a yield-bearing SPL token mint to the whitelist.
-   *
-   * Calls `add_yield_collateral_mint`.  Requires `FLAG_YIELD_COLLATERAL` to
-   * be active.  Rejects duplicates and enforces the 8-mint cap.
-   *
-   * Authority only.
-   *
-   * @param params  `{ mint, collateralMint }`
-   * @returns       Transaction signature.
-   */
-  async addWhitelistedMint(params: AddWhitelistedMintParams): Promise<TransactionSignature> {
+  async addCollateralMint(params: AddYieldCollateralMintParams): Promise<TransactionSignature> {
     const { mint, collateralMint } = params;
     const program = await this._loadProgram();
     const [config] = this.getConfigPda(mint);
-    const [yieldCollateralConfig] = this.getYieldCollateralPda(mint);
+    const [yieldCollateralConfig] = this.getYieldCollateralConfigPda(mint);
 
     return program.methods
       .addYieldCollateralMint(collateralMint)
       .accounts({
         authority: this.provider.wallet.publicKey,
-        mint,
         config,
+        mint,
         yieldCollateralConfig,
-        tokenProgram: this._tokenProgramId(),
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Remove a yield-bearing token mint from the collateral whitelist.
+   *
+   * @param params  `{ mint, collateralMint }` — stablecoin mint and collateral mint to remove.
+   * @returns       Transaction signature.
+   * @throws        If the collateral mint is not in the whitelist.
+   */
+  async removeCollateralMint(params: RemoveYieldCollateralMintParams): Promise<TransactionSignature> {
+    const { mint, collateralMint } = params;
+    const program = await this._loadProgram();
+    const [config] = this.getConfigPda(mint);
+    const [yieldCollateralConfig] = this.getYieldCollateralConfigPda(mint);
+
+    return program.methods
+      .removeYieldCollateralMint(collateralMint)
+      .accounts({
+        authority: this.provider.wallet.publicKey,
+        config,
+        mint,
+        yieldCollateralConfig,
       })
       .rpc({ commitment: 'confirmed' });
   }
@@ -243,53 +215,59 @@ export class YieldCollateralModule {
   // ─── Reads ───────────────────────────────────────────────────────────────
 
   /**
-   * Fetch and decode the `YieldCollateralConfig` PDA from on-chain.
+   * Check whether yield-bearing collateral is currently active for the given mint.
    *
-   * Returns `null` if the account has not been initialised yet
-   * (`enableYieldCollateral` not called, or wrong mint).
+   * Reads `StablecoinConfig.feature_flags` from raw on-chain account data.
    *
-   * @param mint  The stablecoin mint.
+   * @param mint  The stablecoin mint to inspect.
+   * @returns     `true` if FLAG_YIELD_COLLATERAL (bit 3) is set.
    */
-  async fetchYieldCollateralState(mint: PublicKey): Promise<YieldCollateralState | null> {
-    const program = await this._loadProgram();
-    const [pda] = this.getYieldCollateralPda(mint);
-    try {
-      const raw = await program.account.yieldCollateralConfig.fetch(pda);
-      return {
-        sssMint: raw.sssMint as PublicKey,
-        whitelistedMints: (raw.whitelistedMints ?? []) as PublicKey[],
-        bump: raw.bump as number,
-      };
-    } catch {
-      return null;
-    }
+  async isActive(mint: PublicKey): Promise<boolean> {
+    const [pda] = this.getConfigPda(mint);
+    const accountInfo = await this.provider.connection.getAccountInfo(pda);
+    if (!accountInfo) return false;
+    const flags = this._readFeatureFlags(accountInfo.data);
+    return (flags & FLAG_YIELD_COLLATERAL) !== 0n;
   }
 
   /**
-   * Check whether `FLAG_YIELD_COLLATERAL` is currently set for a mint.
+   * Fetch the current whitelist of yield-bearing collateral mints.
    *
-   * Reads `StablecoinConfig.feature_flags` from on-chain.  Returns `false`
-   * if the config account does not exist.
+   * Uses the Anchor program's account fetcher to decode `YieldCollateralConfig`.
    *
-   * @param mint  The stablecoin mint.
+   * @param mint  The stablecoin mint to fetch the whitelist for.
+   * @returns     Array of whitelisted collateral `PublicKey`s (empty if not initialized).
    */
-  async isYieldCollateralEnabled(mint: PublicKey): Promise<boolean> {
+  async getWhitelistedMints(mint: PublicKey): Promise<PublicKey[]> {
     const program = await this._loadProgram();
-    const [configPda] = this.getConfigPda(mint);
+    const [yieldCollateralConfig] = this.getYieldCollateralConfigPda(mint);
+
     try {
-      const config = await program.account.stablecoinConfig.fetch(configPda);
-      const flags = BigInt(config.featureFlags.toString());
-      return (flags & FLAG_YIELD_COLLATERAL) !== 0n;
+      const account = await program.account.yieldCollateralConfig.fetch(yieldCollateralConfig);
+      return (account.whitelistedMints ?? []) as PublicKey[];
     } catch {
-      return false;
+      return [];
     }
   }
 
   // ─── Internals ───────────────────────────────────────────────────────────
 
-  /** Standard SPL Token-2022 program id. */
-  private _tokenProgramId(): PublicKey {
-    return new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
+  /**
+   * Parse `feature_flags` (u64 LE) from raw `StablecoinConfig` account data.
+   *
+   * Layout:
+   * ```
+   * [0..8]    discriminator
+   * [8..168]  5 × Pubkey (32 bytes each)
+   * [168..169] preset (u8)
+   * [169..177] feature_flags (u64 LE)
+   * ```
+   * @internal
+   */
+  private _readFeatureFlags(data: Buffer): bigint {
+    const OFFSET = 8 + 5 * 32 + 1; // 169
+    if (data.length < OFFSET + 8) return 0n;
+    return data.readBigUInt64LE(OFFSET);
   }
 
   /**
