@@ -1,45 +1,46 @@
-# sss-anchor Context
+# sss-docs CONTEXT.md
+_Last updated: 2026-03-15T16:16 UTC_
 
-## Current Status
-- Branch: `feat/sss-075-zk-compliance` (clean, pushed)
-- Active task: SSS-076 — SDK ZkComplianceModule committed to PR #141, awaiting QA
+## Status
+- **SSS-034 (Feature Flags Research)**: ✅ MERGED — PR #69
+- **SSS-060 (Admin Methods + Feature Flags Docs)**: ✅ MERGED — PR #79
+- **SSS-065 (Feature-flags layout update)**: ✅ MERGED — PR #133
+- **SSS-071 (DaoCommitteeModule reference)**: ✅ COMPLETE — PR #136 (closed, content in PR #123)
+- **SSS-074 (YieldCollateralModule reference)**: ✅ COMPLETE — PR #137 (closed, content in PR #123)
+- **SSS-077 (ZkComplianceModule reference)**: ✅ COMPLETE — branch pushed, content in PR #123
 
-## Last completed: SSS-076 — ZkComplianceModule SDK (bit 4)
-**PR #141** (dcccrypto): `feat/sss-075-zk-compliance` — OPEN, awaiting QA
-- FLAG_ZK_COMPLIANCE = 1n << 4n
-- ZkComplianceModule wraps: initZkCompliance, submitZkProof, closeVerificationRecord
-- executeCompliantTransfer: client-side preflight + Token-2022 transfer-checked
-- fetchVerificationRecord / fetchZkConfig: raw Borsh decoders
-- isVerificationValid / getTtlSlots: convenience readers
-- All types exported from index.ts
-- 46 vitest unit tests, 266/266 total SDK tests passing
+## Active PRs (solanabr upstream)
+| PR | Title | Status |
+|----|-------|--------|
+| #123 | Main submission: SSS-1/2/3 + SDK + CLI + Backend + Devnet + Formal Proofs | OPEN |
+| #141 | feat(anchor): SSS-075 — FLAG_ZK_COMPLIANCE (bit 4) | OPEN, awaiting QA |
+| #138 | feat(sdk): SSS-072 — YieldCollateralModule | OPEN |
 
-## Previously completed: SSS-075 — FLAG_ZK_COMPLIANCE (bit 4) Anchor
-**PR #141** (dcccrypto): same branch — OPEN, QA + PM notified
-- FLAG_ZK_COMPLIANCE = 1 << 4 (bit 4)
-- ZkComplianceConfig PDA: seeds ["zk-compliance-config", mint], ttl_slots (default 1500)
-- VerificationRecord PDA: seeds ["zk-verification", mint, user]
-- init_zk_compliance / submit_zk_proof / close_verification_record instructions
-- 99/99 anchor tests passing (16 new SSS-075 tests)
+## Docs Written
+| Task | File | Status |
+|------|------|--------|
+| SSS-034 | docs/FEATURE-FLAGS-RESEARCH.md | ✅ merged |
+| SSS-060 | docs/on-chain-sdk-admin.md + docs/feature-flags.md | ✅ merged |
+| SSS-065 | docs/feature-flags.md (layout table + error codes) | ✅ merged |
+| SSS-071 | docs/on-chain-sdk-dao.md | ✅ in PR #123 |
+| SSS-074 | docs/on-chain-sdk-yield.md + feature-flags update | ✅ in PR #123 |
+| SSS-077 | docs/on-chain-sdk-zk.md + feature-flags update | ✅ in PR #123 |
 
-## Previously completed
-- **SSS-070** (PR #92, awaiting QA): FLAG_YIELD_COLLATERAL anchor implementation
-- **SSS-067** (PR #135, closed/merged): FLAG_DAO_COMMITTEE anchor implementation
-- **SSS-063** (PR #84, merged): FLAG_SPEND_POLICY anchor implementation
-- **SSS-058** (PR #85, merged): FLAG_CIRCUIT_BREAKER + feature_flags u64 field
+## feature-flags.md Coverage (as of HEAD)
+| Flag | Bit | Hex | Task |
+|------|-----|-----|------|
+| FLAG_CIRCUIT_BREAKER | 0 | 0x01 | SSS-060 |
+| FLAG_SPEND_POLICY | 1 | 0x02 | SSS-063 |
+| FLAG_DAO_COMMITTEE | 2 | 0x04 | SSS-065/067 |
+| FLAG_YIELD_COLLATERAL | 3 | 0x08 | SSS-070 |
+| FLAG_ZK_COMPLIANCE | 4 | 0x10 | SSS-075 |
 
-## Feature flag bit assignments
-| Bit | Constant | Anchor | SDK |
-|-----|----------|--------|-----|
-| 0 | FLAG_CIRCUIT_BREAKER | ✅ merged | ✅ |
-| 1 | FLAG_SPEND_POLICY | ✅ merged | ✅ |
-| 2 | FLAG_DAO_COMMITTEE | ✅ merged (PR #135) | ✅ |
-| 3 | FLAG_YIELD_COLLATERAL | 🔄 PR #92, awaiting QA | ✅ |
-| 4 | FLAG_ZK_COMPLIANCE | 🔄 PR #141, awaiting QA | 🔄 PR #141 |
+## Queue
+- No tasks in backlog or in-progress.
+- Awaiting next assignment from sss-pm.
 
-## Next
-- Awaiting QA review on PR #141 (SSS-075 anchor + SSS-076 SDK combined)
-- Awaiting QA review on PR #92 (SSS-070)
-- No other backlog tasks assigned
-
-## Heartbeat: 2026-03-15T16:12 UTC
+## Workflow Rules
+- All PRs go to **dcccrypto/solana-stablecoin-standard** fork first.
+- Do NOT open PRs to solanabr directly.
+- sss-pm handles upstream submission.
+- Docs branches are kept in sync; major docs absorbed into PR #123 (main submission).
