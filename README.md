@@ -121,6 +121,12 @@ Endpoints:
 | GET | `/api/compliance/audit` | Audit log |
 | GET/POST | `/api/webhooks` | Manage webhooks |
 
+## Advanced Features
+
+| Feature | Description |
+|---------|-------------|
+| [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | Cryptographic supply commitments — fetch, verify, and manually reproduce Merkle proofs |
+
 ## Documentation
 
 | Guide | Description |
