@@ -76,6 +76,16 @@ pub struct CdpBorrowStable<'info> {
 pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
 
+    // SSS-085 Fix 1: Validate Pyth feed Pubkey — reject unknown/spoofed price feeds.
+    // If expected_pyth_feed is set (non-default), the provided account must match exactly.
+    let expected_feed = ctx.accounts.config.expected_pyth_feed;
+    if expected_feed != Pubkey::default() {
+        require!(
+            ctx.accounts.pyth_price_feed.key() == expected_feed,
+            SssError::UnexpectedPriceFeed
+        );
+    }
+
     // 1. Read Pyth price
     let clock = Clock::get()?;
     let price_feed = SolanaPriceAccount::account_info_to_feed(

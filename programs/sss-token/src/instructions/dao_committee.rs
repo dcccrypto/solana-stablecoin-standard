@@ -76,6 +76,13 @@ pub fn init_dao_committee_handler(
         SssError::InvalidQuorum
     );
 
+    // SSS-085 Fix 3: Reject duplicate pubkeys to prevent quorum bypass with repeated keys.
+    for i in 0..members.len() {
+        for j in (i + 1)..members.len() {
+            require!(members[i] != members[j], SssError::DuplicateMember);
+        }
+    }
+
     let committee = &mut ctx.accounts.committee;
     committee.config = ctx.accounts.config.key();
     committee.members = members.clone();
