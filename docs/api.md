@@ -630,6 +630,56 @@ Preview borrow/liquidation risk for a given collateral amount and requested borr
 
 ---
 
+## Reserves
+
+### `GET /api/reserves/proof`
+
+Fetch a cryptographic Proof-of-Reserves snapshot for a given SPL token mint. Returns a Merkle root commitment to the total supply, anchored to a specific Solana slot.
+
+**Authentication:** Required — `X-Api-Key` header.
+
+**Query Parameters**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mint` | string (base58) | ✓ | The SPL token mint address |
+| `holder` | string (base58) | ✗ | Optional holder address (echoed back; reserved for future use) |
+
+```bash
+curl -H "X-Api-Key: sss_<48-char hex>" \
+  "http://localhost:8080/api/reserves/proof?mint=TokenMintAddressHere11111111111111111111111"
+```
+
+**Response 200**
+
+```json
+{
+  "success": true,
+  "data": {
+    "merkle_root": "a3f2e1d4c5b6a7980123456789abcdef0123456789abcdef0123456789abcdef01",
+    "total_supply": "1000000000000",
+    "last_verified_slot": "312456789",
+    "proof_type": "supply_snapshot"
+  },
+  "error": null
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `merkle_root` | string (hex) | Double-SHA-256 commitment: `SHA256(SHA256(supply_le8))` |
+| `total_supply` | string (u64) | Token supply in base units at snapshot time |
+| `last_verified_slot` | string (u64) | Solana slot when the snapshot was taken |
+| `proof_type` | string | `"supply_snapshot"` (direction 1) |
+
+**Response 400** — Invalid or missing `mint` parameter.  
+**Response 401** — Missing or invalid API key.  
+**Response 500** — Upstream Solana RPC error.
+
+> **Verification:** The Merkle root can be reproduced independently — encode `total_supply` as 8-byte little-endian, then double-SHA-256. See [Proof of Reserves](PROOF-OF-RESERVES.md) for full details and SDK usage.
+
+---
+
 ## Error Responses
 
 All errors follow the standard envelope with `success: false`:
