@@ -133,6 +133,15 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.max_supply = params.max_supply.unwrap_or(0);
     config.pending_authority = Pubkey::default();
     config.pending_compliance_authority = Pubkey::default();
+    // SSS-085: initialise new security fields
+    config.expected_pyth_feed = Pubkey::default();
+    config.admin_op_mature_slot = 0;
+    config.admin_op_kind = ADMIN_OP_NONE;
+    config.admin_op_param = 0;
+    config.admin_op_target = Pubkey::default();
+    config.admin_timelock_delay = DEFAULT_ADMIN_TIMELOCK_DELAY;
+    // SSS-092: stability fee starts at 0 (disabled by default)
+    config.stability_fee_bps = 0;
     config.bump = ctx.bumps.config;
     // SSS-085 defaults
     config.admin_timelock_delay = crate::state::DEFAULT_ADMIN_TIMELOCK_DELAY;

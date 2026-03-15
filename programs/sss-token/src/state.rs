@@ -107,6 +107,10 @@ pub struct StablecoinConfig {
     /// expressed in basis points (e.g. 100 = 1%).  0 = disabled (no conf check).
     /// Set via `set_oracle_params`.
     pub max_oracle_conf_bps: u16,
+    /// SSS-092: Annual stability fee in basis points (e.g. 50 = 0.5% p.a.).
+    /// Accrues on outstanding CDP debt; collected via `collect_stability_fee`.
+    /// 0 = no stability fee (default).
+    pub stability_fee_bps: u16,
     pub bump: u8,
 }
 
