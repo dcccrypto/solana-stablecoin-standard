@@ -1,0 +1,13 @@
+{
+  "network": "devnet",
+  "programs": {
+    "sss_token": "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
+    "sss_transfer_hook": "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp"
+  },
+  "deployer": "ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB",
+  "deployed_at": "2026-03-14T20:58:00Z",
+  "last_deployed_slots": {
+    "sss_token": 448340719,
+    "sss_transfer_hook": 448340772
+  }
+}

@@ -1,0 +1,50 @@
+# Rust
+target/
+**/*.rs.bk
+# Cargo.lock is committed so CI can use --locked instead of regenerating
+# (avoids Agave-bundled cargo resolving stale/broken crate versions)
+# Cargo.lock
+
+# Node
+node_modules/
+dist/
+.yarn/
+
+# Solana / Anchor
+.anchor/
+test-ledger/
+*.so
+*.json
+!package.json
+!tsconfig.json
+!Anchor.toml
+!devnet-program-ids.json
+!idl/*.json
+!sdk/src/idl/*.json
+
+# Secrets
+*.pem
+*.key
+id.json
+wallet.json
+.env
+.env.*
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Internal agent artifacts
+HEARTBEAT_LOG.md
+CONTEXT.md
+.heartbeat

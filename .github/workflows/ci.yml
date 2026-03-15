@@ -1,0 +1,327 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  SOLANA_VERSION: "2.3.13"
+  ANCHOR_VERSION: "0.32.0"
+  NODE_VERSION: "20"
+
+jobs:
+  backend:
+    name: Backend (Rust / axum)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend -> target
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+  sdk:
+    name: TypeScript SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: sdk/package.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npm test
+
+  sdk-integration:
+    name: SDK Integration Tests
+    runs-on: ubuntu-latest
+    needs: [backend]
+
+    env:
+      BOOTSTRAP_API_KEY: sss_integrationtest000000000000000000
+      SSS_TEST_API_KEY: sss_integrationtest000000000000000000
+      SSS_TEST_BASE_URL: http://127.0.0.1:9876
+      DATABASE_URL: ":memory:"
+      RATE_LIMIT_CAPACITY: "10000"
+      RATE_LIMIT_RPS: "1000"
+      PORT: "9876"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend -> target
+
+      - name: Build backend (release)
+        working-directory: backend
+        run: cargo build --release
+
+      - name: Start backend
+        working-directory: backend
+        run: |
+          ../target/release/sss-backend &
+          # Wait for backend to be ready (up to 30 s)
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:9876/api/health && break
+            sleep 1
+          done
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: sdk/package.json
+
+      - name: Install SDK dependencies
+        working-directory: sdk
+        run: npm install
+
+      - name: Run integration tests
+        working-directory: sdk
+        run: npm run test:integration
+
+  anchor:
+    name: Anchor Programs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Cache Solana
+        uses: actions/cache@v4
+        id: cache-solana
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ env.SOLANA_VERSION }}
+
+      - name: Install Solana
+        if: steps.cache-solana.outputs.cache-hit != 'true'
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v${{ env.SOLANA_VERSION }}/install)"
+
+      - name: Add Solana to PATH
+        run: echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      # NOTE: Do NOT use Swatinem/rust-cache here. The anchor job regenerates
+      # Cargo.lock from scratch via `cargo generate-lockfile` and then builds
+      # with the Solana 2.3 platform-tools toolchain (rustc 1.86), which differs
+      # from the system rustc used to compute the cache key. Reusing cached build
+      # artifacts can cause subtle ABI mismatches between the two toolchains.
+      # Omitting the cache keeps each run hermetic and correct.
+
+      - name: Install Anchor CLI
+        # @coral-xyz/anchor-cli npm package only goes up to 0.31.x.
+        # Anchor 0.32+ is distributed via AVM (cargo-based version manager).
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+          avm install ${{ env.ANCHOR_VERSION }}
+          avm use ${{ env.ANCHOR_VERSION }}
+
+      - name: Generate keypair
+        run: solana-keygen new --no-bip39-passphrase --silent
+
+      # Cargo.lock is committed to the repo (not gitignored) so that CI always
+      # builds with the exact dependency set verified locally. This avoids
+      # platform-specific cargo resolution differences (e.g. Agave 2.3.13's
+      # bundled cargo resolves older spl-tlv-account-resolution → spl-pod 0.3
+      # → solana-zk-token-sdk@2.3.13 which has an internal compile error).
+
+      - name: Anchor build
+        # Anchor 0.32 uses idl-build feature (stable Rust) for IDL generation.
+        # Cargo.lock is committed (not gitignored) — anchor build will use the
+        # checked-in lockfile without regenerating it.
+        run: anchor build
+
+      - name: Anchor test (localnet)
+        # --skip-build reuses the artifacts from the "Anchor build" step above,
+        # avoiding a second compile with a potentially different toolchain.
+        run: anchor test --skip-build
+        # Spawns a local validator, deploys the program, runs tests/sss-token.ts,
+        # then tears the validator down. 13 tests covering initialize, mint, burn,
+        # pause/unpause, freeze/thaw, update_roles, and revoke_minter.
+
+  sdk-anchor:
+    name: SDK Anchor Integration Tests (SSS-017)
+    runs-on: ubuntu-latest
+    needs: [anchor]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Cache Solana
+        uses: actions/cache@v4
+        id: cache-solana-sdk-anchor
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ env.SOLANA_VERSION }}
+
+      - name: Install Solana
+        if: steps.cache-solana-sdk-anchor.outputs.cache-hit != 'true'
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v${{ env.SOLANA_VERSION }}/install)"
+
+      - name: Add Solana to PATH
+        run: echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install Anchor CLI
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+          avm install ${{ env.ANCHOR_VERSION }}
+          avm use ${{ env.ANCHOR_VERSION }}
+
+      - name: Generate keypair
+        run: solana-keygen new --no-bip39-passphrase --silent
+
+      - name: Anchor build
+        # Recompile so deploy artifact is available in this job's workspace.
+        run: anchor build
+
+      - name: Sync generated IDLs to SDK
+        # Ensures sdk/src/idl/*.json matches the freshly built programs.
+        # Without this, any drift between the checked-in IDL and the compiled .so
+        # causes InstructionDidNotDeserialize (Anchor error 102) at runtime.
+        run: |
+          cp target/idl/sss_token.json sdk/src/idl/sss_token.json
+          cp target/idl/sss_transfer_hook.json sdk/src/idl/sss_transfer_hook.json
+
+      - name: Install SDK dependencies
+        working-directory: sdk
+        run: npm install
+
+      - name: Start localnet validator with program deployed
+        run: |
+          solana-test-validator \
+            --bpf-program AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat \
+            target/deploy/sss_token.so \
+            --reset \
+            --quiet &
+          VALIDATOR_PID=$!
+          echo "VALIDATOR_PID=$VALIDATOR_PID" >> $GITHUB_ENV
+          # Wait up to 30 s for the validator to accept RPC calls
+          for i in $(seq 1 30); do
+            solana cluster-version --url http://127.0.0.1:8899 2>/dev/null && break
+            sleep 1
+          done
+          # Fund the generated test wallet
+          solana airdrop 10 --url http://127.0.0.1:8899
+
+      - name: Run SDK Anchor integration tests
+        working-directory: sdk
+        env:
+          ANCHOR_PROVIDER_URL: http://127.0.0.1:8899
+        run: npm run test:anchor
+
+      - name: Stop validator
+        if: always()
+        run: kill "$VALIDATOR_PID" || true
+
+  sdk-anchor-integration:
+    name: SDK Anchor Localnet Integration (SSS-017)
+    runs-on: ubuntu-latest
+    needs: [anchor]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: sdk/package.json
+
+      - name: Cache Solana
+        uses: actions/cache@v4
+        id: cache-solana
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ env.SOLANA_VERSION }}
+
+      - name: Install Solana
+        if: steps.cache-solana.outputs.cache-hit != 'true'
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v${{ env.SOLANA_VERSION }}/install)"
+
+      - name: Add Solana to PATH
+        run: echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Install Anchor CLI
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+          avm install ${{ env.ANCHOR_VERSION }}
+          avm use ${{ env.ANCHOR_VERSION }}
+
+      - name: Generate Solana keypair
+        run: solana-keygen new --no-bip39-passphrase --silent
+
+      - name: Build Anchor programs
+        # Produces target/deploy/sss_token.so and sss_transfer_hook.so
+        run: anchor build
+
+      - name: Sync generated IDLs to SDK
+        # Ensures sdk/src/idl/*.json matches the freshly built programs.
+        # Without this, any drift between the checked-in IDL and the compiled .so
+        # causes InstructionDidNotDeserialize (Anchor error 102) at runtime.
+        run: |
+          cp target/idl/sss_token.json sdk/src/idl/sss_token.json
+          cp target/idl/sss_transfer_hook.json sdk/src/idl/sss_transfer_hook.json
+
+      - name: Install SDK dependencies
+        working-directory: sdk
+        run: npm install
+
+      - name: Run SDK Anchor localnet integration tests (SSS-017)
+        working-directory: sdk
+        run: npm run test:anchor
