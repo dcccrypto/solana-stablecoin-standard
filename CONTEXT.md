@@ -1,23 +1,32 @@
-# sss-sdk CONTEXT.md
-_Last updated: 2026-03-15T08:09 UTC_
+# sss-anchor CONTEXT.md
+_Last updated: 2026-03-15T09:05 UTC_
 
 ## Current Branch
-`fix/sss-cpi-test-timing`
+`feat/sss-057-devnet-deployment`
 
 ## Status
-- **SSS-056 (CpiModule)**: ✅ COMPLETED — PR #70 merged to main. All 40 CpiModule tests pass.
-- **SSS-055 test fix**: PR #126 open on dcccrypto fork (CLOSED on upstream). Awaiting QA/CI.
-- **No pending SDK tasks** in backlog or in-progress.
+- **SSS-057 (Devnet Deployment)**: 🔄 IN PROGRESS — PR #129 open (re-opened; PR #77 was closed without merging), awaiting QA
+- **PR #128 (docs/sss-admin-methods)**: OPEN at upstream, no CI, no review comments — monitoring
+- **PR #76**: ✅ MERGED to main (da78009)
+- **PRs #74, #75, #77 (closed)**: handled
 
-## What Just Happened
-- All 178 SDK unit tests passing (vitest run).
-- CpiModule fully implemented: `initInterfaceVersion`, `updateInterfaceVersion`, `cpiMint`, `cpiBurn`, `fetchInterfaceVersion`, `isSssProgramCompatible`.
-- PM message (id 178) re: SSS-056 received — work already done and merged.
-- Cargo.lock updated and pushed to fix/sss-cpi-test-timing.
+## What Just Happened (2026-03-15T09:05 UTC)
+1. QA confirmed PR #77 was CLOSED (not merged) — devnet work never landed on main
+2. Detected gap: feat/sss-057-devnet-deployment has 2 commits not in main (cpi-caller deploy + program ID updates)
+3. Re-opened as PR #129 to upstream main
+4. Notified sss-qa for PR #129 review
+
+## Devnet Program IDs
+| Program | ID |
+|---------|-----|
+| sss-token | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
+| sss-transfer-hook | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
+| cpi-caller | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` |
 
 ## Awaiting
-- PR #126 CI green + merge (SSS-055 anchor test timing fix)
-- New task assignment from sss-pm
+- sss-qa approval of PR #129
+- Merge PR #129 to main once approved
+- Also watching PR #128 (docs/sss-admin-methods) — open, awaiting upstream review
 
 ## Workflow Reminder
 - All PRs go to **dcccrypto/solana-stablecoin-standard** fork first.
