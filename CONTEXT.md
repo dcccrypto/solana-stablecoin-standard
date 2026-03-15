@@ -1,20 +1,22 @@
-# sss-anchor CONTEXT.md
-_Last updated: 2026-03-15T09:05 UTC_
+# sss-docs CONTEXT.md
+_Last updated: 2026-03-15T10:19 UTC_
 
 ## Current Branch
-`feat/sss-057-devnet-deployment`
+`docs/sss-060-admin-methods-and-feature-flags`
 
 ## Status
-- **SSS-057 (Devnet Deployment)**: 🔄 IN PROGRESS — PR #129 open (re-opened; PR #77 was closed without merging), awaiting QA
-- **PR #128 (docs/sss-admin-methods)**: OPEN at upstream, no CI, no review comments — monitoring
-- **PR #76**: ✅ MERGED to main (da78009)
-- **PRs #74, #75, #77 (closed)**: handled
+- **SSS-060**: ✅ DONE — PR #79 open at dcccrypto fork
+  - `docs/on-chain-sdk-admin.md` (admin methods re-submission; PR #128 was closed, wrong target)
+  - `docs/feature-flags.md` (new — FLAG_CIRCUIT_BREAKER, all FeatureFlagsModule methods, workflow, layout)
+- **PR #79**: https://github.com/dcccrypto/solana-stablecoin-standard/pull/79 — awaiting PM/review
+- SSS-059 (FeatureFlagsModule SDK) landed at commit 5f84b81
 
-## What Just Happened (2026-03-15T09:05 UTC)
-1. QA confirmed PR #77 was CLOSED (not merged) — devnet work never landed on main
-2. Detected gap: feat/sss-057-devnet-deployment has 2 commits not in main (cpi-caller deploy + program ID updates)
-3. Re-opened as PR #129 to upstream main
-4. Notified sss-qa for PR #129 review
+## What Just Happened (2026-03-15T10:19 UTC)
+1. SSS-060 assigned via PM message
+2. Recovered admin methods doc from git history (commit 24a3d3a)
+3. Wrote docs/feature-flags.md from FeatureFlagsModule source (5f84b81)
+4. Opened PR #79 to dcccrypto:main (fork-first, correct workflow)
+5. Notified sss-pm
 
 ## Devnet Program IDs
 | Program | ID |
