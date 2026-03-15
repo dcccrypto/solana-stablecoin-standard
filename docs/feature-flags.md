@@ -1,7 +1,7 @@
 # SSS — Feature Flags Reference
 
 > **SDK class:** `FeatureFlagsModule` (`sdk/src/FeatureFlagsModule.ts`)
-> **Added:** SSS-059 | **Updated:** SSS-060 (FLAG_SPEND_POLICY — SSS-063)
+> **Added:** SSS-059 | **Updated:** SSS-060, SSS-065 (FLAG_SPEND_POLICY — SSS-063)
 
 ---
 
@@ -79,6 +79,17 @@ compliance-sensitive token issuers (SSS-2 / SSS-3 presets).
 > `clear_spend_limit` instructions (not `set_feature_flag` / `clear_feature_flag`).
 > Setting it directly via `set_feature_flag` without configuring
 > `max_transfer_amount` first will leave the policy in an unconfigured state.
+
+---
+
+## Error Codes
+
+| Error | Code | Description |
+|---|---|---|
+| `SssError::CircuitBreakerActive` | — | Returned on `mintTo` / `burnFrom` when `FLAG_CIRCUIT_BREAKER` is set. |
+| `SssError::SpendLimitExceeded` | — | Returned by transfer-hook when transfer amount > `max_transfer_amount`. |
+| `SssError::SpendPolicyNotConfigured` | — | Returned by `set_spend_limit` when `max_amount` is 0. |
+| `SssError::Unauthorized` | — | Signer is not the admin authority for any flag write. |
 
 ---
 
@@ -353,20 +364,32 @@ console.log(`Raw bitmask:     0x${flags.toString(16).padStart(16, '0')}`);
 ## On-Chain Account Layout
 
 `StablecoinConfig` raw data offsets (for the reader implemented in
-`_readFeatureFlags`):
+`_readFeatureFlags`).  **Updated for SSS-063** which added `max_transfer_amount`
+and reordered the tail fields.
 
 | Offset | Size | Field |
 |---|---|---|
 | 0 | 8 | Anchor discriminator |
 | 8 | 32 | `mint` (Pubkey) |
 | 40 | 32 | `authority` (Pubkey) |
-| 72 | 32 | `comp_authority` (Pubkey) |
-| 104 | 32 | `pending_authority` (Pubkey) |
-| 136 | 32 | `pending_comp_authority` (Pubkey) |
-| 168 | 1 | `preset` (u8) |
-| **169** | **8** | **`feature_flags` (u64 LE)** |
+| 72 | 32 | `compliance_authority` (Pubkey) |
+| 104 | 1 | `preset` (u8) |
+| 105 | 1 | `paused` (bool) |
+| 106 | 8 | `total_minted` (u64 LE) |
+| 114 | 8 | `total_burned` (u64 LE) |
+| 122 | 32 | `transfer_hook_program` (Pubkey) |
+| 154 | 32 | `collateral_mint` (Pubkey) |
+| 186 | 32 | `reserve_vault` (Pubkey) |
+| 218 | 8 | `total_collateral` (u64 LE) |
+| 226 | 8 | `max_supply` (u64 LE) |
+| 234 | 32 | `pending_authority` (Pubkey) |
+| 266 | 32 | `pending_compliance_authority` (Pubkey) |
+| **298** | **8** | **`feature_flags` (u64 LE)** |
+| **306** | **8** | **`max_transfer_amount` (u64 LE)** |
+| 314 | 1 | `bump` (u8) |
 
 The `feature_flags` field is read as little-endian `u64`.
+The `max_transfer_amount` field is non-zero only when `FLAG_SPEND_POLICY` is active.
 
 ---
 
