@@ -1,6 +1,7 @@
 mod auth;
 mod db;
 mod error;
+mod indexer;
 mod models;
 mod rate_limit;
 mod routes;
@@ -113,7 +114,7 @@ async fn main() {
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
-        .with_state(state);
+        .with_state(state.clone());
 
     // Determine port
     let port: u16 = std::env::var("PORT")
@@ -127,6 +128,10 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("Failed to bind address");
+
+    // Spawn the on-chain event indexer (SSS-095).
+    // Reads SOLANA_RPC_URL env var (default: devnet).
+    indexer::spawn_indexer(state.clone());
 
     axum::serve(listener, app)
         .await
