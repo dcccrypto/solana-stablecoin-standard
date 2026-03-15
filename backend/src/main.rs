@@ -30,7 +30,6 @@ use routes::{
     confidential::initiate_confidential_transfer,
     cpi::get_cpi_interface,
     chain_events::chain_events,
-    collateral_config::get_collateral_configs,
     events::events,
     health::health,
     liquidations::get_liquidations,
@@ -98,7 +97,6 @@ async fn main() {
         .route("/api/supply", get(supply))
         .route("/api/events", get(events))
         .route("/api/chain-events", get(chain_events))
-        .route("/api/liquidations", get(get_liquidations))
         .route("/api/reserves/proof", get(get_reserves_proof))
         .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
         .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
@@ -174,7 +172,6 @@ mod tests {
             .route("/api/supply", get(supply))
             .route("/api/events", get(events))
             .route("/api/chain-events", get(chain_events))
-            .route("/api/liquidations", get(get_liquidations))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
             .route("/api/compliance/audit", get(get_audit))
@@ -651,7 +648,6 @@ mod qa_tests {
             .route("/api/supply", get(supply))
             .route("/api/events", get(events))
             .route("/api/chain-events", get(chain_events))
-            .route("/api/liquidations", get(get_liquidations))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/audit", get(get_audit))
             .route("/api/compliance/rule", post(add_compliance_rule))
