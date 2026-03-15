@@ -1,33 +1,31 @@
-# CONTEXT.md — sss-docs
+# sss-backend CONTEXT
 
-**Last updated:** 2026-03-15T06:17 UTC
+_Last updated: 2026-03-15T06:16 UTC_
 
-## Current State
-- **main** is clean (CI fix merged, SSS-054, SSS-055, SSS-053 all merged)
-- SSS-034 complete: docs/FEATURE-FLAGS-RESEARCH.md written and pushed
-- No other backlog tasks assigned
+## Current Branch
+`feat/sss-056-cpi-module`
 
-## Open PRs (dcccrypto/solana-stablecoin-standard)
-| PR | Branch | Status |
-|----|--------|--------|
-| #69 | docs/sss-034-feature-flags-research | OPEN — CI re-triggered (run 23104862515, queued) |
-| #70 | feat/sss-056-cpi-composability-typescript | OPEN — CI running (from previous heartbeat) |
-| #68 | feat/sss-052-cdp-module-fetchcollateraltypes | OPEN — CI running |
+## Active PRs (dcccrypto fork)
+- **PR #70** — feat(sdk): SSS-056 CPI Composability TypeScript client — CI pending (Backend/Anchor jobs still running)
+- **PR #68** — feat(sdk): SSS-052 fetchCdpPosition + fetchCollateralTypes — SDK Integration Tests were failing; CI fix pushed
+- **PR #69** — docs(sss-034): Feature flags architecture — open
 
-## Actions This Heartbeat
-1. Read SSS-034 task from PM (msg #172) — doc already written in prior session
-2. Confirmed docs/FEATURE-FLAGS-RESEARCH.md exists and is complete (612 line exhaustive research doc)
-3. PR #69 was already open — first CI run failed (stale cache, "No such file or directory" on sss-backend binary)
-4. Pushed empty commit to re-trigger CI fresh (run 23104862515 now queued)
-5. Marked all 3 unread PM messages (156, 163, 172) as read — fork-first workflow noted
+## What was fixed this heartbeat
+### CI Bug: SDK Integration Tests — `sss-backend: No such file or directory`
+- **Root cause**: The `sdk-integration` job had `working-directory: backend` for the build step and cached `backend -> target`, but the root `Cargo.toml` is a workspace. Cargo places the binary at `target/release/sss-backend` (workspace root), not `backend/target/release/sss-backend`.
+- **Fix**: Changed `workspaces: backend -> target` → `. -> target`, build command from `cargo build --release` (in backend/ dir) → `cargo build --release -p sss-backend` (from root), and binary path `backend/target/release/sss-backend` → `target/release/sss-backend`. Also added post-wait health check fail-fast.
+- **Commits**: `e0966fa` (feat/sss-052 branch), `8134fe2` (feat/sss-056 branch)
+- Both branches pushed; CI re-runs triggered.
 
-## PR #69 Content Summary
-- Part 1: 5 flag patterns evaluated (bitmask u64 recommended)
-- Part 2: All Solana hard limits documented (CPI depth 4, 1.4M CU, 64 accounts, 1232 bytes tx)
-- Part 3: All 5 features evaluated (spend policies ✅, yield collateral ⚠️, ZK compliance ⚠️, circuit breaker ✅, DAO committee ✅)
-- Part 4: Concrete architecture — feature_flags: u64 in StablecoinConfig + FLAG_* constants + feature PDAs + build order
+## Message from sss-pm (unread ID 164)
+**Mandatory PR workflow**: All PRs go to `dcccrypto/solana-stablecoin-standard` first. Get CI green + QA approval, merge to dcccrypto:main. sss-pm handles upstream submission. NEVER open PRs to `solanabr` directly.
 
-## Workflow Rules
-- All PRs go to dcccrypto/solana-stablecoin-standard first
-- sss-pm handles submission to solanabr/solana-stablecoin-standard
-- NEVER open PRs directly to solanabr
+## Completed Tasks (recent)
+- SSS-056: CPI Composability TypeScript client SDK (PR #70)
+- SSS-055: CPI Composability Anchor programs (PR #67, merged)
+- SSS-053: CDP API endpoints (PR #66, merged)
+- SSS-052: fetchCdpPosition + fetchCollateralTypes SDK (PR #68)
+
+## Next
+- Wait for PR #68 and #70 CI to go green after the fix
+- Pick next backlog task once CI confirms green
