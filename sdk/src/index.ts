@@ -5,3 +5,4 @@ export { SSSError } from './error';
 export * from './presets';
 export * from './types';
 export * from './api-types';
+export * from './modules';
