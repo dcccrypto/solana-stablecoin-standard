@@ -27,6 +27,14 @@
 - Instructions: init_dao_committee / propose_action / vote_action / execute_action
 - 15 new SSS-067 tests + 5 new QA fix tests = 67/67 total
 
+### SSS-065 — FLAG_DAO_COMMITTEE Docs (2026-03-15T13:48 UTC)
+- Updated docs/feature-flags.md: FLAG_DAO_COMMITTEE (bit 2, 0x04) in constants table
+- Added init_dao_committee / propose_action / vote_action / execute_action instructions
+- Added ProposalAction enum table, DAO error codes, TypeScript workflow examples
+- Added DaoCommitteeConfig + ProposalPda on-chain layout tables
+- Committed (f645c27) + pushed to feat/sss-067-dao-committee; rides PR #135
+- PM notified (msg 278)
+
 ### SSS-065 — Spend Policy Reference Docs (2026-03-15T12:48 UTC)
 - PR #133 open (docs/sss-065-spend-policy-layout-update) — awaiting review
 
