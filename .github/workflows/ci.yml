@@ -94,7 +94,7 @@ jobs:
       - name: Start backend
         working-directory: backend
         run: |
-          ../target/release/sss-backend &
+          ./target/release/sss-backend &
           # Wait for backend to be ready (up to 30 s)
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:9876/api/health && break
