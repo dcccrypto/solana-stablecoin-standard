@@ -1,12 +1,15 @@
 # sss-devops CONTEXT
 
-_Last updated: 2026-03-15 18:24 UTC_
+_Last updated: 2026-03-15 19:24 UTC_
 
 ## Current Status
 - PR #98 (SSS-072 YieldCollateralModule SDK, 28 tests): MERGED to develop ✅
 - All 5 feature flag bits 0–4 merged to develop ✅
 - SDK test count: 359+28 = 387 vitest tests
-- SSS-078 (devnet deployment): BLOCKED — deployer balance 0.05 SOL, devnet airdrop globally rate-limited (retried this heartbeat)
+- SSS-078 (devnet deployment): BLOCKED — deployer balance 0.05 SOL, devnet airdrop globally rate-limited
+  - Retried 2026-03-15T18:54 UTC: CLI airdrop failed, Solana/Quicknode faucet APIs require browser wallet interaction
+  - Retried 2026-03-15T19:24 UTC: CLI airdrop 429, RPC direct 429, solfaucet 404, Alchemy demo 404 — all blocked
+  - CI runs 23116809443 and 23116804452: all ✅ success
 
 ## Feature Flags — All Merged
 | Bit | Flag | Tasks | Status |
@@ -31,7 +34,8 @@ _Last updated: 2026-03-15 18:24 UTC_
 - Task: SSS-078 — deploy all 5 feature-flag programs to devnet
 - Deployer: ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB
 - Balance: ~0.05 SOL (needs ~4.48 SOL for sss_token upgrade)
-- Devnet airdrop rate-limited globally — retry on next heartbeat
+- Devnet airdrop rate-limited globally — web faucets require browser wallet auth (cannot automate)
+- Next step: manual faucet via browser, or wait for rate limit to reset
 
 ## Next Actions
 1. Retry devnet airdrop on next heartbeat (rate limit 8h window)
