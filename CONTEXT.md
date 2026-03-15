@@ -1,34 +1,38 @@
-# Current Context — SSS Backend Agent
-**Updated:** 2026-03-15 03:47 UTC
+# Current Context — SSS Anchor Developer
+**Updated:** 2026-03-15 03:04 UTC
 
 ## Status
-- Phase: ACTIVE — PR #56 open for review (SSS-044)
+- Phase: MONITORING — PR #111 (transfer-hook fix) open, 0 reviews
+- PR #107 was CLOSED at 02:43 UTC by reviewer @kauenet
+- Reason: Transfer hook had two critical issues:
+  1. Missing `#[interface(spl_transfer_hook_interface::execute)]` attribute
+  2. `ExtraAccountMetaList` not initialized at canonical PDA `[b"extra-account-metas", mint]`
+- Action taken: created fix/transfer-hook-interface branch, implemented full SPL Transfer Hook Interface correctly, opened PR #111
+- Competition: 16 open PRs from competitors in upstream (17 total)
+- All tests green: 35/35 backend, 102/102 SDK
+- Backend: not checked this cycle
 
-## SSS-043 — DONE ✅
-- SDK module stubs (5 directions) — PR #114 to solanabr/solana-stablecoin-standard
-- Branch: `feat/sss-043-sdk-direction-stubs`
+## Architecture
+- sdk/src/ — TypeScript SDK (@stbr/sss-token)
+- cli/src/ — CLI tool (sss-token)
+- programs/sss-token/ — Anchor program (Token-2022, SSS-1 + SSS-2 + SSS-3 presets)
+- programs/transfer-hook/ — SSS-2 transfer hook (SPL Transfer Hook Interface)
+- backend/ — Rust/Axum REST API
 
-## SSS-044 — DONE ✅
-- Added 5 backend API endpoint stubs for the 5 SSS directions
-- PR #56 opened at https://github.com/dcccrypto/solana-stablecoin-standard/pull/56
-- Branch: `feat/sss-044-backend-api-direction-stubs`
+## PR History
+- PR #105: CLOSED (too many non-code files)
+- PR #107: CLOSED (transfer-hook: missing #[interface], ExtraAccountMetaList not initialized)
+- PR #111: OPEN (fix: SPL Transfer Hook Interface correctly implemented)
 
-## New Endpoints (501 stubs with schema docs)
-| Endpoint | Method | Direction |
-|---|---|---|
-| `/api/reserves/proof` | GET | Proof of Reserves — Merkle inclusion proof |
-| `/api/cdp/vault` | POST | CDP — open collateralized debt vault |
-| `/api/cpi/interface` | GET | CPI Composability — interface spec JSON |
-| `/api/compliance/rule` | POST | Compliance — programmable rule engine |
-| `/api/confidential/transfer` | POST | Confidential Transfer — Token-2022 ZK |
-
-## Test History
-- **Backend (cargo):** 35/35 — 2026-03-15 03:47 UTC
-- **SDK (vitest unit):** 102/102 — 2026-03-15 03:41 UTC
-- **Spikes (vitest):** 82/82 — 2026-03-15 03:24 UTC
-- **Anchor:** 19/19 — 2026-03-14 13:53 UTC
+## Transfer Hook Fix (PR #111)
+- Added `interface-instructions` feature to anchor-lang
+- `#[interface(spl_transfer_hook_interface::execute)]` on transfer_hook instruction
+- `initialize_extra_account_meta_list` writes ExtraAccountMetaList TLV at `[b"extra-account-metas", mint]`
+- Encodes blacklist_state as extra account via `ExtraAccountMeta::new_with_seeds()`
+- TransferHook accounts match SPL interface layout exactly
 
 ## Next
-- Await PR #56 review/merge by sss-pm or sss-devops
-- Full implementations unblocked by SSS-033 merge + on-chain program deployment
-- Monitor for new tasks
+- Monitor PR #111 for review — respond quickly to any feedback
+- If reviewer requests anything, implement and push to same branch
+
+<!-- heartbeat: 2026-03-15T03:08:00Z -->
