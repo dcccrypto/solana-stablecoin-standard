@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, MintEvent, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, EventLogEntry, MintEvent, WebhookEntry};
 
 pub struct Database {
     pub conn: Mutex<Connection>,
@@ -64,6 +64,17 @@ impl Database {
                 label TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS event_log (
+                id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                address TEXT NOT NULL,
+                data TEXT NOT NULL,
+                tx_signature TEXT,
+                slot INTEGER,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_event_log_type ON event_log(event_type);
+            CREATE INDEX IF NOT EXISTS idx_event_log_address ON event_log(address);
         ")?;
         Ok(())
     }
@@ -450,5 +461,118 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let rows = conn.execute("DELETE FROM api_keys WHERE id = ?1", params![id])?;
         Ok(rows > 0)
+    }
+
+    // ─── SSS-095: on-chain event log ────────────────────────────────────────
+
+    /// Insert an on-chain event into the event_log table.
+    pub fn insert_event_log(
+        &self,
+        event_type: &str,
+        address: &str,
+        data: serde_json::Value,
+        tx_signature: Option<&str>,
+        slot: Option<i64>,
+    ) -> Result<EventLogEntry, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let created_at = Utc::now().to_rfc3339();
+        let data_json = data.to_string();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO event_log (id, event_type, address, data, tx_signature, slot, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, event_type, address, data_json, tx_signature, slot, created_at],
+        )?;
+        Ok(EventLogEntry {
+            id,
+            event_type: event_type.to_string(),
+            address: address.to_string(),
+            data: data_json,
+            tx_signature: tx_signature.map(|s| s.to_string()),
+            slot,
+            created_at,
+        })
+    }
+
+    /// Query the event_log table with optional type/address filters.
+    pub fn list_event_log(
+        &self,
+        event_type: Option<&str>,
+        address: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<EventLogEntry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = "SELECT id, event_type, address, data, tx_signature, slot, created_at \
+                       FROM event_log WHERE 1=1".to_string();
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(t) = event_type {
+            param_values.push(Box::new(t.to_string()));
+            sql.push_str(&format!(" AND event_type = ?{}", param_values.len()));
+        }
+        if let Some(a) = address {
+            param_values.push(Box::new(a.to_string()));
+            sql.push_str(&format!(" AND address = ?{}", param_values.len()));
+        }
+        param_values.push(Box::new(limit as i64));
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", param_values.len()));
+
+        let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let entries = stmt.query_map(refs.as_slice(), |row| {
+            Ok(EventLogEntry {
+                id: row.get(0)?,
+                event_type: row.get(1)?,
+                address: row.get(2)?,
+                data: row.get(3)?,
+                tx_signature: row.get(4)?,
+                slot: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(entries)
+    }
+
+    // ── Indexer state ──────────────────────────────────────────────────────────
+
+    /// Create the indexer_state table if it doesn't exist.
+    /// Called once at indexer startup.
+    pub fn ensure_indexer_state_table(&self) -> Result<(), AppError> {
+        let conn = self.conn.lock().expect("db lock");
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS indexer_state (
+                program_id TEXT PRIMARY KEY,
+                last_signature TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );"
+        )?;
+        Ok(())
+    }
+
+    /// Get the last processed signature for a program address (cursor).
+    pub fn get_indexer_cursor(&self, program_id: &str) -> Result<Option<String>, AppError> {
+        let conn = self.conn.lock().expect("db lock");
+        let mut stmt = conn.prepare(
+            "SELECT last_signature FROM indexer_state WHERE program_id = ?1"
+        )?;
+        let mut rows = stmt.query([program_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Persist the latest processed signature for a program address.
+    pub fn set_indexer_cursor(&self, program_id: &str, signature: &str) -> Result<(), AppError> {
+        let conn = self.conn.lock().expect("db lock");
+        let updated_at = Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO indexer_state (program_id, last_signature, updated_at) \
+             VALUES (?1, ?2, ?3) \
+             ON CONFLICT(program_id) DO UPDATE SET last_signature = ?2, updated_at = ?3",
+            rusqlite::params![program_id, signature, updated_at],
+        )?;
+        Ok(())
     }
 }

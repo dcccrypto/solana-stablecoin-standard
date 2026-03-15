@@ -1,6 +1,7 @@
 mod auth;
 mod db;
 mod error;
+mod indexer;
 mod models;
 mod rate_limit;
 mod routes;
@@ -28,6 +29,7 @@ use routes::{
     compliance_rules::add_compliance_rule,
     confidential::initiate_confidential_transfer,
     cpi::get_cpi_interface,
+    chain_events::chain_events,
     events::events,
     health::health,
     mint::mint,
@@ -93,6 +95,7 @@ async fn main() {
         .route("/api/burn", post(burn))
         .route("/api/supply", get(supply))
         .route("/api/events", get(events))
+        .route("/api/chain-events", get(chain_events))
         .route("/api/reserves/proof", get(get_reserves_proof))
         .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
         .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
@@ -111,7 +114,7 @@ async fn main() {
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
-        .with_state(state);
+        .with_state(state.clone());
 
     // Determine port
     let port: u16 = std::env::var("PORT")
@@ -126,6 +129,10 @@ async fn main() {
         .await
         .expect("Failed to bind address");
 
+    // Spawn the on-chain event indexer (SSS-095).
+    // Reads SOLANA_RPC_URL env var (default: devnet).
+    indexer::spawn_indexer(state.clone());
+
     axum::serve(listener, app)
         .await
         .expect("Server error");
@@ -134,6 +141,7 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use axum::{
         body::Body,
         http::{Method, Request, StatusCode},
@@ -161,6 +169,7 @@ mod tests {
             .route("/api/burn", post(burn))
             .route("/api/supply", get(supply))
             .route("/api/events", get(events))
+            .route("/api/chain-events", get(chain_events))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
             .route("/api/compliance/audit", get(get_audit))
@@ -372,6 +381,102 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
+    // SSS-095: event_log table + GET /api/chain-events
+    #[tokio::test]
+    async fn test_chain_events_endpoint_empty() {
+        let (app, key) = build_app();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/chain-events")
+                    .header("X-Api-Key", key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["data"].as_array().unwrap().len(), 0, "empty event_log returns empty array");
+    }
+
+    #[tokio::test]
+    async fn test_chain_events_insert_and_query() {
+        let db = Database::new(":memory:").expect("db");
+        // Insert two events of different types
+        db.insert_event_log(
+            "circuit_breaker_toggle",
+            "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
+            serde_json::json!({"halted": true, "authority": "test"}),
+            Some("sig1"),
+            Some(12345),
+        ).unwrap();
+        db.insert_event_log(
+            "cdp_liquidate",
+            "someposition123",
+            serde_json::json!({"debt_cleared": 1000, "collateral_seized": 500}),
+            Some("sig2"),
+            Some(12350),
+        ).unwrap();
+
+        let key_entry = db.create_api_key("test").unwrap();
+        let test_key = key_entry.key.clone();
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/chain-events", get(chain_events))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+
+        // Query all
+        let resp = app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/chain-events")
+                    .header("X-Api-Key", &test_key)
+                    .body(Body::empty())
+                    .unwrap(),
+            ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["data"].as_array().unwrap().len(), 2, "should return both events");
+
+        // Query by type
+        let resp = app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/chain-events?type=circuit_breaker_toggle")
+                    .header("X-Api-Key", &test_key)
+                    .body(Body::empty())
+                    .unwrap(),
+            ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let entries = json["data"].as_array().unwrap();
+        assert_eq!(entries.len(), 1, "type filter: only circuit_breaker_toggle");
+        assert_eq!(entries[0]["event_type"], "circuit_breaker_toggle");
+        assert_eq!(entries[0]["slot"], 12345);
+
+        // Query by address
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/chain-events?address=someposition123")
+                    .header("X-Api-Key", &test_key)
+                    .body(Body::empty())
+                    .unwrap(),
+            ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let entries = json["data"].as_array().unwrap();
+        assert_eq!(entries.len(), 1, "address filter: only cdp_liquidate");
+        assert_eq!(entries[0]["event_type"], "cdp_liquidate");
+    }
+
     #[tokio::test]
     async fn test_blacklist_endpoint() {
         let (app, key) = build_app();
@@ -539,6 +644,7 @@ mod qa_tests {
             .route("/api/burn", post(burn))
             .route("/api/supply", get(supply))
             .route("/api/events", get(events))
+            .route("/api/chain-events", get(chain_events))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/audit", get(get_audit))
             .route("/api/compliance/rule", post(add_compliance_rule))

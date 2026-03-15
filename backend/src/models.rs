@@ -192,3 +192,32 @@ pub struct ReservesProofResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub holder: Option<String>,
 }
+
+/// SSS-095: on-chain event log entry (circuit-breaker, CDP, oracle).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EventLogEntry {
+    pub id: String,
+    /// Event type: "circuit_breaker_toggle" | "cdp_deposit" | "cdp_borrow" | "cdp_liquidate" | "oracle_params_update"
+    pub event_type: String,
+    /// Token mint / CDP position address / program address
+    pub address: String,
+    /// JSON blob with event-specific fields (raw string)
+    pub data: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot: Option<i64>,
+    pub created_at: String,
+}
+
+/// SSS-095: query params for GET /api/chain-events
+#[derive(Debug, Deserialize)]
+pub struct ChainEventsQuery {
+    /// Filter by event type (e.g. "circuit_breaker_toggle", "cdp_borrow")
+    #[serde(rename = "type")]
+    pub event_type: Option<String>,
+    /// Filter by address (token mint, CDP position, or program address)
+    pub address: Option<String>,
+    /// Maximum number of entries to return (default: 100, max: 1000)
+    pub limit: Option<u32>,
+}
