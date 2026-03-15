@@ -22,11 +22,16 @@ use auth::require_api_key;
 use db::Database;
 use routes::{
     apikeys::{create_api_key, delete_api_key, list_api_keys},
+    cdp::open_cdp_vault,
     compliance::{add_blacklist, get_audit, get_blacklist, remove_blacklist},
+    compliance_rules::add_compliance_rule,
+    confidential::initiate_confidential_transfer,
+    cpi::get_cpi_interface,
     events::events,
     health::health,
     mint::mint,
     burn::burn,
+    reserves::get_reserves_proof,
     supply::supply,
     webhooks::{delete_webhook, list_webhooks, register_webhook},
 };
@@ -90,6 +95,11 @@ async fn main() {
         .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
         .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
         .route("/api/compliance/audit", get(get_audit))
+        .route("/api/compliance/rule", post(add_compliance_rule))
+        .route("/api/reserves/proof", get(get_reserves_proof))
+        .route("/api/cdp/vault", post(open_cdp_vault))
+        .route("/api/cpi/interface", get(get_cpi_interface))
+        .route("/api/confidential/transfer", post(initiate_confidential_transfer))
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
         .route("/api/webhooks/:id", delete(delete_webhook))
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
@@ -150,6 +160,11 @@ mod tests {
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
             .route("/api/compliance/audit", get(get_audit))
+            .route("/api/compliance/rule", post(add_compliance_rule))
+            .route("/api/reserves/proof", get(get_reserves_proof))
+            .route("/api/cdp/vault", post(open_cdp_vault))
+            .route("/api/cpi/interface", get(get_cpi_interface))
+            .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
@@ -520,6 +535,11 @@ mod qa_tests {
             .route("/api/events", get(events))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/audit", get(get_audit))
+            .route("/api/compliance/rule", post(add_compliance_rule))
+            .route("/api/reserves/proof", get(get_reserves_proof))
+            .route("/api/cdp/vault", post(open_cdp_vault))
+            .route("/api/cpi/interface", get(get_cpi_interface))
+            .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
