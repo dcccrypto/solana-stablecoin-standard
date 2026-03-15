@@ -51,4 +51,11 @@ pub enum SssError {
     InvalidPrice,
     #[msg("Collateral mint does not match the position's locked collateral (SSS-054: single-collateral per position)")]
     WrongCollateralMint,
+    // CPI Composability (Direction 3)
+    #[msg("InterfaceVersion PDA not initialized — call init_interface_version first")]
+    InterfaceNotInitialized,
+    #[msg("InterfaceVersion mismatch — caller pinned to an incompatible version")]
+    InterfaceVersionMismatch,
+    #[msg("This SSS interface has been deprecated — use the updated program")]
+    InterfaceDeprecated,
 }

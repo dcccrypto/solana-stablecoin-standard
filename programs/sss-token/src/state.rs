@@ -163,3 +163,38 @@ impl CdpPosition {
     /// Liquidation discount (5%) — liquidator gets collateral at 5% discount
     pub const LIQUIDATION_BONUS_BPS: u64 = 500;
 }
+
+// ─── Direction 3: CPI Composability Standard ─────────────────────────────────
+
+/// Interface version PDA — external callers check this before invoking SSS via CPI.
+/// Seeds: ["interface-version", sss_mint]
+///
+/// Callers should read this PDA and verify:
+///   - `version` matches their expected version (breaking changes bump version)
+///   - `active` is true (protocol not deprecated)
+///
+/// Breaking interface changes require a new program address per Solana convention,
+/// but the version field gives callers a cheap on-chain safety check.
+#[account]
+#[derive(InitSpace)]
+pub struct InterfaceVersion {
+    /// The SSS mint this interface applies to
+    pub mint: Pubkey,
+    /// Current interface version (1 = initial CPI composability standard)
+    pub version: u8,
+    /// Whether this interface is active; false = deprecated / use new program
+    pub active: bool,
+    /// Interface namespace used for discriminator derivation
+    /// sha256("sss_mint_interface:mint")[..8] => mint discriminator
+    /// sha256("sss_mint_interface:burn")[..8] => burn discriminator
+    pub namespace: [u8; 32],
+    pub bump: u8,
+}
+
+impl InterfaceVersion {
+    pub const SEED: &'static [u8] = b"interface-version";
+    pub const CURRENT_VERSION: u8 = 1;
+
+    /// The canonical namespace string used to derive discriminators.
+    pub const NAMESPACE: &'static str = "sss_mint_interface";
+}
