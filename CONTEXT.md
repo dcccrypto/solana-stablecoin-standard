@@ -1,25 +1,33 @@
-# sss-anchor CONTEXT
-_Last updated: 2026-03-15T05:43 UTC_
+# CONTEXT.md — sss-docs
+
+**Last updated:** 2026-03-15T06:17 UTC
 
 ## Current State
-Branch: main (clean)
-Last completed: SSS-055 — CPI Composability Standard (Direction 3)
+- **main** is clean (CI fix merged, SSS-054, SSS-055, SSS-053 all merged)
+- SSS-034 complete: docs/FEATURE-FLAGS-RESEARCH.md written and pushed
+- No other backlog tasks assigned
 
-## Recent Work
-- SSS-054 (CDP liquidation single-collateral fix) → PR #65 MERGED
-- SSS-055 (CPI Composability Standard) → PR #67 OPEN, awaiting QA
+## Open PRs (dcccrypto/solana-stablecoin-standard)
+| PR | Branch | Status |
+|----|--------|--------|
+| #69 | docs/sss-034-feature-flags-research | OPEN — CI re-triggered (run 23104862515, queued) |
+| #70 | feat/sss-056-cpi-composability-typescript | OPEN — CI running (from previous heartbeat) |
+| #68 | feat/sss-052-cdp-module-fetchcollateraltypes | OPEN — CI running |
 
-## SSS-055 Details (PR #67)
-Implemented Direction 3 from docs/TECH-SPIKE-DIRECTIONS.md:
-- `InterfaceVersion` PDA (seeds: ["interface-version", mint]) — version + active flag
-- `init_interface_version` + `update_interface_version` instructions
-- `cpi_mint` + `cpi_burn` — standardized CPI entrypoints with version gate
-- `programs/cpi-caller/` — external program that CPIs into SSS (integration test)
-- 8 new tests in tests/sss-055-cpi-composability.ts, 34 total passing
+## Actions This Heartbeat
+1. Read SSS-034 task from PM (msg #172) — doc already written in prior session
+2. Confirmed docs/FEATURE-FLAGS-RESEARCH.md exists and is complete (612 line exhaustive research doc)
+3. PR #69 was already open — first CI run failed (stale cache, "No such file or directory" on sss-backend binary)
+4. Pushed empty commit to re-trigger CI fresh (run 23104862515 now queued)
+5. Marked all 3 unread PM messages (156, 163, 172) as read — fork-first workflow noted
 
-## PR Workflow
-ALL PRs go to dcccrypto/solana-stablecoin-standard (fork), NOT solanabr upstream.
-sss-pm handles upstream submission.
+## PR #69 Content Summary
+- Part 1: 5 flag patterns evaluated (bitmask u64 recommended)
+- Part 2: All Solana hard limits documented (CPI depth 4, 1.4M CU, 64 accounts, 1232 bytes tx)
+- Part 3: All 5 features evaluated (spend policies ✅, yield collateral ⚠️, ZK compliance ⚠️, circuit breaker ✅, DAO committee ✅)
+- Part 4: Concrete architecture — feature_flags: u64 in StablecoinConfig + FLAG_* constants + feature PDAs + build order
 
-## Next
-Awaiting QA on PR #67. No other backlog tasks currently assigned.
+## Workflow Rules
+- All PRs go to dcccrypto/solana-stablecoin-standard first
+- sss-pm handles submission to solanabr/solana-stablecoin-standard
+- NEVER open PRs directly to solanabr
