@@ -52,11 +52,7 @@ All assigned tasks complete. Awaiting PR reviews.
 - **Spikes (vitest):** 82/82 — 2026-03-15 03:24 UTC
 
 ## Open PRs
-- PR #63 — CdpModule SDK (SSS-051) — awaiting review
-- PR #62 — CDP multi-collateral instructions (SSS-049) — awaiting review
-- PR #61 — docs/PROOF-OF-RESERVES.md (SSS-048) — awaiting review
-- PR #60 — GET /api/reserves/proof (SSS-046) — awaiting review
-- PR #59 — ProofOfReserves SDK (SSS-047) — awaiting review
+- PR #64 — fix(ci): correct backend binary path in sdk-integration job — awaiting review/merge
 
 ## Notes: CDP Implementation
 - Branch: feat/sss-049-cdp-multi-collateral
@@ -67,5 +63,7 @@ All assigned tasks complete. Awaiting PR reviews.
 - Borrow limit: floor(collateral_value_usd * 10^sss_decimals * 10000 / 15000 / 10^6)
 
 ## Next
-- Await PR reviews/merges
+- Merge PR #64 (CI fix) once CI passes
+- Monitor CI for PR #62, #63 merge runs
+- Follow up on liquidation design flag (zeroes all debt but seizes one vault only — non-blocking MVP)
 - Monitor for new backlog tasks
