@@ -15,6 +15,15 @@ export { CdpModule } from './CdpModule';
 export type { CdpPosition, CollateralEntry, CollateralType, DepositCollateralParams, BorrowStableParams, RepayStableParams } from './CdpModule';
 export { CpiModule, CURRENT_INTERFACE_VERSION, getInterfaceVersionPda } from './CpiModule';
 export type { InterfaceVersionInfo, CpiMintParams, CpiBurnParams, UpdateInterfaceVersionParams } from './CpiModule';
+export { ZkComplianceModule, FLAG_ZK_COMPLIANCE } from './ZkComplianceModule';
+export type {
+  InitZkComplianceParams,
+  SubmitZkProofParams,
+  CloseVerificationRecordParams,
+  ExecuteCompliantTransferParams,
+  ZkComplianceConfigAccount,
+  VerificationRecordAccount,
+} from './ZkComplianceModule';
 export { SSSClient } from './client';
 export { SSSError } from './error';
 export * from './presets';
