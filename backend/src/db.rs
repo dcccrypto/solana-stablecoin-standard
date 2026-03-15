@@ -532,4 +532,47 @@ impl Database {
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(entries)
     }
+
+    // ── Indexer state ──────────────────────────────────────────────────────────
+
+    /// Create the indexer_state table if it doesn't exist.
+    /// Called once at indexer startup.
+    pub fn ensure_indexer_state_table(&self) -> Result<(), AppError> {
+        let conn = self.conn.lock().expect("db lock");
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS indexer_state (
+                program_id TEXT PRIMARY KEY,
+                last_signature TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );"
+        )?;
+        Ok(())
+    }
+
+    /// Get the last processed signature for a program address (cursor).
+    pub fn get_indexer_cursor(&self, program_id: &str) -> Result<Option<String>, AppError> {
+        let conn = self.conn.lock().expect("db lock");
+        let mut stmt = conn.prepare(
+            "SELECT last_signature FROM indexer_state WHERE program_id = ?1"
+        )?;
+        let mut rows = stmt.query([program_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Persist the latest processed signature for a program address.
+    pub fn set_indexer_cursor(&self, program_id: &str, signature: &str) -> Result<(), AppError> {
+        let conn = self.conn.lock().expect("db lock");
+        let updated_at = Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO indexer_state (program_id, last_signature, updated_at) \
+             VALUES (?1, ?2, ?3) \
+             ON CONFLICT(program_id) DO UPDATE SET last_signature = ?2, updated_at = ?3",
+            rusqlite::params![program_id, signature, updated_at],
+        )?;
+        Ok(())
+    }
 }
