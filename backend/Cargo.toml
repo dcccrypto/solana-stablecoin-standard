@@ -22,6 +22,12 @@ tower-http = { version = "0.5", features = ["cors", "trace"] }
 hyper = { version = "1", features = ["http1", "client"] }
 hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "tokio"] }
 http-body-util = "0.1"
+# SSS-061: circuit breaker on-chain instruction dispatch
+solana-program = "=2.3.0"
+bs58 = "0.5"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+sha2 = "0.10"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

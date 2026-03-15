@@ -1,5 +1,6 @@
 pub mod apikeys;
 pub mod burn;
+pub mod circuit_breaker;
 pub mod compliance;
 pub mod events;
 pub mod health;
