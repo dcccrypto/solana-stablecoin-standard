@@ -322,9 +322,146 @@ await compliance.thawAccount(suspectTokenAccount);
 
 ---
 
+---
+
+## ZK Compliance (SSS-075)
+
+> **Feature flag:** `FLAG_ZK_COMPLIANCE` (bit 7)
+> **Applies to:** SSS-2 stablecoins only
+
+ZK Compliance adds a **per-user proof expiry gate** on top of the blacklist. When `FLAG_ZK_COMPLIANCE` is active, the transfer hook additionally checks that the sender holds a valid `VerificationRecord` PDA — an on-chain record attesting that they have recently submitted a ZK proof. Transfers fail if the record is absent or expired.
+
+### Architecture
+
+```
+transfer_hook (SSS-075 path):
+  1. BlacklistState check (sender/receiver)        ← existing SSS-2 gate
+  2. VerificationRecord check (sender)             ← new SSS-075 gate
+     └── record.expires_at_slot > Clock::slot?
+         ✅ allow  |  ❌ reject (VerificationExpired / VerificationRecordMissing)
+```
+
+### On-chain Instructions
+
+#### `init_zk_compliance`
+
+Initializes the `ZkComplianceConfig` PDA for a mint and enables `FLAG_ZK_COMPLIANCE`. **Called once** after SSS-2 stablecoin init.
+
+**Parameters**
+
+| Name               | Type            | Description |
+|--------------------|-----------------|-------------|
+| `ttl_slots`        | `u64`           | Proof validity window in slots. Pass `0` to use default (1500 slots ≈ 10 min at 400ms/slot). |
+| `verifier_pubkey`  | `Option<Pubkey>`| Compliance oracle that must co-sign every `submit_zk_proof` call. Pass `None` for open/self-submit mode. |
+
+**Authority:** Stablecoin config authority (`config.authority`). SSS-2 only.
+
+---
+
+#### `submit_zk_proof`
+
+Creates or refreshes the caller's `VerificationRecord` PDA, extending expiry by `ttl_slots` from the current slot.
+
+**Accounts**
+
+| Name                  | Description |
+|-----------------------|-------------|
+| `user`                | Signer — the user submitting the proof |
+| `verifier`            | Optional signer. **Required** (and must match `ZkComplianceConfig.verifier_pubkey`) when verifier mode is active. |
+| `verification_record` | PDA: `["zk-verification", mint, user]` — created or updated |
+
+**Verifier mode vs. open mode:**
+
+| Mode | `verifier_pubkey` set? | Who can call `submit_zk_proof` |
+|------|------------------------|--------------------------------|
+| Open | No | Any user (self-submit) |
+| Verifier | Yes | User + compliance oracle co-signature required |
+
+When verifier mode is enabled, the compliance oracle must co-sign every proof submission — preventing users from self-issuing proofs. The oracle is responsible for gating off-chain KYC/AML verification before co-signing.
+
+---
+
+#### `close_verification_record`
+
+Closes an expired `VerificationRecord` PDA, returning rent to the stablecoin authority.
+
+**Authority:** Stablecoin config authority only.
+**Constraint:** Record must be expired (`Clock::slot >= record.expires_at_slot`). Live records cannot be force-closed.
+
+---
+
+### `ZkComplianceConfig` State
+
+PDA seeds: `["zk-compliance-config", mint]`
+
+| Field              | Type            | Description |
+|--------------------|-----------------|-------------|
+| `sss_mint`         | `Pubkey`        | The stablecoin mint |
+| `ttl_slots`        | `u64`           | Proof validity window (slots) |
+| `verifier_pubkey`  | `Option<Pubkey>`| Compliance oracle pubkey, or `None` |
+| `bump`             | `u8`            | PDA bump |
+
+---
+
+### `VerificationRecord` State
+
+PDA seeds: `["zk-verification", mint, user]` — one per (mint, user).
+
+| Field              | Type     | Description |
+|--------------------|----------|-------------|
+| `sss_mint`         | `Pubkey` | The stablecoin mint |
+| `user`             | `Pubkey` | The wallet that submitted the proof |
+| `expires_at_slot`  | `u64`    | Slot at which this record expires |
+| `bump`             | `u8`     | PDA bump |
+
+---
+
+### Error Reference (ZK Compliance)
+
+| Error                         | Code  | Condition |
+|-------------------------------|-------|-----------|
+| `ZkComplianceNotEnabled`      | —     | `FLAG_ZK_COMPLIANCE` not set on the config |
+| `VerificationExpired`         | —     | Transfer hook: user's `VerificationRecord` has expired |
+| `VerificationRecordMissing`   | —     | Transfer hook: user has no `VerificationRecord` |
+| `VerificationRecordNotExpired`| —     | `close_verification_record`: record is still live |
+| `ZkVerifierRequired`          | —     | `verifier_pubkey` is set but no `verifier` account was provided |
+| `ZkVerifierMismatch`          | —     | Provided `verifier` key does not match `verifier_pubkey` |
+
+---
+
+### SDK: ZK Compliance (TypeScript)
+
+The SDK does not yet expose a high-level `ZkComplianceModule`; use Anchor CPI directly via the `sss-token` program:
+
+```typescript
+// init_zk_compliance — call once after SSS-2 init
+await sssProgram.methods
+  .initZkCompliance(
+    new BN(1500),          // ttl_slots (0 = default)
+    verifierPubkey,        // null for open mode
+  )
+  .accounts({ authority, config, mint, zkComplianceConfig, tokenProgram, systemProgram })
+  .rpc();
+
+// submit_zk_proof (open mode — user self-submits)
+await sssProgram.methods
+  .submitZkProof()
+  .accounts({ user, config, mint, zkComplianceConfig, verificationRecord, systemProgram })
+  .rpc();
+
+// submit_zk_proof (verifier mode — oracle must co-sign)
+await sssProgram.methods
+  .submitZkProof()
+  .accounts({ user, config, mint, zkComplianceConfig, verificationRecord, verifier: oraclePubkey, systemProgram })
+  .signers([userKeypair, oracleKeypair])
+  .rpc();
+```
+
+---
+
 ## Related Docs
 
-- [transfer-hook.md](./transfer-hook.md) — on-chain transfer-hook program reference (instructions, errors, account layout)
+- [transfer-hook.md](./transfer-hook.md) — on-chain transfer-hook program reference (instructions, errors, account layout, ZK enforcement)
 - [compliance-audit-log.md](./compliance-audit-log.md) — REST API for compliance actions with immutable audit logging
 - [on-chain-sdk-core.md](./on-chain-sdk-core.md) — `SolanaStablecoin` SDK core reference (initialize, mint, burn)
 - [devnet-deploy.md](./devnet-deploy.md) — deployment flow including transfer-hook registration
