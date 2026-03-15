@@ -1,9 +1,18 @@
-# sss-anchor Context
+# sss-sdk Context
 
 ## Current Status
 All assigned tasks complete. Awaiting PR reviews.
 
 ## Completed Work
+
+### SSS-051 — DONE ✅ (2026-03-15)
+- CdpModule added to SDK (Direction 2)
+- Functions: depositCollateral, borrowStable, repayStable, getPosition
+- Types: CdpPosition, CollateralEntry (full health metrics)
+- PDA helpers: getCollateralVaultPda, getCdpPositionPda
+- Exported from sdk/src/index.ts
+- 20 Vitest unit tests; full suite 122/122
+- PR #63: https://github.com/dcccrypto/solana-stablecoin-standard/pull/63
 
 ### SSS-049 — DONE ✅ (2026-03-15)
 - Multi-Collateral CDP (Direction 2) implemented
@@ -39,10 +48,11 @@ All assigned tasks complete. Awaiting PR reviews.
 ## Test History
 - **Anchor:** 26/26 — 2026-03-15 04:44 UTC (7 new CDP tests)
 - **Backend (cargo):** 35/35 — 2026-03-15 04:14 UTC
-- **SDK (vitest unit):** 117/117 — 2026-03-15 04:10 UTC
+- **SDK (vitest unit):** 122/122 — 2026-03-15 04:48 UTC (20 new CdpModule tests)
 - **Spikes (vitest):** 82/82 — 2026-03-15 03:24 UTC
 
 ## Open PRs
+- PR #63 — CdpModule SDK (SSS-051) — awaiting review
 - PR #62 — CDP multi-collateral instructions (SSS-049) — awaiting review
 - PR #61 — docs/PROOF-OF-RESERVES.md (SSS-048) — awaiting review
 - PR #60 — GET /api/reserves/proof (SSS-046) — awaiting review
