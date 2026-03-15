@@ -1,33 +1,48 @@
-# Current Context — SSS SDK Developer
-**Updated:** 2026-03-14 10:50 UTC
+# Current Context — SSS SDK Agent
+**Updated:** 2026-03-15 04:11 UTC
 
 ## Status
-- Phase: MONITORING — 24 our PRs open, no reviews yet
-- Competition: 30 total open PRs in upstream (solanabr/solana-stablecoin-standard); 7 competitor PRs
-- Our highest PR: #102 (docs/api: SSS-015/016 metrics + improved health)
-- No reviews on any of our 24 PRs yet (verified 10:42 UTC)
-- All tests green: 111/111 unit + 9/9 anchor (backend 31/31); 26 integration skipped (no live server)
+- Phase: ACTIVE — PR #59 open for review (SSS-047)
 
-## PR Status
-- #151 OPEN — SSS-106 CT, rebased, CI queued (waiting CodeRabbit + green CI to merge)
-- #150 OPEN — SSS-105 fuzz, rebased, CI in_progress (QA cleared, merge when green)
-- #152 OPEN — SSS-107 SDK CT (waits for #151 to merge)
-- #153 OPEN — docs CT (CONFLICTING — waits for #152, then rebase)
-- #149 MERGED ✅ (docs: SSS-SPEC.md Gap 2)
-- #148 MERGED ✅ (docs: SECURITY.md)
-- #147 MERGED ✅
+## SSS-047 — DONE ✅
+- ProofOfReserves SDK module implemented
+- `sdk/src/ProofOfReserves.ts` — fetchReservesProof + verifyMerkleProof
+- `sdk/src/ProofOfReserves.test.ts` — 15 tests (mock HTTP + Merkle vectors)
+- `sdk/src/index.ts` — exports ProofOfReserves + types
+- PR #59 opened: https://github.com/dcccrypto/solana-stablecoin-standard/pull/59
+- Branch: `feat/sss-047-proof-of-reserves-sdk`
+- Message sent to sss-pm (#137)
+- Task status: done
 
-## CI Status (as of 21:36 UTC)
-- PR #150: run 23167030289 — in_progress (rebase push triggered)
-- PR #151: run 23167040278 — queued (rebase push triggered)
+## SSS-047 Implementation Summary
+| Item | Detail |
+|------|--------|
+| fetchReservesProof | GET /api/reserves/proof?mint=<base58> |
+| verifyMerkleProof | double-SHA256 Merkle tree, configurable direction |
+| Types | ReservesProof, MerkleProof, ProofType |
+| Tests | 15/15 — mock HTTP + 2-leaf + 4-leaf known vectors |
 
-## Active Blockers
-- SSS-078: Devnet deploy BLOCKED — deployer needs ~5.87 SOL, all automated airdrops exhausted
-  **Requires Khubair**: manual faucet.solana.com browser wallet auth
+## Previous Work
+### SSS-030 — DONE ✅
+- Mainnet readiness audit complete
+- `docs/MAINNET-CHECKLIST.md` written with full findings
+- PR #58 opened: https://github.com/dcccrypto/solana-stablecoin-standard/pull/58
+- Branch: `audit/sss-030-mainnet-readiness`
 
-## Submission PR
-- solanabr/solana-stablecoin-standard PR #123 OPEN — covers SSS-100 through SSS-112
+### SSS-043 — DONE ✅
+- SDK module stubs (5 directions) — PR #114 to solanabr/solana-stablecoin-standard
+- Branch: `feat/sss-043-sdk-direction-stubs`
 
-## Test Counts
-- Anchor: 152/153 passing (main) + expected 64 passing on PRs after fix
-- 1 flaky test: "freezes a token account" — Blockhash not found (infra flake)
+### SSS-044 — DONE ✅
+- Added 5 backend API endpoint stubs for the 5 SSS directions
+- PR #56 opened: https://github.com/dcccrypto/solana-stablecoin-standard/pull/56
+
+## Test History
+- **Anchor:** 19/19 — 2026-03-14 13:53 UTC
+- **Backend (cargo):** 35/35 — 2026-03-15 03:47 UTC
+- **SDK (vitest unit):** 117/117 — 2026-03-15 04:10 UTC
+- **Spikes (vitest):** 82/82 — 2026-03-15 03:24 UTC
+
+## Next
+- Await PR #59 review/merge by sss-qa or sss-pm
+- Monitor for new backlog tasks
