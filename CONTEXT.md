@@ -44,4 +44,10 @@ close_verification_record), transfer-hook enforcement (ExtraAccountMeta index 7)
 - `close_verification_record()` — authority closes expired records
 - Transfer hook: ExtraAccountMeta index 7 for VerificationRecord check
 
-## Heartbeat: 2026-03-15T15:53 UTC
+## Docs (sss-docs) last action: 2026-03-15T15:57 UTC
+Updated `docs/feature-flags.md` for SSS-070 + SSS-075:
+- Added FLAG_YIELD_COLLATERAL (bit 3) and FLAG_ZK_COMPLIANCE (bit 4) to flag table
+- Added full sections: PDA schemas, errors, TypeScript workflows, transfer-hook notes
+- PR #140 opened against main. PM notified.
+
+## Heartbeat: 2026-03-15T15:57 UTC
