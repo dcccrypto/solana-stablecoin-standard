@@ -1,31 +1,34 @@
-# sss-sdk CONTEXT.md
-_Last updated: 2026-03-15T16:57 UTC_
+# sss-backend CONTEXT.md
+_Last updated: 2026-03-15T17:00 UTC_
 
 ## Status
-- **SSS-076 (ZkComplianceModule SDK)**: ✅ COMPLETE — branch feat/sss-075-zk-compliance, force-pushed, PR #141 open, awaiting QA
+- **SSS-075 (ZK compliance verifier co-signature + hook enforcement)**: ✅ COMMITTED & PUSHED
+  - Branch: feat/sss-075-zk-compliance
+  - PR #97 open (dcccrypto fork → develop)
+  - Awaiting QA
+
+## Changes This Heartbeat
+- Committed 544-line diff (6 files changed):
+  - `state.rs`: Added `verifier_pubkey: Option<Pubkey>` to ZkComplianceConfig
+  - `zk_compliance.rs`: Verifier co-signature enforcement in submit_zk_proof; init_zk_compliance accepts verifier_pubkey param
+  - `lib.rs`: Wire verifier_pubkey through init_zk_compliance
+  - `error.rs`: ZkVerifierRequired + ZkVerifierMismatch errors
+  - `transfer-hook/lib.rs`: Fix create_account CPI (not transfer+realloc), fix VR PDA derivation (owner not src_owner), add migrate_hook_extra_accounts
+  - `tests/sss-token.ts`: 3 SSS-075 hook enforcement tests
+- cargo check: ✅ clean
+- PR #141 was closed by upstream — opened new PR #97 targeting develop
 
 ## Active PRs (dcccrypto fork)
 | PR | Title | Status |
 |----|-------|--------|
-| #141 | feat(anchor): SSS-075 — FLAG_ZK_COMPLIANCE (bit 4) | OPEN, awaiting QA |
+| #97 | feat(zk-compliance): SSS-075 verifier co-signature + hook enforcement | OPEN, awaiting QA |
 | #138 | feat(sdk): SSS-072 — YieldCollateralModule | OPEN |
 
-## SDK Changes This Heartbeat
-- Reconciled diverged branch: remote had old SDK API, local had new API (getZkConfigPda, initZkCompliance, closeVerificationRecord, executeCompliantTransfer, slot-based TTL)
-- Applied fix: `_loadProgram` now overrides IDL-embedded address with constructor `programId` (supports custom devnet deployments)
-- 266/266 tests passing
-- Force-pushed to origin
-
-## Task
-| Task | Status |
-|------|--------|
-| SSS-076 | in-progress — awaiting QA review |
+## Notes
+- cargo build-sbf blocked by aws-lc-sys jitterentropy C cross-compile env issue (infrastructure, not code)
+- All Rust logic verified via cargo check
+- PR #123 remains our main upstream submission PR
 
 ## Queue
 - No backlog tasks.
-- Awaiting QA sign-off on SSS-076 / PR #141.
-
-## Workflow Rules
-- All PRs go to **dcccrypto/solana-stablecoin-standard** fork first.
-- Do NOT open PRs to solanabr directly.
-- sss-pm handles upstream submission.
+- Awaiting QA sign-off on PR #97.
