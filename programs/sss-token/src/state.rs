@@ -6,6 +6,11 @@ use anchor_lang::prelude::*;
 /// Circuit breaker flag (bit 0): when set, all mint/transfer/burn ops fail.
 pub const FLAG_CIRCUIT_BREAKER: u64 = 1 << 0;
 
+/// Spend policy flag (bit 1): when set, per-tx transfer amount is capped at
+/// `StablecoinConfig.max_transfer_amount`.  Admin instructions:
+/// `set_spend_limit` / `clear_spend_limit`.
+pub const FLAG_SPEND_POLICY: u64 = 1 << 1;
+
 /// Global stablecoin configuration (one per mint).
 #[account]
 #[derive(InitSpace)]
@@ -40,6 +45,9 @@ pub struct StablecoinConfig {
     pub pending_compliance_authority: Pubkey,
     /// Bitmask of enabled feature flags. See FLAG_* constants.
     pub feature_flags: u64,
+    /// Maximum tokens per transfer when FLAG_SPEND_POLICY is set (0 = policy
+    /// not yet configured; admin must call `set_spend_limit` before enabling).
+    pub max_transfer_amount: u64,
     pub bump: u8,
 }
 

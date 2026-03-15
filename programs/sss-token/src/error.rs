@@ -36,4 +36,8 @@ pub enum SssError {
     ReserveVaultRequired,
     #[msg("Circuit breaker is active: mint/transfer/burn are halted")]
     CircuitBreakerActive,
+    #[msg("Spend policy: transfer amount exceeds max_transfer_amount")]
+    SpendLimitExceeded,
+    #[msg("Spend policy: max_transfer_amount must be > 0 before enabling FLAG_SPEND_POLICY")]
+    SpendPolicyNotConfigured,
 }
