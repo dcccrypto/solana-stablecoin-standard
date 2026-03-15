@@ -14,6 +14,21 @@ export { YieldCollateralModule, FLAG_YIELD_COLLATERAL } from './YieldCollateralM
 export type { InitYieldCollateralParams, AddYieldCollateralMintParams, RemoveYieldCollateralMintParams } from './YieldCollateralModule';
 export { ZkComplianceModule, FLAG_ZK_COMPLIANCE } from './ZkComplianceModule';
 export type { InitZkComplianceParams, SubmitZkProofParams, CloseVerificationRecordParams, ExecuteCompliantTransferParams, ZkComplianceConfigAccount, VerificationRecordAccount } from './ZkComplianceModule';
+export {
+  AdminTimelockModule,
+  ADMIN_OP_NONE,
+  ADMIN_OP_TRANSFER_AUTHORITY,
+  ADMIN_OP_SET_FEATURE_FLAG,
+  ADMIN_OP_CLEAR_FEATURE_FLAG,
+  DEFAULT_ADMIN_TIMELOCK_DELAY,
+} from './AdminTimelockModule';
+export type {
+  AdminOpKind,
+  ProposeTimelockOpParams,
+  TimelockOpMintParams,
+  SetPythFeedParams,
+  PendingTimelockOp,
+} from './AdminTimelockModule';
 export { SSSClient } from './client';
 export { SSSError } from './error';
 export * from './presets';
