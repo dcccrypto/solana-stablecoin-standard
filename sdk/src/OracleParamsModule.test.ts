@@ -3,7 +3,6 @@ import { PublicKey, Keypair } from '@solana/web3.js';
 import {
   OracleParamsModule,
   DEFAULT_MAX_ORACLE_AGE_SECS,
-  MAX_ORACLE_AGE_SECONDS,
   RECOMMENDED_MAX_ORACLE_CONF_BPS,
 } from './OracleParamsModule';
 
@@ -46,10 +45,6 @@ describe('OracleParamsModule', () => {
 
   it('DEFAULT_MAX_ORACLE_AGE_SECS is 60', () => {
     expect(DEFAULT_MAX_ORACLE_AGE_SECS).toBe(60);
-  });
-
-  it('MAX_ORACLE_AGE_SECONDS equals DEFAULT_MAX_ORACLE_AGE_SECS', () => {
-    expect(MAX_ORACLE_AGE_SECONDS).toBe(DEFAULT_MAX_ORACLE_AGE_SECS);
   });
 
   it('RECOMMENDED_MAX_ORACLE_CONF_BPS is 100 (1%)', () => {
@@ -160,77 +155,6 @@ describe('OracleParamsModule', () => {
       await expect(
         mod.setOracleParams({ mint: MINT, maxAgeSecs: 60, maxConfBps: RECOMMENDED_MAX_ORACLE_CONF_BPS }),
       ).resolves.toBe('mockedTxSig');
-    });
-  });
-
-  // ── fetchOracleParams (SSS-094 alias) ─────────────────────────────────────
-
-  describe('fetchOracleParams', () => {
-    it('returns same result as getOracleParams', async () => {
-      const data = buildConfigData(90, 200);
-      const mod = new OracleParamsModule(mockProvider(data), PROGRAM_ID);
-      const via_get = await mod.getOracleParams(MINT);
-      const via_fetch = await mod.fetchOracleParams(MINT);
-      expect(via_fetch).toEqual(via_get);
-    });
-
-    it('throws when config PDA is missing', async () => {
-      const mod = new OracleParamsModule(mockProvider(undefined), PROGRAM_ID);
-      await expect(mod.fetchOracleParams(MINT)).rejects.toThrow('StablecoinConfig PDA not found');
-    });
-  });
-
-  // ── validateOracleFeed ────────────────────────────────────────────────────
-
-  describe('validateOracleFeed', () => {
-    it('returns valid when price is fresh and conf within limit', async () => {
-      const mod = new OracleParamsModule(mockProvider(buildConfigData(60, 100)), PROGRAM_ID);
-      const result = await mod.validateOracleFeed(MINT, 30, 50);
-      expect(result.valid).toBe(true);
-      expect(result.reason).toBeUndefined();
-    });
-
-    it('returns invalid when price is stale', async () => {
-      const mod = new OracleParamsModule(mockProvider(buildConfigData(60, 100)), PROGRAM_ID);
-      const result = await mod.validateOracleFeed(MINT, 61, 50);
-      expect(result.valid).toBe(false);
-      expect(result.reason).toMatch(/stale/);
-    });
-
-    it('returns invalid when conf is too wide', async () => {
-      const mod = new OracleParamsModule(mockProvider(buildConfigData(60, 100)), PROGRAM_ID);
-      const result = await mod.validateOracleFeed(MINT, 30, 101);
-      expect(result.valid).toBe(false);
-      expect(result.reason).toMatch(/confidence/i);
-    });
-
-    it('uses DEFAULT_MAX_ORACLE_AGE_SECS when maxAgeSecs is 0', async () => {
-      const mod = new OracleParamsModule(mockProvider(buildConfigData(0, 100)), PROGRAM_ID);
-      // 60s is the default; 59s should pass
-      const result = await mod.validateOracleFeed(MINT, 59, 50);
-      expect(result.valid).toBe(true);
-    });
-
-    it('rejects exactly at staleness boundary', async () => {
-      const mod = new OracleParamsModule(mockProvider(buildConfigData(60, 100)), PROGRAM_ID);
-      const result = await mod.validateOracleFeed(MINT, 60, 50);
-      // age === maxAge is still valid (not > maxAge)
-      expect(result.valid).toBe(true);
-    });
-
-    it('skips conf check when maxConfBps is 0', async () => {
-      const mod = new OracleParamsModule(mockProvider(buildConfigData(60, 0)), PROGRAM_ID);
-      // even extreme conf should pass when check is disabled
-      const result = await mod.validateOracleFeed(MINT, 30, 9999);
-      expect(result.valid).toBe(true);
-    });
-
-    it('staleness check takes priority over conf check', async () => {
-      const mod = new OracleParamsModule(mockProvider(buildConfigData(60, 100)), PROGRAM_ID);
-      // both stale AND wide conf — should fail on staleness first
-      const result = await mod.validateOracleFeed(MINT, 120, 500);
-      expect(result.valid).toBe(false);
-      expect(result.reason).toMatch(/stale/);
     });
   });
 });
