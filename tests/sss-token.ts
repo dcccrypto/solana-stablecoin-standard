@@ -887,6 +887,410 @@ describe("sss-token", () => {
     expect(final.authority.toBase58()).to.equal(authority.publicKey.toBase58());
   });
 
+  // ---------- SSS-058: Feature Flags — Circuit Breaker ----------
+
+  const FLAG_CIRCUIT_BREAKER = new anchor.BN("1"); // bit 0
+
+  it("initialFeatureFlags is zero on a fresh config", async () => {
+    const config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.featureFlags.toNumber()).to.equal(0);
+  });
+
+  it("authority can set FLAG_CIRCUIT_BREAKER", async () => {
+    await program.methods
+      .setFeatureFlag(FLAG_CIRCUIT_BREAKER)
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.featureFlags.toNumber() & 1).to.equal(1);
+  });
+
+  it("mint fails with CircuitBreakerActive when flag is set", async () => {
+    // Re-register minter so we have a valid minterInfo
+    const [cbMinterInfoPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("minter-info"),
+        configPda.toBuffer(),
+        minterKeypair.publicKey.toBuffer(),
+      ],
+      program.programId
+    );
+    // minter was revoked earlier — register fresh
+    await program.methods
+      .updateMinter(new anchor.BN(0))
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        minter: minterKeypair.publicKey,
+        minterInfo: cbMinterInfoPda,
+        systemProgram: SystemProgram.programId,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const ata = getAssociatedTokenAddressSync(
+      mintKeypair.publicKey,
+      minterKeypair.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    // Create ATA if it doesn't exist
+    const ataInfo = await provider.connection.getAccountInfo(ata);
+    if (!ataInfo) {
+      const createAtaIx = createAssociatedTokenAccountInstruction(
+        authority.publicKey,
+        ata,
+        minterKeypair.publicKey,
+        mintKeypair.publicKey,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+      const tx = new anchor.web3.Transaction().add(createAtaIx);
+      await provider.sendAndConfirm(tx);
+    }
+
+    try {
+      await program.methods
+        .mint(new anchor.BN(100))
+        .accounts({
+          minter: minterKeypair.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          minterInfo: cbMinterInfoPda,
+          recipientTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([minterKeypair])
+        .rpc();
+      expect.fail("mint should fail with CircuitBreakerActive");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /CircuitBreakerActive/i
+      );
+    }
+  });
+
+  it("non-authority cannot set feature flags", async () => {
+    const intruder = Keypair.generate();
+    const airdrop = await provider.connection.requestAirdrop(
+      intruder.publicKey,
+      1_000_000_000
+    );
+    await provider.connection.confirmTransaction(airdrop, "confirmed");
+
+    try {
+      await program.methods
+        .setFeatureFlag(FLAG_CIRCUIT_BREAKER)
+        .accounts({
+          authority: intruder.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([intruder])
+        .rpc();
+      expect.fail("should have thrown Unauthorized");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /Unauthorized|ConstraintRaw|constraint/i
+      );
+    }
+  });
+
+  it("authority can clear FLAG_CIRCUIT_BREAKER and mint resumes", async () => {
+    await program.methods
+      .clearFeatureFlag(FLAG_CIRCUIT_BREAKER)
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.featureFlags.toNumber() & 1).to.equal(0);
+
+    // Mint should now succeed
+    const [cbMinterInfoPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("minter-info"),
+        configPda.toBuffer(),
+        minterKeypair.publicKey.toBuffer(),
+      ],
+      program.programId
+    );
+
+    const ata = getAssociatedTokenAddressSync(
+      mintKeypair.publicKey,
+      minterKeypair.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    await program.methods
+      .mint(new anchor.BN(100))
+      .accounts({
+        minter: minterKeypair.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        minterInfo: cbMinterInfoPda,
+        recipientTokenAccount: ata,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .signers([minterKeypair])
+      .rpc();
+
+    const tokenAccount = await getAccount(
+      provider.connection,
+      ata,
+      "confirmed",
+      TOKEN_2022_PROGRAM_ID
+    );
+    expect(Number(tokenAccount.amount)).to.be.greaterThan(0);
+  });
+
+  it("burn fails with CircuitBreakerActive when flag is set", async () => {
+    // Re-enable circuit breaker
+    await program.methods
+      .setFeatureFlag(FLAG_CIRCUIT_BREAKER)
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const [cbMinterInfoPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("minter-info"),
+        configPda.toBuffer(),
+        minterKeypair.publicKey.toBuffer(),
+      ],
+      program.programId
+    );
+
+    const ata = getAssociatedTokenAddressSync(
+      mintKeypair.publicKey,
+      minterKeypair.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    try {
+      await program.methods
+        .burn(new anchor.BN(1))
+        .accounts({
+          minter: minterKeypair.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          minterInfo: cbMinterInfoPda,
+          sourceTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([minterKeypair])
+        .rpc();
+      expect.fail("burn should fail with CircuitBreakerActive");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /CircuitBreakerActive/i
+      );
+    }
+
+    // Clear the circuit breaker again to leave state clean
+    await program.methods
+      .clearFeatureFlag(FLAG_CIRCUIT_BREAKER)
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+  });
+
+  // ---------- SSS-063: Spend Policy — FLAG_SPEND_POLICY (bit 1) ----------
+
+  const FLAG_SPEND_POLICY = new anchor.BN("2"); // bit 1 = 1 << 1
+
+  it("setSpendLimit fails with zero amount", async () => {
+    try {
+      await program.methods
+        .setSpendLimit(new anchor.BN(0))
+        .accounts({
+          authority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("should have thrown SpendPolicyNotConfigured");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /SpendPolicyNotConfigured/i
+      );
+    }
+  });
+
+  it("setSpendLimit sets max_transfer_amount and enables FLAG_SPEND_POLICY", async () => {
+    await program.methods
+      .setSpendLimit(new anchor.BN(500))
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.maxTransferAmount.toNumber()).to.equal(500);
+    // FLAG_SPEND_POLICY (bit 1) should be set
+    expect(config.featureFlags.toNumber() & 2).to.equal(2);
+  });
+
+  it("non-authority cannot call setSpendLimit", async () => {
+    const intruder = Keypair.generate();
+    const airdrop = await provider.connection.requestAirdrop(
+      intruder.publicKey,
+      1_000_000_000
+    );
+    await provider.connection.confirmTransaction(airdrop, "confirmed");
+
+    try {
+      await program.methods
+        .setSpendLimit(new anchor.BN(100))
+        .accounts({
+          authority: intruder.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([intruder])
+        .rpc();
+      expect.fail("should have thrown Unauthorized");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /Unauthorized|ConstraintRaw|constraint/i
+      );
+    }
+  });
+
+  it("clearSpendLimit disables FLAG_SPEND_POLICY and zeroes max_transfer_amount", async () => {
+    await program.methods
+      .clearSpendLimit()
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.maxTransferAmount.toNumber()).to.equal(0);
+    expect(config.featureFlags.toNumber() & 2).to.equal(0);
+  });
+
+  it("non-authority cannot call clearSpendLimit", async () => {
+    // First re-enable so there's something to clear
+    await program.methods
+      .setSpendLimit(new anchor.BN(1000))
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const intruder = Keypair.generate();
+    const airdrop = await provider.connection.requestAirdrop(
+      intruder.publicKey,
+      1_000_000_000
+    );
+    await provider.connection.confirmTransaction(airdrop, "confirmed");
+
+    try {
+      await program.methods
+        .clearSpendLimit()
+        .accounts({
+          authority: intruder.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([intruder])
+        .rpc();
+      expect.fail("should have thrown Unauthorized");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /Unauthorized|ConstraintRaw|constraint/i
+      );
+    }
+
+    // Clean up
+    await program.methods
+      .clearSpendLimit()
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+  });
+
+  it("setSpendLimit with same flag already set updates max_transfer_amount", async () => {
+    await program.methods
+      .setSpendLimit(new anchor.BN(250))
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    // Update to a different value
+    await program.methods
+      .setSpendLimit(new anchor.BN(750))
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.maxTransferAmount.toNumber()).to.equal(750);
+    expect(config.featureFlags.toNumber() & 2).to.equal(2);
+
+    // Clean up
+    await program.methods
+      .clearSpendLimit()
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+  });
+
   // ---------- Revoke Minter ----------
 
   it("revokes a minter", async () => {

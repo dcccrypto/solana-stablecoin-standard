@@ -162,4 +162,15 @@ pub mod sss_token {
     pub fn clear_feature_flag(ctx: Context<UpdateFeatureFlag>, flag: u64) -> Result<()> {
         instructions::feature_flags::clear_feature_flag_handler(ctx, flag)
     }
+
+    /// Set the per-tx spend limit and atomically enable FLAG_SPEND_POLICY.
+    /// `max_amount` must be > 0. Authority only.
+    pub fn set_spend_limit(ctx: Context<UpdateSpendLimit>, max_amount: u64) -> Result<()> {
+        instructions::spend_policy::set_spend_limit_handler(ctx, max_amount)
+    }
+
+    /// Clear the spend limit and disable FLAG_SPEND_POLICY. Authority only.
+    pub fn clear_spend_limit(ctx: Context<UpdateSpendLimit>) -> Result<()> {
+        instructions::spend_policy::clear_spend_limit_handler(ctx)
+    }
 }

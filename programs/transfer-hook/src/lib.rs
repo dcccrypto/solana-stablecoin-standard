@@ -5,7 +5,52 @@ use spl_transfer_hook_interface::instruction::ExecuteInstruction;
 
 declare_id!("phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp");
 
-/// SSS-2 Transfer Hook — enforces blacklist on every token transfer.
+// ---------------------------------------------------------------------------
+// Constants mirrored from sss-token/src/state.rs
+// Kept in sync manually — update here whenever state.rs changes.
+// ---------------------------------------------------------------------------
+
+/// Discriminator for StablecoinConfig accounts (first 8 bytes of sha256("account:StablecoinConfig")).
+/// Computed: sha256(b"account:StablecoinConfig")[0..8] = 7f19f4d501c06506
+const STABLECOIN_CONFIG_DISCRIMINATOR: [u8; 8] = [0x7f, 0x19, 0xf4, 0xd5, 0x01, 0xc0, 0x65, 0x06];
+
+/// Byte offset of `feature_flags` within StablecoinConfig account data.
+/// Borsh serialization (no alignment padding):
+///   discriminator                  8   @ 0
+///   mint         Pubkey           32   @ 8
+///   authority    Pubkey           32   @ 40
+///   compliance_authority Pubkey   32   @ 72
+///   preset       u8                1   @ 104
+///   paused       bool              1   @ 105
+///   total_minted u64               8   @ 106
+///   total_burned u64               8   @ 114
+///   transfer_hook_program Pubkey  32   @ 122
+///   collateral_mint Pubkey        32   @ 154
+///   reserve_vault Pubkey          32   @ 186
+///   total_collateral u64           8   @ 218
+///   max_supply   u64               8   @ 226
+///   pending_authority Pubkey      32   @ 234
+///   pending_compliance_authority  32   @ 266
+///   feature_flags u64              8   @ 298  <--
+///   max_transfer_amount u64        8   @ 306  <--
+///   bump         u8                1   @ 314
+const FEATURE_FLAGS_OFFSET: usize = 298;
+const MAX_TRANSFER_AMOUNT_OFFSET: usize = 306;
+
+/// FLAG_SPEND_POLICY bit in feature_flags (bit 1 = 1 << 1).
+const FLAG_SPEND_POLICY: u64 = 1 << 1;
+
+/// PDA seed for StablecoinConfig in the sss-token program.
+const STABLECOIN_CONFIG_SEED: &[u8] = b"stablecoin-config";
+
+/// sss-token program ID (for PDA derivation of StablecoinConfig).
+/// Used to verify the stablecoin_config PDA address in transfer_hook.
+pub mod sss_token_program {
+    use anchor_lang::declare_id;
+    declare_id!("AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat");
+}
+
+/// SSS-2 Transfer Hook — enforces blacklist and spend policy on every transfer.
 ///
 /// This program is invoked by Token-2022 on every transfer for mints
 /// that have registered this as their transfer hook.
@@ -26,15 +71,21 @@ pub mod sss_transfer_hook {
     /// attribute makes Anchor emit the correct SPL discriminator so Token-2022
     /// can find and invoke this instruction.
     ///
+    /// Checks performed (in order):
+    ///   1. Sender not blacklisted
+    ///   2. Receiver not blacklisted
+    ///   3. If FLAG_SPEND_POLICY is set: amount ≤ max_transfer_amount
+    ///
     /// Accounts (in Token-2022's required order):
     ///   0. source_token_account
     ///   1. mint
     ///   2. destination_token_account
     ///   3. owner (source owner/delegate)
     ///   4. extra_account_meta_list (validation account)
-    ///   5+ extra accounts listed in extra_account_meta_list (blacklist_state)
+    ///   5. blacklist_state       — PDA [b"blacklist-state", mint]
+    ///   6. stablecoin_config     — PDA [b"stablecoin-config", mint] (sss-token program)
     #[interface(spl_transfer_hook_interface::execute)]
-    pub fn transfer_hook(ctx: Context<TransferHook>, _amount: u64) -> Result<()> {
+    pub fn transfer_hook(ctx: Context<TransferHook>, amount: u64) -> Result<()> {
         let blacklist = &ctx.accounts.blacklist_state;
 
         // Check sender — read owner from Token-2022 token account layout (owner at offset 32..64)
@@ -55,6 +106,54 @@ pub mod sss_transfer_hook {
             HookError::ReceiverBlacklisted
         );
 
+        // --- Spend policy check ---
+        // Read feature_flags and max_transfer_amount from StablecoinConfig via
+        // manual byte-level deserialization (avoids cross-program crate dep).
+        {
+            // Verify the stablecoin_config PDA is derived from the expected program + seeds.
+            let (expected_pda, _bump) = Pubkey::find_program_address(
+                &[STABLECOIN_CONFIG_SEED, ctx.accounts.mint.key().as_ref()],
+                &sss_token_program::ID,
+            );
+            require!(
+                ctx.accounts.stablecoin_config.key() == expected_pda,
+                HookError::InvalidConfig
+            );
+
+            let config_data = ctx.accounts.stablecoin_config.try_borrow_data()?;
+            // Verify discriminator and minimum size
+            require!(
+                config_data.len() >= MAX_TRANSFER_AMOUNT_OFFSET + 8,
+                HookError::InvalidConfig
+            );
+            require!(
+                &config_data[0..8] == &STABLECOIN_CONFIG_DISCRIMINATOR,
+                HookError::InvalidConfig
+            );
+            let feature_flags = u64::from_le_bytes(
+                config_data[FEATURE_FLAGS_OFFSET..FEATURE_FLAGS_OFFSET + 8]
+                    .try_into()
+                    .unwrap(),
+            );
+            if feature_flags & FLAG_SPEND_POLICY != 0 {
+                let max_transfer_amount = u64::from_le_bytes(
+                    config_data[MAX_TRANSFER_AMOUNT_OFFSET..MAX_TRANSFER_AMOUNT_OFFSET + 8]
+                        .try_into()
+                        .unwrap(),
+                );
+                require!(
+                    amount <= max_transfer_amount,
+                    HookError::SpendLimitExceeded
+                );
+                msg!(
+                    "SpendPolicy OK: {} <= max {}",
+                    amount,
+                    max_transfer_amount
+                );
+            }
+        }
+
+        msg!("Transfer hook: {} tokens OK", amount);
         Ok(())
     }
 
@@ -67,31 +166,46 @@ pub mod sss_transfer_hook {
     /// [b"extra-account-metas", mint] that Token-2022 looks up on every
     /// transfer to know which additional accounts to resolve and forward.
     ///
-    /// We encode `blacklist_state` (seeds [b"blacklist-state", mint]) as the
-    /// one extra account, using PDA seed derivation so Token-2022 can compute
-    /// its address at transfer time without it being a fixed account.
+    /// Extra accounts registered (resolved by Token-2022 at transfer time):
+    ///   5. blacklist_state   — seeds [b"blacklist-state", mint (index 1)]
+    ///   6. stablecoin_config — seeds [b"stablecoin-config", mint (index 1)] (sss-token program)
     pub fn initialize_extra_account_meta_list(
         ctx: Context<InitializeExtraAccountMetaList>,
     ) -> Result<()> {
         // Build the extra account list:
-        // We need blacklist_state PDA, seeds = [b"blacklist-state", mint (index 1)]
         // In the Execute instruction accounts:
         //   index 0 = source_token_account
         //   index 1 = mint
         //   index 2 = destination_token_account
         //   index 3 = owner
         //   index 4 = extra_account_meta_list (validation account itself)
-        //   index 5+ = our extra accounts (blacklist_state)
-        let account_metas = vec![ExtraAccountMeta::new_with_seeds(
-            &[
-                Seed::Literal {
-                    bytes: b"blacklist-state".to_vec(),
-                },
-                Seed::AccountKey { index: 1 }, // mint is at index 1
-            ],
-            false, // is_signer
-            false, // is_writable
-        )?];
+        //   index 5 = blacklist_state    (our extra #1)
+        //   index 6 = stablecoin_config  (our extra #2)
+        let account_metas = vec![
+            // blacklist_state PDA: seeds = [b"blacklist-state", mint (index 1)]
+            ExtraAccountMeta::new_with_seeds(
+                &[
+                    Seed::Literal {
+                        bytes: b"blacklist-state".to_vec(),
+                    },
+                    Seed::AccountKey { index: 1 }, // mint is at index 1
+                ],
+                false, // is_signer
+                false, // is_writable
+            )?,
+            // stablecoin_config PDA: seeds = [b"stablecoin-config", mint (index 1)]
+            // owned by sss-token program — resolved by Token-2022 from seeds
+            ExtraAccountMeta::new_with_seeds(
+                &[
+                    Seed::Literal {
+                        bytes: b"stablecoin-config".to_vec(),
+                    },
+                    Seed::AccountKey { index: 1 }, // mint is at index 1
+                ],
+                false, // is_signer
+                false, // is_writable
+            )?,
+        ];
 
         // Calculate space required for the ExtraAccountMetaList TLV data
         let account_size = ExtraAccountMetaList::size_of(account_metas.len())? as u64;
@@ -170,6 +284,10 @@ pub enum HookError {
     ReceiverBlacklisted,
     #[msg("Unauthorized")]
     Unauthorized,
+    #[msg("Spend policy: transfer amount exceeds max_transfer_amount")]
+    SpendLimitExceeded,
+    #[msg("Invalid stablecoin config account (wrong discriminator or size)")]
+    InvalidConfig,
 }
 
 /// Blacklist state PDA for a given mint.
@@ -200,7 +318,8 @@ impl BlacklistState {
 ///   2. destination_token_account
 ///   3. owner (source owner/delegate)
 ///   4. extra_account_meta_list (validation account, passed by Token-2022)
-///   5+ extra accounts listed in extra_account_meta_list (blacklist_state)
+///   5. blacklist_state   — resolved by Token-2022 from extra_account_meta_list
+///   6. stablecoin_config — resolved by Token-2022 from extra_account_meta_list
 ///
 /// All of 0-4 are passed and validated by Token-2022 itself; we use
 /// UncheckedAccount + CHECK comments as required by Anchor's safety linter.
@@ -231,6 +350,11 @@ pub struct TransferHook<'info> {
         bump = blacklist_state.bump,
     )]
     pub blacklist_state: Account<'info, BlacklistState>,
+
+    /// CHECK: StablecoinConfig PDA from sss-token program — seeds [b"stablecoin-config", mint].
+    /// Resolved by Token-2022 from extra_account_meta_list. We manually verify the
+    /// PDA address and discriminator in transfer_hook before reading feature_flags.
+    pub stablecoin_config: UncheckedAccount<'info>,
 }
 
 /// Accounts for initializing the ExtraAccountMetaList and blacklist state.
