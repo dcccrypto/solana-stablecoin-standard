@@ -282,4 +282,44 @@ pub mod sss_token {
     pub fn close_verification_record(ctx: Context<CloseVerificationRecord>) -> Result<()> {
         instructions::zk_compliance::close_verification_record_handler(ctx)
     }
+
+    // ─── SSS-085: Security Fixes ──────────────────────────────────────────────
+
+    /// Register the expected Pyth price feed pubkey for this SSS-3 config.
+    /// After setting, CDP borrow and liquidate reject any other feed account.
+    pub fn set_pyth_feed(ctx: Context<SetPythFeed>, feed: Pubkey) -> Result<()> {
+        instructions::admin_timelock::set_pyth_feed_handler(ctx, feed)
+    }
+
+    /// SSS-090: Configure oracle staleness and confidence parameters.
+    /// `max_age_secs`: max seconds a Pyth price may be old (0 = default 60s).
+    /// `max_conf_bps`: max confidence/price ratio in bps (0 = disabled).
+    pub fn set_oracle_params(
+        ctx: Context<SetOracleParams>,
+        max_age_secs: u32,
+        max_conf_bps: u16,
+    ) -> Result<()> {
+        instructions::admin_timelock::set_oracle_params_handler(ctx, max_age_secs, max_conf_bps)
+    }
+
+    /// Propose a timelocked admin operation (2-epoch delay by default).
+    /// `op_kind`: 1=TransferAuthority, 2=SetFeatureFlag, 3=ClearFeatureFlag.
+    pub fn propose_timelocked_op(
+        ctx: Context<ProposeTimelockOp>,
+        op_kind: u8,
+        param: u64,
+        target: Pubkey,
+    ) -> Result<()> {
+        instructions::admin_timelock::propose_timelocked_op_handler(ctx, op_kind, param, target)
+    }
+
+    /// Execute a pending timelocked admin operation after the delay has elapsed.
+    pub fn execute_timelocked_op(ctx: Context<ExecuteTimelockOp>) -> Result<()> {
+        instructions::admin_timelock::execute_timelocked_op_handler(ctx)
+    }
+
+    /// Cancel a pending timelocked admin operation.
+    pub fn cancel_timelocked_op(ctx: Context<CancelTimelockOp>) -> Result<()> {
+        instructions::admin_timelock::cancel_timelocked_op_handler(ctx)
+    }
 }

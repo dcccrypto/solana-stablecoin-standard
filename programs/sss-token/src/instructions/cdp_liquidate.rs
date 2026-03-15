@@ -8,7 +8,9 @@ use pyth_sdk_solana::state::SolanaPriceAccount;
 use crate::error::SssError;
 use crate::state::{CdpPosition, CollateralVault, StablecoinConfig};
 
-const MAX_PRICE_AGE_SECS: i64 = 60;
+/// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
+/// Overridden by `StablecoinConfig.max_oracle_age_secs` when non-zero.
+const DEFAULT_MAX_PRICE_AGE_SECS: u64 = 60;
 
 /// Liquidate an undercollateralised CDP position.
 /// Callable by anyone (liquidator) when the user's collateral ratio < 120%.
@@ -108,11 +110,32 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>) -> Result<()> {
     )
     .map_err(|_| error!(SssError::InvalidPriceFeed))?;
 
+    // SSS-090: Use configurable max age (falls back to DEFAULT_MAX_PRICE_AGE_SECS when 0)
+    let max_age_secs = if ctx.accounts.config.max_oracle_age_secs > 0 {
+        ctx.accounts.config.max_oracle_age_secs as u64
+    } else {
+        DEFAULT_MAX_PRICE_AGE_SECS
+    };
+
     let price = price_feed
-        .get_price_no_older_than(clock.unix_timestamp, MAX_PRICE_AGE_SECS as u64)
+        .get_price_no_older_than(clock.unix_timestamp, max_age_secs)
         .ok_or(error!(SssError::StalePriceFeed))?;
 
     require!(price.price > 0, SssError::InvalidPrice);
+
+    // SSS-090: Confidence interval check — reject liquidations with uncertain prices.
+    // If max_oracle_conf_bps is set, refuse to liquidate on noisy oracle data.
+    let conf_bps_limit = ctx.accounts.config.max_oracle_conf_bps;
+    if conf_bps_limit > 0 {
+        let conf_ratio_bps = price
+            .conf
+            .saturating_mul(10_000)
+            / price.price as u64;
+        require!(
+            conf_ratio_bps <= conf_bps_limit as u64,
+            SssError::OracleConfidenceTooWide
+        );
+    }
 
     // 2. Compute collateral value (USD, 6dp scaled)
     let deposited = ctx.accounts.collateral_vault.deposited_amount;

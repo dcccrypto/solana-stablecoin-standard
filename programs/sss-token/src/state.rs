@@ -65,6 +65,33 @@ pub struct StablecoinConfig {
     /// Maximum tokens per transfer when FLAG_SPEND_POLICY is set (0 = policy
     /// not yet configured; admin must call `set_spend_limit` before enabling).
     pub max_transfer_amount: u64,
+    /// SSS-085: Expected Pyth price feed Pubkey for CDP operations.
+    /// When non-default, `cdp_borrow_stable` and `cdp_liquidate` reject any
+    /// pyth_price_feed account that does not match this key exactly.
+    /// Set via `set_pyth_feed` (authority-only).  Default = Pubkey::default()
+    /// (validation disabled; set before mainnet).
+    pub expected_pyth_feed: Pubkey,
+    /// SSS-085: Slot at which the pending timelocked admin operation matures.
+    /// 0 = no pending operation.  Set by `propose_timelocked_op`; cleared by
+    /// `execute_timelocked_op` or `cancel_timelocked_op`.
+    pub admin_op_mature_slot: u64,
+    /// SSS-085: Discriminant for the pending timelocked admin operation.
+    /// 0 = none; matches AdminOpKind enum.
+    pub admin_op_kind: u8,
+    /// SSS-085: Generic u64 parameter for the pending timelocked admin op.
+    pub admin_op_param: u64,
+    /// SSS-085: Target pubkey for the pending timelocked admin op.
+    pub admin_op_target: Pubkey,
+    /// SSS-085: Minimum slot delay for admin timelock (default 2 epochs ≈ 432 000 slots).
+    /// Can be set at init or by authority via `set_timelock_delay`.
+    pub admin_timelock_delay: u64,
+    /// SSS-090: Maximum Pyth price age in seconds for CDP operations.
+    /// 0 = use hardcoded default (60 s).  Set via `set_oracle_params`.
+    pub max_oracle_age_secs: u32,
+    /// SSS-090: Maximum acceptable Pyth confidence interval as a fraction of price,
+    /// expressed in basis points (e.g. 100 = 1%).  0 = disabled (no conf check).
+    /// Set via `set_oracle_params`.
+    pub max_oracle_conf_bps: u16,
     pub bump: u8,
 }
 

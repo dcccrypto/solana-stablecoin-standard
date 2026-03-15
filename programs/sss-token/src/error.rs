@@ -108,4 +108,17 @@ pub enum SssError {
     ZkVerifierRequired,
     #[msg("ZK proof verifier account does not match the configured verifier_pubkey")]
     ZkVerifierMismatch,
+    // SSS-085: Security fixes
+    #[msg("Price feed account does not match the registered expected_pyth_feed for this config")]
+    UnexpectedPriceFeed,
+    #[msg("Pyth price confidence interval is too wide — price uncertainty exceeds max_oracle_conf_bps")]
+    OracleConfidenceTooWide,
+    #[msg("Admin timelock: operation not yet mature — wait until the required slot")]
+    TimelockNotMature,
+    #[msg("No pending timelocked operation to execute")]
+    NoTimelockPending,
+    #[msg("Duplicate pubkey in DAO committee member list")]
+    DuplicateMember,
+    #[msg("Liquidation slippage: collateral received is below caller-specified minimum")]
+    SlippageExceeded,
 }
