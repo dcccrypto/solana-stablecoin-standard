@@ -1,12 +1,11 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-15T20:23 UTC (heartbeat)_
+_Last updated: 2026-03-15T23:25 UTC (heartbeat)_
 
 ## Current State
 
-- **Active task:** none (SSS-087 complete)
+- **Active task:** SSS-092 + SSS-093 docs — branch `docs/sss-092-093-stability-fee-psm-velocity`, PR pending
 - **Last completed:** SSS-087 — AdminTimelockModule SDK docs + CDP security updates
-- **Open PRs (dcccrypto fork):** #105 (SSS-087, targeting feat/SSS-086-admin-timelock-sdk)
 
 ## Recently Merged / Completed
 
@@ -18,11 +17,9 @@ _Last updated: 2026-03-15T20:23 UTC (heartbeat)_
 | SSS-084 | Security audit gaps and attack surface analysis | #102 (merged) |
 | SSS-087 | AdminTimelockModule SDK docs + CDP security updates (SSS-085/086) | #105 (open) |
 
-## Recent Commits (local, to push when SSS-085/086 merge)
+## In Progress
 
-- SSS-085 (`b64ff90`) — P0 security fixes: Pyth feed pinning, admin timelock, DAO deduplication, Kani proof, liquidation slippage (feat/SSS-085-security-fixes)
-- SSS-086 (`99eede8`) — AdminTimelockModule SDK client (feat/SSS-086-admin-timelock-sdk)
-- SSS-087 (`11ed79a`) — docs: on-chain-sdk-admin-timelock.md (new), admin.md + cdp.md updates
+- **SSS-092 + SSS-093:** `stability-fee.md` + `psm-velocity.md` written; committing and opening PR to dcccrypto fork docs branch
 
 ## Docs Coverage
 
@@ -32,6 +29,8 @@ _Last updated: 2026-03-15T20:23 UTC (heartbeat)_
 | Admin & Governance | on-chain-sdk-admin.md | ✅ current (cross-links timelock) |
 | AdminTimelockModule | on-chain-sdk-admin-timelock.md | ✅ new (SSS-087) |
 | CDP / Multi-Collateral | on-chain-sdk-cdp.md | ✅ updated (Pyth pinning, slippage) |
+| Stability Fee (SSS-092) | stability-fee.md | ✅ new (SSS-092, PR pending) |
+| PSM Fee + Velocity (SSS-093) | psm-velocity.md | ✅ new (SSS-093, PR pending) |
 | FeatureFlagsModule | feature-flags.md | ✅ current (bits 0–4) |
 | YieldCollateralModule | on-chain-sdk-yield.md | ✅ current |
 | ZkComplianceModule | on-chain-sdk-zk.md | ✅ current |
@@ -40,6 +39,7 @@ _Last updated: 2026-03-15T20:23 UTC (heartbeat)_
 
 ## Notes
 
-- SSS-085/086 are on feature branches; PR #105 targets feat/SSS-086-admin-timelock-sdk
-- Once SSS-085 and SSS-086 PRs merge to develop, rebase #105 onto develop and merge
+- SSS-093 PR on feature/SSS-093-psm-fee-velocity merged (commit 8e5876d)
+- SSS-092 PR on feature/SSS-092-stability-fee merged (commit 0433773)
+- SSS-096 StabilityFeeModule SDK committed (6a63a75) — referenced in stability-fee.md
 - Next gap from SSS-083: SECURITY.md (P0), SSS-SPEC.md (P0) — awaiting sprint assignment
