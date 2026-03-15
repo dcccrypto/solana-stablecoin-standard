@@ -65,4 +65,25 @@ pub enum SssError {
     SpendLimitExceeded,
     #[msg("Spend policy: max_transfer_amount must be > 0 before enabling FLAG_SPEND_POLICY")]
     SpendPolicyNotConfigured,
+    // DAO Committee Governance (SSS-067)
+    #[msg("DAO committee is active: this admin op requires a passed proposal")]
+    DaoCommitteeRequired,
+    #[msg("Caller is not a registered committee member")]
+    NotACommitteeMember,
+    #[msg("Committee member has already voted on this proposal")]
+    AlreadyVoted,
+    #[msg("Proposal has already been executed")]
+    ProposalAlreadyExecuted,
+    #[msg("Proposal has been cancelled")]
+    ProposalCancelled,
+    #[msg("Quorum not reached: not enough YES votes")]
+    QuorumNotReached,
+    #[msg("Quorum must be at least 1 and at most members.len()")]
+    InvalidQuorum,
+    #[msg("Committee member list is full (max 10)")]
+    CommitteeFull,
+    #[msg("Member not found in committee")]
+    MemberNotFound,
+    #[msg("Proposal action does not match the guarded instruction")]
+    ProposalActionMismatch,
 }

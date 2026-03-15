@@ -1886,4 +1886,447 @@ describe("sss-token", () => {
       }
     });
   });
+
+  // ---------- SSS-067: DAO Committee Governance — FLAG_DAO_COMMITTEE (bit 2) ----------
+
+  describe("SSS-067: DAO Committee Governance (FLAG_DAO_COMMITTEE, bit 2)", () => {
+    const FLAG_DAO_COMMITTEE = 4; // 1 << 2
+    let member1: typeof Keypair.prototype;
+    let member2: typeof Keypair.prototype;
+    let member3: typeof Keypair.prototype;
+    let committeePda: PublicKey;
+    let daoProgramId: PublicKey;
+
+    before(async () => {
+      member1 = Keypair.generate();
+      member2 = Keypair.generate();
+      member3 = Keypair.generate();
+
+      // Airdrop to members so they can sign transactions
+      for (const m of [member1, member2, member3]) {
+        const sig = await provider.connection.requestAirdrop(m.publicKey, 2_000_000_000);
+        await provider.connection.confirmTransaction(sig, "confirmed");
+      }
+
+      daoProgramId = program.programId;
+
+      [committeePda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("dao-committee"), configPda.toBuffer()],
+        daoProgramId
+      );
+    });
+
+    it("init_dao_committee rejects quorum=0", async () => {
+      try {
+        await program.methods
+          .initDaoCommittee([member1.publicKey, member2.publicKey], 0)
+          .accounts({
+            authority: authority.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            committee: committeePda,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("should have thrown InvalidQuorum");
+      } catch (err: any) {
+        expect(err.error?.errorCode?.code || err.message).to.match(
+          /InvalidQuorum|Error/i
+        );
+      }
+    });
+
+    it("init_dao_committee rejects quorum > members.len()", async () => {
+      try {
+        await program.methods
+          .initDaoCommittee([member1.publicKey, member2.publicKey], 3) // quorum=3 > 2 members
+          .accounts({
+            authority: authority.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            committee: committeePda,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("should have thrown InvalidQuorum");
+      } catch (err: any) {
+        expect(err.error?.errorCode?.code || err.message).to.match(
+          /InvalidQuorum|Error/i
+        );
+      }
+    });
+
+    it("init_dao_committee rejects empty member list", async () => {
+      try {
+        await program.methods
+          .initDaoCommittee([], 1)
+          .accounts({
+            authority: authority.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            committee: committeePda,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("should have thrown InvalidQuorum");
+      } catch (err: any) {
+        expect(err.error?.errorCode?.code || err.message).to.match(
+          /InvalidQuorum|Error/i
+        );
+      }
+    });
+
+    it("non-authority cannot init_dao_committee", async () => {
+      const intruder = Keypair.generate();
+      const sig = await provider.connection.requestAirdrop(intruder.publicKey, 1_000_000_000);
+      await provider.connection.confirmTransaction(sig, "confirmed");
+      try {
+        await program.methods
+          .initDaoCommittee([member1.publicKey], 1)
+          .accounts({
+            authority: intruder.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            committee: committeePda,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([intruder])
+          .rpc();
+        expect.fail("should have thrown Unauthorized");
+      } catch (err: any) {
+        expect(err.error?.errorCode?.code || err.message).to.match(
+          /Unauthorized|ConstraintRaw|constraint|Error/i
+        );
+      }
+    });
+
+    it("init_dao_committee succeeds, enables FLAG_DAO_COMMITTEE, and stores members+quorum", async () => {
+      await program.methods
+        .initDaoCommittee([member1.publicKey, member2.publicKey, member3.publicKey], 2)
+        .accounts({
+          authority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          committee: committeePda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const config = await program.account.stablecoinConfig.fetch(configPda);
+      // FLAG_DAO_COMMITTEE (bit 2) must be set
+      expect(config.featureFlags.toNumber() & FLAG_DAO_COMMITTEE).to.equal(FLAG_DAO_COMMITTEE);
+
+      const committee = await program.account.daoCommitteeConfig.fetch(committeePda);
+      expect(committee.members.length).to.equal(3);
+      expect(committee.quorum).to.equal(2);
+      expect(committee.nextProposalId.toNumber()).to.equal(0);
+    });
+
+    it("propose_action creates a proposal with the correct fields", async () => {
+      // ProposalAction::Pause = 0
+      const [proposalPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("dao-proposal"),
+          configPda.toBuffer(),
+          Buffer.from(new anchor.BN(0).toArray("le", 8)),
+        ],
+        daoProgramId
+      );
+
+      await program.methods
+        .proposeAction({ pause: {} }, new anchor.BN(0), PublicKey.default)
+        .accounts({
+          proposer: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          committee: committeePda,
+          proposal: proposalPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const proposal = await program.account.proposalPda.fetch(proposalPda);
+      expect(proposal.proposalId.toNumber()).to.equal(0);
+      expect(proposal.proposer.toBase58()).to.equal(authority.publicKey.toBase58());
+      expect(proposal.executed).to.equal(false);
+      expect(proposal.cancelled).to.equal(false);
+      expect(proposal.quorum).to.equal(2);
+      expect(proposal.votes.length).to.equal(0);
+    });
+
+    it("vote_action rejects non-member voter", async () => {
+      const [proposalPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("dao-proposal"),
+          configPda.toBuffer(),
+          Buffer.from(new anchor.BN(0).toArray("le", 8)),
+        ],
+        daoProgramId
+      );
+      const outsider = Keypair.generate();
+      const sig = await provider.connection.requestAirdrop(outsider.publicKey, 1_000_000_000);
+      await provider.connection.confirmTransaction(sig, "confirmed");
+
+      try {
+        await program.methods
+          .voteAction(new anchor.BN(0))
+          .accounts({
+            voter: outsider.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            committee: committeePda,
+            proposal: proposalPda,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .signers([outsider])
+          .rpc();
+        expect.fail("should have thrown NotACommitteeMember");
+      } catch (err: any) {
+        expect(err.error?.errorCode?.code || err.message).to.match(
+          /NotACommitteeMember|Error/i
+        );
+      }
+    });
+
+    it("vote_action accepts member1 vote (1/2 quorum)", async () => {
+      const [proposalPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("dao-proposal"),
+          configPda.toBuffer(),
+          Buffer.from(new anchor.BN(0).toArray("le", 8)),
+        ],
+        daoProgramId
+      );
+
+      await program.methods
+        .voteAction(new anchor.BN(0))
+        .accounts({
+          voter: member1.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          committee: committeePda,
+          proposal: proposalPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([member1])
+        .rpc();
+
+      const proposal = await program.account.proposalPda.fetch(proposalPda);
+      expect(proposal.votes.length).to.equal(1);
+      expect(proposal.votes[0].toBase58()).to.equal(member1.publicKey.toBase58());
+    });
+
+    it("vote_action rejects duplicate vote from member1", async () => {
+      const [proposalPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("dao-proposal"),
+          configPda.toBuffer(),
+          Buffer.from(new anchor.BN(0).toArray("le", 8)),
+        ],
+        daoProgramId
+      );
+
+      try {
+        await program.methods
+          .voteAction(new anchor.BN(0))
+          .accounts({
+            voter: member1.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            committee: committeePda,
+            proposal: proposalPda,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .signers([member1])
+          .rpc();
+        expect.fail("should have thrown AlreadyVoted");
+      } catch (err: any) {
+        expect(err.error?.errorCode?.code || err.message).to.match(
+          /AlreadyVoted|Error/i
+        );
+      }
+    });
+
+    it("execute_action fails before quorum is reached (1/2 votes)", async () => {
+      const [proposalPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("dao-proposal"),
+          configPda.toBuffer(),
+          Buffer.from(new anchor.BN(0).toArray("le", 8)),
+        ],
+        daoProgramId
+      );
+
+      try {
+        await program.methods
+          .executeAction(new anchor.BN(0))
+          .accounts({
+            executor: authority.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            committee: committeePda,
+            proposal: proposalPda,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
+        expect.fail("should have thrown QuorumNotReached");
+      } catch (err: any) {
+        expect(err.error?.errorCode?.code || err.message).to.match(
+          /QuorumNotReached|Error/i
+        );
+      }
+    });
+
+    it("vote_action accepts member2 vote (2/2 quorum reached)", async () => {
+      const [proposalPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("dao-proposal"),
+          configPda.toBuffer(),
+          Buffer.from(new anchor.BN(0).toArray("le", 8)),
+        ],
+        daoProgramId
+      );
+
+      await program.methods
+        .voteAction(new anchor.BN(0))
+        .accounts({
+          voter: member2.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          committee: committeePda,
+          proposal: proposalPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([member2])
+        .rpc();
+
+      const proposal = await program.account.proposalPda.fetch(proposalPda);
+      expect(proposal.votes.length).to.equal(2);
+    });
+
+    it("execute_action succeeds after quorum — Pause proposal executes and pauses config", async () => {
+      const [proposalPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("dao-proposal"),
+          configPda.toBuffer(),
+          Buffer.from(new anchor.BN(0).toArray("le", 8)),
+        ],
+        daoProgramId
+      );
+
+      await program.methods
+        .executeAction(new anchor.BN(0))
+        .accounts({
+          executor: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          committee: committeePda,
+          proposal: proposalPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+
+      const config = await program.account.stablecoinConfig.fetch(configPda);
+      expect(config.paused).to.equal(true);
+
+      const proposal = await program.account.proposalPda.fetch(proposalPda);
+      expect(proposal.executed).to.equal(true);
+    });
+
+    it("execute_action is idempotent — cannot execute the same proposal twice", async () => {
+      const [proposalPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("dao-proposal"),
+          configPda.toBuffer(),
+          Buffer.from(new anchor.BN(0).toArray("le", 8)),
+        ],
+        daoProgramId
+      );
+
+      try {
+        await program.methods
+          .executeAction(new anchor.BN(0))
+          .accounts({
+            executor: authority.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            committee: committeePda,
+            proposal: proposalPda,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
+        expect.fail("should have thrown ProposalAlreadyExecuted");
+      } catch (err: any) {
+        expect(err.error?.errorCode?.code || err.message).to.match(
+          /ProposalAlreadyExecuted|Error/i
+        );
+      }
+    });
+
+    it("SetFeatureFlag proposal — propose + 2 votes + execute enables a flag", async () => {
+      const FLAG_CIRCUIT_BREAKER = new anchor.BN(1); // 1 << 0
+      const proposalId = new anchor.BN(1); // next_proposal_id was incremented to 1
+
+      const [proposalPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("dao-proposal"),
+          configPda.toBuffer(),
+          Buffer.from(proposalId.toArray("le", 8)),
+        ],
+        daoProgramId
+      );
+
+      // Unpause first so we can see just the flag change
+      await program.methods
+        .proposeAction({ setFeatureFlag: {} }, FLAG_CIRCUIT_BREAKER, PublicKey.default)
+        .accounts({
+          proposer: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          committee: committeePda,
+          proposal: proposalPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      // Both members vote
+      for (const m of [member1, member2]) {
+        await program.methods
+          .voteAction(proposalId)
+          .accounts({
+            voter: m.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            committee: committeePda,
+            proposal: proposalPda,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .signers([m])
+          .rpc();
+      }
+
+      await program.methods
+        .executeAction(proposalId)
+        .accounts({
+          executor: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          committee: committeePda,
+          proposal: proposalPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+
+      const config = await program.account.stablecoinConfig.fetch(configPda);
+      // FLAG_CIRCUIT_BREAKER (bit 0) must be set
+      expect(config.featureFlags.toNumber() & 1).to.equal(1);
+    });
+  });
 });

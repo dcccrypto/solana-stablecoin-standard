@@ -1,5 +1,6 @@
 pub mod accept_authority;
 pub mod burn;
+pub mod dao_committee;
 pub mod feature_flags;
 pub mod cdp_borrow_stable;
 pub mod cdp_deposit_collateral;
@@ -22,6 +23,7 @@ pub mod update_roles;
 
 pub use accept_authority::*;
 pub use burn::*;
+pub use dao_committee::*;
 pub use feature_flags::*;
 pub use cdp_borrow_stable::*;
 pub use cdp_deposit_collateral::*;
