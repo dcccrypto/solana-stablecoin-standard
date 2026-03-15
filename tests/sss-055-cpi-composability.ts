@@ -92,7 +92,7 @@ describe("SSS-055: CPI Composability Standard (Direction 3)", () => {
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       })
       .signers([mintKeypair])
-      .rpc();
+      .rpc({ commitment: "confirmed" });
 
     // Register authority as a minter (unlimited cap)
     await program.methods
@@ -106,9 +106,9 @@ describe("SSS-055: CPI Composability Standard (Direction 3)", () => {
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
-      .rpc();
+      .rpc({ commitment: "confirmed" });
 
-    // Create recipient ATA
+    // Create recipient ATA and confirm at "confirmed" level before tests run
     const createAtaTx = new anchor.web3.Transaction().add(
       createAssociatedTokenAccountInstruction(
         authority.publicKey,
@@ -119,7 +119,7 @@ describe("SSS-055: CPI Composability Standard (Direction 3)", () => {
         ASSOCIATED_TOKEN_PROGRAM_ID
       )
     );
-    await provider.sendAndConfirm(createAtaTx);
+    await provider.sendAndConfirm(createAtaTx, [], { commitment: "confirmed" });
   });
 
   // ── Test 1: init_interface_version ────────────────────────────────────────
@@ -134,7 +134,7 @@ describe("SSS-055: CPI Composability Standard (Direction 3)", () => {
         interfaceVersion: interfaceVersionPda,
         systemProgram: SystemProgram.programId,
       })
-      .rpc();
+      .rpc({ commitment: "confirmed" });
 
     const iv = await program.account.interfaceVersion.fetch(
       interfaceVersionPda
