@@ -3,6 +3,12 @@ export { ComplianceModule } from './ComplianceModule';
 export { FeatureFlagsModule, FLAG_CIRCUIT_BREAKER, FLAG_SPEND_POLICY } from './FeatureFlagsModule';
 export type { FeatureFlagParams } from './FeatureFlagsModule';
 export { DaoCommitteeModule, FLAG_DAO_COMMITTEE } from './DaoCommitteeModule';
+export { YieldCollateralModule, FLAG_YIELD_COLLATERAL } from './YieldCollateralModule';
+export type {
+  YieldCollateralConfig,
+  InitYieldCollateralParams,
+  AddYieldCollateralMintParams,
+} from './YieldCollateralModule';
 export type {
   ProposalActionKind,
   ProposalAccount,
