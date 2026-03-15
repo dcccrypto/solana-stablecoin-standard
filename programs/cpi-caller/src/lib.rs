@@ -11,7 +11,7 @@ use sss_token::cpi as sss_cpi;
 use sss_token::program::SssToken;
 use sss_token::state::{InterfaceVersion, MinterInfo, StablecoinConfig};
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof");
 
 #[program]
 pub mod cpi_caller {
