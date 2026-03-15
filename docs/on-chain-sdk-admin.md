@@ -22,6 +22,7 @@
 
 For core lifecycle methods (create, load, mintTo, burnFrom, freeze/thaw), see [on-chain-sdk-core.md](./on-chain-sdk-core.md).
 For collateral and reserve vault methods (SSS-3), see [on-chain-sdk-authority-collateral.md](./on-chain-sdk-authority-collateral.md).
+For timelocked admin operations (authority transfer, feature-flag changes, Pyth feed registration) added by SSS-085/SSS-086, see [on-chain-sdk-admin-timelock.md](./on-chain-sdk-admin-timelock.md).
 
 ---
 
