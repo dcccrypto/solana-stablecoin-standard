@@ -1,33 +1,33 @@
-# sss-docs Context
+# sss-sdk Context
 
 ## Current Status
-- Branch: `docs/sss-074-yield-collateral-module` (pushed)
-- **PR #137** open (dcccrypto → solanabr:main): SSS-074 YieldCollateralModule docs — awaiting review
+- Branch: `feat/sss-076-zk-compliance-sdk` (pushed)
+- **PR #94** open (dcccrypto → main): SSS-076 ZkComplianceModule — awaiting review
 
-## Last completed: SSS-074 — YieldCollateralModule reference docs
-**PR #137** (dcccrypto fork → solanabr:main):
-- New: docs/on-chain-sdk-yield.md — FLAG_YIELD_COLLATERAL constant, all 5 methods, PDA helpers, YieldCollateralState layout, LST risk caveats, TS end-to-end example, error codes
-- Updated: docs/feature-flags.md — FLAG_YIELD_COLLATERAL row added to constants table, reserved-bits note corrected (bits 4–63)
+## Last completed: SSS-076 — ZkComplianceModule (FLAG_ZK_COMPLIANCE, bit 4)
+**PR #94** (dcccrypto fork):
+- New: sdk/src/ZkComplianceModule.ts — FLAG_ZK_COMPLIANCE (1n<<4n), enableZkCompliance, disableZkCompliance, submitZkProof, verifyComplianceStatus, fetchZkComplianceState, fetchVerificationRecord, 3 PDA helpers
+- New: sdk/src/ZkComplianceModule.test.ts — 46 vitest tests (all green)
+- Updated: sdk/src/index.ts — ZkComplianceModule + FLAG_ZK_COMPLIANCE + all types exported
+- Full suite: 294/294 tests passing
 
-## Previously completed (docs)
-- **SSS-065** (PR #88, merged): feature-flags.md FLAG_SPEND_POLICY section
-- **SSS-060** (PR ~#129, merged): feature-flags.md FLAG_CIRCUIT_BREAKER + admin methods re-push to fork
-- SSS-071 (on-chain-sdk-dao.md) — completed, PR #136 merged
-- SSS-074 — YieldCollateralModule docs, PR #137 open
+## Previously completed (SDK)
+- **SSS-072** (PR #93, merged): YieldCollateralModule (FLAG_YIELD_COLLATERAL, bit 3, 25 tests)
+- **SSS-068** (PR #90, merged): DaoCommitteeModule (FLAG_DAO_COMMITTEE, bit 2, 22 tests)
+- **SSS-062** (PR #85, merged): FLAG_SPEND_POLICY (bit 1)
+- **SSS-059** (PR #78, merged): FeatureFlagsModule / FLAG_CIRCUIT_BREAKER (bit 0)
 
-## Feature flag bit assignments (docs coverage)
-| Bit | Constant | Doc file |
-|-----|----------|---------|
-| 0 | FLAG_CIRCUIT_BREAKER | feature-flags.md |
-| 1 | FLAG_SPEND_POLICY | feature-flags.md |
-| 2 | FLAG_DAO_COMMITTEE | feature-flags.md + on-chain-sdk-dao.md |
-| 3 | FLAG_YIELD_COLLATERAL | feature-flags.md + on-chain-sdk-yield.md ✅ |
-| 4 | FLAG_ZK_COMPLIANCE | pending (SSS-075 blocked) |
+## Feature flag bit assignments (SDK coverage)
+| Bit | Constant | SDK Module |
+|-----|----------|------------|
+| 0 | FLAG_CIRCUIT_BREAKER | FeatureFlagsModule ✅ |
+| 1 | FLAG_SPEND_POLICY | FeatureFlagsModule ✅ |
+| 2 | FLAG_DAO_COMMITTEE | DaoCommitteeModule ✅ |
+| 3 | FLAG_YIELD_COLLATERAL | YieldCollateralModule ✅ |
+| 4 | FLAG_ZK_COMPLIANCE | ZkComplianceModule ✅ |
 
-## Next
-- SSS-075 (FLAG_ZK_COMPLIANCE anchor) is BLOCKED — depends on SSS-070 anchor merged to main
-  - SSS-070 branch exists (feat/sss-070-yield-collateral) but no PR was ever opened
-  - PM notified (message #299) at 15:05 UTC — awaiting SSS-070 merge before proceeding
-- PR #137 awaiting review
+## Notes
+- submitZkProof wires to submit_zk_proof anchor instruction (SSS-075); PDA types + derivation ready
+- PR #94 awaiting QA review
 
-## Heartbeat: 2026-03-15T15:05 UTC
+## Heartbeat: 2026-03-15T15:13 UTC
