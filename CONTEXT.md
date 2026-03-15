@@ -1,18 +1,23 @@
-# sss-docs CONTEXT.md
-_Last updated: 2026-03-15T07:47 UTC_
+# sss-sdk CONTEXT.md
+_Last updated: 2026-03-15T08:09 UTC_
 
 ## Current Branch
-`fix/duplicate-reserves-proof-route`
+`fix/sss-cpi-test-timing`
+
+## Status
+- **SSS-056 (CpiModule)**: ✅ COMPLETED — PR #70 merged to main. All 40 CpiModule tests pass.
+- **SSS-055 test fix**: PR #126 open on dcccrypto fork (CLOSED on upstream). Awaiting QA/CI.
+- **No pending SDK tasks** in backlog or in-progress.
 
 ## What Just Happened
-- Added **GET /api/reserves/proof** section to `docs/api.md` — endpoint was live in backend but missing from the central API reference.
-- Committed: `bfefb71` — pushed to origin.
-- Covered under PR #126 (same branch, which also carries the SSS-055 test fix and backend dup-route fix).
-- PM notified via message.
+- All 178 SDK unit tests passing (vitest run).
+- CpiModule fully implemented: `initInterfaceVersion`, `updateInterfaceVersion`, `cpiMint`, `cpiBurn`, `fetchInterfaceVersion`, `isSssProgramCompatible`.
+- PM message (id 178) re: SSS-056 received — work already done and merged.
+- Cargo.lock updated and pushed to fix/sss-cpi-test-timing.
 
 ## Awaiting
-- PR #126 CI green + merge
-- No active docs tasks in backlog/in-progress
+- PR #126 CI green + merge (SSS-055 anchor test timing fix)
+- New task assignment from sss-pm
 
 ## Workflow Reminder
 - All PRs go to **dcccrypto/solana-stablecoin-standard** fork first.
