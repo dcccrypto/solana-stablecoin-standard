@@ -22,11 +22,17 @@ use auth::require_api_key;
 use db::Database;
 use routes::{
     apikeys::{create_api_key, delete_api_key, list_api_keys},
+    cdp::{get_cdp_position, get_collateral_types, post_cdp_simulate},
+    circuit_breaker::set_circuit_breaker,
     compliance::{add_blacklist, get_audit, get_blacklist, remove_blacklist},
+    compliance_rules::add_compliance_rule,
+    confidential::initiate_confidential_transfer,
+    cpi::get_cpi_interface,
     events::events,
     health::health,
     mint::mint,
     burn::burn,
+    reserves::get_reserves_proof,
     supply::supply,
     webhooks::{delete_webhook, list_webhooks, register_webhook},
 };
@@ -87,13 +93,21 @@ async fn main() {
         .route("/api/burn", post(burn))
         .route("/api/supply", get(supply))
         .route("/api/events", get(events))
+        .route("/api/reserves/proof", get(get_reserves_proof))
         .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
         .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
         .route("/api/compliance/audit", get(get_audit))
+        .route("/api/compliance/rule", post(add_compliance_rule))
+        .route("/api/cdp/position/:wallet", get(get_cdp_position))
+        .route("/api/cdp/collateral-types", get(get_collateral_types))
+        .route("/api/cdp/simulate", post(post_cdp_simulate))
+        .route("/api/cpi/interface", get(get_cpi_interface))
+        .route("/api/confidential/transfer", post(initiate_confidential_transfer))
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
         .route("/api/webhooks/:id", delete(delete_webhook))
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
+        .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
@@ -150,6 +164,13 @@ mod tests {
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
             .route("/api/compliance/audit", get(get_audit))
+            .route("/api/compliance/rule", post(add_compliance_rule))
+            .route("/api/reserves/proof", get(get_reserves_proof))
+            .route("/api/cdp/position/:wallet", get(get_cdp_position))
+            .route("/api/cdp/collateral-types", get(get_collateral_types))
+            .route("/api/cdp/simulate", post(post_cdp_simulate))
+            .route("/api/cpi/interface", get(get_cpi_interface))
+            .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
@@ -520,6 +541,13 @@ mod qa_tests {
             .route("/api/events", get(events))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/audit", get(get_audit))
+            .route("/api/compliance/rule", post(add_compliance_rule))
+            .route("/api/reserves/proof", get(get_reserves_proof))
+            .route("/api/cdp/position/:wallet", get(get_cdp_position))
+            .route("/api/cdp/collateral-types", get(get_collateral_types))
+            .route("/api/cdp/simulate", post(post_cdp_simulate))
+            .route("/api/cpi/interface", get(get_cpi_interface))
+            .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
@@ -910,5 +938,160 @@ mod qa_tests {
         assert_eq!(status_lim, StatusCode::OK);
         let entries_lim = json_lim["data"].as_array().unwrap();
         assert_eq!(entries_lim.len(), 1, "limit=1 should return exactly 1 entry");
+    }
+
+    // ── SSS-014: Event date-range filtering ──────────────────────────────────
+
+    #[tokio::test]
+    async fn test_event_date_range_filter_from() {
+        let (app, key) = build_app();
+
+        // Create a mint event
+        post_json(
+            app.clone(),
+            "/api/mint",
+            &key,
+            serde_json::json!({
+                "token_mint": "DateMintAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "amount": 1000,
+                "recipient": "RecipAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            }),
+        )
+        .await;
+
+        // from=far-future should return no events
+        let (status, json) = get_json(
+            app.clone(),
+            "/api/events?from=2099-01-01T00:00:00Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let mint_events = json["data"]["mint_events"].as_array().unwrap();
+        assert_eq!(
+            mint_events.len(),
+            0,
+            "from=2099 should return 0 mint events"
+        );
+
+        // from=past should return at least our event
+        let (status2, json2) = get_json(
+            app.clone(),
+            "/api/events?from=2000-01-01T00:00:00Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status2, StatusCode::OK);
+        let mint_events2 = json2["data"]["mint_events"].as_array().unwrap();
+        assert!(
+            !mint_events2.is_empty(),
+            "from=2000 should return at least 1 mint event"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_event_date_range_filter_to() {
+        let (app, key) = build_app();
+
+        // Create a burn event
+        post_json(
+            app.clone(),
+            "/api/burn",
+            &key,
+            serde_json::json!({
+                "token_mint": "DateBurnAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "amount": 500,
+                "source": "SrcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            }),
+        )
+        .await;
+
+        // to=far-past should return no burn events
+        let (status, json) = get_json(
+            app.clone(),
+            "/api/events?to=2000-01-01T00:00:00Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let burn_events = json["data"]["burn_events"].as_array().unwrap();
+        assert_eq!(
+            burn_events.len(),
+            0,
+            "to=2000 should return 0 burn events"
+        );
+
+        // to=far-future should include our event
+        let (status2, json2) = get_json(
+            app.clone(),
+            "/api/events?to=2099-12-31T23:59:59Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status2, StatusCode::OK);
+        let burn_events2 = json2["data"]["burn_events"].as_array().unwrap();
+        assert!(
+            !burn_events2.is_empty(),
+            "to=2099 should return at least 1 burn event"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_event_date_range_filter_from_to() {
+        let (app, key) = build_app();
+
+        // Create a mint event (now)
+        post_json(
+            app.clone(),
+            "/api/mint",
+            &key,
+            serde_json::json!({
+                "token_mint": "RangeMintAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "amount": 250,
+                "recipient": "RecipAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            }),
+        )
+        .await;
+
+        // from+to spanning now — should include the event
+        let (status, json) = get_json(
+            app.clone(),
+            "/api/events?from=2000-01-01T00:00:00Z&to=2099-12-31T23:59:59Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let mint_events = json["data"]["mint_events"].as_array().unwrap();
+        assert!(
+            !mint_events.is_empty(),
+            "from=2000&to=2099 should return at least 1 mint event"
+        );
+
+        // narrow window that excludes everything
+        let (status2, json2) = get_json(
+            app.clone(),
+            "/api/events?from=2050-01-01T00:00:00Z&to=2050-12-31T23:59:59Z",
+            &key,
+        )
+        .await;
+        assert_eq!(status2, StatusCode::OK);
+        let mint_events2 = json2["data"]["mint_events"].as_array().unwrap();
+        assert_eq!(
+            mint_events2.len(),
+            0,
+            "narrow 2050 window should return 0 events"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_event_limit_cap() {
+        // Verify limit is capped at 1000 (no panic, valid response)
+        let (app, key) = build_app();
+        let (status, json) =
+            get_json(app.clone(), "/api/events?limit=99999", &key).await;
+        assert_eq!(status, StatusCode::OK);
+        // Response is valid JSON with mint/burn arrays
+        assert!(json["data"]["mint_events"].is_array());
+        assert!(json["data"]["burn_events"].is_array());
     }
 }

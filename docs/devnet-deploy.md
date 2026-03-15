@@ -20,12 +20,13 @@ You also need a Solana wallet with some devnet SOL. The deploy script will airdr
 
 ## Program IDs
 
-| Program | ID |
-|---------|----|
-| `sss-token` | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
-| `sss-transfer-hook` | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
+| Program | ID | Explorer |
+|---------|----|----|
+| `sss-token` | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` | [View](https://explorer.solana.com/address/AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat?cluster=devnet) |
+| `sss-transfer-hook` | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` | [View](https://explorer.solana.com/address/phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp?cluster=devnet) |
+| `cpi-caller` | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` | [View](https://explorer.solana.com/address/HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof?cluster=devnet) |
 
-> **Note:** These are the canonical IDs baked into `Anchor.toml`. They are stable across deployments using the same upgrade authority keypair.
+> **Note:** These are the canonical IDs baked into `Anchor.toml`. They are stable across deployments using the same upgrade authority keypair. `cpi-caller` was added in SSS-057 (2026-03-15).
 
 ---
 
@@ -59,15 +60,17 @@ After a successful run, `deploy/devnet-latest.json` will look like:
 ```json
 {
   "cluster": "devnet",
-  "deployedAt": "2026-03-13T20:35:00Z",
-  "wallet": "YourWalletPubkey...",
+  "deployedAt": "2026-03-15T09:00:57Z",
+  "wallet": "ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB",
   "programs": {
     "sssToken": "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
-    "transferHook": "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp"
+    "transferHook": "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp",
+    "cpiCaller": "HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof"
   },
   "explorerLinks": {
     "sssToken": "https://explorer.solana.com/address/AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat?cluster=devnet",
-    "transferHook": "https://explorer.solana.com/address/phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp?cluster=devnet"
+    "transferHook": "https://explorer.solana.com/address/phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp?cluster=devnet",
+    "cpiCaller": "https://explorer.solana.com/address/HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof?cluster=devnet"
   }
 }
 ```
@@ -156,4 +159,4 @@ avm use 0.30.1
 
 ### Deploy fails with "insufficient funds"
 
-You need at least ~3 SOL for deploying two programs. Use the web faucet or split across multiple airdrop calls.
+You need at least ~4 SOL for deploying all three programs (`sss-token`, `sss-transfer-hook`, `cpi-caller`). Use the web faucet or split across multiple airdrop calls.

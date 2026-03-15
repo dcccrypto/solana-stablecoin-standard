@@ -160,8 +160,13 @@ impl RateLimiter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use std::thread;
     use std::time::Duration;
+
+    /// Serialize tests that mutate environment variables to avoid races
+    /// between concurrent test threads reading/writing the same vars.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_allows_up_to_capacity() {
@@ -216,6 +221,7 @@ mod tests {
 
     #[test]
     fn test_from_env_uses_defaults_when_unset() {
+        let _guard = ENV_LOCK.lock().unwrap();
         // Ensure the vars are not set for this test.
         std::env::remove_var("RATE_LIMIT_CAPACITY");
         std::env::remove_var("RATE_LIMIT_RPS");
@@ -229,6 +235,7 @@ mod tests {
 
     #[test]
     fn test_from_env_reads_capacity_env_var() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("RATE_LIMIT_CAPACITY", "3");
         std::env::remove_var("RATE_LIMIT_RPS");
         let rl = RateLimiter::from_env();
@@ -242,6 +249,7 @@ mod tests {
 
     #[test]
     fn test_from_env_falls_back_on_invalid_value() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("RATE_LIMIT_CAPACITY", "not-a-number");
         std::env::remove_var("RATE_LIMIT_RPS");
         // Should not panic; falls back to default capacity (60).

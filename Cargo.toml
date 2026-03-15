@@ -2,6 +2,7 @@
 members = [
     "programs/sss-token",
     "programs/transfer-hook",
+    "programs/cpi-caller",
     "backend",
 ]
 resolver = "2"

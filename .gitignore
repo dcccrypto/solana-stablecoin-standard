@@ -18,6 +18,7 @@ test-ledger/
 !package.json
 !tsconfig.json
 !Anchor.toml
+!devnet-program-ids.json
 !idl/*.json
 !sdk/src/idl/*.json
 
@@ -42,3 +43,22 @@ wallet.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Internal agent artifacts
+HEARTBEAT_LOG.md
+CONTEXT.md
+.heartbeat
+
+# Agent operational files
+HEARTBEAT_LOG.md
+CONTEXT.md
+AGENTS.md
+SOUL.md
+TOOLS.md
+RULES.md
+NORTH-STAR.md
+USER.md
+IDENTITY.md
+PROJECT.md
+*.heartbeat
+.heartbeat/

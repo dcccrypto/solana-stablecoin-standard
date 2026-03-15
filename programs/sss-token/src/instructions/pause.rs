@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::StablecoinConfig;
+use crate::state::{StablecoinConfig, FLAG_DAO_COMMITTEE};
 
 #[derive(Accounts)]
 pub struct Pause<'info> {
@@ -23,6 +23,10 @@ pub struct Pause<'info> {
 }
 
 pub fn handler(ctx: Context<Pause>, paused: bool) -> Result<()> {
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_DAO_COMMITTEE == 0,
+        SssError::DaoCommitteeRequired
+    );
     ctx.accounts.config.paused = paused;
     msg!("Mint {} paused={}", ctx.accounts.mint.key(), paused);
     Ok(())

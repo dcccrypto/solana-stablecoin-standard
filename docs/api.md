@@ -495,6 +495,191 @@ Delete an API key by its ID. The key is immediately invalid for future requests.
 
 ---
 
+## CDP (Collateral Debt Position)
+
+> Added in SSS-053. Prices are fetched live from [Pyth Hermes v2](https://hermes.pyth.network/).
+> All three endpoints require a valid `X-Api-Key` header.
+
+### `GET /api/cdp/collateral-types`
+
+Returns all supported collateral mints with live Pyth USD prices and risk parameters.
+
+**Response 200**
+
+```json
+{
+  "success": true,
+  "data": {
+    "collateral_types": [
+      {
+        "name": "Solana",
+        "mint": "So11111111111111111111111111111111111111112",
+        "price_usd": 142.37,
+        "liquidation_threshold": 0.80,
+        "min_collateral_ratio": 1.50
+      },
+      {
+        "name": "Bitcoin (Wrapped)",
+        "mint": "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E",
+        "price_usd": 84210.50,
+        "liquidation_threshold": 0.80,
+        "min_collateral_ratio": 1.50
+      },
+      {
+        "name": "Ethereum (Wrapped)",
+        "mint": "2FpyTwYzMkjeS168FMoAN8R2QoAntFZo9Mk4uDuyVe1r",
+        "price_usd": 3941.22,
+        "liquidation_threshold": 0.80,
+        "min_collateral_ratio": 1.50
+      }
+    ]
+  },
+  "error": null
+}
+```
+
+---
+
+### `GET /api/cdp/position/:wallet`
+
+Returns the CDP health metrics for a given wallet address. The `wallet` path parameter must be a valid base-58 Solana public key (32–44 characters).
+
+**Path parameters**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `wallet` | string | Solana wallet public key (base-58) |
+
+**Response 200**
+
+```json
+{
+  "success": true,
+  "data": {
+    "wallet": "So11111111111111111111111111111111111111112",
+    "collateral_mint": "So11111111111111111111111111111111111111112",
+    "collateral_amount": 5.3,
+    "collateral_usd": 754.56,
+    "debt_usd": 320.00,
+    "collateral_ratio": 2.358,
+    "health_factor": 1.887,
+    "liquidation_price": 75.47,
+    "max_borrowable_usd": 603.65,
+    "is_liquidatable": false
+  },
+  "error": null
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `collateral_ratio` | `collateral_usd / debt_usd` |
+| `health_factor` | `(collateral_usd × liquidation_threshold) / debt_usd`; position is safe when ≥ 1.0 |
+| `liquidation_price` | Spot price (USD) at which the position becomes liquidatable |
+| `max_borrowable_usd` | Maximum additional debt allowed: `collateral_usd × liquidation_threshold` |
+| `is_liquidatable` | `true` when `collateral_ratio < min_collateral_ratio` |
+
+**Response 400** — wallet address length outside 32–44 characters.
+
+---
+
+### `POST /api/cdp/simulate`
+
+Preview borrow/liquidation risk for a given collateral amount and requested borrow without any on-chain state.
+
+**Request body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `collateral_mint` | string | ✓ | One of the supported collateral mints from `/api/cdp/collateral-types` |
+| `collateral_amount` | f64 | ✓ | Collateral quantity (token units, must be > 0) |
+| `borrow_amount` | f64 | ✓ | Desired borrow in USD (≥ 0) |
+
+```json
+{
+  "collateral_mint": "So11111111111111111111111111111111111111112",
+  "collateral_amount": 10.0,
+  "borrow_amount": 500.0
+}
+```
+
+**Response 200**
+
+```json
+{
+  "success": true,
+  "data": {
+    "collateral_usd": 1423.70,
+    "debt_usd": 500.00,
+    "collateral_ratio": 2.847,
+    "health_factor": 2.278,
+    "liquidation_price": 62.50,
+    "max_borrowable_usd": 1138.96,
+    "is_liquidatable": false,
+    "would_be_valid": true
+  },
+  "error": null
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `would_be_valid` | `true` when `collateral_ratio ≥ min_collateral_ratio` or `borrow_amount == 0` |
+
+**Response 400** — unsupported mint, `collateral_amount ≤ 0`, or `borrow_amount < 0`.
+
+---
+
+## Reserves
+
+### `GET /api/reserves/proof`
+
+Fetch a cryptographic Proof-of-Reserves snapshot for a given SPL token mint. Returns a Merkle root commitment to the total supply, anchored to a specific Solana slot.
+
+**Authentication:** Required — `X-Api-Key` header.
+
+**Query Parameters**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mint` | string (base58) | ✓ | The SPL token mint address |
+| `holder` | string (base58) | ✗ | Optional holder address (echoed back; reserved for future use) |
+
+```bash
+curl -H "X-Api-Key: sss_<48-char hex>" \
+  "http://localhost:8080/api/reserves/proof?mint=TokenMintAddressHere11111111111111111111111"
+```
+
+**Response 200**
+
+```json
+{
+  "success": true,
+  "data": {
+    "merkle_root": "a3f2e1d4c5b6a7980123456789abcdef0123456789abcdef0123456789abcdef01",
+    "total_supply": "1000000000000",
+    "last_verified_slot": "312456789",
+    "proof_type": "supply_snapshot"
+  },
+  "error": null
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `merkle_root` | string (hex) | Double-SHA-256 commitment: `SHA256(SHA256(supply_le8))` |
+| `total_supply` | string (u64) | Token supply in base units at snapshot time |
+| `last_verified_slot` | string (u64) | Solana slot when the snapshot was taken |
+| `proof_type` | string | `"supply_snapshot"` (direction 1) |
+
+**Response 400** — Invalid or missing `mint` parameter.  
+**Response 401** — Missing or invalid API key.  
+**Response 500** — Upstream Solana RPC error.
+
+> **Verification:** The Merkle root can be reproduced independently — encode `total_supply` as 8-byte little-endian, then double-SHA-256. See [Proof of Reserves](PROOF-OF-RESERVES.md) for full details and SDK usage.
+
+---
+
 ## Error Responses
 
 All errors follow the standard envelope with `success: false`:

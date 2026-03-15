@@ -85,21 +85,24 @@ jobs:
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: backend -> target
+          # The root Cargo.toml is a workspace; cargo writes the backend binary
+          # to the workspace-root target/ dir, not backend/target/.
+          workspaces: . -> target
 
       - name: Build backend (release)
-        working-directory: backend
-        run: cargo build --release
+        # Run from repo root so cargo uses the workspace; binary lands in target/release/sss-backend
+        run: cargo build --release -p sss-backend
 
       - name: Start backend
-        working-directory: backend
         run: |
-          ../target/release/sss-backend &
+          target/release/sss-backend &
           # Wait for backend to be ready (up to 30 s)
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:9876/api/health && break
             sleep 1
           done
+          # Fail fast if the backend never came up
+          curl -sf http://127.0.0.1:9876/api/health || (echo "Backend failed to start"; exit 1)
 
       - name: Setup Node
         uses: actions/setup-node@v4

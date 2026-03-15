@@ -90,4 +90,196 @@ pub mod sss_token {
     pub fn accept_compliance_authority(ctx: Context<AcceptComplianceAuthority>) -> Result<()> {
         instructions::accept_authority::accept_compliance_authority_handler(ctx)
     }
+
+    // ─── Direction 2: Multi-Collateral CDP ───────────────────────────────────
+
+    /// CDP: Deposit SPL token collateral into a per-user vault (Direction 2).
+    /// Each (user, collateral_mint) pair gets its own CollateralVault PDA.
+    pub fn cdp_deposit_collateral(
+        ctx: Context<CdpDepositCollateral>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::cdp_deposit_collateral::cdp_deposit_collateral_handler(ctx, amount)
+    }
+
+    /// CDP: Borrow SSS-3 stablecoins against deposited collateral.
+    /// Enforces min 150% collateral ratio via Pyth oracle price.
+    pub fn cdp_borrow_stable(ctx: Context<CdpBorrowStable>, amount: u64) -> Result<()> {
+        instructions::cdp_borrow_stable::cdp_borrow_stable_handler(ctx, amount)
+    }
+
+    /// CDP: Repay SSS-3 debt by burning stablecoins, release collateral proportionally.
+    pub fn cdp_repay_stable(ctx: Context<CdpRepayStable>, amount: u64) -> Result<()> {
+        instructions::cdp_repay_stable::cdp_repay_stable_handler(ctx, amount)
+    }
+
+    /// CDP: Liquidate an undercollateralised position (ratio < 120%).
+    /// Callable by anyone; liquidator burns full debt and receives all collateral.
+    pub fn cdp_liquidate(ctx: Context<CdpLiquidate>) -> Result<()> {
+        instructions::cdp_liquidate::cdp_liquidate_handler(ctx)
+    }
+
+    // ─── Direction 3: CPI Composability Standard ──────────────────────────────
+
+    /// Initialize the InterfaceVersion PDA for this mint.
+    /// One-time call by the stablecoin authority; required before `cpi_mint`/`cpi_burn`.
+    pub fn init_interface_version(ctx: Context<InitInterfaceVersion>) -> Result<()> {
+        instructions::interface_version::init_interface_version_handler(ctx)
+    }
+
+    /// Update the InterfaceVersion PDA (bump version or deprecate). Authority only.
+    pub fn update_interface_version(
+        ctx: Context<UpdateInterfaceVersion>,
+        new_version: Option<u8>,
+        active: Option<bool>,
+    ) -> Result<()> {
+        instructions::interface_version::update_interface_version_handler(
+            ctx,
+            new_version,
+            active,
+        )
+    }
+
+    /// Standardized CPI mint entrypoint.
+    /// External programs should call this instead of `mint` for forward-compatible integration.
+    /// `required_version` must match the on-chain InterfaceVersion — guards against silent breaks.
+    pub fn cpi_mint(ctx: Context<CpiMint>, amount: u64, required_version: u8) -> Result<()> {
+        instructions::cpi_mint::cpi_mint_handler(ctx, amount, required_version)
+    }
+
+    /// Standardized CPI burn entrypoint.
+    /// External programs should call this instead of `burn` for forward-compatible integration.
+    pub fn cpi_burn(ctx: Context<CpiBurn>, amount: u64, required_version: u8) -> Result<()> {
+        instructions::cpi_burn::cpi_burn_handler(ctx, amount, required_version)
+    }
+
+    /// Set a feature flag bit. Authority only. Pass the FLAG_* constant value.
+    pub fn set_feature_flag(ctx: Context<UpdateFeatureFlag>, flag: u64) -> Result<()> {
+        instructions::feature_flags::set_feature_flag_handler(ctx, flag)
+    }
+
+    /// Clear a feature flag bit. Authority only. Pass the FLAG_* constant value.
+    pub fn clear_feature_flag(ctx: Context<UpdateFeatureFlag>, flag: u64) -> Result<()> {
+        instructions::feature_flags::clear_feature_flag_handler(ctx, flag)
+    }
+
+    /// Set the per-tx spend limit and atomically enable FLAG_SPEND_POLICY.
+    /// `max_amount` must be > 0. Authority only.
+    pub fn set_spend_limit(ctx: Context<UpdateSpendLimit>, max_amount: u64) -> Result<()> {
+        instructions::spend_policy::set_spend_limit_handler(ctx, max_amount)
+    }
+
+    /// Clear the spend limit and disable FLAG_SPEND_POLICY. Authority only.
+    pub fn clear_spend_limit(ctx: Context<UpdateSpendLimit>) -> Result<()> {
+        instructions::spend_policy::clear_spend_limit_handler(ctx)
+    }
+
+    // ─── SSS-067: DAO Committee Governance ───────────────────────────────────
+
+    /// Initialize the DAO committee for a stablecoin config.
+    ///
+    /// Registers `members` (1–10 pubkeys) as committee voters and sets the
+    /// `quorum` threshold.  Atomically enables FLAG_DAO_COMMITTEE.
+    /// Authority only; can only be called once per config (PDA is `init`).
+    pub fn init_dao_committee(
+        ctx: Context<InitDaoCommittee>,
+        members: Vec<Pubkey>,
+        quorum: u8,
+    ) -> Result<()> {
+        instructions::dao_committee::init_dao_committee_handler(ctx, members, quorum)
+    }
+
+    /// Open a governance proposal.
+    ///
+    /// Authority opens a proposal for a specific `action` + optional `param`
+    /// and `target`.  The proposal collects YES votes from committee members
+    /// before it can be executed.
+    pub fn propose_action(
+        ctx: Context<ProposeAction>,
+        action: crate::state::ProposalAction,
+        param: u64,
+        target: Pubkey,
+    ) -> Result<()> {
+        instructions::dao_committee::propose_action_handler(ctx, action, param, target)
+    }
+
+    /// Cast a YES vote on a governance proposal.
+    ///
+    /// Caller must be a registered committee member.  Duplicate votes are rejected.
+    pub fn vote_action(ctx: Context<VoteAction>, proposal_id: u64) -> Result<()> {
+        instructions::dao_committee::vote_action_handler(ctx, proposal_id)
+    }
+
+    /// Execute a passed governance proposal.
+    ///
+    /// Verifies that `votes.len() >= quorum` and then applies the action
+    /// (pause, feature flag change, etc.) to the StablecoinConfig.
+    /// Can be called by anyone once quorum is reached; one-shot (idempotent after execution).
+    pub fn execute_action(ctx: Context<ExecuteAction>, proposal_id: u64) -> Result<()> {
+        instructions::dao_committee::execute_action_handler(ctx, proposal_id)
+    }
+
+    // ─── SSS-070: Yield-Bearing Collateral ───────────────────────────────────
+
+    /// Initialize yield-bearing collateral support for a stablecoin config.
+    ///
+    /// Creates the `YieldCollateralConfig` PDA and atomically enables
+    /// `FLAG_YIELD_COLLATERAL`.  Only valid for SSS-3 presets.  Authority only.
+    ///
+    /// `initial_mints`: optional list of yield-bearing SPL token mints to
+    /// whitelist immediately (e.g. stSOL, mSOL).  Max 8 total.
+    pub fn init_yield_collateral(
+        ctx: Context<InitYieldCollateral>,
+        initial_mints: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::yield_collateral::init_yield_collateral_handler(ctx, initial_mints)
+    }
+
+    /// Add a yield-bearing SPL token mint to the whitelist.
+    ///
+    /// `FLAG_YIELD_COLLATERAL` must already be enabled.  Authority only.
+    /// Rejects duplicates and enforces the 8-mint cap.
+    pub fn add_yield_collateral_mint(
+        ctx: Context<AddYieldCollateralMint>,
+        collateral_mint: Pubkey,
+    ) -> Result<()> {
+        instructions::yield_collateral::add_yield_collateral_mint_handler(ctx, collateral_mint)
+    }
+
+    // ─── SSS-075: ZK Compliance ───────────────────────────────────────────────
+
+    /// Initialize ZK compliance support for a stablecoin config.
+    ///
+    /// Creates the `ZkComplianceConfig` PDA and atomically enables
+    /// `FLAG_ZK_COMPLIANCE`.  Only valid for SSS-2 presets (requires transfer hook).
+    /// Authority only.
+    ///
+    /// `ttl_slots`: proof validity window in slots (0 = use default 1500 slots,
+    /// ~10 minutes at 400ms/slot).
+    pub fn init_zk_compliance(
+        ctx: Context<InitZkCompliance>,
+        ttl_slots: u64,
+        verifier_pubkey: Option<Pubkey>,
+    ) -> Result<()> {
+        instructions::zk_compliance::init_zk_compliance_handler(ctx, ttl_slots, verifier_pubkey)
+    }
+
+    /// Submit or refresh a ZK compliance proof for the calling user.
+    ///
+    /// Creates or updates the caller's `VerificationRecord` PDA with an expiry
+    /// of `Clock::slot + ttl_slots` from `ZkComplianceConfig`.
+    ///
+    /// `FLAG_ZK_COMPLIANCE` must already be enabled.  Any user may call this.
+    /// The transfer hook will enforce this record on each transfer.
+    pub fn submit_zk_proof(ctx: Context<SubmitZkProof>) -> Result<()> {
+        instructions::zk_compliance::submit_zk_proof_handler(ctx)
+    }
+
+    /// Close an expired `VerificationRecord` PDA, returning rent to authority.
+    ///
+    /// Fails if the record has not yet expired.  Authority only.
+    /// Users cannot be forcibly de-verified before their record expires.
+    pub fn close_verification_record(ctx: Context<CloseVerificationRecord>) -> Result<()> {
+        instructions::zk_compliance::close_verification_record_handler(ctx)
+    }
 }
