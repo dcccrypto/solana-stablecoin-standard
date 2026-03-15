@@ -12,6 +12,8 @@
 Key guarantees:
 - **Collateral isolation:** each (user, collateral mint) pair has its own `CollateralVault` PDA
 - **Oracle-gated borrowing:** `cdp_borrow_stable` reads a Pyth price feed on-chain; under-collateralised borrows are rejected
+- **Pyth feed pinning (SSS-085):** admins can call `AdminTimelockModule.setPythFeed()` to lock the expected price-feed pubkey; once set, both `cdp_borrow_stable` and `cdp_liquidate` reject any feed account that does not match, blocking price-feed substitution attacks (FINDING-006)
+- **Liquidation slippage protection (SSS-085):** `cdp_liquidate` accepts a `min_collateral_amount` parameter; pass `0` for no slippage check (backward compatible)
 - **Single collateral per position:** one `CdpPosition` PDA per user; the collateral mint is locked at first borrow
 
 ---
@@ -365,6 +367,7 @@ Errors originate from the on-chain Anchor program. Common causes:
 | `CollateralMintLocked` | Borrow attempted with a different collateral mint than the locked one |
 | `InvalidPythFeed` | Pyth price feed account doesn't match expected collateral mint |
 | `StaleOraclePrice` | Pyth price is too old (confidence interval exceeded) |
+| `SlippageExceeded` | `cdp_liquidate` seized collateral is less than `min_collateral_amount` (SSS-085 Fix 5; pass `0` to disable) |
 | `PositionNotFound` | On-chain instruction attempted on a wallet with no open CDP position (e.g. `repayStable` before any borrow). Note: `getPosition` and `fetchCdpPosition` do **not** throw this — they return an empty `CdpPosition` when no account is found. |
 
 ---
