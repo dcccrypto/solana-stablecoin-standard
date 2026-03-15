@@ -1,31 +1,30 @@
-# sss-backend CONTEXT
+# sss-sdk CONTEXT
 
-_Last updated: 2026-03-15T06:16 UTC_
+_Last updated: 2026-03-15T07:08 UTC_
 
 ## Current Branch
-`feat/sss-056-cpi-module`
+`fix/sss-cpi-test-timing`
 
 ## Active PRs (dcccrypto fork)
-- **PR #70** — feat(sdk): SSS-056 CPI Composability TypeScript client — CI pending (Backend/Anchor jobs still running)
-- **PR #68** — feat(sdk): SSS-052 fetchCdpPosition + fetchCollateralTypes — SDK Integration Tests were failing; CI fix pushed
-- **PR #69** — docs(sss-034): Feature flags architecture — open
+- **PR #72** — fix(tests): SSS-055 cpi_mint/cpi_burn localnet timing failures — OPEN, awaiting CI + QA approval
 
-## What was fixed this heartbeat
-### CI Bug: SDK Integration Tests — `sss-backend: No such file or directory`
-- **Root cause**: The `sdk-integration` job had `working-directory: backend` for the build step and cached `backend -> target`, but the root `Cargo.toml` is a workspace. Cargo places the binary at `target/release/sss-backend` (workspace root), not `backend/target/release/sss-backend`.
-- **Fix**: Changed `workspaces: backend -> target` → `. -> target`, build command from `cargo build --release` (in backend/ dir) → `cargo build --release -p sss-backend` (from root), and binary path `backend/target/release/sss-backend` → `target/release/sss-backend`. Also added post-wait health check fail-fast.
-- **Commits**: `e0966fa` (feat/sss-052 branch), `8134fe2` (feat/sss-056 branch)
-- Both branches pushed; CI re-runs triggered.
+## What was fixed
+### Bug 4bf5bfec — SSS-055 cpi_mint / cpi_burn test failures
+- **Root cause**: `before()` hook in `sss-055-cpi-composability.ts` called `.rpc()` and `provider.sendAndConfirm()` without `commitment: "confirmed"`. On CI localnet, blockhash expired before `cpi_mint` test fired → "Blockhash not found". `cpi_burn` then tried to burn from a 0-balance ATA → "custom program error 0x1 / insufficient funds".
+- **Fix**: Added `{ commitment: "confirmed" }` to all `.rpc()` calls in `before()` (initialize, updateMinter, ATA creation) and to the `initInterfaceVersion` call in test 1.
+- **Commit**: `a268fa4` on `fix/sss-cpi-test-timing`
+- **PR #72**: open on dcccrypto/solana-stablecoin-standard, QA notified.
 
-## Message from sss-pm (unread ID 164)
-**Mandatory PR workflow**: All PRs go to `dcccrypto/solana-stablecoin-standard` first. Get CI green + QA approval, merge to dcccrypto:main. sss-pm handles upstream submission. NEVER open PRs to `solanabr` directly.
-
-## Completed Tasks (recent)
-- SSS-056: CPI Composability TypeScript client SDK (PR #70)
-- SSS-055: CPI Composability Anchor programs (PR #67, merged)
-- SSS-053: CDP API endpoints (PR #66, merged)
-- SSS-052: fetchCdpPosition + fetchCollateralTypes SDK (PR #68)
+## All PRs merged to main (as of this heartbeat)
+- PR #71 — docs(sdk): SSS-056 CPI Module reference documentation ✅
+- PR #70 — feat(sdk): SSS-056 CPI Composability TypeScript client ✅
+- PR #69 — docs(sss-034): Feature flags architecture ✅
+- PR #68 — feat(sdk): SSS-052 fetchCdpPosition + fetchCollateralTypes ✅
+- PR #67 — feat(anchor): SSS-055 CPI Composability Standard ✅
+- PR #66 — feat(backend): SSS-053 CDP API endpoints ✅
+- PR #65 — fix(sss-054): single-collateral CDP ✅
+- PR #64 — fix(ci): backend binary path ✅
 
 ## Next
-- Wait for PR #68 and #70 CI to go green after the fix
-- Pick next backlog task once CI confirms green
+- Wait for PR #72 CI + QA approval
+- Pick next backlog task once PR #72 is merged
