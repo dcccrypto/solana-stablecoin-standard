@@ -1,6 +1,6 @@
 export { SolanaStablecoin, SSS_TOKEN_PROGRAM_ID, SSS_TRANSFER_HOOK_PROGRAM_ID } from './SolanaStablecoin';
 export { ComplianceModule } from './ComplianceModule';
-export { FeatureFlagsModule, FLAG_CIRCUIT_BREAKER } from './FeatureFlagsModule';
+export { FeatureFlagsModule, FLAG_CIRCUIT_BREAKER, FLAG_SPEND_POLICY } from './FeatureFlagsModule';
 export type { FeatureFlagParams } from './FeatureFlagsModule';
 export { CdpModule } from './CdpModule';
 export type { CdpPosition, CollateralEntry, CollateralType, DepositCollateralParams, BorrowStableParams, RepayStableParams } from './CdpModule';
