@@ -28,6 +28,21 @@ pub const FLAG_YIELD_COLLATERAL: u64 = 1 << 3;
 /// SSS-2 only.  See docs/FEATURE-FLAGS-RESEARCH.md §Feature 4.
 pub const FLAG_ZK_COMPLIANCE: u64 = 1 << 4;
 
+// ---------------------------------------------------------------------------
+// SSS-085: Admin timelock operation kinds
+// ---------------------------------------------------------------------------
+/// No pending operation.
+pub const ADMIN_OP_NONE: u8 = 0;
+/// Pending: transfer authority to `admin_op_target`.
+pub const ADMIN_OP_TRANSFER_AUTHORITY: u8 = 1;
+/// Pending: set feature flag `admin_op_param` bits.
+pub const ADMIN_OP_SET_FEATURE_FLAG: u8 = 2;
+/// Pending: clear feature flag `admin_op_param` bits.
+pub const ADMIN_OP_CLEAR_FEATURE_FLAG: u8 = 3;
+
+/// Default timelock delay: 2 Solana epochs ≈ 432 000 slots (at 2 days/epoch).
+pub const DEFAULT_ADMIN_TIMELOCK_DELAY: u64 = 432_000;
+
 /// Global stablecoin configuration (one per mint).
 #[account]
 #[derive(InitSpace)]
@@ -65,6 +80,26 @@ pub struct StablecoinConfig {
     /// Maximum tokens per transfer when FLAG_SPEND_POLICY is set (0 = policy
     /// not yet configured; admin must call `set_spend_limit` before enabling).
     pub max_transfer_amount: u64,
+    /// SSS-085: Expected Pyth price feed Pubkey for CDP operations.
+    /// When non-default, `cdp_borrow_stable` and `cdp_liquidate` reject any
+    /// pyth_price_feed account that does not match this key exactly.
+    /// Set via `set_pyth_feed` (authority-only).  Default = Pubkey::default()
+    /// (validation disabled; set before mainnet).
+    pub expected_pyth_feed: Pubkey,
+    /// SSS-085: Slot at which the pending timelocked admin operation matures.
+    /// 0 = no pending operation.  Set by `propose_timelocked_op`; cleared by
+    /// `execute_timelocked_op` or `cancel_timelocked_op`.
+    pub admin_op_mature_slot: u64,
+    /// SSS-085: Discriminant for the pending timelocked admin operation.
+    /// 0 = none; matches AdminOpKind enum.
+    pub admin_op_kind: u8,
+    /// SSS-085: Generic u64 parameter for the pending timelocked admin op.
+    pub admin_op_param: u64,
+    /// SSS-085: Target pubkey for the pending timelocked admin op.
+    pub admin_op_target: Pubkey,
+    /// SSS-085: Minimum slot delay for admin timelock (default 2 epochs ≈ 432 000 slots).
+    /// Can be set at init or by authority via `set_timelock_delay`.
+    pub admin_timelock_delay: u64,
     pub bump: u8,
 }
 

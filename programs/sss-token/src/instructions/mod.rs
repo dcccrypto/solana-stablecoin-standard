@@ -1,4 +1,5 @@
 pub mod accept_authority;
+pub mod admin_timelock;
 pub mod burn;
 pub mod dao_committee;
 pub mod feature_flags;
@@ -24,6 +25,7 @@ pub mod yield_collateral;
 pub mod zk_compliance;
 
 pub use accept_authority::*;
+pub use admin_timelock::*;
 pub use burn::*;
 pub use dao_committee::*;
 pub use feature_flags::*;
