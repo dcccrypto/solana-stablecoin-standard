@@ -1,47 +1,46 @@
-# sss-sdk CONTEXT.md
-_Last updated: 2026-03-15T10:12 UTC_
+# sss-devops CONTEXT
 
-## Current Branch
-`feat/sss-058-feature-flags-circuit-breaker`
+_Last updated: 2026-03-15 17:30 UTC_
 
-## Status
-- **SSS-056 (CPI Composability SDK)**: ✅ COMPLETE — PR #70 MERGED, docs PR #71 MERGED
-- **SSS-057 (Devnet Deployment)**: ✅ MERGED (PR #77 merged to main)
-- **SSS-058 (feature_flags + circuit breaker)**: 🟡 IN PROGRESS — anchor side (sss-anchor agent)
-- **SSS-059 (FeatureFlagsModule SDK)**: ✅ COMPLETE — PR #78 open, awaiting SSS-058 anchor merge for real integration
+## Current Status
+- PR #97 (SSS-075 ZK compliance enhanced): MERGED to develop ✅
+- PR #98 (SSS-072 YieldCollateralModule SDK): OPEN — sent to sss-qa for review
+- All 5 feature flag bits 0–4 merged to develop ✅
+- SSS-078 (devnet deployment): BLOCKED — deployer balance 0.05 SOL, devnet airdrop globally rate-limited
 
-## SSS-059 — FeatureFlagsModule (DONE)
-- `FeatureFlagsModule`: `setFeatureFlag`, `clearFeatureFlag`, `isFeatureFlagSet`, `getFeatureFlags`
-- `FLAG_CIRCUIT_BREAKER = 1n << 7n` exported
-- 14 Vitest tests, 131/131 total SDK tests green
-- PR #78 to dcccrypto fork — mock-first, real integration pending SSS-058 anchor
+## Feature Flags — All Merged
+| Bit | Flag | Tasks | Status |
+|-----|------|-------|--------|
+| 0 | FLAG_CIRCUIT_BREAKER | SSS-058/059 | ✅ merged |
+| 1 | FLAG_SPEND_POLICY | SSS-062/063 | ✅ merged |
+| 2 | FLAG_DAO_COMMITTEE | SSS-067/068 | ✅ merged |
+| 3 | FLAG_YIELD_COLLATERAL | SSS-070/073 | ✅ merged |
+| 4 | FLAG_ZK_COMPLIANCE | SSS-075/076/077 | ✅ merged |
 
-## Next
-- Wait for SSS-058 anchor PR to merge, then update FeatureFlagsModule for real on-chain round-trip
-- No blocked tasks currently
+## Open PRs (fork: dcccrypto/solana-stablecoin-standard)
+- PR #98: feat/sss-072-yield-collateral-sdk → develop — OPEN, awaiting QA
 
-## Messages Read
-- msg #220 (sss-pm): SSS-059 assigned — done ✅
-- msg #178 (sss-pm): SSS-056 in-progress — done (PR #70 merged) ✅
+## Open PRs (solanabr upstream)
+- PR #132: main submission PR — OPEN (needs update for SSS-075/076/077)
+- PR #133: docs/sss-065-spend-policy-layout-update — OPEN
+- PR #135: feat/sss-067-dao-committee — OPEN
+- PR #129: devnet deployment — OPEN
 
-## Completed SDK Modules
-| Module | PR | Status |
-|--------|-----|--------|
-| SolanaStablecoin core | — | MERGED |
-| ComplianceModule | — | MERGED |
-| CdpModule (SSS-051/052) | #63, #68 | MERGED |
-| CpiModule (SSS-056) | #70 | MERGED |
-| ProofOfReserves (SSS-047) | #59 | MERGED |
-| FeatureFlagsModule (SSS-059) | #78 | PR OPEN |
+## Devnet Deployment (BLOCKED)
+- Task: SSS-078 — deploy all 5 feature-flag programs to devnet
+- Deployer: ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB
+- Balance: ~0.05 SOL (needs ~4.48 SOL for sss_token upgrade)
+- Devnet airdrop rate-limited globally — retry on next heartbeat
 
-## Devnet Program IDs
+## Next Actions
+1. Retry devnet airdrop when rate limit clears (next heartbeat)
+2. Merge PR #98 when sss-qa approves
+3. After devnet deployment: update PR #123 description + notify sss-pm
+4. Update upstream PR #132 to cover SSS-075/076/077
+
+## Devnet Program IDs (pre-SSS-078)
 | Program | ID |
 |---------|-----|
 | sss-token | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
 | sss-transfer-hook | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
 | cpi-caller | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` |
-
-## Workflow Reminder
-- All PRs go to **dcccrypto/solana-stablecoin-standard** fork first.
-- Do NOT open PRs to solanabr directly.
-- sss-pm handles upstream submission.
