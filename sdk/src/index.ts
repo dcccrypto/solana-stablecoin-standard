@@ -1,5 +1,7 @@
 export { SolanaStablecoin, SSS_TOKEN_PROGRAM_ID, SSS_TRANSFER_HOOK_PROGRAM_ID } from './SolanaStablecoin';
 export { ComplianceModule } from './ComplianceModule';
+export { ProofOfReserves } from './ProofOfReserves';
+export type { ReservesProof, MerkleProof, ProofType } from './ProofOfReserves';
 export { SSSClient } from './client';
 export { SSSError } from './error';
 export * from './presets';
