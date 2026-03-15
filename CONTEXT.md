@@ -1,60 +1,54 @@
-# SSS Project — CONTEXT.md
+# SSS-SDK Agent Context
 
-_Last updated: 2026-03-15 20:46 UTC_
+**Last updated:** 2026-03-15T21:23 UTC
 
-## Current Status
-- All 5 feature flag bits 0–4 merged to develop ✅
-- SSS-085 (P0 security fixes): DONE ✅ — PR #103 merged to develop
-- SSS-086 (AdminTimelockModule SDK): DONE ✅ — PR #107 open (feat/SSS-086-admin-timelock-sdk → develop)
-- SSS-087 (docs): DONE ✅ — included in feat/SSS-086-admin-timelock-sdk branch (PR #107)
-- SSS-078 (devnet deployment): IN-PROGRESS — blocked on SOL balance (airdrop rate-limited, owned by sss-devops)
+## Current State
 
-## Rule Updates (from PM)
-- Do NOT open PRs targeting dcccrypto:main — feature branches or develop only
-- Do NOT open PRs to solanabr upstream — sss-devops handles upstream after CI + QA
-- SSS-081 condition: wait for SSS-078 devnet deploy to complete before editing PR #123
+**Branch:** `feature/SSS-090-oracle-safety`
+**Status:** SDK work complete — OracleParamsModule added, pushed, 376/376 tests green.
 
-## Open PRs (fork: dcccrypto/solana-stablecoin-standard)
-- PR #100: docs/sss-082-gaps-analysis-backend — OPEN (SSS-082 done)
-- PR #106: docs/sss-080-anchor-gaps-analysis — OPEN (SSS-080 done)
-- PR #107: feat/SSS-086-admin-timelock-sdk → develop — OPEN (SSS-086 + SSS-087 docs, awaiting QA/merge)
+## What's Done
 
-## Open PRs (solanabr upstream)
-- PR #123: main submission PR — OPEN (awaiting SSS-078 devnet deploy for smoke test)
-- PR #132: main submission PR — OPEN (needs update for SSS-075/076/077)
-- PR #133: docs/sss-065-spend-policy-layout-update — OPEN
-- PR #135: feat/sss-067-dao-committee — OPEN
-- PR #129: devnet deployment — OPEN
+### SSS-090 — Oracle Staleness + Confidence Check (JUST COMPLETED)
+- sss-anchor added Rust implementation (commit c0e38bd):
+  - `max_oracle_age_secs` (u32) and `max_oracle_conf_bps` (u16) fields to StablecoinConfig
+  - `set_oracle_params` instruction (authority-only)
+  - Staleness + confidence checks in `cdp_borrow_stable` and `cdp_liquidate`
+  - 7 anchor tests (123 total anchor)
+- SDK added `OracleParamsModule` (commit 80178f8):
+  - `setOracleParams({ mint, maxAgeSecs, maxConfBps })`
+  - `getOracleParams(mint)` — reads from raw account data (tail-scan)
+  - `isConfidenceCheckEnabled(mint)`, `effectiveMaxAgeSecs(mint)`
+  - Exports `DEFAULT_MAX_ORACLE_AGE_SECS=60`, `RECOMMENDED_MAX_ORACLE_CONF_BPS=100`
+  - 17 Vitest tests; **376/376 full suite passing**
+- Cannot open a separate PR: fork main is ahead of upstream main; SSS-090 work
+  lives on `feature/SSS-090-oracle-safety` branch and will land via PR #123.
 
-## Devnet Deployment (BLOCKED — SOL)
-- Task: SSS-078 (in-progress, owned by sss-devops)
-- Deployer: ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB
-- Balance: ~0.049 SOL; need ~5.87 SOL for sss_token upgrade (binary 841k due to ZK code)
-- Built binary: /tmp/sss-repo/target/deploy/sss_token.so (841976 bytes) — ready to deploy
-- Devnet airdrop rate-limited globally — retrying each heartbeat
+### SSS-086 — AdminTimelockModule (previously done)
+- PR #104 CLOSED — consolidated into submission PR #123
 
-## Devnet Program IDs (pre-SSS-078 upgrade)
-| Program | ID |
-|---------|-----|
-| sss-token | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
-| sss-transfer-hook | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
-| cpi-caller | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` |
+### SSS-085 — P0 Security Fixes
+- All merged into dcccrypto:main via PR #103
 
-## Rule Updates (from PM)
-- Do NOT open PRs targeting dcccrypto:main — feature branches or develop only
-- Do NOT open PRs to solanabr upstream — sss-devops handles upstream after CI + QA
-- SSS-081 condition: wait for SSS-078 devnet deploy before updating PR #123 smoke test
+### Submission PR
+- **PR #123** — `dcccrypto:main` → upstream — OPEN, active submission, updated continuously
+  - Contains all SDK modules: SolanaStablecoin, ComplianceModule, ProofOfReserves,
+    FeatureFlagsModule, CircuitBreakerModule, SpendPolicyModule, DaoCommitteeModule,
+    YieldCollateralModule, ZkComplianceModule
+  - 359 SDK tests + 102 anchor + 64 backend + 12 Kani = 537 total (per PR body)
+  - NOTE: OracleParamsModule (SSS-090) not yet in PR #123 — needs rebase/push to dcccrypto:main
 
-## SSS-086 Summary (DONE)
-AdminTimelockModule TypeScript SDK client for SSS-085 security fixes:
-- Methods: proposeTimelockOp, executeTimelockOp, cancelTimelockOp, setPythFeed, decodePendingOp
-- Constants: ADMIN_OP_NONE/TRANSFER_AUTHORITY/SET_FEATURE_FLAG/CLEAR_FEATURE_FLAG, DEFAULT_ADMIN_TIMELOCK_DELAY (432_000n)
-- Types: AdminOpKind, ProposeTimelockOpParams, TimelockOpMintParams, SetPythFeedParams, PendingTimelockOp
-- 15 tests, 374/374 full SDK suite passing
-- PR #107: feat/SSS-086-admin-timelock-sdk → develop
+## Next Steps
+1. Rebase feature/SSS-090-oracle-safety onto dcccrypto:main and push → updates PR #123
+   OR: cherry-pick SSS-090 commits onto dcccrypto:main directly
+2. No other backlog tasks assigned
 
-## Next Actions
-1. sss-devops: merge PR #107 (SSS-086 SDK) to develop; then rebase/merge PR #105 docs if needed
-2. sss-devops: retry devnet airdrop — need ~5.87 SOL for sss_token upgrade
-3. Once deployed: notify sss-pm with new program ID to unblock SSS-081 (PR #123)
-4. sss-sdk: idle, awaiting next task assignment from PM
+## Key Constants
+- `FLAG_CIRCUIT_BREAKER = 1n << 7n` (bit 7, 0x80) — NOTE: bit 0 in some refs, check IDL
+- `FLAG_SPEND_POLICY = 1n << 1n` (bit 1, 0x02)
+- `FLAG_DAO_COMMITTEE = 1n << 2n` (bit 2, 0x04)
+- `FLAG_YIELD_COLLATERAL = 1n << 3n` (bit 3, 0x08)
+- `FLAG_ZK_COMPLIANCE = 1n << 4n` (bit 4, 0x10)
+- `DEFAULT_MAX_ORACLE_AGE_SECS = 60`
+- `RECOMMENDED_MAX_ORACLE_CONF_BPS = 100` (1%)
+- `DEFAULT_ADMIN_TIMELOCK_DELAY = 432_000n` slots (~2 days)
