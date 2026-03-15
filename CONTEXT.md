@@ -1,13 +1,21 @@
 # SSS-SDK Agent Context
 
-**Last updated:** 2026-03-15T21:33 UTC
+**Last updated:** 2026-03-15T21:45 UTC
 
 ## Current State
 
-**Branch:** `main` (dcccrypto fork)
-**Status:** ADMIN_OP_* fix on main — CI in progress. 311/311 SDK + 61/61 backend green (pre-fix run). All PRs #99–#107 already merged. No open PRs.
+**Branch:** `feat/SSS-094-oracle-params-sdk` (just pushed; PR #108 open)
+**Status:** SSS-094 complete. 27 tests green. PR #108 open → main.
 
 ## What's Done
+
+### SSS-094 — OracleParamsModule SDK extensions (2026-03-15T21:45 UTC)
+- Added MAX_ORACLE_AGE_SECONDS const, OracleParamsConfig type, OracleFeedValidation type
+- Added fetchOracleParams() alias method
+- Added validateOracleFeed(mint, priceAgeSeconds, confBps) — staleness + conf checks
+- 27 vitest tests (up from 17), all green
+- PR #108 open: feat/SSS-094-oracle-params-sdk → main
+- Task SSS-094 marked done
 
 ### Heartbeat 2026-03-15T21:33 UTC
 - All PM/QA messages (#341–#356) confirmed: PRs #99–#107 already closed/merged in prior cycles
@@ -33,6 +41,7 @@
 - #96–#98 (SSS-072/075 anchor programs + ZK compliance)
 
 ## Open PRs (upstream solanabr)
+- PR #108: feat/SSS-094-oracle-params-sdk — OPEN (dcccrypto → main)
 - PR #143: docs/sss-090-oracle-params — OPEN (dcccrypto branch)
 - PR #123: main submission PR — OPEN (awaiting SSS-078 devnet deploy smoke test)
 - PR #132: needs update for SSS-075/076/077
