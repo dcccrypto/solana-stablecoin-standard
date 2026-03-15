@@ -111,3 +111,52 @@ pub struct UpdateRolesParams {
     pub new_authority: Option<Pubkey>,
     pub new_compliance_authority: Option<Pubkey>,
 }
+
+// ─── CDP State (Direction 2: Multi-Collateral CDP) ───────────────────────────
+
+/// Collateral vault PDA — one per (user, collateral_mint).
+/// Seeds: ["cdp-collateral-vault", user, collateral_mint]
+#[account]
+#[derive(InitSpace)]
+pub struct CollateralVault {
+    /// The user who owns this vault
+    pub owner: Pubkey,
+    /// The SPL token mint for this collateral type
+    pub collateral_mint: Pubkey,
+    /// The token account that holds collateral (owned by the vault PDA)
+    pub vault_token_account: Pubkey,
+    /// Total collateral deposited (in collateral token's native units)
+    pub deposited_amount: u64,
+    pub bump: u8,
+}
+
+impl CollateralVault {
+    pub const SEED: &'static [u8] = b"cdp-collateral-vault";
+}
+
+/// CDP position PDA — one per user, tracks total debt across all collateral types.
+/// Seeds: ["cdp-position", sss_mint, user]
+#[account]
+#[derive(InitSpace)]
+pub struct CdpPosition {
+    /// The SSS stablecoin config this CDP borrows against
+    pub config: Pubkey,
+    /// The SSS stablecoin mint
+    pub sss_mint: Pubkey,
+    /// The user who owns this CDP
+    pub owner: Pubkey,
+    /// Total SSS-3 tokens currently borrowed (outstanding debt)
+    pub debt_amount: u64,
+    pub bump: u8,
+}
+
+impl CdpPosition {
+    pub const SEED: &'static [u8] = b"cdp-position";
+
+    /// MIN collateral ratio (150%) in basis points
+    pub const MIN_COLLATERAL_RATIO_BPS: u64 = 15_000;
+    /// LIQUIDATION threshold (120%) in basis points
+    pub const LIQUIDATION_THRESHOLD_BPS: u64 = 12_000;
+    /// Liquidation discount (5%) — liquidator gets collateral at 5% discount
+    pub const LIQUIDATION_BONUS_BPS: u64 = 500;
+}
