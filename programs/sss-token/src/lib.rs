@@ -295,6 +295,17 @@ pub mod sss_token {
         instructions::admin_timelock::set_pyth_feed_handler(ctx, feed)
     }
 
+    /// SSS-090: Configure oracle staleness and confidence parameters.
+    /// `max_age_secs`: max seconds a Pyth price may be old (0 = default 60s).
+    /// `max_conf_bps`: max confidence/price ratio in bps (0 = disabled).
+    pub fn set_oracle_params(
+        ctx: Context<SetOracleParams>,
+        max_age_secs: u32,
+        max_conf_bps: u16,
+    ) -> Result<()> {
+        instructions::admin_timelock::set_oracle_params_handler(ctx, max_age_secs, max_conf_bps)
+    }
+
     /// Propose a timelocked admin operation (2-epoch delay by default).
     /// `op_kind`: 1=TransferAuthority, 2=SetFeatureFlag, 3=ClearFeatureFlag.
     pub fn propose_timelocked_op(
