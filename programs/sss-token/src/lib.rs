@@ -339,4 +339,23 @@ pub mod sss_token {
     pub fn cancel_timelocked_op(ctx: Context<CancelTimelockOp>) -> Result<()> {
         instructions::admin_timelock::cancel_timelocked_op_handler(ctx)
     }
+
+    // -----------------------------------------------------------------------
+    // SSS-093: PSM fee + per-minter velocity limit
+    // -----------------------------------------------------------------------
+
+    /// Set the PSM redemption fee in basis points (SSS-3 only). Authority-only.
+    /// 0 = no fee.  Max 1000 bps (10%).
+    pub fn set_psm_fee(ctx: Context<SetPsmFee>, fee_bps: u16) -> Result<()> {
+        instructions::psm_fee::set_psm_fee_handler(ctx, fee_bps)
+    }
+
+    /// Set a per-epoch velocity limit for a registered minter.
+    /// `max_mint_per_epoch` = 0 disables the limit.  Authority-only.
+    pub fn set_mint_velocity_limit(
+        ctx: Context<SetMintVelocityLimit>,
+        max_mint_per_epoch: u64,
+    ) -> Result<()> {
+        instructions::psm_fee::set_mint_velocity_limit_handler(ctx, max_mint_per_epoch)
+    }
 }

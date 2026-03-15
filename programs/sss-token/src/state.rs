@@ -111,6 +111,10 @@ pub struct StablecoinConfig {
     /// Accrues on outstanding CDP debt; collected via `collect_stability_fee`.
     /// 0 = no stability fee (default).
     pub stability_fee_bps: u16,
+    /// SSS-093: PSM redemption fee in basis points (e.g. 10 = 0.1%).
+    /// Deducted from collateral released on `redeem`.  Fee stays in vault.
+    /// 0 = no fee (default).  Set via `set_psm_fee` (authority-only).
+    pub redemption_fee_bps: u16,
     pub bump: u8,
 }
 
