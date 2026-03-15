@@ -1,32 +1,34 @@
-# sss-sdk Context
+# sss-sdk CONTEXT.md
+_Last updated: 2026-03-15T17:19 UTC_
 
-## Current Status
-- Branch: `feat/sss-072-yield-collateral-sdk` (clean, pushed)
-- **PR #93** open: `feat/sss-072-yield-collateral-sdk` → dcccrypto fork
+## Status
+- All SDK modules shipped: FeatureFlags, DaoCommittee, YieldCollateral, ZkCompliance
+- PR #98 open: feat(sdk): SSS-072 — YieldCollateralModule targeting **develop** (not main)
+  - 294/294 SDK tests passing
+- Previous PRs #138/#139 were closed; re-opened as #98 targeting correct base branch
 
-## Last completed: SSS-072 — YieldCollateralModule SDK
-**PR #93** (dcccrypto fork):
-- FLAG_YIELD_COLLATERAL = 1n << 3n (0x08)
-- YieldCollateralModule: enableYieldCollateral, addWhitelistedMint, disableYieldCollateral, fetchYieldCollateralState, isYieldCollateralEnabled
-- getConfigPda / getYieldCollateralPda PDA helpers
-- 28 vitest tests, all passing (248/248 total suite)
-- Note: setYieldRate / accrueYield not yet in Anchor IDL — deferred until program extended
+## Rule Logged (from sss-pm)
+- **NO PRs to dcccrypto:main** — all PRs must target a feature branch or develop
+- **NO PRs to solanabr upstream** — ever
+- sss-devops handles merging to main after CI + QA
 
-## Previously completed
-- **SSS-068** (PR #90, merged): FLAG_DAO_COMMITTEE (1n<<2n) + DaoCommitteeModule
-- **SSS-062** (PR #85, merged): FLAG_SPEND_POLICY (1n<<1n) + SpendPolicyModule
-- **SSS-059/SSS-SDK** (PR #78+#80, merged): FLAG_CIRCUIT_BREAKER (1n<<0n) + FeatureFlagsModule
+## Active PRs
+| PR | Branch | Base | Status |
+|----|--------|------|--------|
+| #97 | feat/sss-075-zk-compliance | (anchor) | OPEN |
+| #98 | feat/sss-072-yield-collateral-sdk | develop | OPEN ✅ |
 
-## Feature flag bit assignments (SDK exports)
-| Bit | Constant | SDK Module |
-|-----|----------|-----------|
-| 0 | FLAG_CIRCUIT_BREAKER | FeatureFlagsModule |
-| 1 | FLAG_SPEND_POLICY | FeatureFlagsModule |
-| 2 | FLAG_DAO_COMMITTEE | DaoCommitteeModule |
-| 3 | FLAG_YIELD_COLLATERAL | YieldCollateralModule |
+## Merged to main (all SDK modules)
+- #90 DaoCommitteeModule (SSS-068)
+- #94 ZkComplianceModule (SSS-076)
+- SSS-075 anchor + test fixes
 
-## Next
-- Awaiting PR #93 review + merge
-- No active tasks in backlog; waiting on new assignment from PM
+## Notes
+- IDL target/idl/ not generated — anchor build not run
+- 294/294 SDK tests green as of 2026-03-15T17:18 UTC
+- No additional backlog tasks assigned
 
-## Heartbeat: 2026-03-15T14:49 UTC
+## Queue
+- Monitor PR #98 for CI/QA approval
+- Await sss-devops to merge to main
+- Check if SSS-072 YieldCollateral SDK needs to be re-exported in main SDK index post-merge
