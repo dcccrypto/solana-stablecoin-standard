@@ -240,7 +240,7 @@ export class ZkComplianceModule {
     return program.methods
       .submitZkProof()
       .accounts({
-        user: this.provider.wallet.publicKey,
+        user: user,  // use the resolved user param, not hardcoded wallet
         mint,
         config,
         zkComplianceConfig,
@@ -315,6 +315,7 @@ export class ZkComplianceModule {
     // Token-2022 Mint layout: discriminator(1) + ...decimals at offset 44
     const decimals = mintInfo.data[44];
 
+    // Pass amount as bigint directly — avoids Number() precision loss for large values.
     return transferChecked(
       this.provider.connection,
       (this.provider.wallet as any).payer ?? (this.provider.wallet as any),
@@ -322,7 +323,7 @@ export class ZkComplianceModule {
       mint,
       destination,
       senderWallet,
-      Number(amount),
+      amount,
       decimals,
       [],
       { commitment: 'confirmed' },
@@ -454,7 +455,12 @@ export class ZkComplianceModule {
     if (this._program) return this._program;
     const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
     const idl = await import('./idl/sss_token.json');
-    this._program = new AnchorProgram(idl as any, this.provider) as any;
+    // Override IDL-embedded address with the constructor programId so custom
+    // deployments (e.g. devnet custom address) work without IDL edits.
+    this._program = new AnchorProgram(
+      { ...idl as any, address: this.programId.toBase58() },
+      this.provider
+    ) as any;
     return this._program;
   }
 }
