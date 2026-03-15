@@ -4405,4 +4405,141 @@ describe("sss-token", () => {
       });
     });
   });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // SSS-091: DefaultAccountState=Frozen — Token-2022 extension set on mint init
+  // Fixes: race window between ATA creation and compliance freeze.
+  // All new token accounts for this mint start Frozen; compliance authority
+  // must explicitly thaw them before the user can receive/spend tokens.
+  // ────────────────────────────────────────────────────────────────────────────
+  describe("SSS-091: DefaultAccountState=Frozen on mint init", () => {
+    const { getMint } = require("@solana/spl-token");
+
+    // Fresh keypairs isolated from other test suites
+    const sss091MintKp = Keypair.generate();
+    let sss091ConfigPda: PublicKey;
+
+    before(async () => {
+      [sss091ConfigPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("stablecoin-config"), sss091MintKp.publicKey.toBuffer()],
+        program.programId
+      );
+    });
+
+    it("SSS-091: initialize succeeds and mint has DefaultAccountState=Frozen extension", async () => {
+      await program.methods
+        .initialize({
+          preset: 1,
+          decimals: 6,
+          name: "SSS-091 USD",
+          symbol: "S91D",
+          uri: "https://example.com/sss091.json",
+          transferHookProgram: null,
+          collateralMint: null,
+          reserveVault: null,
+          maxSupply: null,
+        })
+        .accounts({
+          payer: authority.publicKey,
+          mint: sss091MintKp.publicKey,
+          config: sss091ConfigPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([sss091MintKp])
+        .rpc();
+
+      // Verify the mint has DefaultAccountState=Frozen extension
+      const mintInfo = await getMint(
+        provider.connection,
+        sss091MintKp.publicKey,
+        "confirmed",
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      // The mint should exist and have extensions
+      expect(mintInfo).to.not.be.null;
+      expect(mintInfo.address.toBase58()).to.equal(sss091MintKp.publicKey.toBase58());
+
+      // Verify DefaultAccountState extension is present and set to Frozen (2)
+      // AccountState: Uninitialized=0, Initialized=1, Frozen=2
+      const extensions = mintInfo.tlvData;
+      expect(extensions).to.not.be.null;
+      expect(extensions.length).to.be.greaterThan(0);
+
+      // The DefaultAccountState extension type is 10 (0x000A in little-endian)
+      // Parse TLV manually: [type u16 LE][length u16 LE][data...]
+      let offset = 0;
+      let foundDefaultAccountState = false;
+      while (offset + 4 <= extensions.length) {
+        const extType = extensions.readUInt16LE(offset);
+        const extLen = extensions.readUInt16LE(offset + 2);
+        if (extType === 10 /* DefaultAccountState */) {
+          foundDefaultAccountState = true;
+          // state byte: 2 = Frozen
+          const state = extensions[offset + 4];
+          expect(state).to.equal(2, "DefaultAccountState should be Frozen (2)");
+          break;
+        }
+        offset += 4 + extLen;
+      }
+      expect(foundDefaultAccountState).to.be.true;
+    });
+
+    it("SSS-091: config PDA is correctly populated after manual mint init", async () => {
+      const cfg = await program.account.stablecoinConfig.fetch(sss091ConfigPda);
+      expect(cfg.mint.toBase58()).to.equal(sss091MintKp.publicKey.toBase58());
+      expect(cfg.preset).to.equal(1);
+      expect(cfg.paused).to.equal(false);
+      expect(cfg.authority.toBase58()).to.equal(authority.publicKey.toBase58());
+      expect(cfg.totalMinted.toNumber()).to.equal(0);
+      expect(cfg.totalBurned.toNumber()).to.equal(0);
+    });
+
+    it("SSS-091: new ATA for SSS-091 mint starts Frozen (compliance race window closed)", async () => {
+      // Create an ATA for a fresh wallet — it should start Frozen
+      const freshWallet = Keypair.generate();
+      // Fund the wallet minimally
+      const airdropSig = await provider.connection.requestAirdrop(
+        freshWallet.publicKey,
+        0.01 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await provider.connection.confirmTransaction(airdropSig);
+
+      // Derive ATA
+      const ata = getAssociatedTokenAddressSync(
+        sss091MintKp.publicKey,
+        freshWallet.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      // Create ATA
+      const createAtaIx = createAssociatedTokenAccountInstruction(
+        authority.publicKey,
+        ata,
+        freshWallet.publicKey,
+        sss091MintKp.publicKey,
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      const tx = new anchor.web3.Transaction().add(createAtaIx);
+      await provider.sendAndConfirm(tx, []);
+
+      // Verify the ATA is Frozen by default
+      const ataInfo = await getAccount(
+        provider.connection,
+        ata,
+        "confirmed",
+        TOKEN_2022_PROGRAM_ID
+      );
+      expect(ataInfo.isFrozen).to.be.true;
+    });
+
+    it("SSS-091: adminTimelockDelay defaults to 432_000 on SSS-091 config", async () => {
+      const cfg = await program.account.stablecoinConfig.fetch(sss091ConfigPda);
+      expect(cfg.adminTimelockDelay.toNumber()).to.equal(432_000);
+    });
+  });
 });
