@@ -95,4 +95,17 @@ pub enum SssError {
     WhitelistFull,
     #[msg("Collateral mint is already on the whitelist")]
     MintAlreadyWhitelisted,
+    // ZK Compliance (SSS-075)
+    #[msg("FLAG_ZK_COMPLIANCE is not enabled for this stablecoin")]
+    ZkComplianceNotEnabled,
+    #[msg("ZK verification record has expired — submit a fresh proof")]
+    VerificationExpired,
+    #[msg("ZK verification record has not expired yet — cannot close")]
+    VerificationRecordNotExpired,
+    #[msg("ZK verification record is missing for this user")]
+    VerificationRecordMissing,
+    #[msg("ZK proof submission requires a verifier co-signature (verifier_pubkey is set)")]
+    ZkVerifierRequired,
+    #[msg("ZK proof verifier account does not match the configured verifier_pubkey")]
+    ZkVerifierMismatch,
 }

@@ -3,17 +3,6 @@ export { ComplianceModule } from './ComplianceModule';
 export { FeatureFlagsModule, FLAG_CIRCUIT_BREAKER, FLAG_SPEND_POLICY } from './FeatureFlagsModule';
 export type { FeatureFlagParams } from './FeatureFlagsModule';
 export { DaoCommitteeModule, FLAG_DAO_COMMITTEE } from './DaoCommitteeModule';
-export { YieldCollateralModule, FLAG_YIELD_COLLATERAL } from './YieldCollateralModule';
-export type { YieldCollateralState, EnableYieldCollateralParams, DisableYieldCollateralParams, AddWhitelistedMintParams } from './YieldCollateralModule';
-export { ZkComplianceModule, FLAG_ZK_COMPLIANCE } from './ZkComplianceModule';
-export type {
-  ZkComplianceState,
-  ZkVerificationRecord,
-  EnableZkComplianceParams,
-  DisableZkComplianceParams,
-  SubmitZkProofParams,
-  VerifyComplianceStatusParams,
-} from './ZkComplianceModule';
 export type {
   ProposalActionKind,
   ProposalAccount,
@@ -26,6 +15,15 @@ export { CdpModule } from './CdpModule';
 export type { CdpPosition, CollateralEntry, CollateralType, DepositCollateralParams, BorrowStableParams, RepayStableParams } from './CdpModule';
 export { CpiModule, CURRENT_INTERFACE_VERSION, getInterfaceVersionPda } from './CpiModule';
 export type { InterfaceVersionInfo, CpiMintParams, CpiBurnParams, UpdateInterfaceVersionParams } from './CpiModule';
+export { ZkComplianceModule, FLAG_ZK_COMPLIANCE } from './ZkComplianceModule';
+export type {
+  InitZkComplianceParams,
+  SubmitZkProofParams,
+  CloseVerificationRecordParams,
+  ExecuteCompliantTransferParams,
+  ZkComplianceConfigAccount,
+  VerificationRecordAccount,
+} from './ZkComplianceModule';
 export { SSSClient } from './client';
 export { SSSError } from './error';
 export * from './presets';

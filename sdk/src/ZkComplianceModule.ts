@@ -1,21 +1,20 @@
 import { PublicKey, TransactionSignature } from '@solana/web3.js';
-import { AnchorProvider } from '@coral-xyz/anchor';
+import { AnchorProvider, BN } from '@coral-xyz/anchor';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /**
- * Bit flag for the ZK compliance feature (SSS-076).
+ * Bit flag for the ZK Compliance feature (SSS-075 / SSS-076).
  *
- * When this flag is set in `StablecoinConfig.feature_flags`, the on-chain
- * ZK compliance module is active. Users must submit a valid zero-knowledge
- * proof to the `ZkComplianceConfig` PDA before being authorised to
- * transact beyond basic thresholds.
+ * When this flag is set in `StablecoinConfig.feature_flags`, every transfer
+ * requires the sender to hold a valid `VerificationRecord` PDA that has not
+ * expired.
  *
  * Matches `FLAG_ZK_COMPLIANCE` in the Anchor program (bit 4 = 0x10).
  *
  * @example
  * ```ts
- * const active = await zkModule.isZkComplianceEnabled(mint);
+ * const active = await featureFlags.isFeatureFlagSet(mint, FLAG_ZK_COMPLIANCE);
  * ```
  */
 export const FLAG_ZK_COMPLIANCE = 1n << 4n; // 0x10
@@ -23,124 +22,99 @@ export const FLAG_ZK_COMPLIANCE = 1n << 4n; // 0x10
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
- * On-chain state of a `ZkComplianceConfig` PDA, as decoded from account data.
- *
- * Seeds: `[b"zk-compliance", sss_mint]`
+ * Parameters for `initZkCompliance`.
  */
-export interface ZkComplianceState {
-  /** The SSS stablecoin mint this config belongs to. */
-  sssMint: PublicKey;
-  /** Program or verifying-key address used to validate submitted proofs. */
-  verifierKey: PublicKey;
-  /** Unix timestamp after which a compliance proof expires (seconds). */
-  proofExpirySeconds: number;
-  /** PDA bump. */
-  bump: number;
-}
-
-/**
- * On-chain verification record for a single user's ZK compliance proof.
- *
- * Seeds: `[b"zk-verification", sss_mint, user]`
- */
-export interface ZkVerificationRecord {
-  /** The stablecoin mint this record belongs to. */
-  sssMint: PublicKey;
-  /** The user whose compliance was verified. */
-  user: PublicKey;
-  /** Unix timestamp when the proof was accepted (seconds). */
-  verifiedAt: number;
-  /** Unix timestamp when this record expires (seconds). */
-  expiresAt: number;
-  /** Whether the compliance status is currently valid (non-expired). */
-  isValid: boolean;
-  /** PDA bump. */
-  bump: number;
-}
-
-/**
- * Parameters for `enableZkCompliance` (wraps `init_zk_compliance`).
- */
-export interface EnableZkComplianceParams {
-  /** The stablecoin mint (must hold admin authority). */
+export interface InitZkComplianceParams {
+  /** The stablecoin mint (must be SSS-2 preset). */
   mint: PublicKey;
-  /** On-chain verifier key / program address used to validate proofs. */
-  verifierKey: PublicKey;
   /**
-   * Proof expiry window in seconds. After this many seconds from verification,
-   * the `ZkVerificationRecord` is considered stale and re-proof is required.
-   * Defaults to `2592000` (30 days).
+   * Number of slots a submitted proof remains valid.
+   * Pass `0` to use the on-chain default (1500 slots ≈ 10 minutes at 400ms/slot).
    */
-  proofExpirySeconds?: number;
-}
-
-/**
- * Parameters for `disableZkCompliance`.
- *
- * Clears `FLAG_ZK_COMPLIANCE` via `clear_feature_flag`. The
- * `ZkComplianceConfig` PDA is left intact on-chain so the verifier key and
- * expiry settings are preserved if the feature is re-enabled later.
- */
-export interface DisableZkComplianceParams {
-  /** The stablecoin mint. */
-  mint: PublicKey;
+  ttlSlots?: number;
 }
 
 /**
  * Parameters for `submitZkProof`.
- *
- * Submits a serialised zero-knowledge proof to the `submit_zk_proof`
- * Anchor instruction. The on-chain verifier validates the proof and writes
- * (or updates) the `ZkVerificationRecord` PDA for the user.
- *
- * @remarks
- * Depends on SSS-075 anchor instruction `submit_zk_proof` being deployed.
- * Once SSS-075 lands this method is fully wired; until then it throws
- * `ZkComplianceNotAvailable` at runtime.
  */
 export interface SubmitZkProofParams {
   /** The stablecoin mint. */
   mint: PublicKey;
-  /** The user whose compliance is being proven (defaults to provider wallet). */
+  /**
+   * The user whose `VerificationRecord` PDA will be created or refreshed.
+   * Defaults to `provider.wallet.publicKey` when omitted.
+   */
   user?: PublicKey;
-  /** Serialised ZK proof bytes (Groth16 or Plonk; format determined by verifier). */
-  proofData: Uint8Array;
-  /** Optional public inputs for the proof (ABI-encoded as bytes). */
-  publicInputs?: Uint8Array;
 }
 
 /**
- * Parameters for `verifyComplianceStatus`.
- *
- * Read-only check: fetches the `ZkVerificationRecord` and returns whether it
- * is present and not expired relative to the current clock.
+ * Parameters for `closeVerificationRecord`.
  */
-export interface VerifyComplianceStatusParams {
+export interface CloseVerificationRecordParams {
   /** The stablecoin mint. */
   mint: PublicKey;
-  /** The user to check. Defaults to provider wallet public key. */
-  user?: PublicKey;
+  /** The wallet whose expired `VerificationRecord` should be closed. */
+  recordOwner: PublicKey;
+}
+
+/**
+ * Parameters for `executeCompliantTransfer`.
+ */
+export interface ExecuteCompliantTransferParams {
+  /** The stablecoin mint. */
+  mint: PublicKey;
+  /** Source token account. */
+  source: PublicKey;
+  /** Destination token account. */
+  destination: PublicKey;
+  /** Token amount (in smallest units). */
+  amount: bigint;
+  /**
+   * Whether to verify the caller's VerificationRecord is still valid
+   * client-side before sending.  Default `true`.
+   */
+  preflight?: boolean;
+}
+
+/**
+ * Decoded on-chain `ZkComplianceConfig` account data.
+ */
+export interface ZkComplianceConfigAccount {
+  /** The mint this config belongs to. */
+  sssMint: PublicKey;
+  /** Number of slots a submitted proof remains valid. */
+  ttlSlots: bigint;
+  /** Bump seed. */
+  bump: number;
+}
+
+/**
+ * Decoded on-chain `VerificationRecord` account data.
+ */
+export interface VerificationRecordAccount {
+  /** The mint this record is scoped to. */
+  sssMint: PublicKey;
+  /** The wallet that submitted the proof. */
+  user: PublicKey;
+  /** The slot at which this record expires (exclusive). */
+  expiresAtSlot: bigint;
+  /** Bump seed. */
+  bump: number;
 }
 
 // ─── ZkComplianceModule ───────────────────────────────────────────────────────
 
 /**
- * ZkComplianceModule — TypeScript SDK client for the SSS ZK compliance
- * feature (SSS-076).
+ * ZkComplianceModule — SDK client for the SSS ZK Compliance feature (SSS-076).
  *
- * Wraps the `init_zk_compliance` and `submit_zk_proof` Anchor instructions
- * (SSS-075/076). Also provides `disableZkCompliance` (via `clear_feature_flag`)
- * and read helpers for the `ZkComplianceConfig` and `ZkVerificationRecord`
- * PDAs.
+ * Wraps `init_zk_compliance`, `submit_zk_proof`, and `close_verification_record`
+ * Anchor instructions, and provides `executeCompliantTransfer` as a client-side
+ * helper that performs a preflight check before dispatching a Token-2022 transfer.
  *
- * ## Workflow
- * 1. Admin calls `enableZkCompliance` → creates `ZkComplianceConfig` PDA and
- *    sets `FLAG_ZK_COMPLIANCE` atomically.
- * 2. Users call `submitZkProof` with a serialised ZK proof → on-chain verifier
- *    validates and writes/updates `ZkVerificationRecord`.
- * 3. Application/program checks `verifyComplianceStatus` before allowing
- *    restricted operations.
- * 4. Admin calls `disableZkCompliance` to clear the flag (PDA preserved).
+ * **ZK Compliance pattern**: call `submitZkProof` for users that have cleared
+ * off-chain compliance checks. The resulting `VerificationRecord` PDA is
+ * checked by the transfer hook on every transfer when `FLAG_ZK_COMPLIANCE` is set.
+ * Records expire after `ttlSlots` and must be refreshed.
  *
  * @example
  * ```ts
@@ -148,33 +122,30 @@ export interface VerifyComplianceStatusParams {
  *
  * const zk = new ZkComplianceModule(provider, programId);
  *
- * // 1. Enable
- * await zk.enableZkCompliance({ mint, verifierKey, proofExpirySeconds: 86400 });
+ * // Initialize (authority, SSS-2 only)
+ * await zk.initZkCompliance({ mint, ttlSlots: 1500 });
  *
- * // 2. User submits proof
- * await zk.submitZkProof({ mint, proofData: myProofBytes });
+ * // Submit proof on behalf of a user (after off-chain verification)
+ * await zk.submitZkProof({ mint, user: userPubkey });
  *
- * // 3. Check status
- * const status = await zk.verifyComplianceStatus({ mint });
- * console.log(status?.isValid); // true
+ * // Check if a record is still valid
+ * const valid = await zk.isVerificationValid(mint, userPubkey);
  *
- * // 4. Disable
- * await zk.disableZkCompliance({ mint });
+ * // Fetch the record details
+ * const record = await zk.fetchVerificationRecord(mint, userPubkey);
  * ```
  */
 export class ZkComplianceModule {
   private readonly provider: AnchorProvider;
   private readonly programId: PublicKey;
 
-  static readonly CONFIG_SEED         = Buffer.from('stablecoin-config');
-  static readonly ZK_COMPLIANCE_SEED  = Buffer.from('zk-compliance');
-  static readonly ZK_VERIFICATION_SEED = Buffer.from('zk-verification');
-
-  /** Default proof expiry: 30 days in seconds. */
-  static readonly DEFAULT_PROOF_EXPIRY_SECONDS = 2_592_000;
+  static readonly CONFIG_SEED       = Buffer.from('stablecoin-config');
+  static readonly ZK_CONFIG_SEED    = Buffer.from('zk-compliance-config');
+  static readonly VERIFICATION_SEED = Buffer.from('zk-verification');
 
   /**
-   * @param provider   Anchor provider (wallet used as signer for write ops).
+   * @param provider   Anchor provider (wallet must be the admin authority to
+   *                   call `initZkCompliance` or `closeVerificationRecord`).
    * @param programId  SSS token program ID.
    */
   constructor(provider: AnchorProvider, programId: PublicKey) {
@@ -186,8 +157,6 @@ export class ZkComplianceModule {
 
   /**
    * Derive the `StablecoinConfig` PDA for the given mint.
-   *
-   * Seeds: `[b"stablecoin-config", mint]`
    */
   getConfigPda(mint: PublicKey): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
@@ -198,24 +167,22 @@ export class ZkComplianceModule {
 
   /**
    * Derive the `ZkComplianceConfig` PDA for the given mint.
-   *
-   * Seeds: `[b"zk-compliance", mint]`
+   * Seeds: `["zk-compliance-config", mint]`
    */
-  getZkCompliancePda(mint: PublicKey): [PublicKey, number] {
+  getZkConfigPda(mint: PublicKey): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
-      [ZkComplianceModule.ZK_COMPLIANCE_SEED, mint.toBuffer()],
+      [ZkComplianceModule.ZK_CONFIG_SEED, mint.toBuffer()],
       this.programId
     );
   }
 
   /**
-   * Derive the `ZkVerificationRecord` PDA for a specific user and mint.
-   *
-   * Seeds: `[b"zk-verification", mint, user]`
+   * Derive the `VerificationRecord` PDA for a specific (mint, user) pair.
+   * Seeds: `["zk-verification", mint, user]`
    */
   getVerificationRecordPda(mint: PublicKey, user: PublicKey): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
-      [ZkComplianceModule.ZK_VERIFICATION_SEED, mint.toBuffer(), user.toBuffer()],
+      [ZkComplianceModule.VERIFICATION_SEED, mint.toBuffer(), user.toBuffer()],
       this.programId
     );
   }
@@ -223,199 +190,261 @@ export class ZkComplianceModule {
   // ─── Writes ──────────────────────────────────────────────────────────────
 
   /**
-   * Enable ZK compliance for this mint.
+   * Initialize the `ZkComplianceConfig` PDA for a stablecoin mint.
    *
-   * Calls `init_zk_compliance` — creates the `ZkComplianceConfig` PDA and
-   * atomically sets `FLAG_ZK_COMPLIANCE` on the `StablecoinConfig`.
+   * Atomically enables `FLAG_ZK_COMPLIANCE` on the `StablecoinConfig`.
+   * Only valid for SSS-2 (compliant) stablecoins.
+   * The wallet in `provider` must be the admin authority.
    *
-   * Authority only. Fails if the PDA already exists (call `set_feature_flag`
-   * directly to re-enable without re-initialising).
-   *
-   * @param params  `{ mint, verifierKey, proofExpirySeconds? }`
+   * @param params  `{ mint, ttlSlots }` — mint and optional TTL.
    * @returns       Transaction signature.
+   * @throws        If the signer is not the admin authority, or mint is not SSS-2.
    */
-  async enableZkCompliance(params: EnableZkComplianceParams): Promise<TransactionSignature> {
-    const {
-      mint,
-      verifierKey,
-      proofExpirySeconds = ZkComplianceModule.DEFAULT_PROOF_EXPIRY_SECONDS,
-    } = params;
+  async initZkCompliance(params: InitZkComplianceParams): Promise<TransactionSignature> {
+    const { mint, ttlSlots = 0 } = params;
     const program = await this._loadProgram();
     const [config] = this.getConfigPda(mint);
-    const [zkComplianceConfig] = this.getZkCompliancePda(mint);
+    const [zkComplianceConfig] = this.getZkConfigPda(mint);
 
     return program.methods
-      .initZkCompliance(verifierKey, proofExpirySeconds)
+      .initZkCompliance(new BN(ttlSlots))
       .accounts({
         authority: this.provider.wallet.publicKey,
         mint,
         config,
         zkComplianceConfig,
-        systemProgram: PublicKey.default,
       })
       .rpc({ commitment: 'confirmed' });
   }
 
   /**
-   * Disable ZK compliance for this mint.
+   * Submit or refresh a ZK proof for a user.
    *
-   * Calls `clear_feature_flag` with `FLAG_ZK_COMPLIANCE`. The
-   * `ZkComplianceConfig` PDA is **not** closed — it remains on-chain so the
-   * verifier key and expiry settings are preserved if the feature is
-   * re-enabled later.
+   * Creates or updates the `VerificationRecord` PDA with an expiry of
+   * `currentSlot + ttlSlots`. In production, this should only be called
+   * after the compliance oracle has verified the proof off-chain.
    *
-   * Authority only.
+   * Any wallet may call this instruction (user pays rent if creating).
    *
-   * @param params  `{ mint }`
-   * @returns       Transaction signature.
-   */
-  async disableZkCompliance(params: DisableZkComplianceParams): Promise<TransactionSignature> {
-    const { mint } = params;
-    const program = await this._loadProgram();
-    const [config] = this.getConfigPda(mint);
-
-    return program.methods
-      .clearFeatureFlag(FLAG_ZK_COMPLIANCE.toString())
-      .accounts({
-        authority: this.provider.wallet.publicKey,
-        mint,
-        config,
-      })
-      .rpc({ commitment: 'confirmed' });
-  }
-
-  /**
-   * Submit a zero-knowledge compliance proof.
-   *
-   * Calls `submit_zk_proof` — validates the proof on-chain using the
-   * registered verifier key and writes (or refreshes) the
-   * `ZkVerificationRecord` PDA for the user.
-   *
-   * Requires `FLAG_ZK_COMPLIANCE` to be active on the stablecoin config.
-   * The user defaults to the connected wallet if not specified.
-   *
-   * @param params  `{ mint, proofData, user?, publicInputs? }`
+   * @param params  `{ mint, user }` — mint and optional user (defaults to wallet).
    * @returns       Transaction signature.
    */
   async submitZkProof(params: SubmitZkProofParams): Promise<TransactionSignature> {
-    const { mint, proofData, publicInputs = new Uint8Array(0) } = params;
+    const { mint } = params;
     const user = params.user ?? this.provider.wallet.publicKey;
     const program = await this._loadProgram();
     const [config] = this.getConfigPda(mint);
-    const [zkComplianceConfig] = this.getZkCompliancePda(mint);
+    const [zkComplianceConfig] = this.getZkConfigPda(mint);
     const [verificationRecord] = this.getVerificationRecordPda(mint, user);
 
     return program.methods
-      .submitZkProof(Array.from(proofData), Array.from(publicInputs))
+      .submitZkProof()
       .accounts({
-        user,
+        user: user,  // use the resolved user param, not hardcoded wallet
         mint,
         config,
         zkComplianceConfig,
         verificationRecord,
-        systemProgram: PublicKey.default,
       })
       .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Close an expired `VerificationRecord` PDA, returning rent to authority.
+   *
+   * Fails if the record has not yet expired.
+   * The wallet in `provider` must be the admin authority.
+   *
+   * @param params  `{ mint, recordOwner }` — mint and wallet whose record to close.
+   * @returns       Transaction signature.
+   */
+  async closeVerificationRecord(
+    params: CloseVerificationRecordParams
+  ): Promise<TransactionSignature> {
+    const { mint, recordOwner } = params;
+    const program = await this._loadProgram();
+    const [config] = this.getConfigPda(mint);
+    const [verificationRecord] = this.getVerificationRecordPda(mint, recordOwner);
+
+    return program.methods
+      .closeVerificationRecord()
+      .accounts({
+        authority: this.provider.wallet.publicKey,
+        mint,
+        config,
+        recordOwner,
+        verificationRecord,
+      })
+      .rpc({ commitment: 'confirmed' });
+  }
+
+  /**
+   * Execute a compliant transfer via Token-2022's transfer-checked instruction.
+   *
+   * When `preflight` is enabled (default), checks the sender's
+   * `VerificationRecord` client-side before sending — providing a cleaner
+   * error than waiting for the transfer hook to reject the transaction.
+   *
+   * @param params  Transfer parameters including source, destination, and amount.
+   * @returns       Transaction signature.
+   * @throws        `SSSError` with code `ZK_RECORD_MISSING` or `ZK_RECORD_EXPIRED`
+   *                if preflight fails.
+   */
+  async executeCompliantTransfer(
+    params: ExecuteCompliantTransferParams
+  ): Promise<TransactionSignature> {
+    const { mint, source, destination, amount, preflight = true } = params;
+    const senderWallet = this.provider.wallet.publicKey;
+
+    if (preflight) {
+      const valid = await this.isVerificationValid(mint, senderWallet);
+      if (!valid) {
+        throw new Error(
+          `ZkCompliance: VerificationRecord for ${senderWallet.toBase58()} on mint ` +
+          `${mint.toBase58()} is missing or expired. Call submitZkProof first.`
+        );
+      }
+    }
+
+    const { transferChecked, getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } =
+      await import('@solana/spl-token');
+
+    // Fetch decimals from mint account
+    const mintInfo = await this.provider.connection.getAccountInfo(mint);
+    if (!mintInfo) throw new Error(`Mint account not found: ${mint.toBase58()}`);
+    // Token-2022 Mint layout: discriminator(1) + ...decimals at offset 44
+    const decimals = mintInfo.data[44];
+
+    // Pass amount as bigint directly — avoids Number() precision loss for large values.
+    return transferChecked(
+      this.provider.connection,
+      (this.provider.wallet as any).payer ?? (this.provider.wallet as any),
+      source,
+      mint,
+      destination,
+      senderWallet,
+      amount,
+      decimals,
+      [],
+      { commitment: 'confirmed' },
+      TOKEN_2022_PROGRAM_ID
+    );
   }
 
   // ─── Reads ───────────────────────────────────────────────────────────────
 
   /**
-   * Fetch and decode the `ZkComplianceConfig` PDA from on-chain.
+   * Check whether a user's `VerificationRecord` exists and has not expired.
    *
-   * Returns `null` if the account has not been initialised yet
-   * (`enableZkCompliance` not called, or wrong mint).
+   * Reads the raw on-chain account and compares `expires_at_slot` to the
+   * current slot. Returns `false` if the account does not exist.
    *
    * @param mint  The stablecoin mint.
+   * @param user  The wallet to check.
+   * @returns     `true` if the record exists and is not expired.
    */
-  async fetchZkComplianceState(mint: PublicKey): Promise<ZkComplianceState | null> {
-    const program = await this._loadProgram();
-    const [pda] = this.getZkCompliancePda(mint);
-    try {
-      const raw = await program.account.zkComplianceConfig.fetch(pda);
-      return {
-        sssMint: raw.sssMint as PublicKey,
-        verifierKey: raw.verifierKey as PublicKey,
-        proofExpirySeconds: Number(raw.proofExpirySeconds),
-        bump: raw.bump as number,
-      };
-    } catch {
-      return null;
-    }
+  async isVerificationValid(mint: PublicKey, user: PublicKey): Promise<boolean> {
+    const record = await this._fetchRawVerificationRecord(mint, user);
+    if (!record) return false;
+    const currentSlot = await this.provider.connection.getSlot('finalized');
+    return currentSlot < record.expiresAtSlot;
   }
 
   /**
-   * Fetch and decode a `ZkVerificationRecord` for a specific user.
+   * Fetch and decode a `VerificationRecord` account.
    *
-   * Returns `null` if the user has not submitted a proof yet.
+   * Returns `null` if the account does not exist.
    *
    * @param mint  The stablecoin mint.
-   * @param user  The user whose record to fetch. Defaults to provider wallet.
+   * @param user  The wallet to look up.
    */
   async fetchVerificationRecord(
     mint: PublicKey,
-    user?: PublicKey
-  ): Promise<ZkVerificationRecord | null> {
-    const resolvedUser = user ?? this.provider.wallet.publicKey;
-    const program = await this._loadProgram();
-    const [pda] = this.getVerificationRecordPda(mint, resolvedUser);
-    try {
-      const raw = await program.account.zkVerificationRecord.fetch(pda);
-      const verifiedAt = Number(raw.verifiedAt);
-      const expiresAt = Number(raw.expiresAt);
-      const nowSec = Math.floor(Date.now() / 1000);
-      return {
-        sssMint: raw.sssMint as PublicKey,
-        user: raw.user as PublicKey,
-        verifiedAt,
-        expiresAt,
-        isValid: expiresAt > nowSec,
-        bump: raw.bump as number,
-      };
-    } catch {
-      return null;
-    }
+    user: PublicKey
+  ): Promise<VerificationRecordAccount | null> {
+    return this._fetchRawVerificationRecord(mint, user);
   }
 
   /**
-   * Check whether `FLAG_ZK_COMPLIANCE` is currently set for a mint.
+   * Fetch and decode a `ZkComplianceConfig` account.
    *
-   * Reads `StablecoinConfig.feature_flags` from on-chain. Returns `false`
-   * if the config account does not exist.
+   * Returns `null` if the account has not been initialized.
    *
    * @param mint  The stablecoin mint.
    */
-  async isZkComplianceEnabled(mint: PublicKey): Promise<boolean> {
-    const program = await this._loadProgram();
-    const [configPda] = this.getConfigPda(mint);
-    try {
-      const config = await program.account.stablecoinConfig.fetch(configPda);
-      const flags = BigInt(config.featureFlags.toString());
-      return (flags & FLAG_ZK_COMPLIANCE) !== 0n;
-    } catch {
-      return false;
-    }
+  async fetchZkConfig(mint: PublicKey): Promise<ZkComplianceConfigAccount | null> {
+    const [pda] = this.getZkConfigPda(mint);
+    const accountInfo = await this.provider.connection.getAccountInfo(pda);
+    if (!accountInfo) return null;
+    return this._decodeZkConfig(accountInfo.data);
   }
 
   /**
-   * Verify the compliance status of a user.
+   * Read the slots-to-live setting from the on-chain `ZkComplianceConfig`.
+   * Returns `null` if the config has not been initialized.
    *
-   * Convenience wrapper around `fetchVerificationRecord` that checks both
-   * existence and expiry. Returns the record if valid, `null` otherwise.
-   *
-   * @param params  `{ mint, user? }`
+   * @param mint  The stablecoin mint.
    */
-  async verifyComplianceStatus(
-    params: VerifyComplianceStatusParams
-  ): Promise<ZkVerificationRecord | null> {
-    const { mint } = params;
-    const user = params.user ?? this.provider.wallet.publicKey;
-    const record = await this.fetchVerificationRecord(mint, user);
-    if (!record || !record.isValid) return null;
-    return record;
+  async getTtlSlots(mint: PublicKey): Promise<bigint | null> {
+    const config = await this.fetchZkConfig(mint);
+    return config?.ttlSlots ?? null;
   }
 
   // ─── Internals ───────────────────────────────────────────────────────────
+
+  /**
+   * Parse a `VerificationRecord` from raw account data.
+   *
+   * Layout (Borsh, after 8-byte Anchor discriminator):
+   * ```
+   * [0..8]   discriminator  (8 bytes)
+   * [8..40]  sss_mint       (Pubkey, 32 bytes)
+   * [40..72] user           (Pubkey, 32 bytes)
+   * [72..80] expires_at_slot (u64 LE, 8 bytes)
+   * [80]     bump           (u8, 1 byte)
+   * ```
+   * @internal
+   */
+  private _decodeVerificationRecord(data: Buffer): VerificationRecordAccount {
+    const sssMint = new PublicKey(data.subarray(8, 40));
+    const user    = new PublicKey(data.subarray(40, 72));
+    const expiresAtSlot = data.readBigUInt64LE(72);
+    const bump    = data[80];
+    return { sssMint, user, expiresAtSlot, bump };
+  }
+
+  /**
+   * Parse a `ZkComplianceConfig` from raw account data.
+   *
+   * Layout (Borsh, after 8-byte Anchor discriminator):
+   * ```
+   * [0..8]   discriminator  (8 bytes)
+   * [8..40]  sss_mint       (Pubkey, 32 bytes)
+   * [40..48] ttl_slots      (u64 LE, 8 bytes)
+   * [48]     bump           (u8, 1 byte)
+   * ```
+   * @internal
+   */
+  private _decodeZkConfig(data: Buffer): ZkComplianceConfigAccount {
+    const sssMint  = new PublicKey(data.subarray(8, 40));
+    const ttlSlots = data.readBigUInt64LE(40);
+    const bump     = data[48];
+    return { sssMint, ttlSlots, bump };
+  }
+
+  /**
+   * Fetch and decode a VerificationRecord from on-chain, or return null.
+   * @internal
+   */
+  private async _fetchRawVerificationRecord(
+    mint: PublicKey,
+    user: PublicKey
+  ): Promise<VerificationRecordAccount | null> {
+    const [pda] = this.getVerificationRecordPda(mint, user);
+    const accountInfo = await this.provider.connection.getAccountInfo(pda);
+    if (!accountInfo || accountInfo.data.length < 81) return null;
+    return this._decodeVerificationRecord(accountInfo.data);
+  }
 
   /**
    * Lazy-load + cache the Anchor program instance.
@@ -426,7 +455,12 @@ export class ZkComplianceModule {
     if (this._program) return this._program;
     const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
     const idl = await import('./idl/sss_token.json');
-    this._program = new AnchorProgram(idl as any, this.provider) as any;
+    // Override IDL-embedded address with the constructor programId so custom
+    // deployments (e.g. devnet custom address) work without IDL edits.
+    this._program = new AnchorProgram(
+      { ...idl as any, address: this.programId.toBase58() },
+      this.provider
+    ) as any;
     return this._program;
   }
 }

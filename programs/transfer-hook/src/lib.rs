@@ -40,6 +40,21 @@ const MAX_TRANSFER_AMOUNT_OFFSET: usize = 306;
 /// FLAG_SPEND_POLICY bit in feature_flags (bit 1 = 1 << 1).
 const FLAG_SPEND_POLICY: u64 = 1 << 1;
 
+/// FLAG_ZK_COMPLIANCE bit in feature_flags (bit 4 = 1 << 4).
+const FLAG_ZK_COMPLIANCE: u64 = 1 << 4;
+
+/// PDA seed for VerificationRecord in the sss-token program.
+const ZK_VERIFICATION_SEED: &[u8] = b"zk-verification";
+
+/// Byte offsets within VerificationRecord account data (Borsh layout):
+///   discriminator          8  @ 0
+///   sss_mint  Pubkey      32  @ 8
+///   user      Pubkey      32  @ 40
+///   expires_at_slot u64    8  @ 72
+///   bump      u8           1  @ 80
+const ZK_RECORD_EXPIRES_OFFSET: usize = 72;
+const ZK_RECORD_MIN_SIZE: usize = 80;
+
 /// PDA seed for StablecoinConfig in the sss-token program.
 const STABLECOIN_CONFIG_SEED: &[u8] = b"stablecoin-config";
 
@@ -151,6 +166,50 @@ pub mod sss_transfer_hook {
                     max_transfer_amount
                 );
             }
+
+            // --- ZK compliance check ---
+            // If FLAG_ZK_COMPLIANCE is set, the sender must have a valid, non-expired
+            // VerificationRecord PDA at seeds [b"zk-verification", mint, src_owner].
+            if feature_flags & FLAG_ZK_COMPLIANCE != 0 {
+                let vr_account = &ctx.accounts.verification_record;
+                // Verify the PDA address
+                // Use the transfer authority (owner at account index 3) for VR PDA derivation.
+                // For delegated transfers, index 3 is the delegate — the party
+                // executing the transfer and required to hold a valid VerificationRecord.
+                // This matches the ExtraAccountMeta registration which uses index 3.
+                let (expected_vr_pda, _bump) = Pubkey::find_program_address(
+                    &[
+                        ZK_VERIFICATION_SEED,
+                        ctx.accounts.mint.key().as_ref(),
+                        ctx.accounts.owner.key().as_ref(),
+                    ],
+                    &sss_token_program::ID,
+                );
+                require!(
+                    vr_account.key() == expected_vr_pda,
+                    HookError::ZkRecordMissing
+                );
+                let vr_data = vr_account.try_borrow_data()?;
+                require!(
+                    vr_data.len() >= ZK_RECORD_MIN_SIZE,
+                    HookError::ZkRecordMissing
+                );
+                let clock = Clock::get()?;
+                let expires_at = u64::from_le_bytes(
+                    vr_data[ZK_RECORD_EXPIRES_OFFSET..ZK_RECORD_EXPIRES_OFFSET + 8]
+                        .try_into()
+                        .unwrap(),
+                );
+                require!(
+                    clock.slot < expires_at,
+                    HookError::ZkRecordExpired
+                );
+                msg!(
+                    "ZkCompliance OK: sender {} verified until slot {}",
+                    src_owner,
+                    expires_at
+                );
+            }
         }
 
         msg!("Transfer hook: {} tokens OK", amount);
@@ -167,8 +226,9 @@ pub mod sss_transfer_hook {
     /// transfer to know which additional accounts to resolve and forward.
     ///
     /// Extra accounts registered (resolved by Token-2022 at transfer time):
-    ///   5. blacklist_state   — seeds [b"blacklist-state", mint (index 1)]
-    ///   6. stablecoin_config — seeds [b"stablecoin-config", mint (index 1)] (sss-token program)
+    ///   5. blacklist_state        — seeds [b"blacklist-state", mint (index 1)]
+    ///   6. stablecoin_config      — seeds [b"stablecoin-config", mint (index 1)] (sss-token program)
+    ///   7. verification_record    — seeds [b"zk-verification", mint (index 1), owner (index 3)] (sss-token program)
     pub fn initialize_extra_account_meta_list(
         ctx: Context<InitializeExtraAccountMetaList>,
     ) -> Result<()> {
@@ -205,32 +265,51 @@ pub mod sss_transfer_hook {
                 false, // is_signer
                 false, // is_writable
             )?,
+            // verification_record PDA: seeds = [b"zk-verification", mint (index 1), owner (index 3)]
+            // owned by sss-token program — only enforced when FLAG_ZK_COMPLIANCE is set
+            ExtraAccountMeta::new_with_seeds(
+                &[
+                    Seed::Literal {
+                        bytes: b"zk-verification".to_vec(),
+                    },
+                    Seed::AccountKey { index: 1 }, // mint is at index 1
+                    Seed::AccountKey { index: 3 }, // owner (source owner) is at index 3
+                ],
+                false, // is_signer
+                false, // is_writable
+            )?,
         ];
 
         // Calculate space required for the ExtraAccountMetaList TLV data
-        let account_size = ExtraAccountMetaList::size_of(account_metas.len())? as u64;
+        let account_size = ExtraAccountMetaList::size_of(account_metas.len())? as usize;
 
-        // Fund the extra_account_meta_list PDA
+        // Create the extra_account_meta_list account with the correct size upfront.
+        // Using create_account (not transfer+realloc) so the account is allocated
+        // and owned by this program in a single CPI, avoiding the two-step
+        // "transfer then realloc" which fails on system-owned accounts.
         let rent = Rent::get()?;
-        let lamports = rent.minimum_balance(account_size as usize);
-
-        system_program::transfer(
-            CpiContext::new(
+        let lamports = rent.minimum_balance(account_size);
+        let (_, bump_seed) = Pubkey::find_program_address(
+            &[b"extra-account-metas", ctx.accounts.mint.key().as_ref()],
+            ctx.program_id,
+        );
+        system_program::create_account(
+            CpiContext::new_with_signer(
                 ctx.accounts.system_program.to_account_info(),
-                system_program::Transfer {
+                system_program::CreateAccount {
                     from: ctx.accounts.authority.to_account_info(),
                     to: ctx.accounts.extra_account_meta_list.to_account_info(),
                 },
+                &[&[
+                    b"extra-account-metas",
+                    ctx.accounts.mint.key().as_ref(),
+                    &[bump_seed],
+                ]],
             ),
             lamports,
+            account_size as u64,
+            ctx.program_id,
         )?;
-
-        // Allocate space
-        {
-            let extra_meta_info = ctx.accounts.extra_account_meta_list.to_account_info();
-            extra_meta_info.realloc(account_size as usize, false)
-                .map_err(|_| error!(HookError::SenderBlacklisted))?;
-        }
 
         // Write the ExtraAccountMetaList data
         {
@@ -274,6 +353,81 @@ pub mod sss_transfer_hook {
         msg!("Removed {} from blacklist", address);
         Ok(())
     }
+
+    /// Migrate the ExtraAccountMetaList to include the ZK VerificationRecord slot.
+    ///
+    /// Required for SSS-2 mints initialized before SSS-075 (ZK compliance).
+    /// The original ExtraAccountMetaList had 2 extra accounts; after migration
+    /// it has 3 (adding the verification_record PDA at index 7).
+    ///
+    /// Must be called by the blacklist authority before enabling FLAG_ZK_COMPLIANCE
+    /// on an existing mint.
+    pub fn migrate_hook_extra_accounts(ctx: Context<MigrateHookExtraAccounts>) -> Result<()> {
+        let account_metas = vec![
+            ExtraAccountMeta::new_with_seeds(
+                &[
+                    Seed::Literal { bytes: b"blacklist-state".to_vec() },
+                    Seed::AccountKey { index: 1 },
+                ],
+                false,
+                false,
+            )?,
+            ExtraAccountMeta::new_with_seeds(
+                &[
+                    Seed::Literal { bytes: b"stablecoin-config".to_vec() },
+                    Seed::AccountKey { index: 1 },
+                ],
+                false,
+                false,
+            )?,
+            ExtraAccountMeta::new_with_seeds(
+                &[
+                    Seed::Literal { bytes: b"zk-verification".to_vec() },
+                    Seed::AccountKey { index: 1 }, // mint
+                    Seed::AccountKey { index: 3 }, // owner/delegate
+                ],
+                false,
+                false,
+            )?,
+        ];
+
+        let new_size = ExtraAccountMetaList::size_of(account_metas.len())? as usize;
+        let extra_meta_info = ctx.accounts.extra_account_meta_list.to_account_info();
+        let current_size = extra_meta_info.data_len();
+
+        // Realloc and re-fund if necessary
+        if new_size > current_size {
+            let rent = Rent::get()?;
+            let current_lamports = extra_meta_info.lamports();
+            let required_lamports = rent.minimum_balance(new_size);
+            if required_lamports > current_lamports {
+                let diff = required_lamports.saturating_sub(current_lamports);
+                system_program::transfer(
+                    CpiContext::new(
+                        ctx.accounts.system_program.to_account_info(),
+                        system_program::Transfer {
+                            from: ctx.accounts.authority.to_account_info(),
+                            to: extra_meta_info.clone(),
+                        },
+                    ),
+                    diff,
+                )?;
+            }
+            extra_meta_info.realloc(new_size, false)
+                .map_err(|_| error!(HookError::InvalidConfig))?;
+        }
+
+        {
+            let mut data = ctx.accounts.extra_account_meta_list.try_borrow_mut_data()?;
+            ExtraAccountMetaList::init::<ExecuteInstruction>(&mut data, &account_metas)?;
+        }
+
+        msg!(
+            "TransferHook: migrated ExtraAccountMetaList for mint {} to include verification_record slot",
+            ctx.accounts.mint.key()
+        );
+        Ok(())
+    }
 }
 
 #[error_code]
@@ -288,6 +442,10 @@ pub enum HookError {
     SpendLimitExceeded,
     #[msg("Invalid stablecoin config account (wrong discriminator or size)")]
     InvalidConfig,
+    #[msg("ZK compliance: sender has no valid verification record")]
+    ZkRecordMissing,
+    #[msg("ZK compliance: sender's verification record has expired")]
+    ZkRecordExpired,
 }
 
 /// Blacklist state PDA for a given mint.
@@ -318,8 +476,9 @@ impl BlacklistState {
 ///   2. destination_token_account
 ///   3. owner (source owner/delegate)
 ///   4. extra_account_meta_list (validation account, passed by Token-2022)
-///   5. blacklist_state   — resolved by Token-2022 from extra_account_meta_list
-///   6. stablecoin_config — resolved by Token-2022 from extra_account_meta_list
+///   5. blacklist_state        — resolved by Token-2022 from extra_account_meta_list
+///   6. stablecoin_config      — resolved by Token-2022 from extra_account_meta_list
+///   7. verification_record    — resolved by Token-2022 from extra_account_meta_list
 ///
 /// All of 0-4 are passed and validated by Token-2022 itself; we use
 /// UncheckedAccount + CHECK comments as required by Anchor's safety linter.
@@ -355,6 +514,13 @@ pub struct TransferHook<'info> {
     /// Resolved by Token-2022 from extra_account_meta_list. We manually verify the
     /// PDA address and discriminator in transfer_hook before reading feature_flags.
     pub stablecoin_config: UncheckedAccount<'info>,
+
+    /// CHECK: VerificationRecord PDA from sss-token program —
+    /// seeds [b"zk-verification", mint, source_owner].
+    /// Resolved by Token-2022 from extra_account_meta_list (index 7).
+    /// Only enforced when FLAG_ZK_COMPLIANCE is set; we manually verify PDA
+    /// address and expiry in transfer_hook.
+    pub verification_record: UncheckedAccount<'info>,
 }
 
 /// Accounts for initializing the ExtraAccountMetaList and blacklist state.
@@ -404,4 +570,33 @@ pub struct ManageBlacklist<'info> {
         constraint = blacklist_state.authority == authority.key() @ HookError::Unauthorized,
     )]
     pub blacklist_state: Account<'info, BlacklistState>,
+}
+
+/// Accounts for migrating the ExtraAccountMetaList to include the ZK
+/// VerificationRecord slot (needed for mints initialized before SSS-075).
+#[derive(Accounts)]
+pub struct MigrateHookExtraAccounts<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    /// CHECK: The Token-2022 mint
+    pub mint: UncheckedAccount<'info>,
+
+    /// CHECK: The canonical extra-account-metas PDA. We rewrite it.
+    #[account(
+        mut,
+        seeds = [b"extra-account-metas", mint.key().as_ref()],
+        bump,
+    )]
+    pub extra_account_meta_list: UncheckedAccount<'info>,
+
+    /// Blacklist state — validates caller is the authority
+    #[account(
+        seeds = [BlacklistState::SEED, mint.key().as_ref()],
+        bump = blacklist_state.bump,
+        constraint = blacklist_state.authority == authority.key() @ HookError::Unauthorized,
+    )]
+    pub blacklist_state: Account<'info, BlacklistState>,
+
+    pub system_program: Program<'info, System>,
 }

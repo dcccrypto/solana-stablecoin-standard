@@ -109,22 +109,47 @@ Removes a public key from the blacklist. Transfers to/from this address will be 
 
 This instruction is called automatically by Token-2022 on every transfer for an SSS-2 mint. **Do not call it directly** — it requires the Token-2022 CPI calling convention.
 
-**Behavior:**
+**Behavior (SSS-075+):**
 1. Loads the `BlacklistState` PDA for the mint.
-2. Checks `blacklist_state.is_blacklisted(source_token_account.owner)`.
-3. Checks `blacklist_state.is_blacklisted(destination_token_account.owner)`.
-4. If either check is true → returns `HookError::SenderBlacklisted` or `HookError::ReceiverBlacklisted`.
+2. Checks `blacklist_state.is_blacklisted(source_token_account.owner)` → rejects with `SenderBlacklisted` if true.
+3. Checks `blacklist_state.is_blacklisted(destination_token_account.owner)` → rejects with `ReceiverBlacklisted` if true.
+4. **SSS-075 ZK gate:** If the `sss-token` config has `FLAG_ZK_COMPLIANCE` enabled:
+   - Loads the sender's `VerificationRecord` PDA (`["zk-verification", mint, sender]`).
+   - If the record is missing → rejects with `VerificationRecordMissing`.
+   - If `record.expires_at_slot <= Clock::slot` → rejects with `VerificationExpired`.
 5. Otherwise → logs `"Transfer hook: <amount> tokens OK"` and returns `Ok(())`.
+
+---
+
+### `migrate_hook_extra_accounts`
+
+> **Added in SSS-075.** Use this to upgrade mints initialized before SSS-075 was deployed.
+
+Pre-SSS-075 mints may have the `ExtraAccountMetaList` initialized via `transfer+realloc` instead of the corrected `create_account` CPI. This instruction re-initializes the `ExtraAccountMetaList` PDA to the updated format required by the SSS-075 hook.
+
+**Accounts**
+
+| Name                        | Writable | Signer | Description |
+|-----------------------------|----------|--------|-------------|
+| `authority`                 | ✅       | ✅     | Blacklist authority for this mint |
+| `mint`                      | ❌       | ❌     | The Token-2022 mint |
+| `blacklist_state`           | ❌       | ❌     | Existing `BlacklistState` PDA |
+| `extra_account_meta_list`   | ✅       | ❌     | PDA to migrate (`seeds = ["extra-account-metas", mint]`) |
+| `system_program`            | ❌       | ❌     | System program |
+
+**When to call:** Only required for SSS-2 mints created before the SSS-075 program upgrade. New mints deployed after SSS-075 do not need this.
 
 ---
 
 ## Error Codes
 
-| Code                   | Value | Message                   |
-|------------------------|-------|---------------------------|
-| `SenderBlacklisted`    | 6000  | Sender is blacklisted      |
-| `ReceiverBlacklisted`  | 6001  | Receiver is blacklisted    |
-| `Unauthorized`         | 6002  | Unauthorized               |
+| Code                          | Value | Message |
+|-------------------------------|-------|---------|
+| `SenderBlacklisted`           | 6000  | Sender is blacklisted |
+| `ReceiverBlacklisted`         | 6001  | Receiver is blacklisted |
+| `Unauthorized`                | 6002  | Unauthorized |
+| `VerificationRecordMissing`   | —     | ZK: sender has no verification record |
+| `VerificationExpired`         | —     | ZK: sender's verification record has expired |
 
 ---
 
