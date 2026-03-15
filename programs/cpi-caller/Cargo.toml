@@ -1,0 +1,22 @@
+[package]
+name = "cpi-caller"
+version = "0.1.0"
+description = "SSS-055 integration test: external program that CPIs into SSS mint/burn"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "cpi_caller"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { workspace = true }
+anchor-spl = { workspace = true }
+sss-token = { path = "../sss-token", features = ["cpi"] }

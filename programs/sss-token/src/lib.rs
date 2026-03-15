@@ -118,4 +118,38 @@ pub mod sss_token {
     pub fn cdp_liquidate(ctx: Context<CdpLiquidate>) -> Result<()> {
         instructions::cdp_liquidate::cdp_liquidate_handler(ctx)
     }
+
+    // ─── Direction 3: CPI Composability Standard ──────────────────────────────
+
+    /// Initialize the InterfaceVersion PDA for this mint.
+    /// One-time call by the stablecoin authority; required before `cpi_mint`/`cpi_burn`.
+    pub fn init_interface_version(ctx: Context<InitInterfaceVersion>) -> Result<()> {
+        instructions::interface_version::init_interface_version_handler(ctx)
+    }
+
+    /// Update the InterfaceVersion PDA (bump version or deprecate). Authority only.
+    pub fn update_interface_version(
+        ctx: Context<UpdateInterfaceVersion>,
+        new_version: Option<u8>,
+        active: Option<bool>,
+    ) -> Result<()> {
+        instructions::interface_version::update_interface_version_handler(
+            ctx,
+            new_version,
+            active,
+        )
+    }
+
+    /// Standardized CPI mint entrypoint.
+    /// External programs should call this instead of `mint` for forward-compatible integration.
+    /// `required_version` must match the on-chain InterfaceVersion — guards against silent breaks.
+    pub fn cpi_mint(ctx: Context<CpiMint>, amount: u64, required_version: u8) -> Result<()> {
+        instructions::cpi_mint::cpi_mint_handler(ctx, amount, required_version)
+    }
+
+    /// Standardized CPI burn entrypoint.
+    /// External programs should call this instead of `burn` for forward-compatible integration.
+    pub fn cpi_burn(ctx: Context<CpiBurn>, amount: u64, required_version: u8) -> Result<()> {
+        instructions::cpi_burn::cpi_burn_handler(ctx, amount, required_version)
+    }
 }
