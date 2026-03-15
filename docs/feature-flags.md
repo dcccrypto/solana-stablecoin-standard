@@ -1,7 +1,7 @@
 # SSS — Feature Flags Reference
 
 > **SDK class:** `FeatureFlagsModule` (`sdk/src/FeatureFlagsModule.ts`)
-> **Added:** SSS-059
+> **Added:** SSS-059 | **Updated:** SSS-060 (FLAG_SPEND_POLICY — SSS-063)
 
 ---
 
@@ -20,15 +20,23 @@ corresponding behaviour; clearing it deactivates it.
 
 | Constant | Bit | Hex | Description |
 |---|---|---|---|
-| `FLAG_CIRCUIT_BREAKER` | 7 | `0x80` | Halts all mint and burn operations for the token until cleared. |
+| `FLAG_CIRCUIT_BREAKER` | 0 | `0x01` | Halts all mint and burn operations for the token until cleared. |
+| `FLAG_SPEND_POLICY` | 1 | `0x02` | Enforces a per-transaction transfer cap (`max_transfer_amount`). Enabled atomically by `set_spend_limit`. |
 
-> **Reserved bits:** bits 0–6 and 8–63 are reserved for future protocol flags.
+> **Reserved bits:** bits 2–63 are reserved for future protocol flags.
 > Do not set them directly.
+
+---
 
 ### `FLAG_CIRCUIT_BREAKER`
 
 ```typescript
-export const FLAG_CIRCUIT_BREAKER = 1n << 7n; // 0x80
+export const FLAG_CIRCUIT_BREAKER = 1n << 0n; // 0x01
+```
+
+**Anchor constant:**
+```rust
+pub const FLAG_CIRCUIT_BREAKER: u64 = 1 << 0; // 0x01
 ```
 
 When `FLAG_CIRCUIT_BREAKER` is set in `StablecoinConfig.feature_flags`:
@@ -41,6 +49,36 @@ When `FLAG_CIRCUIT_BREAKER` is set in `StablecoinConfig.feature_flags`:
 
 **Use case:** emergency halt in response to an exploit or regulatory event,
 without a full pause (which also freezes governance operations).
+
+---
+
+### `FLAG_SPEND_POLICY`
+
+```typescript
+export const FLAG_SPEND_POLICY = 1n << 1n; // 0x02
+```
+
+**Anchor constant:**
+```rust
+pub const FLAG_SPEND_POLICY: u64 = 1 << 1; // 0x02
+```
+
+When `FLAG_SPEND_POLICY` is set in `StablecoinConfig.feature_flags`:
+
+- Every transfer instruction checks `transfer_amount <= config.max_transfer_amount`.
+- Transfers exceeding the cap are rejected with `SssError::SpendLimitExceeded`.
+- The cap is set atomically when calling `set_spend_limit` — the flag is never
+  left set with `max_transfer_amount == 0`.
+- Clearing is done via `clear_spend_limit`, which zeros `max_transfer_amount`
+  and clears the flag atomically.
+
+**Use case:** regulatory spend controls or rate-limiting per transaction for
+compliance-sensitive token issuers (SSS-2 / SSS-3 presets).
+
+> **Note:** `FLAG_SPEND_POLICY` is managed via the dedicated `set_spend_limit` /
+> `clear_spend_limit` instructions (not `set_feature_flag` / `clear_feature_flag`).
+> Setting it directly via `set_feature_flag` without configuring
+> `max_transfer_amount` first will leave the policy in an unconfigured state.
 
 ---
 
@@ -89,6 +127,9 @@ await ff.setFeatureFlag({ mint, flag: FLAG_CIRCUIT_BREAKER });
 Calls the `set_feature_flag` Anchor instruction.
 The connected wallet **must be the admin authority**.
 
+> **Note for `FLAG_SPEND_POLICY`:** use `set_spend_limit` (see below) rather
+> than `setFeatureFlag` to ensure `max_transfer_amount` is configured atomically.
+
 | Parameter | Type | Description |
 |---|---|---|
 | `mint` | `PublicKey` | Stablecoin mint address. |
@@ -111,6 +152,9 @@ await ff.clearFeatureFlag({ mint, flag: FLAG_CIRCUIT_BREAKER });
 
 Calls the `clear_feature_flag` Anchor instruction.
 The connected wallet **must be the admin authority**.
+
+> **Note for `FLAG_SPEND_POLICY`:** use `clear_spend_limit` (see below) to
+> zero `max_transfer_amount` atomically alongside clearing the flag.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -150,7 +194,7 @@ the config account does not exist.
 
 ```typescript
 const flags = await ff.getFeatureFlags(mint);
-console.log('Raw feature flags:', flags.toString(16)); // e.g. "80"
+console.log('Raw feature flags:', flags.toString(16)); // e.g. "03"
 ```
 
 **Returns:** `Promise<bigint>`
@@ -168,6 +212,56 @@ const [configPda, bump] = ff.getConfigPda(mint);
 Seeds: `["stablecoin-config", mint]` on `programId`.
 
 **Returns:** `[PublicKey, number]`
+
+---
+
+## Spend Policy Methods (via Anchor program directly)
+
+`FLAG_SPEND_POLICY` is managed through dedicated instructions that keep
+the flag and `max_transfer_amount` in sync atomically.
+
+### `set_spend_limit` (Anchor instruction)
+
+Set the per-transaction transfer cap and atomically enable `FLAG_SPEND_POLICY`.
+
+```typescript
+import { BN } from '@coral-xyz/anchor';
+
+const program = new Program(idl, provider);
+const [config] = PublicKey.findProgramAddressSync(
+  [Buffer.from('stablecoin-config'), mint.toBuffer()],
+  programId
+);
+
+// Set cap to 10,000 tokens (with 6 decimals = 10_000_000_000 raw)
+await program.methods
+  .setSpendLimit(new BN(10_000_000_000))
+  .accounts({ authority: provider.wallet.publicKey, mint, config })
+  .rpc({ commitment: 'confirmed' });
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `max_amount` | `u64` | Maximum tokens per transfer (raw units). Must be > 0. |
+
+**Errors:**
+- `SssError::SpendPolicyNotConfigured` — `max_amount` is 0.
+- `SssError::Unauthorized` — signer is not the admin authority.
+
+---
+
+### `clear_spend_limit` (Anchor instruction)
+
+Remove the spend cap and atomically clear `FLAG_SPEND_POLICY`.
+
+```typescript
+await program.methods
+  .clearSpendLimit()
+  .accounts({ authority: provider.wallet.publicKey, mint, config })
+  .rpc({ commitment: 'confirmed' });
+```
+
+**Returns:** `Promise<TransactionSignature>`
 
 ---
 
@@ -200,6 +294,58 @@ console.log('Circuit breaker cleared:', sig);
 
 const active = await ff.isFeatureFlagSet(mint, FLAG_CIRCUIT_BREAKER);
 console.assert(active === false);
+```
+
+---
+
+## Spend Policy Workflow
+
+### Enabling a spend limit
+
+```typescript
+import { Program } from '@coral-xyz/anchor';
+import { BN } from '@coral-xyz/anchor';
+
+const program = new Program(idl, provider);
+const [config] = PublicKey.findProgramAddressSync(
+  [Buffer.from('stablecoin-config'), mint.toBuffer()],
+  programId
+);
+
+// Cap transfers at 500 tokens (6 decimals = 500_000_000 raw)
+await program.methods
+  .setSpendLimit(new BN(500_000_000))
+  .accounts({ authority: provider.wallet.publicKey, mint, config })
+  .rpc({ commitment: 'confirmed' });
+
+// Verify the flag is now set
+const ff = new FeatureFlagsModule(provider, programId);
+const spendPolicyActive = await ff.isFeatureFlagSet(mint, FLAG_SPEND_POLICY);
+console.assert(spendPolicyActive === true);
+```
+
+### Removing the spend limit
+
+```typescript
+await program.methods
+  .clearSpendLimit()
+  .accounts({ authority: provider.wallet.publicKey, mint, config })
+  .rpc({ commitment: 'confirmed' });
+
+const spendPolicyActive = await ff.isFeatureFlagSet(mint, FLAG_SPEND_POLICY);
+console.assert(spendPolicyActive === false);
+```
+
+### Checking both flags
+
+```typescript
+const flags = await ff.getFeatureFlags(mint);
+const circuitBreakerOn = (flags & FLAG_CIRCUIT_BREAKER) !== 0n;
+const spendPolicyOn    = (flags & FLAG_SPEND_POLICY) !== 0n;
+
+console.log(`Circuit breaker: ${circuitBreakerOn}`);
+console.log(`Spend policy:    ${spendPolicyOn}`);
+console.log(`Raw bitmask:     0x${flags.toString(16).padStart(16, '0')}`);
 ```
 
 ---
@@ -241,6 +387,17 @@ sss-cli feature-flags clear \
 
 # Query flag status
 sss-cli feature-flags status --mint <MINT_ADDRESS>
+
+# Set spend limit (500 tokens with 6 decimals)
+sss-cli spend-policy set \
+  --mint <MINT_ADDRESS> \
+  --max-amount 500000000 \
+  --keypair /path/to/admin-keypair.json
+
+# Clear spend limit
+sss-cli spend-policy clear \
+  --mint <MINT_ADDRESS> \
+  --keypair /path/to/admin-keypair.json
 ```
 
 ---
