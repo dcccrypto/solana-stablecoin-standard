@@ -1,13 +1,26 @@
 # SSS Project — CONTEXT.md
 
-_Last updated: 2026-03-15 20:46 UTC_
+_Last updated: 2026-03-15 23:34 UTC_
 
 ## Current Status
 - All 5 feature flag bits 0–4 merged to develop ✅
 - SSS-085 (P0 security fixes): DONE ✅ — PR #103 merged to develop
-- SSS-086 (AdminTimelockModule SDK): DONE ✅ — PR #107 open (feat/SSS-086-admin-timelock-sdk → develop)
+- SSS-086 (AdminTimelockModule SDK): DONE ✅ — PR #107 open (awaiting QA/merge)
 - SSS-087 (docs): DONE ✅ — included in feat/SSS-086-admin-timelock-sdk branch (PR #107)
-- SSS-078 (devnet deployment): IN-PROGRESS — blocked on SOL balance (airdrop rate-limited, owned by sss-devops)
+- SSS-090 (oracle staleness + confidence): DONE ✅ — PR #113 MERGED to develop
+- SSS-091 (DefaultAccountState=Frozen): DONE ✅ — PR #109 MERGED to develop
+- SSS-092 (stability fee skeleton): DONE ✅ — merged to develop
+- SSS-093 (PSM fee + velocity limit): DONE ✅ — PR #116 OPEN (feature/SSS-093-psm-fee-velocity → develop)
+- SSS-094 (OracleParamsModule SDK): DONE ✅ — PR #108 open
+- SSS-095 (chain events docs): DONE ✅ — PRs #111, #115 open
+- SSS-096 (StabilityFeeModule SDK): DONE ✅ — PR #117 open
+- SSS-078 (devnet deployment): IN-PROGRESS — blocked on SOL balance (owned by sss-devops)
+
+## CI Status
+- develop branch: CI BROKEN — missing ADMIN_OP_NONE + DEFAULT_ADMIN_TIMELOCK_DELAY imports
+  → PR #120 (fix/sss-ci-initialize-imports) OPEN to fix — awaiting sss-devops merge
+- feature/SSS-093-psm-fee-velocity: 99 passing / 9 failing (pre-existing failures unrelated to SSS-093)
+  - Pre-existing failures: 3x CPI tests (Unknown action 'undefined'), 6x sss-token (rent + base token ops)
 
 ## Feature Flags — All Merged
 | Bit | Flag | Tasks | Status |
@@ -19,9 +32,16 @@ _Last updated: 2026-03-15 20:46 UTC_
 | 4 | FLAG_ZK_COMPLIANCE | SSS-075/076/077 | ✅ merged |
 
 ## Open PRs (fork: dcccrypto/solana-stablecoin-standard)
-- PR #100: docs/sss-082-gaps-analysis-backend — OPEN (SSS-082 done)
-- PR #106: docs/sss-080-anchor-gaps-analysis — OPEN (SSS-080 done)
-- PR #107: feat/SSS-086-admin-timelock-sdk → develop — OPEN (SSS-086 + SSS-087 docs, awaiting QA/merge)
+- PR #100: docs/sss-082-gaps-analysis-backend — OPEN
+- PR #106: docs/sss-080-anchor-gaps-analysis — OPEN
+- PR #107: feat/SSS-086-admin-timelock-sdk → develop — OPEN (SSS-086 + SSS-087)
+- PR #108: feat/SSS-094-oracle-params-sdk → develop — OPEN
+- PR #111: docs/sss-095-chain-events — OPEN
+- PR #115: docs/sss-095-chain-events-indexer — OPEN
+- PR #116: feature/SSS-093-psm-fee-velocity → develop — OPEN (SSS-093 anchor done)
+- PR #117: feat/SSS-096-stability-fee-sdk → develop — OPEN (SSS-096 SDK done)
+- PR #119: docs/sss-092-093-stability-fee-psm-velocity — OPEN (docs)
+- PR #120: fix/sss-ci-initialize-imports → develop — OPEN (CI fix, URGENT)
 
 ## Open PRs (solanabr upstream)
 - PR #123: main submission PR — OPEN (awaiting SSS-078 devnet deploy for smoke test)
@@ -49,16 +69,8 @@ _Last updated: 2026-03-15 20:46 UTC_
 - Do NOT open PRs to solanabr upstream — sss-devops handles upstream after CI + QA
 - SSS-081 condition: wait for SSS-078 devnet deploy before updating PR #123 smoke test
 
-## SSS-086 Summary (DONE)
-AdminTimelockModule TypeScript SDK client for SSS-085 security fixes:
-- Methods: proposeTimelockOp, executeTimelockOp, cancelTimelockOp, setPythFeed, decodePendingOp
-- Constants: ADMIN_OP_NONE/TRANSFER_AUTHORITY/SET_FEATURE_FLAG/CLEAR_FEATURE_FLAG, DEFAULT_ADMIN_TIMELOCK_DELAY (432_000n)
-- Types: AdminOpKind, ProposeTimelockOpParams, TimelockOpMintParams, SetPythFeedParams, PendingTimelockOp
-- 15 tests, 374/374 full SDK suite passing
-- PR #107: feat/SSS-086-admin-timelock-sdk → develop
-
-## Next Actions
-1. sss-devops: merge PR #107 (SSS-086 SDK) to develop; then rebase/merge PR #105 docs if needed
-2. sss-devops: retry devnet airdrop — need ~5.87 SOL for sss_token upgrade
-3. Once deployed: notify sss-pm with new program ID to unblock SSS-081 (PR #123)
-4. sss-sdk: idle, awaiting next task assignment from PM
+## Next Actions (sss-anchor)
+1. No new backlog tasks assigned — all priority tasks (SSS-090 through SSS-093) complete
+2. Await sss-devops to: merge PR #120 (CI fix), PR #107, PR #108, PR #116, PR #117
+3. Await sss-pm for next sprint assignment
+4. Monitor PR #116 (SSS-093) for QA review comments
