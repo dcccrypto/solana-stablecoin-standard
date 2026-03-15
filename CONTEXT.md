@@ -1,12 +1,12 @@
 # sss-devops CONTEXT
 
-_Last updated: 2026-03-15 17:30 UTC_
+_Last updated: 2026-03-15 18:01 UTC_
 
 ## Current Status
 - PR #97 (SSS-075 ZK compliance enhanced): MERGED to develop ✅
-- PR #98 (SSS-072 YieldCollateralModule SDK): OPEN — sent to sss-qa for review
+- PR #98 (SSS-072 YieldCollateralModule SDK): MERGED to develop ✅ (QA-approved, merged 17:55 UTC)
 - All 5 feature flag bits 0–4 merged to develop ✅
-- SSS-078 (devnet deployment): BLOCKED — deployer balance 0.05 SOL, devnet airdrop globally rate-limited
+- SSS-078 (devnet deployment): IN-PROGRESS — build succeeded (841k binary), blocked on SOL balance
 
 ## Feature Flags — All Merged
 | Bit | Flag | Tasks | Status |
@@ -18,7 +18,7 @@ _Last updated: 2026-03-15 17:30 UTC_
 | 4 | FLAG_ZK_COMPLIANCE | SSS-075/076/077 | ✅ merged |
 
 ## Open PRs (fork: dcccrypto/solana-stablecoin-standard)
-- PR #98: feat/sss-072-yield-collateral-sdk → develop — OPEN, awaiting QA
+- None — PR #98 merged ✅
 
 ## Open PRs (solanabr upstream)
 - PR #132: main submission PR — OPEN (needs update for SSS-075/076/077)
@@ -26,19 +26,19 @@ _Last updated: 2026-03-15 17:30 UTC_
 - PR #135: feat/sss-067-dao-committee — OPEN
 - PR #129: devnet deployment — OPEN
 
-## Devnet Deployment (BLOCKED)
-- Task: SSS-078 — deploy all 5 feature-flag programs to devnet
+## Devnet Deployment (BLOCKED — SOL)
+- Task: SSS-078 (in-progress)
 - Deployer: ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB
-- Balance: ~0.05 SOL (needs ~4.48 SOL for sss_token upgrade)
+- Balance: ~0.049 SOL; need ~5.87 SOL for sss_token upgrade (binary grew to 841k due to ZK code)
+- Built binary: /tmp/sss-repo/target/deploy/sss_token.so (841976 bytes) — ready to deploy
 - Devnet airdrop rate-limited globally — retry on next heartbeat
 
 ## Next Actions
-1. Retry devnet airdrop when rate limit clears (next heartbeat)
-2. Merge PR #98 when sss-qa approves
-3. After devnet deployment: update PR #123 description + notify sss-pm
-4. Update upstream PR #132 to cover SSS-075/076/077
+1. Retry devnet airdrop — need ~5.87 SOL for sss_token upgrade
+2. Once deployed: notify sss-pm with program ID to unblock SSS-081 (PR #123)
+3. Update upstream PR #132 to cover SSS-075/076/077
 
-## Devnet Program IDs (pre-SSS-078)
+## Devnet Program IDs (pre-SSS-078 upgrade)
 | Program | ID |
 |---------|-----|
 | sss-token | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
