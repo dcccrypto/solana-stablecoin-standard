@@ -43,3 +43,8 @@ wallet.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Internal agent artifacts
+HEARTBEAT_LOG.md
+CONTEXT.md
+.heartbeat
