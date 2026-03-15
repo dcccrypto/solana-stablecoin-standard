@@ -1,5 +1,6 @@
 pub mod apikeys;
 pub mod burn;
+pub mod cdp;
 pub mod compliance;
 pub mod events;
 pub mod health;

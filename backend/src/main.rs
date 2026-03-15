@@ -22,6 +22,7 @@ use auth::require_api_key;
 use db::Database;
 use routes::{
     apikeys::{create_api_key, delete_api_key, list_api_keys},
+    cdp::{get_cdp_position, get_collateral_types, post_cdp_simulate},
     compliance::{add_blacklist, get_audit, get_blacklist, remove_blacklist},
     events::events,
     health::health,
@@ -89,6 +90,9 @@ async fn main() {
         .route("/api/supply", get(supply))
         .route("/api/events", get(events))
         .route("/api/reserves/proof", get(get_reserves_proof))
+        .route("/api/cdp/position/:wallet", get(get_cdp_position))
+        .route("/api/cdp/collateral-types", get(get_collateral_types))
+        .route("/api/cdp/simulate", post(post_cdp_simulate))
         .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
         .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
         .route("/api/compliance/audit", get(get_audit))
