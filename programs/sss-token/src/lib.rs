@@ -90,4 +90,32 @@ pub mod sss_token {
     pub fn accept_compliance_authority(ctx: Context<AcceptComplianceAuthority>) -> Result<()> {
         instructions::accept_authority::accept_compliance_authority_handler(ctx)
     }
+
+    // ─── Direction 2: Multi-Collateral CDP ───────────────────────────────────
+
+    /// CDP: Deposit SPL token collateral into a per-user vault (Direction 2).
+    /// Each (user, collateral_mint) pair gets its own CollateralVault PDA.
+    pub fn cdp_deposit_collateral(
+        ctx: Context<CdpDepositCollateral>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::cdp_deposit_collateral::cdp_deposit_collateral_handler(ctx, amount)
+    }
+
+    /// CDP: Borrow SSS-3 stablecoins against deposited collateral.
+    /// Enforces min 150% collateral ratio via Pyth oracle price.
+    pub fn cdp_borrow_stable(ctx: Context<CdpBorrowStable>, amount: u64) -> Result<()> {
+        instructions::cdp_borrow_stable::cdp_borrow_stable_handler(ctx, amount)
+    }
+
+    /// CDP: Repay SSS-3 debt by burning stablecoins, release collateral proportionally.
+    pub fn cdp_repay_stable(ctx: Context<CdpRepayStable>, amount: u64) -> Result<()> {
+        instructions::cdp_repay_stable::cdp_repay_stable_handler(ctx, amount)
+    }
+
+    /// CDP: Liquidate an undercollateralised position (ratio < 120%).
+    /// Callable by anyone; liquidator burns full debt and receives all collateral.
+    pub fn cdp_liquidate(ctx: Context<CdpLiquidate>) -> Result<()> {
+        instructions::cdp_liquidate::cdp_liquidate_handler(ctx)
+    }
 }

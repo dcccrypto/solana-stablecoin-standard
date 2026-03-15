@@ -34,4 +34,19 @@ pub enum SssError {
     NoPendingComplianceAuthority,
     #[msg("Reserve vault is required for SSS-3")]
     ReserveVaultRequired,
+    // CDP errors
+    #[msg("Collateral ratio too low — minimum 150% required")]
+    CollateralRatioTooLow,
+    #[msg("CDP is healthy — cannot be liquidated (ratio >= 120%)")]
+    CdpNotLiquidatable,
+    #[msg("Insufficient debt to repay requested amount")]
+    InsufficientDebt,
+    #[msg("Insufficient collateral deposited in vault")]
+    InsufficientCollateral,
+    #[msg("Invalid Pyth price feed account")]
+    InvalidPriceFeed,
+    #[msg("Pyth price is stale or unavailable")]
+    StalePriceFeed,
+    #[msg("Price is zero or negative — cannot compute ratio")]
+    InvalidPrice,
 }

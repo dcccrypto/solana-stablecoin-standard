@@ -1,5 +1,9 @@
 pub mod accept_authority;
 pub mod burn;
+pub mod cdp_borrow_stable;
+pub mod cdp_deposit_collateral;
+pub mod cdp_liquidate;
+pub mod cdp_repay_stable;
 pub mod deposit_collateral;
 pub mod freeze;
 pub mod initialize;
@@ -13,6 +17,10 @@ pub mod update_roles;
 
 pub use accept_authority::*;
 pub use burn::*;
+pub use cdp_borrow_stable::*;
+pub use cdp_deposit_collateral::*;
+pub use cdp_liquidate::*;
+pub use cdp_repay_stable::*;
 pub use deposit_collateral::*;
 pub use freeze::*;
 pub use initialize::*;

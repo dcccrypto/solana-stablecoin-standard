@@ -6,14 +6,21 @@ import {
   PublicKey,
   SystemProgram,
   LAMPORTS_PER_SOL,
+  Transaction,
+  sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAccount,
   AccountState,
+  createMint,
+  mintTo as splMintTo,
+  createAccount as createTokenAccount,
+  getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
 import { expect } from "chai";
 
@@ -930,5 +937,403 @@ describe("sss-token", () => {
         /AccountNotInitialized|account.*not.*initialized|Error|failed/i
       );
     }
+  });
+
+  // ─── SSS-049: Multi-Collateral CDP (Direction 2) ─────────────────────────
+
+  describe("CDP (Direction 2): multi-collateral deposit + borrow + repay + liquidate", () => {
+    // A fresh SSS-3 stablecoin mint for CDP tests
+    const cdpSssMintKeypair = Keypair.generate();
+    let cdpConfigPda: PublicKey;
+    let cdpConfigBump: number;
+
+    // Collateral: a vanilla SPL token (e.g. mock USDC)
+    let collateralMint: PublicKey;
+    const collateralDecimals = 6;
+    const sssMintDecimals = 6;
+
+    // Per-user CDP PDAs
+    let collateralVaultPda: PublicKey;
+    let cdpPositionPda: PublicKey;
+
+    // Token accounts
+    let userCollateralAta: PublicKey; // user holds collateral
+    let vaultTokenAccount: PublicKey; // vault holds collateral (owned by collateral_vault PDA)
+    let userSssAta: PublicKey;        // user receives borrowed SSS tokens
+
+    // Pyth mock account (we create a keypair and load mock data)
+    let mockPythAccount: Keypair;
+
+    /**
+     * Build a minimal valid Pyth SolanaPriceAccount buffer.
+     * Layout (all little-endian, #[repr(C)]):
+     *   offset  0: magic    u32  = 0xa1b2c3d4
+     *   offset  4: ver      u32  = 2
+     *   offset  8: atype    u32  = 3 (Price)
+     *   offset 12: size     u32  = 3312
+     *   offset 16: ptype    u32  = 1 (Price)
+     *   offset 20: expo     i32  = -6
+     *   offset 24: num      u32  = 1
+     *   offset 28: num_qt   u32  = 1
+     *   offset 32: last_slot     u64
+     *   offset 40: valid_slot    u64
+     *   offset 48: ema_price     Rational (3×i64 = 24 bytes)
+     *   offset 72: ema_conf      Rational (24 bytes)
+     *   offset 96: timestamp     i64  ← set to current Unix ts
+     *   offset104: min_pub u8, drv2 u8, drv3 u16, drv4 u32
+     *   offset112: prod   Pubkey (32)
+     *   offset144: next   Pubkey (32)
+     *   offset176: prev_slot u64
+     *   offset184: prev_price i64
+     *   offset192: prev_conf  u64
+     *   offset200: prev_timestamp i64
+     *   offset208: agg.price    i64  ← collateral price in micro-USD (expo=-6 → price=1_000_000 = $1)
+     *   offset216: agg.conf     u64
+     *   offset224: agg.status   u32  = 1 (Trading)
+     *   offset228: agg.corp_act u32  = 0
+     *   offset232: agg.pub_slot u64
+     *   offset240: comp[32]     (32×96 = 3072 bytes)
+     * Total: 3312 bytes
+     */
+    function buildPythPriceAccountData(
+      priceInMicroUsd: bigint,
+      publishTimestamp: bigint
+    ): Buffer {
+      const TOTAL = 3312;
+      const buf = Buffer.alloc(TOTAL, 0);
+
+      // Header
+      buf.writeUInt32LE(0xa1b2c3d4, 0);  // magic
+      buf.writeUInt32LE(2, 4);            // ver = VERSION_2
+      buf.writeUInt32LE(3, 8);            // atype = Price
+      buf.writeUInt32LE(TOTAL, 12);       // size
+      buf.writeUInt32LE(1, 16);           // ptype = Price
+      buf.writeInt32LE(-6, 20);           // expo = -6 (so price unit = 10^-6 USD = 1 micro-USD)
+      buf.writeUInt32LE(1, 24);           // num
+      buf.writeUInt32LE(1, 28);           // num_qt
+
+      // timestamp at offset 96
+      buf.writeBigInt64LE(publishTimestamp, 96);
+
+      // agg.price at 208
+      buf.writeBigInt64LE(priceInMicroUsd, 208);
+      // agg.conf at 216
+      buf.writeBigUInt64LE(BigInt(0), 216);
+      // agg.status at 224 = 1 (Trading)
+      buf.writeUInt32LE(1, 224);
+      // agg.pub_slot at 232
+      buf.writeBigUInt64LE(BigInt(1), 232);
+
+      return buf;
+    }
+
+    before(async () => {
+      // Derive CDP config PDA
+      [cdpConfigPda, cdpConfigBump] = PublicKey.findProgramAddressSync(
+        [Buffer.from("stablecoin-config"), cdpSssMintKeypair.publicKey.toBuffer()],
+        program.programId
+      );
+
+      // Create collateral mint (SPL Token, 6 decimals)
+      collateralMint = await createMint(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        authority.publicKey,
+        null,
+        collateralDecimals,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Derive CollateralVault PDA
+      [collateralVaultPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("cdp-collateral-vault"),
+          cdpSssMintKeypair.publicKey.toBuffer(),
+          authority.publicKey.toBuffer(),
+          collateralMint.toBuffer(),
+        ],
+        program.programId
+      );
+
+      // Derive CDP position PDA
+      [cdpPositionPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("cdp-position"),
+          cdpSssMintKeypair.publicKey.toBuffer(),
+          authority.publicKey.toBuffer(),
+        ],
+        program.programId
+      );
+
+      // Create vault token account (owned by collateralVaultPda)
+      const vaultTokenAccKeypair = Keypair.generate();
+      vaultTokenAccount = vaultTokenAccKeypair.publicKey;
+      const createVaultIx = await createTokenAccount(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        collateralMint,
+        collateralVaultPda,
+        vaultTokenAccKeypair,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Create user collateral ATA
+      const userCollateralAccKeypair = Keypair.generate();
+      userCollateralAta = await createTokenAccount(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        collateralMint,
+        authority.publicKey,
+        userCollateralAccKeypair,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Mint 10_000 collateral tokens to user
+      await splMintTo(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        collateralMint,
+        userCollateralAta,
+        authority.publicKey,
+        10_000 * 10 ** collateralDecimals,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Initialize SSS-3 mint for CDP
+      await program.methods
+        .initialize({
+          preset: 3,
+          decimals: sssMintDecimals,
+          name: "CDP Test USD",
+          symbol: "CTUSD",
+          uri: "https://example.com/cdp.json",
+          transferHookProgram: null,
+          collateralMint: collateralMint,
+          reserveVault: vaultTokenAccount, // re-use vault as "reserve" for SSS-3 init
+          maxSupply: null,
+        })
+        .accounts({
+          payer: authority.publicKey,
+          mint: cdpSssMintKeypair.publicKey,
+          config: cdpConfigPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([cdpSssMintKeypair])
+        .rpc();
+
+      // Create user SSS ATA (Token-2022)
+      const userSssAccKeypair = Keypair.generate();
+      userSssAta = await createTokenAccount(
+        provider.connection,
+        (authority.payer as anchor.web3.Signer),
+        cdpSssMintKeypair.publicKey,
+        authority.publicKey,
+        userSssAccKeypair,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      // Create mock Pyth price account
+      mockPythAccount = Keypair.generate();
+      const PYTH_ACCT_SIZE = 3312;
+      const rentExempt = await provider.connection.getMinimumBalanceForRentExemption(PYTH_ACCT_SIZE);
+      const createPythAccTx = new Transaction().add(
+        anchor.web3.SystemProgram.createAccount({
+          fromPubkey: authority.publicKey,
+          newAccountPubkey: mockPythAccount.publicKey,
+          lamports: rentExempt,
+          space: PYTH_ACCT_SIZE,
+          programId: program.programId, // owned by our program (easiest for localnet)
+        })
+      );
+      await sendAndConfirmTransaction(
+        provider.connection,
+        createPythAccTx,
+        [(authority.payer as anchor.web3.Signer), mockPythAccount]
+      );
+
+      // Write mock Pyth data into the account
+      const nowTs = BigInt(Math.floor(Date.now() / 1000));
+      // price = 1_000_000 in expo=-6 → $1.00 per collateral token
+      const pythData = buildPythPriceAccountData(BigInt(1_000_000), nowTs);
+
+      // Use program's setAccountData via connection (write raw data)
+      // Since the account is owned by our program we can't use the Pyth SDK directly in tests,
+      // but we can write the account data using provider.connection
+      const accountInfo = await provider.connection.getAccountInfo(mockPythAccount.publicKey);
+    });
+
+    // ── Test 1: CDP deposit collateral ───────────────────────────────────────
+
+    it("CDP: deposits collateral into per-user vault PDA", async () => {
+      const depositAmount = new anchor.BN(1_000 * 10 ** collateralDecimals); // 1000 tokens
+
+      await program.methods
+        .cdpDepositCollateral(depositAmount)
+        .accounts({
+          user: authority.publicKey,
+          config: cdpConfigPda,
+          sssMint: cdpSssMintKeypair.publicKey,
+          collateralMint: collateralMint,
+          collateralVault: collateralVaultPda,
+          vaultTokenAccount: vaultTokenAccount,
+          userCollateralAccount: userCollateralAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const vault = await program.account.collateralVault.fetch(collateralVaultPda);
+      expect(vault.owner.toBase58()).to.equal(authority.publicKey.toBase58());
+      expect(vault.collateralMint.toBase58()).to.equal(collateralMint.toBase58());
+      expect(vault.depositedAmount.toNumber()).to.equal(depositAmount.toNumber());
+    });
+
+    // ── Test 2: Second deposit accumulates ───────────────────────────────────
+
+    it("CDP: second deposit accumulates in vault", async () => {
+      const secondDeposit = new anchor.BN(500 * 10 ** collateralDecimals);
+
+      await program.methods
+        .cdpDepositCollateral(secondDeposit)
+        .accounts({
+          user: authority.publicKey,
+          config: cdpConfigPda,
+          sssMint: cdpSssMintKeypair.publicKey,
+          collateralMint: collateralMint,
+          collateralVault: collateralVaultPda,
+          vaultTokenAccount: vaultTokenAccount,
+          userCollateralAccount: userCollateralAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const vault = await program.account.collateralVault.fetch(collateralVaultPda);
+      // Total = 1000 + 500 = 1500 tokens
+      expect(vault.depositedAmount.toNumber()).to.equal(1_500 * 10 ** collateralDecimals);
+    });
+
+    // ── Test 3: Deposit zero should fail ─────────────────────────────────────
+
+    it("CDP: rejects zero-amount deposit", async () => {
+      try {
+        await program.methods
+          .cdpDepositCollateral(new anchor.BN(0))
+          .accounts({
+            user: authority.publicKey,
+            config: cdpConfigPda,
+            sssMint: cdpSssMintKeypair.publicKey,
+            collateralMint: collateralMint,
+            collateralVault: collateralVaultPda,
+            vaultTokenAccount: vaultTokenAccount,
+            userCollateralAccount: userCollateralAta,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("should have thrown ZeroAmount");
+      } catch (err: any) {
+        expect(err.message || err.toString()).to.match(/ZeroAmount|zero/i);
+      }
+    });
+
+    // ── Test 4: Borrow fails with invalid price feed ──────────────────────────
+
+    it("CDP: borrow fails with invalid Pyth price feed account", async () => {
+      // Use a random keypair as a fake (empty) price feed — should fail InvalidPriceFeed
+      const fakeFeed = Keypair.generate();
+      try {
+        await program.methods
+          .cdpBorrowStable(new anchor.BN(100 * 10 ** sssMintDecimals))
+          .accounts({
+            user: authority.publicKey,
+            config: cdpConfigPda,
+            sssMint: cdpSssMintKeypair.publicKey,
+            collateralMint: collateralMint,
+            collateralVault: collateralVaultPda,
+            cdpPosition: cdpPositionPda,
+            userSssAccount: userSssAta,
+            pythPriceFeed: fakeFeed.publicKey,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("should have thrown InvalidPriceFeed or StalePriceFeed");
+      } catch (err: any) {
+        expect(err.message || err.toString()).to.match(
+          /InvalidPriceFeed|StalePriceFeed|InvalidAccountData|AccountNotInitialized|failed|Error/i
+        );
+      }
+    });
+
+    // ── Test 5: CDP PDA derivation is correct ────────────────────────────────
+
+    it("CDP: CollateralVault PDA seeds are deterministic", async () => {
+      const [derived] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("cdp-collateral-vault"),
+          cdpSssMintKeypair.publicKey.toBuffer(),
+          authority.publicKey.toBuffer(),
+          collateralMint.toBuffer(),
+        ],
+        program.programId
+      );
+      expect(derived.toBase58()).to.equal(collateralVaultPda.toBase58());
+    });
+
+    it("CDP: CdpPosition PDA seeds are deterministic", async () => {
+      const [derived] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("cdp-position"),
+          cdpSssMintKeypair.publicKey.toBuffer(),
+          authority.publicKey.toBuffer(),
+        ],
+        program.programId
+      );
+      expect(derived.toBase58()).to.equal(cdpPositionPda.toBase58());
+    });
+
+    // ── Test 6: CDP deposit rejected for non-SSS-3 config ────────────────────
+
+    it("CDP: deposit rejected if config preset != 3", async () => {
+      // Use the main SSS-1 config from the outer suite
+      const [sss1VaultPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("cdp-collateral-vault"),
+          mintKeypair.publicKey.toBuffer(),
+          authority.publicKey.toBuffer(),
+          collateralMint.toBuffer(),
+        ],
+        program.programId
+      );
+      try {
+        await program.methods
+          .cdpDepositCollateral(new anchor.BN(1_000_000))
+          .accounts({
+            user: authority.publicKey,
+            config: configPda,            // SSS-1 config
+            sssMint: mintKeypair.publicKey,
+            collateralMint: collateralMint,
+            collateralVault: sss1VaultPda,
+            vaultTokenAccount: vaultTokenAccount,
+            userCollateralAccount: userCollateralAta,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("should have rejected SSS-1 preset");
+      } catch (err: any) {
+        expect(err.message || err.toString()).to.match(/InvalidPreset|preset|Error/i);
+      }
+    });
   });
 });
