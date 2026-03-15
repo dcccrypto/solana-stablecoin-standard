@@ -1,7 +1,7 @@
 # SSS — Feature Flags Reference
 
 > **SDK class:** `FeatureFlagsModule` (`sdk/src/FeatureFlagsModule.ts`)
-> **Added:** SSS-059 | **Updated:** SSS-060 (FLAG_SPEND_POLICY — SSS-063), SSS-065 (FLAG_DAO_COMMITTEE — SSS-067)
+> **Added:** SSS-059 | **Updated:** SSS-060 (FLAG_SPEND_POLICY — SSS-063), SSS-065 (FLAG_DAO_COMMITTEE — SSS-067), SSS-074 (FLAG_YIELD_COLLATERAL — SSS-072)
 
 ---
 
@@ -23,8 +23,9 @@ corresponding behaviour; clearing it deactivates it.
 | `FLAG_CIRCUIT_BREAKER` | 0 | `0x01` | Halts all mint and burn operations for the token until cleared. |
 | `FLAG_SPEND_POLICY` | 1 | `0x02` | Enforces a per-transaction transfer cap (`max_transfer_amount`). Enabled atomically by `set_spend_limit`. |
 | `FLAG_DAO_COMMITTEE` | 2 | `0x04` | Gates privileged admin operations behind on-chain proposals that require committee quorum approval. Enabled atomically by `init_dao_committee`. |
+| `FLAG_YIELD_COLLATERAL` | 3 | `0x08` | Allows yield-bearing SPL token mints (stSOL, mSOL, jitoSOL, etc.) to be deposited as CDP collateral. Enabled atomically by `init_yield_collateral`. |
 
-> **Reserved bits:** bits 3–63 are reserved for future protocol flags.
+> **Reserved bits:** bits 4–63 are reserved for future protocol flags.
 > Do not set them directly.
 
 ---
