@@ -37,16 +37,14 @@ const cdp        = new CdpModule(provider, sssMint);
 
 // 1. Deposit collateral
 await cdp.depositCollateral({
-  sssMint,
   collateralMint,
-  amount: 5_000_000n,           // 5 SOL (lamports)
+  amount: 5_000_000_000n,       // 5 SOL (lamports)
   userCollateralAccount,
   vaultTokenAccount,
 });
 
 // 2. Borrow stablecoins (≥ 150% collateral ratio required)
 await cdp.borrowStable({
-  sssMint,
   collateralMint,
   amount: 1_000_000n,           // 1 USDC-equivalent
   userSssAccount,
@@ -92,18 +90,18 @@ Deposits SPL token collateral into the user's `CollateralVault` PDA. Creates the
 
 | Field | Type | Description |
 |---|---|---|
-| `sssMint` | `PublicKey` | The SSS-3 stablecoin mint |
 | `collateralMint` | `PublicKey` | SPL token mint of the collateral to deposit |
 | `amount` | `bigint` | Amount in collateral token's native units (base units) |
 | `userCollateralAccount` | `PublicKey` | Sender's token account for the collateral |
 | `vaultTokenAccount` | `PublicKey` | Token account owned by the `CollateralVault` PDA |
 | `collateralTokenProgram` | `PublicKey?` | Token program for collateral mint (default: `TOKEN_PROGRAM_ID`) |
 
+> **Note:** The SSS-3 mint is derived internally from `this.sssMint` (set at construction) and does not need to be passed here.
+
 **Example**
 
 ```ts
 await cdp.depositCollateral({
-  sssMint,
   collateralMint: SOL_MINT,
   amount: 2_000_000_000n,   // 2 SOL
   userCollateralAccount: userWSOLAccount,
@@ -127,12 +125,13 @@ Creates the `CdpPosition` PDA on first borrow (single collateral mint locked at 
 
 | Field | Type | Description |
 |---|---|---|
-| `sssMint` | `PublicKey` | The SSS-3 stablecoin mint |
 | `collateralMint` | `PublicKey` | Collateral mint to borrow against |
 | `amount` | `bigint` | SSS tokens to borrow (base units, 6 decimals) |
 | `userSssAccount` | `PublicKey` | Recipient token account for minted stablecoins |
 | `pythPriceFeed` | `PublicKey` | Pyth price feed account for collateral / USD |
 | `collateralTokenProgram` | `PublicKey?` | Token program for collateral (default: `TOKEN_2022_PROGRAM_ID`) |
+
+> **Note:** The SSS-3 mint is derived internally from `this.sssMint` (set at construction) and does not need to be passed here.
 
 **Example**
 
@@ -140,7 +139,6 @@ Creates the `CdpPosition` PDA on first borrow (single collateral mint locked at 
 const SOL_USD_PYTH = new PublicKey('J83w4HKfqxwcq3BEMMkPFSppX3gqekLyLJBexebFVkix');
 
 await cdp.borrowStable({
-  sssMint,
   collateralMint: SOL_MINT,
   amount: 500_000n,          // 0.5 USDC-equivalent
   userSssAccount,
@@ -164,7 +162,6 @@ Burns SSS-3 stablecoins to repay debt. Collateral is released proportionally fro
 
 | Field | Type | Description |
 |---|---|---|
-| `sssMint` | `PublicKey` | The SSS-3 stablecoin mint |
 | `collateralMint` | `PublicKey` | Collateral mint associated with the debt |
 | `amount` | `bigint` | SSS tokens to repay (base units) |
 | `userSssAccount` | `PublicKey` | User's token account to burn from |
@@ -172,11 +169,12 @@ Burns SSS-3 stablecoins to repay debt. Collateral is released proportionally fro
 | `userCollateralAccount` | `PublicKey` | User's token account to receive released collateral |
 | `collateralTokenProgram` | `PublicKey?` | Token program for collateral (default: `TOKEN_PROGRAM_ID`) |
 
+> **Note:** The SSS-3 mint is derived internally from `this.sssMint` (set at construction) and does not need to be passed here.
+
 **Example**
 
 ```ts
 await cdp.repayStable({
-  sssMint,
   collateralMint: SOL_MINT,
   amount: 250_000n,          // repay 0.25 USDC-equivalent
   userSssAccount,
@@ -208,8 +206,8 @@ Fetches the on-chain `CdpPosition` and all `CollateralVault` PDAs for a wallet. 
 |---|---|---|
 | `wallet` | `PublicKey` | Wallet to query |
 | `connection` | `Connection` | Solana RPC connection |
-| `collateralMints` | `PublicKey[]?` | Mints to check vaults for (if omitted, health metrics will be 0) |
-| `collateralUsdPrices` | `Map<string, number>?` | Mint → USD price per base unit |
+| `collateralMints` | `PublicKey[]?` | Mints to check vaults for. If omitted, collateral entries are empty; when debt is also 0, `ratio` and `healthFactor` are `Infinity`; when debt > 0 they are `0`. |
+| `collateralUsdPrices` | `Map<string, number>?` | Mint (base58) → USD price **per whole token unit** (e.g. `200` for $200/SOL). The SDK divides `deposited` by 1e6 before multiplying by this price. |
 
 ---
 
@@ -367,7 +365,7 @@ Errors originate from the on-chain Anchor program. Common causes:
 | `CollateralMintLocked` | Borrow attempted with a different collateral mint than the locked one |
 | `InvalidPythFeed` | Pyth price feed account doesn't match expected collateral mint |
 | `StaleOraclePrice` | Pyth price is too old (confidence interval exceeded) |
-| `PositionNotFound` | `getPosition` / `fetchCdpPosition` called for a wallet with no open position |
+| `PositionNotFound` | On-chain instruction attempted on a wallet with no open CDP position (e.g. `repayStable` before any borrow). Note: `getPosition` and `fetchCdpPosition` do **not** throw this — they return an empty `CdpPosition` when no account is found. |
 
 ---
 
@@ -400,16 +398,14 @@ async function main() {
 
   // Deposit 5 SOL of collateral
   await cdp.depositCollateral({
-    sssMint:              SSS_MINT,
     collateralMint:       SOL_MINT,
-    amount:               5_000_000_000n,
+    amount:               5_000_000_000n,  // 5 SOL in lamports
     userCollateralAccount: userWSOLAccount,
     vaultTokenAccount:    wsolVaultTokenAccount,
   });
 
-  // Borrow 500 USDC-equivalent (≈ 20% utilisation at $200/SOL = 1000 USD collateral)
+  // Borrow 500 USDC-equivalent (≈ 50% utilisation at $200/SOL = 1000 USD collateral)
   await cdp.borrowStable({
-    sssMint:        SSS_MINT,
     collateralMint: SOL_MINT,
     amount:         500_000_000n,    // 500 USDC
     userSssAccount: userSSSAccount,
@@ -427,7 +423,6 @@ async function main() {
 
   // Repay 250 USDC
   await cdp.repayStable({
-    sssMint:              SSS_MINT,
     collateralMint:       SOL_MINT,
     amount:               250_000_000n,
     userSssAccount:       userSSSAccount,
