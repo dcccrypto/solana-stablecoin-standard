@@ -16,14 +16,9 @@ export type { CdpPosition, CollateralEntry, CollateralType, DepositCollateralPar
 export { CpiModule, CURRENT_INTERFACE_VERSION, getInterfaceVersionPda } from './CpiModule';
 export type { InterfaceVersionInfo, CpiMintParams, CpiBurnParams, UpdateInterfaceVersionParams } from './CpiModule';
 export { ZkComplianceModule, FLAG_ZK_COMPLIANCE } from './ZkComplianceModule';
-export type {
-  InitZkComplianceParams,
-  SubmitZkProofParams,
-  CloseVerificationRecordParams,
-  ExecuteCompliantTransferParams,
-  ZkComplianceConfigAccount,
-  VerificationRecordAccount,
-} from './ZkComplianceModule';
+export type { InitZkComplianceParams, SubmitZkProofParams, CloseVerificationRecordParams, ExecuteCompliantTransferParams, ZkComplianceConfigAccount, VerificationRecordAccount } from './ZkComplianceModule';
+export { OracleParamsModule, DEFAULT_MAX_ORACLE_AGE_SECS, RECOMMENDED_MAX_ORACLE_CONF_BPS } from './OracleParamsModule';
+export type { SetOracleParamsArgs, OracleParams } from './OracleParamsModule';
 export { SSSClient } from './client';
 export { SSSError } from './error';
 export * from './presets';
