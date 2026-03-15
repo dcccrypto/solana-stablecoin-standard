@@ -3,7 +3,7 @@ use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::{MinterInfo, StablecoinConfig};
+use crate::state::{FLAG_CIRCUIT_BREAKER, MinterInfo, StablecoinConfig};
 
 #[derive(Accounts)]
 pub struct MintTokens<'info> {
@@ -40,6 +40,10 @@ pub struct MintTokens<'info> {
 pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
     require!(!ctx.accounts.config.paused, SssError::MintPaused);
+    require!(
+        !ctx.accounts.config.check_feature_flag(FLAG_CIRCUIT_BREAKER),
+        SssError::CircuitBreakerActive
+    );
 
     let minter_info = &mut ctx.accounts.minter_info;
     if minter_info.cap > 0 {

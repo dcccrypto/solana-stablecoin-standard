@@ -1,6 +1,7 @@
 pub mod accept_authority;
 pub mod burn;
 pub mod deposit_collateral;
+pub mod feature_flags;
 pub mod freeze;
 pub mod initialize;
 pub mod mint;
@@ -14,6 +15,7 @@ pub mod update_roles;
 pub use accept_authority::*;
 pub use burn::*;
 pub use deposit_collateral::*;
+pub use feature_flags::*;
 pub use freeze::*;
 pub use initialize::*;
 pub use mint::*;

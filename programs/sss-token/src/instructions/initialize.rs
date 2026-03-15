@@ -65,6 +65,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.max_supply = params.max_supply.unwrap_or(0);
     config.pending_authority = Pubkey::default();
     config.pending_compliance_authority = Pubkey::default();
+    config.feature_flags = 0;
     config.bump = ctx.bumps.config;
 
     msg!(

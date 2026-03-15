@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{burn, Burn, Mint, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::{MinterInfo, StablecoinConfig};
+use crate::state::{FLAG_CIRCUIT_BREAKER, MinterInfo, StablecoinConfig};
 
 #[derive(Accounts)]
 pub struct BurnTokens<'info> {
@@ -42,6 +42,10 @@ pub struct BurnTokens<'info> {
 pub fn handler(ctx: Context<BurnTokens>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
     require!(!ctx.accounts.config.paused, SssError::MintPaused);
+    require!(
+        !ctx.accounts.config.check_feature_flag(FLAG_CIRCUIT_BREAKER),
+        SssError::CircuitBreakerActive
+    );
 
     burn(
         CpiContext::new(

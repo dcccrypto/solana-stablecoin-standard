@@ -34,4 +34,6 @@ pub enum SssError {
     NoPendingComplianceAuthority,
     #[msg("Reserve vault is required for SSS-3")]
     ReserveVaultRequired,
+    #[msg("Circuit breaker is active: mint/transfer/burn are halted")]
+    CircuitBreakerActive,
 }

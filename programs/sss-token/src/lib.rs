@@ -90,4 +90,14 @@ pub mod sss_token {
     pub fn accept_compliance_authority(ctx: Context<AcceptComplianceAuthority>) -> Result<()> {
         instructions::accept_authority::accept_compliance_authority_handler(ctx)
     }
+
+    /// Set a feature flag bit. Authority only. Pass the FLAG_* constant value.
+    pub fn set_feature_flag(ctx: Context<UpdateFeatureFlag>, flag: u64) -> Result<()> {
+        instructions::feature_flags::set_feature_flag_handler(ctx, flag)
+    }
+
+    /// Clear a feature flag bit. Authority only. Pass the FLAG_* constant value.
+    pub fn clear_feature_flag(ctx: Context<UpdateFeatureFlag>, flag: u64) -> Result<()> {
+        instructions::feature_flags::clear_feature_flag_handler(ctx, flag)
+    }
 }
