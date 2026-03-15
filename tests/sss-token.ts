@@ -3765,13 +3765,32 @@ describe("sss-token", () => {
         );
         await provider.sendAndConfirm(setupTx);
 
+        // Register authority as minter for this short-TTL mint
+        const [shortMinterInfoPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from("minter-info"), shortConfigPda.toBuffer(), authority.publicKey.toBuffer()],
+          program.programId
+        );
         await program.methods
-          .mint(new anchor.BN(1_000_000))
+          .updateMinter(new anchor.BN(10_000_000))
           .accounts({
             authority: authority.publicKey,
             config: shortConfigPda,
             mint: shortTtlMintKp.publicKey,
-            destination: shortSenderAta,
+            minter: authority.publicKey,
+            minterInfo: shortMinterInfoPda,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+
+        await program.methods
+          .mint(new anchor.BN(1_000_000))
+          .accounts({
+            minter: authority.publicKey,
+            config: shortConfigPda,
+            mint: shortTtlMintKp.publicKey,
+            minterInfo: shortMinterInfoPda,
+            recipientTokenAccount: shortSenderAta,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .rpc();
