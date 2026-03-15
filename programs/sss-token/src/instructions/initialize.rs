@@ -142,6 +142,8 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.admin_timelock_delay = DEFAULT_ADMIN_TIMELOCK_DELAY;
     // SSS-092: stability fee starts at 0 (disabled by default)
     config.stability_fee_bps = 0;
+    // SSS-093: PSM redemption fee starts at 0 (disabled by default)
+    config.redemption_fee_bps = 0;
     config.bump = ctx.bumps.config;
 
     msg!(

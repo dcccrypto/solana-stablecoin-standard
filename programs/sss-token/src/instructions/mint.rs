@@ -5,6 +5,8 @@ use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInte
 use crate::error::SssError;
 use crate::state::{MinterInfo, StablecoinConfig};
 
+// Solana clock is available via Clock::get() in Anchor instructions.
+
 #[derive(Accounts)]
 pub struct MintTokens<'info> {
     pub minter: Signer<'info>,
@@ -40,6 +42,28 @@ pub struct MintTokens<'info> {
 pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
     require!(!ctx.accounts.config.paused, SssError::MintPaused);
+
+    // SSS-093: Per-minter epoch velocity limit check.
+    {
+        let clock = Clock::get()?;
+        let current_epoch = clock.epoch;
+        let minter_info = &mut ctx.accounts.minter_info;
+
+        // Reset epoch counter if epoch has advanced since last reset.
+        // last_epoch_reset == 0 means never minted; initialize it now.
+        if minter_info.last_epoch_reset == 0 || current_epoch != minter_info.last_epoch_reset {
+            minter_info.minted_this_epoch = 0;
+            minter_info.last_epoch_reset = current_epoch;
+        }
+
+        if minter_info.max_mint_per_epoch > 0 {
+            require!(
+                minter_info.minted_this_epoch.checked_add(amount).unwrap()
+                    <= minter_info.max_mint_per_epoch,
+                SssError::MintVelocityExceeded
+            );
+        }
+    }
 
     let minter_info = &mut ctx.accounts.minter_info;
     if minter_info.cap > 0 {
@@ -82,6 +106,9 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
     let config = &mut ctx.accounts.config;
     config.total_minted = config.total_minted.checked_add(amount).unwrap();
     minter_info.minted = minter_info.minted.checked_add(amount).unwrap();
+    // SSS-093: Track epoch velocity regardless of whether limit is set
+    // (enables auditing even when max_mint_per_epoch == 0).
+    minter_info.minted_this_epoch = minter_info.minted_this_epoch.checked_add(amount).unwrap();
 
     msg!("Minted {} tokens to {}", amount, ctx.accounts.recipient_token_account.key());
     Ok(())

@@ -72,3 +72,36 @@ pub struct AuthorityAccepted {
     pub new_authority: Pubkey,
     pub is_compliance: bool,
 }
+
+/// SSS-093: Emitted on every PSM redeem (deposit_collateral→mint is fee-free).
+#[event]
+pub struct PsmSwapEvent {
+    pub mint: Pubkey,
+    pub redeemer: Pubkey,
+    /// SSS tokens burned by the redeemer.
+    pub sss_burned: u64,
+    /// Collateral tokens released to the redeemer (sss_burned - fee_collected).
+    pub collateral_out: u64,
+    /// Collateral retained in vault as fee.
+    pub fee_collected: u64,
+    /// Fee rate at time of swap in basis points.
+    pub fee_bps: u16,
+}
+
+/// SSS-093: Emitted when the PSM redemption fee is updated.
+#[event]
+pub struct PsmFeeUpdated {
+    pub mint: Pubkey,
+    pub old_fee_bps: u16,
+    pub new_fee_bps: u16,
+    pub authority: Pubkey,
+}
+
+/// SSS-093: Emitted when a minter's per-epoch velocity limit is updated.
+#[event]
+pub struct MintVelocityUpdated {
+    pub mint: Pubkey,
+    pub minter: Pubkey,
+    pub max_mint_per_epoch: u64,
+    pub authority: Pubkey,
+}

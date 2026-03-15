@@ -5,6 +5,7 @@ use anchor_spl::token_interface::{
 };
 
 use crate::error::SssError;
+use crate::events::PsmSwapEvent;
 use crate::state::StablecoinConfig;
 
 /// Accounts for `redeem` (SSS-3 only).
@@ -73,7 +74,20 @@ pub fn redeem_handler(ctx: Context<RedeemCtx>, amount: u64) -> Result<()> {
         SssError::InsufficientReserves
     );
 
-    // 1. Burn SSS stablecoin tokens from redeemer (redeemer signs)
+    // 1. Compute PSM fee (stays in vault; redeemer receives amount - fee).
+    let fee_bps = ctx.accounts.config.redemption_fee_bps as u64;
+    let fee_amount = if fee_bps > 0 {
+        amount.saturating_mul(fee_bps) / 10_000
+    } else {
+        0
+    };
+    let collateral_out = amount.checked_sub(fee_amount).unwrap();
+    require!(
+        ctx.accounts.reserve_vault.amount >= amount,
+        SssError::InsufficientReserves
+    );
+
+    // 2. Burn SSS stablecoin tokens from redeemer (redeemer signs)
     spl_burn_checked(
         CpiContext::new(
             ctx.accounts.sss_token_program.to_account_info(),
@@ -87,7 +101,7 @@ pub fn redeem_handler(ctx: Context<RedeemCtx>, amount: u64) -> Result<()> {
         ctx.accounts.sss_mint.decimals,
     )?;
 
-    // 2. Release collateral from vault → redeemer (config PDA signs)
+    // 3. Release (amount - fee) collateral from vault → redeemer (config PDA signs)
     let sss_mint_key = ctx.accounts.sss_mint.key();
     let seeds = &[
         StablecoinConfig::SEED,
@@ -107,19 +121,31 @@ pub fn redeem_handler(ctx: Context<RedeemCtx>, amount: u64) -> Result<()> {
             },
             signer_seeds,
         ),
-        amount,
+        collateral_out,
         ctx.accounts.collateral_mint.decimals,
     )?;
 
-    // 3. Update config state
+    // 4. Update config state: burn decreases supply; fee stays in vault.
     let config = &mut ctx.accounts.config;
     config.total_burned = config.total_burned.checked_add(amount).unwrap();
-    config.total_collateral = config.total_collateral.checked_sub(amount).unwrap();
+    // Only the collateral that left the vault reduces total_collateral.
+    config.total_collateral = config.total_collateral.checked_sub(collateral_out).unwrap();
+
+    emit!(PsmSwapEvent {
+        mint: config.mint,
+        redeemer: ctx.accounts.redeemer.key(),
+        sss_burned: amount,
+        collateral_out,
+        fee_collected: fee_amount,
+        fee_bps: fee_bps as u16,
+    });
 
     msg!(
-        "Redeemed {} SSS tokens for {} collateral. New collateral: {}",
+        "Redeemed {} SSS tokens; collateral_out={} fee={} ({}bps). Vault: {}",
         amount,
-        amount,
+        collateral_out,
+        fee_amount,
+        fee_bps,
         config.total_collateral
     );
     Ok(())
