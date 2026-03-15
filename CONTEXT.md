@@ -51,13 +51,6 @@ All assigned tasks complete. Awaiting PR reviews.
 - **SDK (vitest unit):** 122/122 — 2026-03-15 04:48 UTC (20 new CdpModule tests)
 - **Spikes (vitest):** 82/82 — 2026-03-15 03:24 UTC
 
-## Open PRs
-- PR #63 — CdpModule SDK (SSS-051) — awaiting review
-- PR #62 — CDP multi-collateral instructions (SSS-049) — awaiting review
-- PR #61 — docs/PROOF-OF-RESERVES.md (SSS-048) — awaiting review
-- PR #60 — GET /api/reserves/proof (SSS-046) — awaiting review
-- PR #59 — ProofOfReserves SDK (SSS-047) — awaiting review
-
 ## Notes: CDP Implementation
 - Branch: feat/sss-049-cdp-multi-collateral
 - CollateralVault PDA seeds: ["cdp-collateral-vault", sss_mint, user, collateral_mint]
@@ -65,6 +58,18 @@ All assigned tasks complete. Awaiting PR reviews.
 - Liquidation: full position (all debt burned, all collateral seized)
 - Pyth price expo assumed negative; uses price.expo.unsigned_abs()
 - Borrow limit: floor(collateral_value_usd * 10^sss_decimals * 10000 / 15000 / 10^6)
+
+### SSS-052 — DONE ✅
+- docs/CDP.md — multi-collateral CDP guide (Anchor + API + SDK)
+- Pushed to feat/sss-050-cdp-position-api; included in PR #119
+
+## Open PRs
+- PR #119 — SSS-050 CDP backend API + SSS-052 CDP docs — awaiting review
+- PR #63 — CdpModule SDK (SSS-051) — awaiting review
+- PR #62 — CDP multi-collateral instructions (SSS-049) — awaiting review
+- PR #61 — docs/PROOF-OF-RESERVES.md (SSS-048) — awaiting review
+- PR #60 — GET /api/reserves/proof (SSS-046) — awaiting review
+- PR #59 — ProofOfReserves SDK (SSS-047) — awaiting review
 
 ## Next
 - Await PR reviews/merges
