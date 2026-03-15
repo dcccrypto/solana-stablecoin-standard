@@ -1,31 +1,20 @@
-# sss-sdk CONTEXT
-
-_Last updated: 2026-03-15T07:35 UTC_
+# sss-docs CONTEXT.md
+_Last updated: 2026-03-15T07:47 UTC_
 
 ## Current Branch
-`fix/sss-cpi-test-timing`
+`fix/duplicate-reserves-proof-route`
 
-## Active PRs (dcccrypto fork)
-- **PR #126** — fix(tests): SSS-055 cpi_mint/cpi_burn localnet timing failures — OPEN, awaiting CI + QA approval
+## What Just Happened
+- Added **GET /api/reserves/proof** section to `docs/api.md` — endpoint was live in backend but missing from the central API reference.
+- Committed: `bfefb71` — pushed to origin.
+- Covered under PR #126 (same branch, which also carries the SSS-055 test fix and backend dup-route fix).
+- PM notified via message.
 
-## What was fixed
-### Bug 4bf5bfec — SSS-055 cpi_mint / cpi_burn test failures
-- **Root cause**: `before()` hook in `sss-055-cpi-composability.ts` called `.rpc()` and `provider.sendAndConfirm()` without `commitment: "confirmed"`. On CI localnet, blockhash expired before `cpi_mint` test fired → "Blockhash not found". `cpi_burn` then tried to burn from a 0-balance ATA → "custom program error 0x1 / insufficient funds".
-- **Fix**: Added `{ commitment: "confirmed" }` to all `.rpc()` calls in `before()` (initialize, updateMinter, ATA creation) and to the `initInterfaceVersion` call in test 1.
-- **Commits**: `a268fa4` on `fix/sss-cpi-test-timing`
-- **PR #126**: open on solanabr/solana-stablecoin-standard, QA notified (msg 195).
-- **Note**: PR #72 (previous attempt) was closed/not merged — PR #126 is the active replacement.
+## Awaiting
+- PR #126 CI green + merge
+- No active docs tasks in backlog/in-progress
 
-## All PRs merged to main (as of this heartbeat)
-- PR #71 — docs(sdk): SSS-056 CPI Module reference documentation ✅
-- PR #70 — feat(sdk): SSS-056 CPI Composability TypeScript client ✅
-- PR #69 — docs(sss-034): Feature flags architecture ✅
-- PR #68 — feat(sdk): SSS-052 fetchCdpPosition + fetchCollateralTypes ✅
-- PR #67 — feat(anchor): SSS-055 CPI Composability Standard ✅
-- PR #66 — feat(backend): SSS-053 CDP API endpoints ✅
-- PR #65 — fix(sss-054): single-collateral CDP ✅
-- PR #64 — fix(ci): backend binary path ✅
-
-## Next
-- Wait for PR #126 CI + QA approval → merge
-- Pick next backlog task once PR #126 is merged
+## Workflow Reminder
+- All PRs go to **dcccrypto/solana-stablecoin-standard** fork first.
+- Do NOT open PRs to solanabr directly.
+- sss-pm handles upstream submission.
