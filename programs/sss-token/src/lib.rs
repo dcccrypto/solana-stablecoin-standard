@@ -218,4 +218,31 @@ pub mod sss_token {
     pub fn execute_action(ctx: Context<ExecuteAction>, proposal_id: u64) -> Result<()> {
         instructions::dao_committee::execute_action_handler(ctx, proposal_id)
     }
+
+    // ─── SSS-070: Yield-Bearing Collateral ───────────────────────────────────
+
+    /// Initialize yield-bearing collateral support for a stablecoin config.
+    ///
+    /// Creates the `YieldCollateralConfig` PDA and atomically enables
+    /// `FLAG_YIELD_COLLATERAL`.  Only valid for SSS-3 presets.  Authority only.
+    ///
+    /// `initial_mints`: optional list of yield-bearing SPL token mints to
+    /// whitelist immediately (e.g. stSOL, mSOL).  Max 8 total.
+    pub fn init_yield_collateral(
+        ctx: Context<InitYieldCollateral>,
+        initial_mints: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::yield_collateral::init_yield_collateral_handler(ctx, initial_mints)
+    }
+
+    /// Add a yield-bearing SPL token mint to the whitelist.
+    ///
+    /// `FLAG_YIELD_COLLATERAL` must already be enabled.  Authority only.
+    /// Rejects duplicates and enforces the 8-mint cap.
+    pub fn add_yield_collateral_mint(
+        ctx: Context<AddYieldCollateralMint>,
+        collateral_mint: Pubkey,
+    ) -> Result<()> {
+        instructions::yield_collateral::add_yield_collateral_mint_handler(ctx, collateral_mint)
+    }
 }

@@ -86,4 +86,13 @@ pub enum SssError {
     MemberNotFound,
     #[msg("Proposal action does not match the guarded instruction")]
     ProposalActionMismatch,
+    // Yield-Bearing Collateral (SSS-070)
+    #[msg("FLAG_YIELD_COLLATERAL is not enabled for this stablecoin")]
+    YieldCollateralNotEnabled,
+    #[msg("Collateral mint is not on the yield-bearing whitelist")]
+    CollateralMintNotWhitelisted,
+    #[msg("Yield collateral whitelist is full (max 8 mints)")]
+    WhitelistFull,
+    #[msg("Collateral mint is already on the whitelist")]
+    MintAlreadyWhitelisted,
 }
