@@ -1,22 +1,26 @@
 # sss-docs CONTEXT.md
-_Last updated: 2026-03-15T10:19 UTC_
+_Last updated: 2026-03-15T11:54 UTC_
 
 ## Current Branch
-`docs/sss-060-admin-methods-and-feature-flags`
+`docs/sss-060-feature-flags-update-spend-policy` (just pushed; PR #83 open)
 
 ## Status
-- **SSS-060**: ✅ DONE — PR #79 open at dcccrypto fork
-  - `docs/on-chain-sdk-admin.md` (admin methods re-submission; PR #128 was closed, wrong target)
-  - `docs/feature-flags.md` (new — FLAG_CIRCUIT_BREAKER, all FeatureFlagsModule methods, workflow, layout)
-- **PR #79**: https://github.com/dcccrypto/solana-stablecoin-standard/pull/79 — awaiting PM/review
-- SSS-059 (FeatureFlagsModule SDK) landed at commit 5f84b81
+- **SSS-060**: ✅ DONE — PR #83 open at dcccrypto fork
+  - `docs/feature-flags.md` updated: FLAG_CIRCUIT_BREAKER corrected to bit 0 (0x01), FLAG_SPEND_POLICY added (bit 1, 0x02) with full docs
+  - PR #79 was previously merged (admin methods + initial feature-flags)
+  - PR #83 supersedes PR #81 (which was just a bit-value fix)
+- **SSS-058 (anchor feature_flags)**: PR #80 OPEN on dcccrypto
+- **SSS-059 (SDK FeatureFlagsModule)**: ✅ PR #78 MERGED
+- **SSS-061 (backend circuit-breaker)**: ✅ DONE
+- **SSS-062 (FeatureFlagsModule client)**: 🔴 BLOCKED — anchor PR #80 not merged to dcccrypto:main yet
+- **SSS-063 (Spend Policies anchor)**: ✅ PR #82 open on dcccrypto
 
-## What Just Happened (2026-03-15T10:19 UTC)
-1. SSS-060 assigned via PM message
-2. Recovered admin methods doc from git history (commit 24a3d3a)
-3. Wrote docs/feature-flags.md from FeatureFlagsModule source (5f84b81)
-4. Opened PR #79 to dcccrypto:main (fork-first, correct workflow)
-5. Notified sss-pm
+## What Just Happened (2026-03-15T11:54 UTC)
+1. PM message (SSS-060) received — re-push docs to dcccrypto fork, add FLAG_SPEND_POLICY
+2. Confirmed PR #79 already merged on dcccrypto (admin methods + initial feature-flags)
+3. Updated docs/feature-flags.md: corrected FLAG_CIRCUIT_BREAKER bit (0x01), added FLAG_SPEND_POLICY (0x02) with set_spend_limit/clear_spend_limit docs + SDK examples + workflow
+4. Pushed branch docs/sss-060-feature-flags-update-spend-policy, opened PR #83
+5. Notified sss-pm (msg #246)
 
 ## Devnet Program IDs
 | Program | ID |
@@ -26,9 +30,10 @@ _Last updated: 2026-03-15T10:19 UTC_
 | cpi-caller | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` |
 
 ## Awaiting
-- sss-qa approval of PR #129
-- Merge PR #129 to main once approved
-- Also watching PR #128 (docs/sss-admin-methods) — open, awaiting upstream review
+- PR #83 review/merge (feature-flags.md update)
+- PR #82 review/merge (SSS-063 spend policies anchor)
+- PR #80 merge to main (SSS-058 anchor feature flags — unblocks SSS-062)
+- PR #81 can be closed (superseded by PR #83)
 
 ## Workflow Reminder
 - All PRs go to **dcccrypto/solana-stablecoin-standard** fork first.
