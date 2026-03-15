@@ -1,46 +1,51 @@
 # SSS-SDK Agent Context
 
-**Last updated:** 2026-03-15T21:30 UTC
+**Last updated:** 2026-03-15T21:33 UTC
 
 ## Current State
 
 **Branch:** `main` (dcccrypto fork)
-**Status:** Build fix applied — ADMIN_OP_* constants added to state.rs. 311/311 SDK + 61/61 backend green.
+**Status:** ADMIN_OP_* fix on main — CI in progress. 311/311 SDK + 61/61 backend green (pre-fix run). All PRs #99–#107 already merged. No open PRs.
 
 ## What's Done
 
+### Heartbeat 2026-03-15T21:33 UTC
+- All PM/QA messages (#341–#356) confirmed: PRs #99–#107 already closed/merged in prior cycles
+- No open PRs remain
+- CI runs 23119798395 + 23119810518 in progress (ADMIN_OP_* fix + CONTEXT update)
+- Devnet airdrop: 0.05 SOL balance, rate-limited 429 on CLI + RPC. QuickNode faucet requires browser wallet auth — cannot automate
+- SSS-078 devnet deploy still BLOCKED — needs manual browser faucet visit (faucet.solana.com or faucet.quicknode.com/solana/devnet)
+
 ### Build Fix — ADMIN_OP_* constants (2026-03-15T21:30 UTC)
-- `admin_timelock.rs` imported `ADMIN_OP_NONE`, `ADMIN_OP_TRANSFER_AUTHORITY`, `ADMIN_OP_SET_FEATURE_FLAG`, `ADMIN_OP_CLEAR_FEATURE_FLAG` from `crate::state` but they were never defined
-- Added 4 pub const u8 discriminants to state.rs (module level, above `impl StablecoinConfig`)
-- Committed + pushed: abaa3ef — fix(sss-085): add missing ADMIN_OP_* constants to state.rs
+- `admin_timelock.rs` imported ADMIN_OP_NONE/TRANSFER_AUTHORITY/SET_FEATURE_FLAG/CLEAR_FEATURE_FLAG from `crate::state` but undefined
+- Added 4 pub const u8 discriminants to state.rs — fix(sss-085) commit abaa3ef
 - cargo build -p sss-token: clean (warnings only, 0 errors)
-- 311/311 SDK + 61/61 backend tests passing
 
 ### SSS-090 — Oracle Staleness + Confidence Check (LANDED ON MAIN)
-- Cherry-picked onto dcccrypto:main, pushed. 311/311 SDK + 61/61 backend green.
-- Includes `OracleParamsModule`, 17 tests, `set_oracle_params`, staleness+confidence in CDP handlers.
+- OracleParamsModule, 17 tests, set_oracle_params, staleness+confidence in CDP handlers
 
-### SSS-085 — P0 Security Fixes (also landed)
-- admin_timelock.rs: `set_pyth_feed`, `set_oracle_params`, propose/execute/cancel timelocked ops
-- state.rs: `expected_pyth_feed`, `admin_op_*` fields, `admin_timelock_delay`
+### SSS-085 — P0 Security Fixes (LANDED ON MAIN)
+- admin_timelock.rs: set_pyth_feed, set_oracle_params, propose/execute/cancel timelocked ops
+- state.rs: expected_pyth_feed, admin_op_* fields, admin_timelock_delay
 
-### Submission PR #123
-- PR #123 is OPEN (dcccrypto:main → upstream main)
-- All SSS-090 + SSS-085 + build fix now on dcccrypto:main
+### PRs Merged (prior cycles)
+- #99–#107 all closed (SSS-081 through SSS-087 — SDK/docs/security/AdminTimelock)
+- #96–#98 (SSS-072/075 anchor programs + ZK compliance)
 
 ## Open PRs (upstream solanabr)
-- PR #143: docs/sss-090-oracle-params — OPEN (dcccrypto branch, created by sss-docs)
-- PR #123: main submission PR — OPEN (awaiting SSS-078 devnet deploy for smoke test)
-- PR #132: needs update for SSS-075/076/077 — OPEN
-- PR #133: docs/sss-065-spend-policy-layout-update — OPEN
-- PR #135: feat/sss-067-dao-committee — OPEN
-- PR #129: devnet deployment — OPEN
+- PR #143: docs/sss-090-oracle-params — OPEN (dcccrypto branch)
+- PR #123: main submission PR — OPEN (awaiting SSS-078 devnet deploy smoke test)
+- PR #132: needs update for SSS-075/076/077
+- PR #133: docs/sss-065-spend-policy-layout-update
+- PR #135: feat/sss-067-dao-committee
+- PR #129: devnet deployment
 
 ## Devnet Deployment (BLOCKED — SOL)
-- Task: SSS-078 (in-progress, owned by sss-devops)
+- Task: SSS-078 (in-progress)
 - Deployer: ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB
-- Need ~5.87 SOL for sss_token upgrade (841k binary due to ZK code)
-- Devnet airdrop rate-limited globally
+- Balance: 0.05 SOL (need ~5.87 SOL for sss_token upgrade)
+- All automated faucet paths exhausted (CLI 429, RPC 429, solfaucet 404)
+- REQUIRES: Khubair manual browser visit to faucet.solana.com or faucet.quicknode.com/solana/devnet
 
 ## Key Constants
 - `FLAG_CIRCUIT_BREAKER = 1n << 0n` (bit 0, 0x01)
@@ -54,6 +59,6 @@
 - `ADMIN_OP_NONE = 0`, `ADMIN_OP_TRANSFER_AUTHORITY = 1`, `ADMIN_OP_SET_FEATURE_FLAG = 2`, `ADMIN_OP_CLEAR_FEATURE_FLAG = 3`
 
 ## Next Steps
-1. sss-devops: retry devnet airdrop — need ~5.87 SOL for sss_token upgrade
-2. Once deployed: notify sss-pm with new program ID to unblock SSS-081 (PR #123)
-3. No new QA tasks assigned — monitoring for regressions
+1. BLOCKED: Devnet airdrop — needs Khubair manual browser wallet auth (~5.87 SOL needed)
+2. Once deployed: notify sss-pm with new program ID to unblock PR #123
+3. Monitor CI runs 23119798395 + 23119810518 for build fix result
