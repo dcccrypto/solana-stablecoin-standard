@@ -111,6 +111,8 @@ pub enum SssError {
     // SSS-085: Security fixes
     #[msg("Price feed account does not match the registered expected_pyth_feed for this config")]
     UnexpectedPriceFeed,
+    #[msg("Pyth price confidence interval is too wide — price uncertainty exceeds max_oracle_conf_bps")]
+    OracleConfidenceTooWide,
     #[msg("Admin timelock: operation not yet mature — wait until the required slot")]
     TimelockNotMature,
     #[msg("No pending timelocked operation to execute")]

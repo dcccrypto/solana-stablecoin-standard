@@ -29,6 +29,8 @@ export type {
   SetPythFeedParams,
   PendingTimelockOp,
 } from './AdminTimelockModule';
+export { OracleParamsModule, DEFAULT_MAX_ORACLE_AGE_SECS, RECOMMENDED_MAX_ORACLE_CONF_BPS } from './OracleParamsModule';
+export type { SetOracleParamsArgs, OracleParams } from './OracleParamsModule';
 export { SSSClient } from './client';
 export { SSSError } from './error';
 export * from './presets';

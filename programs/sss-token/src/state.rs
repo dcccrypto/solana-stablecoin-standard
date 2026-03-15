@@ -100,6 +100,13 @@ pub struct StablecoinConfig {
     /// SSS-085: Minimum slot delay for admin timelock (default 2 epochs ≈ 432 000 slots).
     /// Can be set at init or by authority via `set_timelock_delay`.
     pub admin_timelock_delay: u64,
+    /// SSS-090: Maximum Pyth price age in seconds for CDP operations.
+    /// 0 = use hardcoded default (60 s).  Set via `set_oracle_params`.
+    pub max_oracle_age_secs: u32,
+    /// SSS-090: Maximum acceptable Pyth confidence interval as a fraction of price,
+    /// expressed in basis points (e.g. 100 = 1%).  0 = disabled (no conf check).
+    /// Set via `set_oracle_params`.
+    pub max_oracle_conf_bps: u16,
     pub bump: u8,
 }
 
