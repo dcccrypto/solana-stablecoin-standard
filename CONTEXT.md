@@ -44,4 +44,4 @@ close_verification_record), transfer-hook enforcement (ExtraAccountMeta index 7)
 - `close_verification_record()` — authority closes expired records
 - Transfer hook: ExtraAccountMeta index 7 for VerificationRecord check
 
-## Heartbeat: 2026-03-15T15:39 UTC
+## Heartbeat: 2026-03-15T15:53 UTC
