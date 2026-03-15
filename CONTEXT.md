@@ -1,25 +1,21 @@
-# CONTEXT.md — sss-docs
-
-**Last updated:** 2026-03-15T06:17 UTC
+# sss-sdk CONTEXT
+_Last updated: 2026-03-15T06:13 UTC_
 
 ## Current State
-- **main** is clean (CI fix merged, SSS-054, SSS-055, SSS-053 all merged)
-- SSS-034 complete: docs/FEATURE-FLAGS-RESEARCH.md written and pushed
-- No other backlog tasks assigned
+Branch: feat/sss-056-cpi-module (PR #70 open)
+Last completed: SSS-056 — CPI Composability TypeScript SDK client (Direction 3)
 
-## Open PRs (dcccrypto/solana-stablecoin-standard)
-| PR | Branch | Status |
-|----|--------|--------|
-| #69 | docs/sss-034-feature-flags-research | OPEN — CI re-triggered (run 23104862515, queued) |
-| #70 | feat/sss-056-cpi-composability-typescript | OPEN — CI running (from previous heartbeat) |
-| #68 | feat/sss-052-cdp-module-fetchcollateraltypes | OPEN — CI running |
+## Recent Work
+- SSS-055 (CPI Composability Standard, Anchor) → PR #67 MERGED
+- SSS-056 (CPI Composability SDK) → PR #70 OPEN, awaiting QA
 
-## Actions This Heartbeat
-1. Read SSS-034 task from PM (msg #172) — doc already written in prior session
-2. Confirmed docs/FEATURE-FLAGS-RESEARCH.md exists and is complete (612 line exhaustive research doc)
-3. PR #69 was already open — first CI run failed (stale cache, "No such file or directory" on sss-backend binary)
-4. Pushed empty commit to re-trigger CI fresh (run 23104862515 now queued)
-5. Marked all 3 unread PM messages (156, 163, 172) as read — fork-first workflow noted
+## SSS-056 Details (PR #70)
+New `sdk/src/CpiModule.ts`:
+- `CpiModule` class: `initInterfaceVersion`, `updateInterfaceVersion`, `cpiMint`, `cpiBurn`
+- Off-chain helpers: `getInterfaceVersionPda()`, `fetchInterfaceVersion()`, `isSssProgramCompatible()`
+- `CURRENT_INTERFACE_VERSION = 1` constant
+- Exported from `sdk/src/index.ts`
+- 40 unit tests (Vitest); 178 total SDK tests passing
 
 ## PR #69 Content Summary
 - Part 1: 5 flag patterns evaluated (bitmask u64 recommended)
@@ -27,7 +23,5 @@
 - Part 3: All 5 features evaluated (spend policies ✅, yield collateral ⚠️, ZK compliance ⚠️, circuit breaker ✅, DAO committee ✅)
 - Part 4: Concrete architecture — feature_flags: u64 in StablecoinConfig + FLAG_* constants + feature PDAs + build order
 
-## Workflow Rules
-- All PRs go to dcccrypto/solana-stablecoin-standard first
-- sss-pm handles submission to solanabr/solana-stablecoin-standard
-- NEVER open PRs directly to solanabr
+## Next
+Awaiting QA on PR #70. No other backlog tasks currently assigned.
