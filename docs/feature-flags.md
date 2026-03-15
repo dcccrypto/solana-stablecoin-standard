@@ -20,7 +20,7 @@ corresponding behaviour; clearing it deactivates it.
 
 | Constant | Bit | Hex | Description |
 |---|---|---|---|
-| `FLAG_CIRCUIT_BREAKER` | 7 | `0x80` | Halts all mint and burn operations for the token until cleared. |
+| `FLAG_CIRCUIT_BREAKER` | 0 | `0x01` | Halts all mint and burn operations for the token until cleared. |
 
 > **Reserved bits:** bits 0–6 and 8–63 are reserved for future protocol flags.
 > Do not set them directly.
@@ -28,7 +28,7 @@ corresponding behaviour; clearing it deactivates it.
 ### `FLAG_CIRCUIT_BREAKER`
 
 ```typescript
-export const FLAG_CIRCUIT_BREAKER = 1n << 7n; // 0x80
+export const FLAG_CIRCUIT_BREAKER = 1n << 0n; // 0x01
 ```
 
 When `FLAG_CIRCUIT_BREAKER` is set in `StablecoinConfig.feature_flags`:
