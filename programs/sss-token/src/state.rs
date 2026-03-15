@@ -107,6 +107,10 @@ pub struct StablecoinConfig {
     /// expressed in basis points (e.g. 100 = 1%).  0 = disabled (no conf check).
     /// Set via `set_oracle_params`.
     pub max_oracle_conf_bps: u16,
+    /// SSS-092: Annual stability fee in basis points (e.g. 50 = 0.5% p.a.).
+    /// Accrues on outstanding CDP debt; collected via `collect_stability_fee`.
+    /// 0 = no stability fee (default).
+    pub stability_fee_bps: u16,
     pub bump: u8,
 }
 
@@ -230,6 +234,12 @@ pub struct CdpPosition {
     /// The single collateral mint for this position (set on first borrow, immutable).
     /// Enforces 1:1 CollateralVault-to-CdpPosition to prevent liquidation insolvency.
     pub collateral_mint: Pubkey,
+    /// SSS-092: Unix timestamp of the last stability fee accrual for this position.
+    /// Initialised to 0; set on first borrow and updated each time fees are collected.
+    pub last_fee_accrual: i64,
+    /// SSS-092: Total stability fees accrued (in SSS token native units) but not yet
+    /// collected by the protocol.  Debtor must repay principal + accrued_fees.
+    pub accrued_fees: u64,
     pub bump: u8,
 }
 
