@@ -267,6 +267,13 @@ export class OracleParamsModule {
     priceAgeSeconds: number,
     confBps: number,
   ): Promise<OracleFeedValidation> {
+    if (!Number.isFinite(priceAgeSeconds) || priceAgeSeconds < 0) {
+      throw new Error(`priceAgeSeconds must be a finite non-negative number, got ${priceAgeSeconds}`);
+    }
+    if (!Number.isFinite(confBps) || confBps < 0) {
+      throw new Error(`confBps must be a finite non-negative number, got ${confBps}`);
+    }
+
     const params = await this.getOracleParams(mint);
     const maxAge = params.maxAgeSecs === 0 ? DEFAULT_MAX_ORACLE_AGE_SECS : params.maxAgeSecs;
 

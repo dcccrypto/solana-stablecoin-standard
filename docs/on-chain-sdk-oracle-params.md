@@ -27,7 +27,7 @@ Both `cdp_borrow_stable` and `cdp_liquidate` enforce these constraints on every 
 import {
   DEFAULT_MAX_ORACLE_AGE_SECS,       // 60  — on-chain hardcoded default
   RECOMMENDED_MAX_ORACLE_CONF_BPS,   // 100 — 1%; recommended for mainnet
-} from '@sss/sdk';
+} from '@stbr/sss-token';
 ```
 
 | Constant | Value | Notes |
@@ -40,7 +40,7 @@ import {
 ## Import & Instantiation
 
 ```typescript
-import { OracleParamsModule } from '@sss/sdk';
+import { OracleParamsModule } from '@stbr/sss-token';
 import { AnchorProvider, web3 } from '@coral-xyz/anchor';
 
 const provider: AnchorProvider = /* ... */;
@@ -78,7 +78,7 @@ setOracleParams(args: SetOracleParamsArgs): Promise<TransactionSignature>
 **Example — tighten mainnet settings:**
 
 ```typescript
-import { RECOMMENDED_MAX_ORACLE_CONF_BPS } from '@sss/sdk';
+import { RECOMMENDED_MAX_ORACLE_CONF_BPS } from '@stbr/sss-token';
 
 const sig = await op.setOracleParams({
   mint,
@@ -192,7 +192,7 @@ Applies the same staleness and confidence checks as `cdp_borrow_stable` before c
 
 | Error | Trigger |
 |---|---|
-| `StaleOraclePrice` | Price feed older than `max_oracle_age_secs` |
+| `StalePriceFeed` | Price feed older than `max_oracle_age_secs` |
 | `OracleConfidenceTooWide` | `conf / price` (bps) > `max_oracle_conf_bps` |
 
 ---
