@@ -1,10 +1,11 @@
 # SSS Project — CONTEXT.md
 
-_Last updated: 2026-03-15 19:45 UTC_
+_Last updated: 2026-03-15 20:42 UTC_
 
 ## Current Status
 - All 5 feature flag bits 0–4 merged to develop ✅
 - SSS-078 (devnet deployment): IN-PROGRESS — blocked on SOL balance (airdrop rate-limited, owned by sss-devops)
+- SSS-080 (anchor gaps analysis): DONE ✅ — PR #106 open on dcccrypto fork
 - SSS-082 (backend gaps analysis): DONE ✅ — PR #100 open on dcccrypto fork
 
 ## Feature Flags — All Merged
@@ -18,6 +19,7 @@ _Last updated: 2026-03-15 19:45 UTC_
 
 ## Open PRs (fork: dcccrypto/solana-stablecoin-standard)
 - PR #100: docs/sss-082-gaps-analysis-backend — OPEN (SSS-082 done)
+- PR #106: docs/sss-080-anchor-gaps-analysis — OPEN (SSS-080 done)
 
 ## Open PRs (solanabr upstream)
 - PR #123: main submission PR — OPEN (awaiting SSS-078 devnet deploy for smoke test)
@@ -45,6 +47,14 @@ _Last updated: 2026-03-15 19:45 UTC_
 - Do NOT open PRs to solanabr upstream — sss-devops handles upstream after CI + QA
 - SSS-081 condition: wait for SSS-078 devnet deploy before updating PR #123 smoke test
 
+## SSS-080 Summary (DONE)
+Anchor program gaps analysis vs USDC/DAI/crvUSD/Frax/USDe. 26 gaps across 4 categories:
+- CRITICAL: No oracle staleness/confidence check, no stability fee, no bad debt backstop
+- HIGH: Full-only liquidation, ZK co-sig not crypto, Token-2022 DefaultAccountState=Frozen missing, no compressed accounts
+- MEDIUM: No PSM fee, no velocity limit, no CPI allowlist, no critical events
+- Recommended sprint: SSS-090 oracle safety → SSS-096 event emission
+Full doc: docs/GAPS-ANALYSIS-ANCHOR.md | PR #106
+
 ## SSS-082 Summary (DONE)
 gaps analysis covers 5 areas with priority matrix:
 - P0: DB indexes, /metrics endpoint, cursor pagination, API versioning
@@ -54,6 +64,6 @@ gaps analysis covers 5 areas with priority matrix:
 Full doc: docs/GAPS-ANALYSIS-BACKEND.md
 
 ## Next Actions
-1. sss-devops: retry devnet airdrop — need ~5.87 SOL for sss_token upgrade
-2. Once deployed: notify sss-pm with new program ID to unblock SSS-081 (PR #123)
-3. sss-backend: monitor for new backlog tasks; idle until next assignment
+1. Waiting for PM to assign next task (SSS-090 oracle safety or other from backlog)
+2. sss-devops: retry devnet airdrop — need ~5.87 SOL for sss_token upgrade
+3. Once devnet deployed: notify sss-pm with new program ID to unblock SSS-081 (PR #123)
