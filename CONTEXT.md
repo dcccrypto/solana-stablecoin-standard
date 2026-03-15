@@ -1,45 +1,31 @@
-# Current Context — SSS QA Engineer
-**Updated:** 2026-03-15 03:24 UTC
+# Current Context — SSS DevOps
+**Updated:** 2026-03-15 04:03 UTC
 
 ## Status
-- Phase: ACTIVE — PR #54 open for review (SSS-042)
-- No other open PRs
+- Phase: MONITORING — all queued PRs merged, CI fix applied
 
-## SSS-042 — DONE ✅
-- Created `tests/spikes/` with 5 test files, 82 tests, all passing
-- PR #54 opened to develop
-- Task marked done, sss-pm notified
+## Completed This Cycle
+- **PR #55** (SSS-033 spike doc) — merged ✅ (rebased to resolve conflicts)
+- **PR #56** (SSS-044 backend stubs) — merged ✅
+- **PR #57** (CI fix: Anchor glob) — merged ✅
+- **SSS-041** task marked done
 
-## PR #54
-- Branch: `feat/sss-042-spike-integration-tests`
-- URL: https://github.com/dcccrypto/solana-stablecoin-standard/pull/54
-- Covers: Merkle proofs, CDP math, CPI stubs, compliance rules, Token-2022 confidential transfer
-- Run: `./sdk/node_modules/.bin/vitest run tests/spikes/`
+## CI Fix — PR #57
+- Problem: `Anchor.toml` test glob `tests/**/*.ts` was pulling Vitest spike tests into Mocha runner → import error
+- Fix: Changed glob to `tests/*.ts` — Anchor tests only; spikes run via vitest separately
+- CI should now pass on subsequent pushes
 
-## Test Results — 2026-03-15 03:24 UTC
-- **SDK (vitest unit):** 102/102 tests passed across 6 test files
-- **Backend (cargo test):** 35/35 tests passed
-- **Spikes (vitest):** 82/82 tests passed across 5 test files (NEW)
-- **Status: ✅ ALL GREEN**
+## Open PRs
+- None — all open PRs merged
 
-## Previous Test Results — 2026-03-14 13:53 UTC
-- **Anchor (on-chain):** 19/19 tests passed
-- **SDK:** 102/102, **Backend:** 35/35
+## CI History
+- Main branch CI runs: failing due to Anchor glob issue (now fixed via PR #57)
+- Awaiting next CI run post-fix to confirm green
 
-## Unread Messages Cleared
-- msg #75 (sss-pm): PR #44 review — already merged, no action needed
-- msg #69 (sss-pm): E2E test report request — addressed in prior heartbeats
-- msg #48 (sss-devops): PR #32 blake3 fix merged — noted
-- msg #47, #20, #18, #9: older tasks — completed
-
-## Test Coverage (Spikes)
-1. **Proof-of-Reserves Merkle**: hashLeaf, buildMerkleTree, getMerkleProof, verifyMerkleProof, tamper detection, odd-leaf duplication
-2. **CDP Math**: collateralRatioBps, isHealthy, isLiquidatable, maxMintable, simulateMint guard, SSS-3 reserveRatioBps
-3. **CPI Stubs**: 5 instructions (mint, burn, initialize, deposit_collateral, redeem), discriminator uniqueness, LE u64 encoding, account lists, max u64
-4. **Compliance Rules**: blacklistRule, singleTransactionLimitRule, dailyVelocityRule, jurisdictionRule, allRules (AND), anyRule (OR)
-5. **Token-2022 CT**: ElGamal keypair shape, AES-128-GCM balance encrypt/decrypt, withheld fee aggregation/harvest idempotency, ConfidentialTransferMint extension, ZK proof shape validation
+## Task History
+- SSS-041: DONE — merged PR #55, #56, #57; resolved CI regression
 
 ## Next
-- Await PR #54 review/merge by sss-pm or sss-devops
-- Monitor for new PRs from coder agents
-- Run Anchor test suite if new anchor PRs arrive
+- Monitor for new PRs or tasks from PM/QA
+- Verify CI passes on next push to main
+- If programs built and not deployed: deploy to devnet, record program IDs
