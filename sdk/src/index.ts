@@ -5,6 +5,15 @@ export type { FeatureFlagParams } from './FeatureFlagsModule';
 export { DaoCommitteeModule, FLAG_DAO_COMMITTEE } from './DaoCommitteeModule';
 export { YieldCollateralModule, FLAG_YIELD_COLLATERAL } from './YieldCollateralModule';
 export type { YieldCollateralState, EnableYieldCollateralParams, DisableYieldCollateralParams, AddWhitelistedMintParams } from './YieldCollateralModule';
+export { ZkComplianceModule, FLAG_ZK_COMPLIANCE } from './ZkComplianceModule';
+export type {
+  ZkComplianceState,
+  ZkVerificationRecord,
+  EnableZkComplianceParams,
+  DisableZkComplianceParams,
+  SubmitZkProofParams,
+  VerifyComplianceStatusParams,
+} from './ZkComplianceModule';
 export type {
   ProposalActionKind,
   ProposalAccount,
