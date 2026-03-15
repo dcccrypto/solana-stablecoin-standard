@@ -65,8 +65,8 @@
 - After PRs merge: tag release, update npm package version
 - All major gaps closed: docs, examples, benchmarks, proofs, migration guide, FAQ, OpenAPI spec
 
-## heartbeat 23:46
-<!-- heartbeat: 2026-03-14T23:46:00Z -->
+## heartbeat 00:04
+<!-- heartbeat: 2026-03-15T00:04:00Z -->
 
 ## Fixes Applied (2026-03-14)
 - Found backend server was running old binary (Mar 13) vs new compiled binary in workspace target
