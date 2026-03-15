@@ -97,7 +97,6 @@ async fn main() {
         .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
         .route("/api/compliance/audit", get(get_audit))
         .route("/api/compliance/rule", post(add_compliance_rule))
-        .route("/api/reserves/proof", get(get_reserves_proof))
         .route("/api/cdp/position/:wallet", get(get_cdp_position))
         .route("/api/cdp/collateral-types", get(get_collateral_types))
         .route("/api/cdp/simulate", post(post_cdp_simulate))
