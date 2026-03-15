@@ -887,6 +887,176 @@ describe("sss-token", () => {
     expect(final.authority.toBase58()).to.equal(authority.publicKey.toBase58());
   });
 
+  // ---------- SSS-063: Spend Policy — FLAG_SPEND_POLICY (bit 1) ----------
+
+  const FLAG_SPEND_POLICY = new anchor.BN("2"); // bit 1 = 1 << 1
+
+  it("setSpendLimit fails with zero amount", async () => {
+    try {
+      await program.methods
+        .setSpendLimit(new anchor.BN(0))
+        .accounts({
+          authority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("should have thrown SpendPolicyNotConfigured");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /SpendPolicyNotConfigured/i
+      );
+    }
+  });
+
+  it("setSpendLimit sets max_transfer_amount and enables FLAG_SPEND_POLICY", async () => {
+    await program.methods
+      .setSpendLimit(new anchor.BN(500))
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.maxTransferAmount.toNumber()).to.equal(500);
+    // FLAG_SPEND_POLICY (bit 1) should be set
+    expect(config.featureFlags.toNumber() & 2).to.equal(2);
+  });
+
+  it("non-authority cannot call setSpendLimit", async () => {
+    const intruder = Keypair.generate();
+    const airdrop = await provider.connection.requestAirdrop(
+      intruder.publicKey,
+      1_000_000_000
+    );
+    await provider.connection.confirmTransaction(airdrop, "confirmed");
+
+    try {
+      await program.methods
+        .setSpendLimit(new anchor.BN(100))
+        .accounts({
+          authority: intruder.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([intruder])
+        .rpc();
+      expect.fail("should have thrown Unauthorized");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /Unauthorized|ConstraintRaw|constraint/i
+      );
+    }
+  });
+
+  it("clearSpendLimit disables FLAG_SPEND_POLICY and zeroes max_transfer_amount", async () => {
+    await program.methods
+      .clearSpendLimit()
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.maxTransferAmount.toNumber()).to.equal(0);
+    expect(config.featureFlags.toNumber() & 2).to.equal(0);
+  });
+
+  it("non-authority cannot call clearSpendLimit", async () => {
+    // First re-enable so there's something to clear
+    await program.methods
+      .setSpendLimit(new anchor.BN(1000))
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const intruder = Keypair.generate();
+    const airdrop = await provider.connection.requestAirdrop(
+      intruder.publicKey,
+      1_000_000_000
+    );
+    await provider.connection.confirmTransaction(airdrop, "confirmed");
+
+    try {
+      await program.methods
+        .clearSpendLimit()
+        .accounts({
+          authority: intruder.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([intruder])
+        .rpc();
+      expect.fail("should have thrown Unauthorized");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /Unauthorized|ConstraintRaw|constraint/i
+      );
+    }
+
+    // Clean up
+    await program.methods
+      .clearSpendLimit()
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+  });
+
+  it("setSpendLimit with same flag already set updates max_transfer_amount", async () => {
+    await program.methods
+      .setSpendLimit(new anchor.BN(250))
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    // Update to a different value
+    await program.methods
+      .setSpendLimit(new anchor.BN(750))
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const config = await program.account.stablecoinConfig.fetch(configPda);
+    expect(config.maxTransferAmount.toNumber()).to.equal(750);
+    expect(config.featureFlags.toNumber() & 2).to.equal(2);
+
+    // Clean up
+    await program.methods
+      .clearSpendLimit()
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+  });
+
   // ---------- Revoke Minter ----------
 
   it("revokes a minter", async () => {

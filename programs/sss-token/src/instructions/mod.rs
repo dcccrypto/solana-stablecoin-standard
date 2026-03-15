@@ -1,6 +1,7 @@
 pub mod accept_authority;
 pub mod burn;
 pub mod feature_flags;
+pub mod spend_policy;
 pub mod cdp_borrow_stable;
 pub mod cdp_deposit_collateral;
 pub mod cdp_liquidate;
@@ -22,6 +23,7 @@ pub mod update_roles;
 pub use accept_authority::*;
 pub use burn::*;
 pub use feature_flags::*;
+pub use spend_policy::*;
 pub use cdp_borrow_stable::*;
 pub use cdp_deposit_collateral::*;
 pub use cdp_liquidate::*;

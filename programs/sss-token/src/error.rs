@@ -61,4 +61,9 @@ pub enum SssError {
     // Feature Flags (SSS-058)
     #[msg("Circuit breaker is active: mint/burn are halted")]
     CircuitBreakerActive,
+    // Spend Policy (SSS-063)
+    #[msg("Spend policy: transfer amount exceeds max_transfer_amount")]
+    SpendLimitExceeded,
+    #[msg("Spend policy: max_transfer_amount must be > 0 before enabling FLAG_SPEND_POLICY")]
+    SpendPolicyNotConfigured,
 }
