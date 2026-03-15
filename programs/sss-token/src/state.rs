@@ -11,6 +11,11 @@ pub const FLAG_CIRCUIT_BREAKER: u64 = 1 << 0;
 /// `set_spend_limit` / `clear_spend_limit`.
 pub const FLAG_SPEND_POLICY: u64 = 1 << 1;
 
+/// DAO committee flag (bit 2): when set, privileged admin operations
+/// (pause, update_minter, update_roles, set/clear feature flags) require
+/// a passed on-chain proposal via `propose_action` / `vote_action` / `execute_action`.
+pub const FLAG_DAO_COMMITTEE: u64 = 1 << 2;
+
 /// Global stablecoin configuration (one per mint).
 #[account]
 #[derive(InitSpace)]
@@ -218,4 +223,87 @@ impl InterfaceVersion {
 
     /// The canonical namespace string used to derive discriminators.
     pub const NAMESPACE: &'static str = "sss_mint_interface";
+}
+
+// ─── SSS-067: DAO Committee Governance ───────────────────────────────────────
+
+/// Action kinds that a DAO committee proposal may authorize.
+/// Encoded as a u8 discriminant to keep the PDA small.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
+pub enum ProposalAction {
+    /// Pause the stablecoin mint (privilege: authority)
+    Pause = 0,
+    /// Unpause the stablecoin mint (privilege: authority)
+    Unpause = 1,
+    /// Enable a feature flag.  `param` = flag bits.
+    SetFeatureFlag = 2,
+    /// Clear a feature flag.  `param` = flag bits.
+    ClearFeatureFlag = 3,
+    /// Update a minter cap.  `param` = new cap (u64); `target` = minter key.
+    UpdateMinter = 4,
+    /// Revoke a minter.  `target` = minter key.
+    RevokeMinter = 5,
+}
+
+/// DAO Governance Proposal PDA.
+///
+/// Seeds: [b"dao-proposal", config, proposal_id.to_le_bytes()]
+/// Created by `propose_action`, voted on by `vote_action`, executed by `execute_action`.
+#[account]
+#[derive(InitSpace)]
+pub struct ProposalPda {
+    /// The stablecoin config this proposal governs.
+    pub config: Pubkey,
+    /// Monotonically increasing proposal index for this config (0-based).
+    pub proposal_id: u64,
+    /// Who created the proposal (must be the current authority).
+    pub proposer: Pubkey,
+    /// The action to execute when the proposal passes.
+    pub action: ProposalAction,
+    /// Generic u64 parameter (flag bits for Set/ClearFeatureFlag; cap for UpdateMinter; 0 otherwise).
+    pub param: u64,
+    /// Target pubkey (minter key for UpdateMinter/RevokeMinter; default otherwise).
+    pub target: Pubkey,
+    /// Set of committee member keys that have voted YES (max 10 members).
+    /// We store votes inline to avoid extra accounts; for simplicity, duplicate
+    /// vote attempts are rejected at the instruction level.
+    #[max_len(10)]
+    pub votes: Vec<Pubkey>,
+    /// Quorum: how many YES votes are required to execute.
+    pub quorum: u8,
+    /// Whether this proposal has been executed (one-shot).
+    pub executed: bool,
+    /// Whether this proposal has been cancelled.
+    pub cancelled: bool,
+    pub bump: u8,
+}
+
+impl ProposalPda {
+    pub const SEED: &'static [u8] = b"dao-proposal";
+    /// Maximum committee members / votes per proposal.
+    pub const MAX_VOTES: usize = 10;
+}
+
+/// DAO Committee Config PDA — tracks committee members and proposal counter.
+///
+/// Seeds: [b"dao-committee", config]
+/// Initialized by `init_dao_committee`; managed by authority.
+#[account]
+#[derive(InitSpace)]
+pub struct DaoCommitteeConfig {
+    /// The stablecoin config this committee governs.
+    pub config: Pubkey,
+    /// Ordered list of committee member pubkeys (max 10).
+    #[max_len(10)]
+    pub members: Vec<Pubkey>,
+    /// Minimum YES votes required to pass a proposal (must be ≤ members.len()).
+    pub quorum: u8,
+    /// Next proposal ID to assign (auto-incremented on `propose_action`).
+    pub next_proposal_id: u64,
+    pub bump: u8,
+}
+
+impl DaoCommitteeConfig {
+    pub const SEED: &'static [u8] = b"dao-committee";
+    pub const MAX_MEMBERS: usize = 10;
 }
