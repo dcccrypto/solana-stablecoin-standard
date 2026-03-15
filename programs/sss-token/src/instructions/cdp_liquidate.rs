@@ -48,6 +48,8 @@ pub struct CdpLiquidate<'info> {
         bump = cdp_position.bump,
         constraint = cdp_position.owner == cdp_owner.key(),
         constraint = cdp_position.sss_mint == sss_mint.key(),
+        // SSS-054: enforce the vault being seized is the position's locked collateral
+        constraint = cdp_position.collateral_mint == collateral_mint.key() @ SssError::WrongCollateralMint,
     )]
     pub cdp_position: Account<'info, CdpPosition>,
 

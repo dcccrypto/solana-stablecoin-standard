@@ -49,4 +49,6 @@ pub enum SssError {
     StalePriceFeed,
     #[msg("Price is zero or negative — cannot compute ratio")]
     InvalidPrice,
+    #[msg("Collateral mint does not match the position's locked collateral (SSS-054: single-collateral per position)")]
+    WrongCollateralMint,
 }

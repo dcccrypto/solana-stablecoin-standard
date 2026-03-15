@@ -155,10 +155,18 @@ pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> 
     // 5. Update state
     let position = &mut ctx.accounts.cdp_position;
     if position.owner == Pubkey::default() {
+        // First borrow: initialise position and lock in the collateral mint (SSS-054)
         position.config = ctx.accounts.config.key();
         position.sss_mint = ctx.accounts.sss_mint.key();
         position.owner = ctx.accounts.user.key();
+        position.collateral_mint = ctx.accounts.collateral_mint.key();
         position.bump = ctx.bumps.cdp_position;
+    } else {
+        // Subsequent borrows: enforce single-collateral constraint (SSS-054)
+        require!(
+            position.collateral_mint == ctx.accounts.collateral_mint.key(),
+            SssError::WrongCollateralMint,
+        );
     }
     position.debt_amount = position.debt_amount.checked_add(amount).unwrap();
 
