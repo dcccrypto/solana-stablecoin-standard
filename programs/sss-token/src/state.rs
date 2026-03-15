@@ -134,7 +134,7 @@ impl CollateralVault {
     pub const SEED: &'static [u8] = b"cdp-collateral-vault";
 }
 
-/// CDP position PDA — one per user, tracks total debt across all collateral types.
+/// CDP position PDA — one per user, single-collateral per position (SSS-054 fix).
 /// Seeds: ["cdp-position", sss_mint, user]
 #[account]
 #[derive(InitSpace)]
@@ -147,6 +147,9 @@ pub struct CdpPosition {
     pub owner: Pubkey,
     /// Total SSS-3 tokens currently borrowed (outstanding debt)
     pub debt_amount: u64,
+    /// The single collateral mint for this position (set on first borrow, immutable).
+    /// Enforces 1:1 CollateralVault-to-CdpPosition to prevent liquidation insolvency.
+    pub collateral_mint: Pubkey,
     pub bump: u8,
 }
 
