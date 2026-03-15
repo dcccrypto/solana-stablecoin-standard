@@ -22,7 +22,7 @@ use auth::require_api_key;
 use db::Database;
 use routes::{
     apikeys::{create_api_key, delete_api_key, list_api_keys},
-    cdp::open_cdp_vault,
+    cdp::{get_cdp_position, get_collateral_types, post_cdp_simulate},
     compliance::{add_blacklist, get_audit, get_blacklist, remove_blacklist},
     compliance_rules::add_compliance_rule,
     confidential::initiate_confidential_transfer,
@@ -98,7 +98,9 @@ async fn main() {
         .route("/api/compliance/audit", get(get_audit))
         .route("/api/compliance/rule", post(add_compliance_rule))
         .route("/api/reserves/proof", get(get_reserves_proof))
-        .route("/api/cdp/vault", post(open_cdp_vault))
+        .route("/api/cdp/position/:wallet", get(get_cdp_position))
+        .route("/api/cdp/collateral-types", get(get_collateral_types))
+        .route("/api/cdp/simulate", post(post_cdp_simulate))
         .route("/api/cpi/interface", get(get_cpi_interface))
         .route("/api/confidential/transfer", post(initiate_confidential_transfer))
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
@@ -163,7 +165,9 @@ mod tests {
             .route("/api/compliance/audit", get(get_audit))
             .route("/api/compliance/rule", post(add_compliance_rule))
             .route("/api/reserves/proof", get(get_reserves_proof))
-            .route("/api/cdp/vault", post(open_cdp_vault))
+            .route("/api/cdp/position/:wallet", get(get_cdp_position))
+            .route("/api/cdp/collateral-types", get(get_collateral_types))
+            .route("/api/cdp/simulate", post(post_cdp_simulate))
             .route("/api/cpi/interface", get(get_cpi_interface))
             .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
@@ -538,7 +542,9 @@ mod qa_tests {
             .route("/api/compliance/audit", get(get_audit))
             .route("/api/compliance/rule", post(add_compliance_rule))
             .route("/api/reserves/proof", get(get_reserves_proof))
-            .route("/api/cdp/vault", post(open_cdp_vault))
+            .route("/api/cdp/position/:wallet", get(get_cdp_position))
+            .route("/api/cdp/collateral-types", get(get_collateral_types))
+            .route("/api/cdp/simulate", post(post_cdp_simulate))
             .route("/api/cpi/interface", get(get_cpi_interface))
             .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
