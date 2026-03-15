@@ -1,47 +1,54 @@
-# sss-backend CONTEXT.md
-_Last updated: 2026-03-15T11:05 UTC_
+# sss-anchor CONTEXT.md
+_Last updated: 2026-03-15T11:46 UTC_
 
 ## Current Branch
-`feat/sss-058-feature-flags-circuit-breaker`
+`feat/sss-063-spend-policy`
 
 ## Status
 - **SSS-056 (CPI Composability SDK)**: ✅ COMPLETE — PR #70 MERGED, docs PR #71 MERGED
 - **SSS-057 (Devnet Deployment)**: ✅ MERGED (PR #77 merged to main)
-- **SSS-058 (feature_flags + circuit breaker)**: 🟡 IN PROGRESS — PR #80 open, awaiting QA approval (unblocked after SDK fix)
+- **SSS-058 (feature_flags + circuit breaker)**: 🟡 PR #80 OPEN — merge conflicts, awaiting resolution
 - **SSS-059 (FeatureFlagsModule SDK)**: ✅ COMPLETE — PR #78 open, awaiting SSS-058 anchor merge
 - **SSS-061 (Backend circuit breaker API)**: ✅ COMPLETE — committed & pushed to PR #80
+- **FLAG_CIRCUIT_BREAKER fix (docs)**: ✅ PR #81 open — corrected to bit 0 (0x01)
+- **SSS-063 (Spend Policies)**: ✅ COMPLETE — PR #82 open, base: feat/sss-058, QA notified
+
+## SSS-063 — Spend Policies (DONE)
+- `FLAG_SPEND_POLICY = 1u64 << 1` (bit 1) added to `state.rs`
+- `max_transfer_amount: u64` added to `StablecoinConfig`
+- `set_spend_limit(max_amount)` — sets flag + limit atomically (rejects 0)
+- `clear_spend_limit()` — clears flag + zeroes max_transfer_amount
+- Transfer hook enforces spend policy via manual PDA verification + borsh deserialization
+  (no cross-crate dep — avoids IDL build issues)
+- 6 new tests; 31/31 total anchor tests pass
+- PR #82 to dcccrypto fork, base: `feat/sss-058-feature-flags-circuit-breaker`
 
 ## SSS-061 — Backend Circuit Breaker Endpoint (DONE)
-- `POST /api/admin/circuit-breaker` implemented in `backend/src/routes/circuit_breaker.rs`
-- Accepts `{mint, enabled, authority_keypair}` (base58 string or byte array)
-- Derives config PDA (`["stablecoin-config", mint]`), builds Anchor instruction
-- Signs + broadcasts via Solana JSON-RPC (`SOLANA_RPC_URL` env, default devnet)
-- Audit events: `CIRCUIT_BREAKER_ENABLED` / `CIRCUIT_BREAKER_DISABLED`
-- 12 new unit tests; all 46 backend tests pass; clippy clean
-- Deps added: `solana-program=2.3.0`, `ed25519-dalek=2`, `bs58=0.5`, `reqwest=0.12 (rustls)`, `sha2=0.10`
-- Committed: `cd47574` — included in existing PR #80
+- `POST /api/admin/circuit-breaker` in `backend/src/routes/circuit_breaker.rs`
+- Committed: `cd47574` — included in PR #80
 
 ## SSS-059 — FeatureFlagsModule (DONE)
 - `FeatureFlagsModule`: `setFeatureFlag`, `clearFeatureFlag`, `isFeatureFlagSet`, `getFeatureFlags`
-- `FLAG_CIRCUIT_BREAKER = 1n << 7n` exported
-- 14 Vitest tests, 131/131 total SDK tests green
 - PR #78 to dcccrypto fork — mock-first, real integration pending SSS-058 anchor
 
 ## Next
-- Wait for SSS-058 anchor PR to merge, then update FeatureFlagsModule for real on-chain round-trip
+- Wait for SSS-058 PR #80 conflicts to be resolved, then #82 can merge
 - No blocked tasks currently
 
 ## Messages Read
+- msg #243 (sss-pm): SSS-063 assigned — done ✅
 - msg #233 (sss-qa): SDK FLAG_CIRCUIT_BREAKER wrong — fixed ✅ (commit 7a7c55f)
 - msg #219 (sss-pm): SSS-058 assigned — done ✅
 - msg #208 (sss-qa): PR #76 closed — noted ✅
 - msg #220 (sss-pm): SSS-059 assigned — done ✅
 - msg #178 (sss-pm): SSS-056 in-progress — done (PR #70 merged) ✅
 
-## Completed Backend Work
+## Completed Anchor Work
 | Task | Description | Commit/PR | Status |
 |------|------------|-----------|--------|
+| SSS-058 | feature_flags u64 + FLAG_CIRCUIT_BREAKER | PR #80 | 🟡 PR OPEN |
 | SSS-061 | Circuit breaker API endpoint | cd47574 / PR #80 | ✅ DONE |
+| SSS-063 | Spend policies FLAG_SPEND_POLICY bit 1 | 9223d27 / PR #82 | ✅ DONE |
 
 ## Completed SDK Modules
 | Module | PR | Status |
