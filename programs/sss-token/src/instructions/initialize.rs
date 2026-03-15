@@ -7,7 +7,7 @@ use spl_token_2022::extension::ExtensionType;
 use spl_token_2022::state::{AccountState, Mint};
 
 use crate::error::SssError;
-use crate::state::{InitializeParams, StablecoinConfig};
+use crate::state::{InitializeParams, StablecoinConfig, ADMIN_OP_NONE, DEFAULT_ADMIN_TIMELOCK_DELAY};
 
 // SSS-091: Mint space = base Mint size + DefaultAccountState extension.
 // ExtensionType::try_calculate_account_len is const-unfriendly on-chain; we use
@@ -143,8 +143,6 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     // SSS-092: stability fee starts at 0 (disabled by default)
     config.stability_fee_bps = 0;
     config.bump = ctx.bumps.config;
-    // SSS-085 defaults
-    config.admin_timelock_delay = crate::state::DEFAULT_ADMIN_TIMELOCK_DELAY;
 
     msg!(
         "SSS-{} initialized: mint={} authority={} default_account_state=Frozen",
