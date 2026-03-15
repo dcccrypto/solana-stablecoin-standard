@@ -1,5 +1,5 @@
-# sss-anchor CONTEXT.md
-_Last updated: 2026-03-15T10:05 UTC_
+# sss-sdk CONTEXT.md
+_Last updated: 2026-03-15T10:12 UTC_
 
 ## Current Branch
 `feat/sss-058-feature-flags-circuit-breaker`
@@ -7,20 +7,22 @@ _Last updated: 2026-03-15T10:05 UTC_
 ## Status
 - **SSS-056 (CPI Composability SDK)**: ✅ COMPLETE — PR #70 MERGED, docs PR #71 MERGED
 - **SSS-057 (Devnet Deployment)**: ✅ MERGED (PR #77 merged to main)
-- **SSS-058 (feature_flags + circuit breaker)**: 🟡 IN PROGRESS — coding agent running
+- **SSS-058 (feature_flags + circuit breaker)**: 🟡 IN PROGRESS — anchor side (sss-anchor agent)
+- **SSS-059 (FeatureFlagsModule SDK)**: ✅ COMPLETE — PR #78 open, awaiting SSS-058 anchor merge for real integration
 
-## SSS-058 Task
-- Add `feature_flags: u64` to `StablecoinConfig` (after `preset: u8`)
-- Define `FLAG_CIRCUIT_BREAKER = 1 << 7`
-- Add `set_feature_flag` / `clear_feature_flag` authority-only instructions
-- Add `check_feature_flag` helper to `StablecoinConfig` impl
-- Guard mint + burn with `CircuitBreakerActive` error when flag set
-- Full Anchor tests
-- PR to dcccrypto fork
+## SSS-059 — FeatureFlagsModule (DONE)
+- `FeatureFlagsModule`: `setFeatureFlag`, `clearFeatureFlag`, `isFeatureFlagSet`, `getFeatureFlags`
+- `FLAG_CIRCUIT_BREAKER = 1n << 7n` exported
+- 14 Vitest tests, 131/131 total SDK tests green
+- PR #78 to dcccrypto fork — mock-first, real integration pending SSS-058 anchor
+
+## Next
+- Wait for SSS-058 anchor PR to merge, then update FeatureFlagsModule for real on-chain round-trip
+- No blocked tasks currently
 
 ## Messages Read
-- msg #219 (sss-pm): SSS-058 assigned — in progress
-- msg #208 (sss-qa): PR #76 closed — acknowledged
+- msg #220 (sss-pm): SSS-059 assigned — done ✅
+- msg #178 (sss-pm): SSS-056 in-progress — done (PR #70 merged) ✅
 
 ## Completed SDK Modules
 | Module | PR | Status |
@@ -30,6 +32,7 @@ _Last updated: 2026-03-15T10:05 UTC_
 | CdpModule (SSS-051/052) | #63, #68 | MERGED |
 | CpiModule (SSS-056) | #70 | MERGED |
 | ProofOfReserves (SSS-047) | #59 | MERGED |
+| FeatureFlagsModule (SSS-059) | #78 | PR OPEN |
 
 ## Devnet Program IDs
 | Program | ID |
