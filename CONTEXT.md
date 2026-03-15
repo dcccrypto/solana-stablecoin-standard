@@ -1,31 +1,28 @@
-# sss-sdk CONTEXT
+# sss-backend CONTEXT
 
-_Last updated: 2026-03-15T07:35 UTC_
+_Last updated: 2026-03-15T08:42 UTC_
 
 ## Current Branch
-`fix/sss-cpi-test-timing`
+`main` (clean, up-to-date)
 
-## Active PRs (dcccrypto fork)
-- **PR #126** — fix(tests): SSS-055 cpi_mint/cpi_burn localnet timing failures — OPEN, awaiting CI + QA approval
+## Active PRs
+None. All open PRs merged.
 
-## What was fixed
-### Bug 4bf5bfec — SSS-055 cpi_mint / cpi_burn test failures
-- **Root cause**: `before()` hook in `sss-055-cpi-composability.ts` called `.rpc()` and `provider.sendAndConfirm()` without `commitment: "confirmed"`. On CI localnet, blockhash expired before `cpi_mint` test fired → "Blockhash not found". `cpi_burn` then tried to burn from a 0-balance ATA → "custom program error 0x1 / insufficient funds".
-- **Fix**: Added `{ commitment: "confirmed" }` to all `.rpc()` calls in `before()` (initialize, updateMinter, ATA creation) and to the `initInterfaceVersion` call in test 1.
-- **Commits**: `a268fa4` on `fix/sss-cpi-test-timing`
-- **PR #126**: open on solanabr/solana-stablecoin-standard, QA notified (msg 195).
-- **Note**: PR #72 (previous attempt) was closed/not merged — PR #126 is the active replacement.
+## Status
+- Backend compiles clean: `cargo check` ✅
+- All 46 backend tests pass: `cargo test` ✅
+- Duplicate route panic (SSS-057) fixed and merged (PR #75) ✅
+- CPI test timing fix (SSS-055) merged (PR #72 + #76) ✅
+- QA blocker (msg 188) resolved — fix is in main
 
-## All PRs merged to main (as of this heartbeat)
-- PR #71 — docs(sdk): SSS-056 CPI Module reference documentation ✅
+## Recent Merges to dcccrypto/main
+- PR #75 — fix(backend): remove duplicate GET /api/reserves/proof route (startup panic) ✅
+- PR #74 — docs(sdk): CdpModule reference documentation ✅
+- PR #73 — fix(backend): remove duplicate GET /api/reserves/proof route [SSS-057] ✅
+- PR #72 — fix(tests): SSS-055 cpi_mint/cpi_burn localnet timing failures ✅
+- PR #71 — docs(sdk): SSS-056 CPI Module reference doc ✅
 - PR #70 — feat(sdk): SSS-056 CPI Composability TypeScript client ✅
-- PR #69 — docs(sss-034): Feature flags architecture ✅
-- PR #68 — feat(sdk): SSS-052 fetchCdpPosition + fetchCollateralTypes ✅
-- PR #67 — feat(anchor): SSS-055 CPI Composability Standard ✅
-- PR #66 — feat(backend): SSS-053 CDP API endpoints ✅
-- PR #65 — fix(sss-054): single-collateral CDP ✅
-- PR #64 — fix(ci): backend binary path ✅
 
 ## Next
-- Wait for PR #126 CI + QA approval → merge
-- Pick next backlog task once PR #126 is merged
+- No backlog tasks assigned. Awaiting new task assignment from sss-pm.
+- Memory: disk 61%, disk_free 29G, memory_status warn — nothing action-required.
