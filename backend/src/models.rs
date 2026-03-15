@@ -155,3 +155,40 @@ pub struct AuditQuery {
     /// Maximum number of entries to return (default: 100, max: 1000)
     pub limit: Option<u32>,
 }
+
+/// Query parameters for GET /api/reserves/proof
+#[derive(Debug, Deserialize)]
+pub struct ReservesProofQuery {
+    /// SPL token mint address (base58)
+    pub mint: String,
+    /// Optional holder address (base58) — future use for individual proof
+    pub holder: Option<String>,
+}
+
+/// Proof type variants
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProofType {
+    /// Full Merkle tree over all balances (on-chain data)
+    MerkleBalance,
+    /// Simple on-chain supply snapshot (no Merkle tree yet)
+    SupplySnapshot,
+}
+
+/// Response for GET /api/reserves/proof
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReservesProofResponse {
+    /// Hex-encoded Merkle root (SHA-256 over leaf of total_supply LE-8)
+    pub merkle_root: String,
+    /// Total supply from SPL mint (raw u64)
+    pub total_supply: u64,
+    /// Last confirmed slot returned by devnet RPC
+    pub last_verified_slot: u64,
+    /// Proof variant used
+    pub proof_type: ProofType,
+    /// Mint pubkey echoed back
+    pub mint: String,
+    /// Holder echoed back (null when not provided)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub holder: Option<String>,
+}
