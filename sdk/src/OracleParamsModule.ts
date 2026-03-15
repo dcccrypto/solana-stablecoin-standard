@@ -10,6 +10,11 @@ import { AnchorProvider } from '@coral-xyz/anchor';
 export const DEFAULT_MAX_ORACLE_AGE_SECS = 60;
 
 /**
+ * Alias for {@link DEFAULT_MAX_ORACLE_AGE_SECS} — SSS-094 canonical export name.
+ */
+export const MAX_ORACLE_AGE_SECONDS = DEFAULT_MAX_ORACLE_AGE_SECS;
+
+/**
  * Recommended mainnet `max_oracle_conf_bps` value (1%).
  * Prices whose confidence interval exceeds 1% of price are rejected.
  */
@@ -62,6 +67,17 @@ export interface OracleParams {
    * 0 means the confidence check is disabled.
    */
   maxConfBps: number;
+}
+
+/** Alias for {@link OracleParams} — SSS-094 canonical type name. */
+export type OracleParamsConfig = OracleParams;
+
+/** Result returned by {@link OracleParamsModule.validateOracleFeed}. */
+export interface OracleFeedValidation {
+  /** Whether the feed passes all configured checks. */
+  valid: boolean;
+  /** Human-readable reason if `valid` is false. */
+  reason?: string;
 }
 
 // ─── OracleParamsModule ──────────────────────────────────────────────────────
@@ -221,6 +237,61 @@ export class OracleParamsModule {
     const maxConfBps = data.readUInt16LE(len - 3);
 
     return { maxAgeSecs, maxConfBps };
+  }
+
+  /**
+   * Alias for {@link getOracleParams} — SSS-094 canonical method name.
+   *
+   * @param mint - The stablecoin mint whose config to read.
+   * @returns {@link OracleParamsConfig} with the current settings.
+   */
+  async fetchOracleParams(mint: PublicKey): Promise<OracleParamsConfig> {
+    return this.getOracleParams(mint);
+  }
+
+  /**
+   * Validate a candidate Pyth price feed against the configured oracle params.
+   *
+   * Checks:
+   * 1. Staleness — `priceAgeSeconds` must not exceed `effectiveMaxAgeSecs`.
+   * 2. Confidence — when `maxConfBps > 0`, `confBps` must not exceed it.
+   *
+   * @param mint           - The stablecoin mint whose config provides thresholds.
+   * @param priceAgeSeconds - How many seconds old the current price is.
+   * @param confBps         - Confidence interval expressed as basis points of price
+   *                          (conf / price * 10_000). Pass 0 to skip confidence check.
+   * @returns {@link OracleFeedValidation} indicating pass/fail with reason.
+   */
+  async validateOracleFeed(
+    mint: PublicKey,
+    priceAgeSeconds: number,
+    confBps: number,
+  ): Promise<OracleFeedValidation> {
+    if (!Number.isFinite(priceAgeSeconds) || priceAgeSeconds < 0) {
+      throw new Error(`priceAgeSeconds must be a finite non-negative number, got ${priceAgeSeconds}`);
+    }
+    if (!Number.isFinite(confBps) || confBps < 0) {
+      throw new Error(`confBps must be a finite non-negative number, got ${confBps}`);
+    }
+
+    const params = await this.getOracleParams(mint);
+    const maxAge = params.maxAgeSecs === 0 ? DEFAULT_MAX_ORACLE_AGE_SECS : params.maxAgeSecs;
+
+    if (priceAgeSeconds > maxAge) {
+      return {
+        valid: false,
+        reason: `Oracle price is stale: age ${priceAgeSeconds}s exceeds max ${maxAge}s`,
+      };
+    }
+
+    if (params.maxConfBps > 0 && confBps > params.maxConfBps) {
+      return {
+        valid: false,
+        reason: `Oracle confidence too wide: ${confBps} bps exceeds max ${params.maxConfBps} bps`,
+      };
+    }
+
+    return { valid: true };
   }
 
   /**
