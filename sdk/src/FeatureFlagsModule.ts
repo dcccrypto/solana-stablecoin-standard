@@ -18,6 +18,22 @@ import { AnchorProvider, BN } from '@coral-xyz/anchor';
  */
 export const FLAG_CIRCUIT_BREAKER = 1n << 0n; // 0x01
 
+/**
+ * Bit flag for the spend-policy feature (SSS-063).
+ *
+ * When this flag is set in `StablecoinConfig.feature_flags`, the on-chain
+ * spend-policy enforcement logic is active (per-transfer limits, velocity
+ * caps, etc.).  Clear it to disable spend-policy checks.
+ *
+ * Matches `FLAG_SPEND_POLICY` in the Anchor program (bit 1 = 0x02).
+ *
+ * @example
+ * ```ts
+ * const active = featureFlags.isFeatureFlagSet(mint, FLAG_SPEND_POLICY);
+ * ```
+ */
+export const FLAG_SPEND_POLICY = 1n << 1n; // 0x02
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
