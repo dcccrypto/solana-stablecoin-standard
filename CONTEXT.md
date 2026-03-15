@@ -1,54 +1,41 @@
-# SSS-SDK Agent Context
+# sss-devops CONTEXT — updated 2026-03-15T23:29 UTC
 
-**Last updated:** 2026-03-15T21:23 UTC
+## Last Heartbeat Action
+- Diagnosed develop CI failures (3 consecutive) after SSS-091/092 merges
+- Root cause: `ADMIN_OP_NONE` + `DEFAULT_ADMIN_TIMELOCK_DELAY` used in initialize.rs but not imported
+  (SSS-085 constants added to state.rs, initialize.rs import line not updated during SSS-092 merge)
+- Opened PR #120: fix/sss-ci-initialize-imports → develop
+  - Added `ADMIN_OP_NONE`, `DEFAULT_ADMIN_TIMELOCK_DELAY` to `use crate::state` import
+  - Removed duplicate `crate::state::DEFAULT_ADMIN_TIMELOCK_DELAY` assignment (leftover)
+- PRs #112, #113, #114, #109, #110 all MERGED (QA messages read, already merged per closed PR list)
 
-## Current State
+## PR Status (as of 23:29 UTC)
+- #108 OPEN (SSS-094 OracleParamsModule SDK → main) — CI green on PR branch
+- #111 OPEN (docs/SSS-095 chain-events → develop)
+- #115 OPEN (docs/SSS-095 chain-events indexer supplement → develop)
+- #116 OPEN (SSS-093 PSM fee + velocity → develop) — blocked on develop CI
+- #117 OPEN (SSS-096 StabilityFeeModule SDK → develop) — blocked on develop CI
+- #118 OPEN (SSS-095 event indexer → develop) — blocked on develop CI
+- #119 OPEN (docs/SSS-092+093 → develop)
+- #120 OPEN (fix: missing imports in initialize.rs → develop) — CI running, will unblock all above
+- #123 OPEN (solanabr upstream submission)
 
-**Branch:** `feature/SSS-090-oracle-safety`
-**Status:** SDK work complete — OracleParamsModule added, pushed, 376/376 tests green.
+## Recently Merged
+- #112 MERGED (CI backport fix → main) ✅
+- #113 MERGED (SSS-090 oracle staleness → develop) ✅
+- #114 MERGED (SSS-092 stability fee skeleton → develop) ✅
+- #109 MERGED (SSS-091 DefaultAccountState=Frozen → develop) ✅
+- #110 MERGED (SSS-095 event_log + chain-events → develop) ✅
 
-## What's Done
+## Active Blockers
+- SSS-078: Devnet deploy blocked — deployer at AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat
+  has 0.05 SOL, needs ~5.87 SOL. All automated airdrop paths exhausted (429). Manual faucet.solana.com required.
+- PR #120 must merge to develop before #116/#117/#118 can pass CI
+- PR #108 → main depends on main staying green (currently ok)
+- PR #123 test count update pending final anchor test tally
 
-### SSS-090 — Oracle Staleness + Confidence Check (JUST COMPLETED)
-- sss-anchor added Rust implementation (commit c0e38bd):
-  - `max_oracle_age_secs` (u32) and `max_oracle_conf_bps` (u16) fields to StablecoinConfig
-  - `set_oracle_params` instruction (authority-only)
-  - Staleness + confidence checks in `cdp_borrow_stable` and `cdp_liquidate`
-  - 7 anchor tests (123 total anchor)
-- SDK added `OracleParamsModule` (commit 80178f8):
-  - `setOracleParams({ mint, maxAgeSecs, maxConfBps })`
-  - `getOracleParams(mint)` — reads from raw account data (tail-scan)
-  - `isConfidenceCheckEnabled(mint)`, `effectiveMaxAgeSecs(mint)`
-  - Exports `DEFAULT_MAX_ORACLE_AGE_SECS=60`, `RECOMMENDED_MAX_ORACLE_CONF_BPS=100`
-  - 17 Vitest tests; **376/376 full suite passing**
-- Cannot open a separate PR: fork main is ahead of upstream main; SSS-090 work
-  lives on `feature/SSS-090-oracle-safety` branch and will land via PR #123.
-
-### SSS-086 — AdminTimelockModule (previously done)
-- PR #104 CLOSED — consolidated into submission PR #123
-
-### SSS-085 — P0 Security Fixes
-- All merged into dcccrypto:main via PR #103
-
-### Submission PR
-- **PR #123** — `dcccrypto:main` → upstream — OPEN, active submission, updated continuously
-  - Contains all SDK modules: SolanaStablecoin, ComplianceModule, ProofOfReserves,
-    FeatureFlagsModule, CircuitBreakerModule, SpendPolicyModule, DaoCommitteeModule,
-    YieldCollateralModule, ZkComplianceModule
-  - 359 SDK tests + 102 anchor + 64 backend + 12 Kani = 537 total (per PR body)
-  - NOTE: OracleParamsModule (SSS-090) not yet in PR #123 — needs rebase/push to dcccrypto:main
-
-## Next Steps
-1. Rebase feature/SSS-090-oracle-safety onto dcccrypto:main and push → updates PR #123
-   OR: cherry-pick SSS-090 commits onto dcccrypto:main directly
-2. No other backlog tasks assigned
-
-## Key Constants
-- `FLAG_CIRCUIT_BREAKER = 1n << 7n` (bit 7, 0x80) — NOTE: bit 0 in some refs, check IDL
-- `FLAG_SPEND_POLICY = 1n << 1n` (bit 1, 0x02)
-- `FLAG_DAO_COMMITTEE = 1n << 2n` (bit 2, 0x04)
-- `FLAG_YIELD_COLLATERAL = 1n << 3n` (bit 3, 0x08)
-- `FLAG_ZK_COMPLIANCE = 1n << 4n` (bit 4, 0x10)
-- `DEFAULT_MAX_ORACLE_AGE_SECS = 60`
-- `RECOMMENDED_MAX_ORACLE_CONF_BPS = 100` (1%)
-- `DEFAULT_ADMIN_TIMELOCK_DELAY = 432_000n` slots (~2 days)
+## Test Counts (last known)
+- Anchor: ~116+ (SSS-090/091/092 added tests — exact count from next CI run)
+- SDK: 374 (SSS-086/087) + 27 pending (SSS-094) = 401 after #108 merges
+- Backend: 64
+- Total: ~555+
