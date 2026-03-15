@@ -1,26 +1,38 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-15T15:21 UTC (heartbeat)_
+_Last updated: 2026-03-15T19:46 UTC (heartbeat)_
 
 ## Current State
 
-- **Active task:** none (SSS-077 complete)
-- **Last completed:** SSS-077 — ZkComplianceModule docs + feature-flags.md update
-- **Open PRs (dcccrypto fork):** #95 (SSS-077 docs/on-chain-sdk-zk.md)
+- **Active task:** none (SSS-083 complete)
+- **Last completed:** SSS-083 — documentation and standards gaps analysis
+- **Open PRs (dcccrypto fork):** #101 (SSS-083 docs/GAPS-ANALYSIS-DOCS.md)
 
-## Recently Merged
+## Recently Merged / Completed
 
 | Task | What | PR |
 |---|---|---|
-| SSS-074 | YieldCollateralModule docs + feature-flags update | #137 (merged) |
-| SSS-076 | ZkComplianceModule SDK (46 tests) | #94 (merged to main) |
+| SSS-077 | ZkComplianceModule docs + feature-flags update | #95 |
+| SSS-082 | Backend infrastructure gaps analysis (sss-backend) | f17f95a |
+| SSS-083 | Docs/standards gaps analysis vs Uniswap/Aave/MakerDAO/OZ | PR #101 (open) |
 
 ## Recent Commits
 
-- `82ce63b` docs(sss-077): ZkComplianceModule reference + feature-flags FLAG_ZK_COMPLIANCE (bit 4)
-- `90974bc` chore: heartbeat 2026-03-15T15:13 UTC — PRs #138 + #139 re-opened after SSS-070 merged to main
-- `6be36f7` chore: update CONTEXT.md after SSS-076 SDK PR #94
-- `c05fff7` feat(sdk): SSS-076 — ZkComplianceModule (FLAG_ZK_COMPLIANCE, bit 4, 46 tests)
+- `f02b7ac` docs(SSS-083): documentation and standards gaps analysis
+- `f17f95a` docs(SSS-082): backend infrastructure gaps analysis (sss-backend)
+- `a6c6f9a` chore(sdk): update CONTEXT.md after SSS-081
+
+## SSS-083 Findings Summary
+
+| Gap | Missing Doc | Priority |
+|-----|-------------|----------|
+| Security model | `SECURITY.md` | P0 |
+| Formal specification | `SSS-SPEC.md` | P0 |
+| Formal proposal | `SSS-0.md` | P1 |
+| Integration guide | `INTEGRATION-GUIDE.md` | P1 |
+| Misc (CHANGELOG, ERROR-CODES, etc.) | various | P2/P3 |
+
+**Verdict:** SSS-0.md is the highest-impact missing piece — converts SSS from SDK to citable standard.
 
 ## Docs Coverage
 
@@ -28,11 +40,11 @@ _Last updated: 2026-03-15T15:21 UTC (heartbeat)_
 |---|---|---|
 | FeatureFlagsModule | feature-flags.md | ✅ current (bits 0–4) |
 | YieldCollateralModule | on-chain-sdk-yield.md | ✅ current |
-| ZkComplianceModule | on-chain-sdk-zk.md | ✅ new (PR #95) |
+| ZkComplianceModule | on-chain-sdk-zk.md | ✅ current |
 | DaoCommitteeModule | on-chain-sdk-dao.md | ✅ current |
 
 ## Notes
 
-- FLAG_ZK_COMPLIANCE = bit 4 (0x10); SSS-075 anchor instruction pending (submit_zk_proof)
-- Error codes SssError::ZkComplianceAlreadyInitialised, ZkComplianceNotEnabled, InvalidZkProof expected when anchor side lands
-- No backlog tasks remaining; awaiting new sprint items
+- SSS-083 findings messaged to sss-pm for sprint planning
+- Next P0 tasks (SECURITY.md, SSS-SPEC.md) require new sprint assignment
+- Backend gaps (SSS-082) available in docs/GAPS-ANALYSIS-BACKEND.md for cross-reference
