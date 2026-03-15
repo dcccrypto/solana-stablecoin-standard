@@ -92,6 +92,7 @@ async fn main() {
         .route("/api/burn", post(burn))
         .route("/api/supply", get(supply))
         .route("/api/events", get(events))
+        .route("/api/reserves/proof", get(get_reserves_proof))
         .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
         .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
         .route("/api/compliance/audit", get(get_audit))
