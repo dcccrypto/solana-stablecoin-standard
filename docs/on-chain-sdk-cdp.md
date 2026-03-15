@@ -364,7 +364,8 @@ Errors originate from the on-chain Anchor program. Common causes:
 | `InsufficientCollateral` | Resulting collateral ratio would be < 150% after borrow |
 | `CollateralMintLocked` | Borrow attempted with a different collateral mint than the locked one |
 | `InvalidPythFeed` | Pyth price feed account doesn't match expected collateral mint |
-| `StaleOraclePrice` | Pyth price is too old (confidence interval exceeded) |
+| `StaleOraclePrice` | Pyth price is older than `max_oracle_age_secs` (default 60 s; configurable via `setOracleParams`) |
+| `OracleConfidenceTooWide` | Pyth confidence/price ratio exceeds `max_oracle_conf_bps` (SSS-090; 0 = disabled) |
 | `PositionNotFound` | On-chain instruction attempted on a wallet with no open CDP position (e.g. `repayStable` before any borrow). Note: `getPosition` and `fetchCdpPosition` do **not** throw this — they return an empty `CdpPosition` when no account is found. |
 
 ---
@@ -433,3 +434,11 @@ async function main() {
 
 main().catch(console.error);
 ```
+
+---
+
+## Related Docs
+
+- [on-chain-sdk-oracle-params.md](./on-chain-sdk-oracle-params.md) — Configure Pyth staleness + confidence thresholds (SSS-090)
+- [on-chain-sdk-admin.md](./on-chain-sdk-admin.md) — Admin & governance methods
+- [on-chain-sdk-core.md](./on-chain-sdk-core.md) — Core lifecycle methods

@@ -19,6 +19,7 @@
 | [`proposeAuthority()`](#proposeauthority) | Admin authority | Step 1 of two-step authority transfer |
 | [`acceptAuthority()`](#acceptauthority) | Pending admin | Step 2: accept admin authority |
 | [`acceptComplianceAuthority()`](#acceptcomplianceauthority) | Pending compliance | Step 2: accept compliance authority |
+| [`setOracleParams()`](./on-chain-sdk-oracle-params.md) | Admin authority | Configure Pyth staleness + confidence thresholds (SSS-090) |
 
 For core lifecycle methods (create, load, mintTo, burnFrom, freeze/thaw), see [on-chain-sdk-core.md](./on-chain-sdk-core.md).
 For collateral and reserve vault methods (SSS-3), see [on-chain-sdk-authority-collateral.md](./on-chain-sdk-authority-collateral.md).
