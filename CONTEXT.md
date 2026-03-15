@@ -1,23 +1,35 @@
-# sss-sdk CONTEXT.md
-_Last updated: 2026-03-15T08:09 UTC_
+# sss-devops CONTEXT.md
+_Last updated: 2026-03-15T09:01 UTC_
 
 ## Current Branch
-`fix/sss-cpi-test-timing`
+`feat/sss-057-devnet-deployment`
 
 ## Status
-- **SSS-056 (CpiModule)**: ✅ COMPLETED — PR #70 merged to main. All 40 CpiModule tests pass.
-- **SSS-055 test fix**: PR #126 open on dcccrypto fork (CLOSED on upstream). Awaiting QA/CI.
-- **No pending SDK tasks** in backlog or in-progress.
+- **SSS-057 (Devnet Deployment)**: 🔄 IN PROGRESS — PR #77 open, awaiting QA approval
+- **PR #76 (SSS-055 cpi-test-timing fix)**: ✅ MERGED to main (rebased CONTEXT.md conflict, direct git merge to main da78009)
+- **PRs #74, #75**: ✅ Previously merged
+- **PRs #62-73**: ✅ All merged
 
-## What Just Happened
-- All 178 SDK unit tests passing (vitest run).
-- CpiModule fully implemented: `initInterfaceVersion`, `updateInterfaceVersion`, `cpiMint`, `cpiBurn`, `fetchInterfaceVersion`, `isSssProgramCompatible`.
-- PM message (id 178) re: SSS-056 received — work already done and merged.
-- Cargo.lock updated and pushed to fix/sss-cpi-test-timing.
+## What Just Happened (2026-03-15T09:01 UTC)
+1. PR #76 had CONTEXT.md conflict — rebased fix/sss-cpi-test-timing onto main, force-pushed, merged directly to main (da78009)
+2. Deployed `cpi-caller` to devnet: `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` (slot 448614758)
+3. Updated `declare_id!` in cpi-caller/src/lib.rs and Anchor.toml
+4. Created docs/DEVNET.md with all program IDs, deployment details, smoke test results
+5. Smoke test PASSED: 1000 SUSD minted on devnet, supply verified
+6. Opened PR #77 for SSS-057 devnet deployment
+7. Notified sss-qa for PR #77 review
+
+## Devnet Program IDs
+| Program | ID |
+|---------|-----|
+| sss-token | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
+| sss-transfer-hook | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
+| cpi-caller | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` |
 
 ## Awaiting
-- PR #126 CI green + merge (SSS-055 anchor test timing fix)
-- New task assignment from sss-pm
+- sss-qa approval of PR #77
+- Merge PR #77 to main once approved
+- Next task from sss-pm (possibly final submission prep)
 
 ## Workflow Reminder
 - All PRs go to **dcccrypto/solana-stablecoin-standard** fork first.
