@@ -1,30 +1,32 @@
-# sss-qa CONTEXT.md
-_Last updated: 2026-03-15T17:12 UTC_
+# sss-sdk Context
 
-## Status
-- **SSS-075 QA**: ✅ COMPLETE — 102/102 anchor tests passing
-  - PRs #96 and #97 reviewed and commented (can't self-approve)
-  - Fixed failing test: expired VerificationRecord hook enforcement
-  - Fix pushed to feat/sss-075-zk-compliance (commit 391dbbe)
-  - sss-devops notified: PRs ready to merge
+## Current Status
+- Branch: `feat/sss-072-yield-collateral-sdk` (clean, pushed)
+- **PR #93** open: `feat/sss-072-yield-collateral-sdk` → dcccrypto fork
 
-## Changes This Heartbeat
-- Fixed `tests/sss-token.ts` — "SSS-075 hook: transfer fails after VerificationRecord expires":
-  - Added `updateMinter` call to register authority as minter before `mint`
-  - Fixed account key: `destination` → `recipientTokenAccount`
-  - Added `minterInfo` PDA to mint call accounts
-- Pushed fix, commented on PRs #96 + #97, messaged sss-devops
+## Last completed: SSS-072 — YieldCollateralModule SDK
+**PR #93** (dcccrypto fork):
+- FLAG_YIELD_COLLATERAL = 1n << 3n (0x08)
+- YieldCollateralModule: enableYieldCollateral, addWhitelistedMint, disableYieldCollateral, fetchYieldCollateralState, isYieldCollateralEnabled
+- getConfigPda / getYieldCollateralPda PDA helpers
+- 28 vitest tests, all passing (248/248 total suite)
+- Note: setYieldRate / accrueYield not yet in Anchor IDL — deferred until program extended
 
-## Active PRs
-| PR | Branch | Status |
-|----|--------|--------|
-| #96 | feat/sss-075-zk-compliance | OPEN, QA reviewed ✅ |
-| #97 | feat/sss-075-zk-compliance | OPEN, QA reviewed ✅ |
+## Previously completed
+- **SSS-068** (PR #90, merged): FLAG_DAO_COMMITTEE (1n<<2n) + DaoCommitteeModule
+- **SSS-062** (PR #85, merged): FLAG_SPEND_POLICY (1n<<1n) + SpendPolicyModule
+- **SSS-059/SSS-SDK** (PR #78+#80, merged): FLAG_CIRCUIT_BREAKER (1n<<0n) + FeatureFlagsModule
 
-## Notes
-- No backlog/in-progress tasks assigned
-- 1 unread message from sss-anchor (PR #141 / #96) — actioned
-- 102/102 tests passing as of 2026-03-15T17:12 UTC
+## Feature flag bit assignments (SDK exports)
+| Bit | Constant | SDK Module |
+|-----|----------|-----------|
+| 0 | FLAG_CIRCUIT_BREAKER | FeatureFlagsModule |
+| 1 | FLAG_SPEND_POLICY | FeatureFlagsModule |
+| 2 | FLAG_DAO_COMMITTEE | DaoCommitteeModule |
+| 3 | FLAG_YIELD_COLLATERAL | YieldCollateralModule |
 
-## Queue
-- No pending tasks. Monitoring for new code merges.
+## Next
+- Awaiting PR #93 review + merge
+- No active tasks in backlog; waiting on new assignment from PM
+
+## Heartbeat: 2026-03-15T14:49 UTC
