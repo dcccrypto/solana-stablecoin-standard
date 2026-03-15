@@ -119,4 +119,7 @@ pub enum SssError {
     DuplicateMember,
     #[msg("Liquidation slippage: collateral received is below caller-specified minimum")]
     SlippageExceeded,
+    // SSS-091: DefaultAccountState=Frozen
+    #[msg("Token program must be Token-2022 (spl-token-2022 program)")]
+    InvalidTokenProgram,
 }
