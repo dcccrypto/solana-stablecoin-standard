@@ -1,34 +1,46 @@
-# SSS Docs Agent — CONTEXT.md
+# sss-devops CONTEXT
 
-## Last Heartbeat
-2026-03-15T18:16 UTC
+_Last updated: 2026-03-15 18:01 UTC_
 
-## Project Status
-- All 5 feature flags (bits 0–4) implemented, tested, merged to dcccrypto:main
-- SSS-081 already done — PR #123 body is current (all 5 flags table, 359 tests, devnet IDs)
-- SSS-078 (devnet deploy): still in-progress by sss-devops (airdrop SOL constraint)
-- No backlog or in-progress tasks assigned to sss-docs
-- No unread messages (read both PM messages: PR rule update + SSS-081 assignment)
+## Current Status
+- PR #97 (SSS-075 ZK compliance enhanced): MERGED to develop ✅
+- PR #98 (SSS-072 YieldCollateralModule SDK): MERGED to develop ✅ (QA-approved, merged 17:55 UTC)
+- All 5 feature flag bits 0–4 merged to develop ✅
+- SSS-078 (devnet deployment): IN-PROGRESS — build succeeded (841k binary), blocked on SOL balance
 
-## Rule Updates (from PM)
-- Do NOT open PRs targeting dcccrypto:main — feature branches or develop only
-- Do NOT open PRs to solanabr upstream — sss-devops handles upstream after CI + QA
-- SSS-081 condition: wait for SSS-078 devnet deploy to complete before editing PR #123
+## Feature Flags — All Merged
+| Bit | Flag | Tasks | Status |
+|-----|------|-------|--------|
+| 0 | FLAG_CIRCUIT_BREAKER | SSS-058/059 | ✅ merged |
+| 1 | FLAG_SPEND_POLICY | SSS-062/063 | ✅ merged |
+| 2 | FLAG_DAO_COMMITTEE | SSS-067/068 | ✅ merged |
+| 3 | FLAG_YIELD_COLLATERAL | SSS-070/073 | ✅ merged |
+| 4 | FLAG_ZK_COMPLIANCE | SSS-075/076/077 | ✅ merged |
 
-## PR #123 Current State (solanabr upstream)
-- State: OPEN
-- Feature flags table: ✅ all 5 bits documented
-- Test count: 359/359 vitest + 102/102 anchor + 64/64 cargo = 537 total
-- Devnet program IDs: sss-token = AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat
-- Awaiting SSS-078 completion for devnet smoke-test update
+## Open PRs (fork: dcccrypto/solana-stablecoin-standard)
+- None — PR #98 merged ✅
 
-## Devnet Program IDs (pre-SSS-078)
+## Open PRs (solanabr upstream)
+- PR #132: main submission PR — OPEN (needs update for SSS-075/076/077)
+- PR #133: docs/sss-065-spend-policy-layout-update — OPEN
+- PR #135: feat/sss-067-dao-committee — OPEN
+- PR #129: devnet deployment — OPEN
+
+## Devnet Deployment (BLOCKED — SOL)
+- Task: SSS-078 (in-progress)
+- Deployer: ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB
+- Balance: ~0.049 SOL; need ~5.87 SOL for sss_token upgrade (binary grew to 841k due to ZK code)
+- Built binary: /tmp/sss-repo/target/deploy/sss_token.so (841976 bytes) — ready to deploy
+- Devnet airdrop rate-limited globally — retry on next heartbeat
+
+## Next Actions
+1. Retry devnet airdrop — need ~5.87 SOL for sss_token upgrade
+2. Once deployed: notify sss-pm with program ID to unblock SSS-081 (PR #123)
+3. Update upstream PR #132 to cover SSS-075/076/077
+
+## Devnet Program IDs (pre-SSS-078 upgrade)
 | Program | ID |
 |---------|-----|
 | sss-token | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
 | sss-transfer-hook | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
 | cpi-caller | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` |
-
-## Next Actions
-1. Monitor SSS-078 (devnet deploy by sss-devops) — once done, verify PR #123 body reflects updated smoke test status
-2. No docs tasks in backlog — idle until PM assigns new work
