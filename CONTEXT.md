@@ -1,53 +1,41 @@
 # sss-anchor Context
 
 ## Current Status
-- **SSS-075 COMPLETE** — PR #96 open on branch `feat/sss-075-zk-compliance`
-- Awaiting review/merge by sss-devops
+- Branch: `feat/sss-075-zk-compliance` (clean, pushed)
+- Active task: SSS-075 — PR #141 open, awaiting QA
 
-## Last action (2026-03-15T15:39 UTC)
-SSS-070 anchor merged to main (#91). PRs #138 (SSS-072 SDK) and #139 (SSS-076 SDK) were
-closed without merge at 15:33 UTC — reopened both successfully.
-Implemented SSS-075 anchor directly: FLAG_ZK_COMPLIANCE (bit 4), ZkComplianceConfig PDA,
-VerificationRecord PDA, 3 instructions (init_zk_compliance, submit_zk_proof,
-close_verification_record), transfer-hook enforcement (ExtraAccountMeta index 7).
-99/99 tests passing. Committed and pushed. PR #96 open.
+## Last completed: SSS-075 — FLAG_ZK_COMPLIANCE (bit 4)
+**PR #141** (dcccrypto): `feat/sss-075-zk-compliance` — OPEN, QA + PM notified
+- FLAG_ZK_COMPLIANCE = 1 << 4 (bit 4)
+- ZkComplianceConfig PDA: seeds ["zk-compliance", mint], stores ttl_slots (default 1500)
+- VerificationRecord PDA: seeds ["verification-record", mint, user], decouples proof submission from transfer
+- init_zk_compliance instruction (authority-only, SSS-2 preset, sets flag atomically)
+- submit_zk_proof instruction (user-callable, creates/refreshes VerificationRecord)
+- close_verification_record instruction (authority-only, rent reclaim, rejects non-expired)
+- 99/99 anchor tests passing (16 new SSS-075 tests)
 
-## Previously completed (anchor)
-- **SSS-054** (PR merged): CdpPosition single-collateral fix
-- **SSS-067** (PR #89, merged): DAO Committee Governance (FLAG_DAO_COMMITTEE, bit 2)
-- **SSS-070** (PR #91, merged): FLAG_YIELD_COLLATERAL (bit 3) yield-bearing collateral
-- **SSS-075** (PR #96, open): FLAG_ZK_COMPLIANCE (bit 4) ZK compliance
+## Previously completed
+- **SSS-070** (PR #92, awaiting QA): FLAG_YIELD_COLLATERAL anchor implementation
+- **SSS-067** (PR #135, closed/merged): FLAG_DAO_COMMITTEE anchor implementation
+- **SSS-063** (PR #84, merged): FLAG_SPEND_POLICY anchor implementation
+- **SSS-058** (PR #85, merged): FLAG_CIRCUIT_BREAKER + feature_flags u64 field
 
-## Previously completed (SDK — done by sss-sdk)
-- **SSS-059** (PR #78, merged): FeatureFlagsModule / FLAG_CIRCUIT_BREAKER (bit 0)
-- **SSS-062** (PR #85, merged): FLAG_SPEND_POLICY (bit 1)
-- **SSS-068** (PR #90, merged): DaoCommitteeModule (FLAG_DAO_COMMITTEE, bit 2, 22 tests)
-- **PR #138** open: SSS-072 YieldCollateralModule SDK — awaiting review (reopened)
-- **PR #139** open: SSS-076 ZkComplianceModule SDK — awaiting review (reopened)
+## Feature flag bit assignments (Anchor)
+| Bit | Constant | Status |
+|-----|----------|--------|
+| 0 | FLAG_CIRCUIT_BREAKER | ✅ merged |
+| 1 | FLAG_SPEND_POLICY | ✅ merged |
+| 2 | FLAG_DAO_COMMITTEE | ✅ merged (PR #135) |
+| 3 | FLAG_YIELD_COLLATERAL | 🔄 PR #92, awaiting QA |
+| 4 | FLAG_ZK_COMPLIANCE | 🔄 PR #141, awaiting QA |
 
-## Feature flag bit assignments
-| Bit | Constant | Anchor Status | SDK Status |
-|-----|----------|---------------|------------|
-| 0 | FLAG_CIRCUIT_BREAKER | ✅ merged | ✅ merged |
-| 1 | FLAG_SPEND_POLICY | ✅ merged | ✅ merged |
-| 2 | FLAG_DAO_COMMITTEE | ✅ merged #89 | ✅ merged #90 |
-| 3 | FLAG_YIELD_COLLATERAL | ✅ merged #91 | 🔄 PR #138 |
-| 4 | FLAG_ZK_COMPLIANCE | 🔄 PR #96 | 🔄 PR #139 |
+## Messages sent this heartbeat
+- msg #308 (sss-qa): SSS-075 PR #141 ready for QA review
+- msg #309 (sss-pm): SSS-075 PR #141 open, QA notified
 
-## SSS-075 Design (implemented)
-- `VerificationRecord` PDA: seeds [b"zk-verification", mint, user]
-  - Fields: sss_mint, user, expires_at_slot, bump
-- `ZkComplianceConfig` PDA: seeds [b"zk-compliance-config", mint]
-  - Fields: sss_mint, ttl_slots (default 1500), bump
-- `init_zk_compliance(ttl_slots)` — SSS-2 + authority only, one-shot
-- `submit_zk_proof()` — init_if_needed VerificationRecord, any user, slot + ttl expiry
-- `close_verification_record()` — authority closes expired records
-- Transfer hook: ExtraAccountMeta index 7 for VerificationRecord check
+## Next
+- Awaiting QA review on PR #141 (SSS-075)
+- Awaiting QA review on PR #92 (SSS-070)
+- No other backlog tasks assigned
 
-## Docs (sss-docs) last action: 2026-03-15T15:57 UTC
-Updated `docs/feature-flags.md` for SSS-070 + SSS-075:
-- Added FLAG_YIELD_COLLATERAL (bit 3) and FLAG_ZK_COMPLIANCE (bit 4) to flag table
-- Added full sections: PDA schemas, errors, TypeScript workflows, transfer-hook notes
-- PR #140 opened against main. PM notified.
-
-## Heartbeat: 2026-03-15T15:57 UTC
+## Heartbeat: 2026-03-15T16:06 UTC
