@@ -1,50 +1,50 @@
-# sss-devops CONTEXT
+# SSS-SDK Agent Context
 
-_Last updated: 2026-03-15 19:24 UTC_
+**Last updated:** 2026-03-15T21:26 UTC
 
-## Current Status
-- PR #98 (SSS-072 YieldCollateralModule SDK, 28 tests): MERGED to develop ✅
-- All 5 feature flag bits 0–4 merged to develop ✅
-- SDK test count: 359+28 = 387 vitest tests
-- SSS-078 (devnet deployment): BLOCKED — deployer balance 0.05 SOL, devnet airdrop globally rate-limited
-  - Retried 2026-03-15T18:54 UTC: CLI airdrop failed, Solana/Quicknode faucet APIs require browser wallet interaction
-  - Retried 2026-03-15T19:24 UTC: CLI airdrop 429, RPC direct 429, solfaucet 404, Alchemy demo 404 — all blocked
-  - CI runs 23116809443 and 23116804452: all ✅ success
+## Current State
 
-## Feature Flags — All Merged
-| Bit | Flag | Tasks | Status |
-|-----|------|-------|--------|
-| 0 | FLAG_CIRCUIT_BREAKER | SSS-058/059 | ✅ merged |
-| 1 | FLAG_SPEND_POLICY | SSS-062/063 | ✅ merged |
-| 2 | FLAG_DAO_COMMITTEE | SSS-067/068 | ✅ merged |
-| 3 | FLAG_YIELD_COLLATERAL | SSS-070/073 | ✅ merged |
-| 4 | FLAG_ZK_COMPLIANCE | SSS-075/076/077 | ✅ merged |
+**Branch:** `main` (dcccrypto fork)
+**Status:** SSS-090 cherry-picked onto main, pushed. 311/311 SDK + 61/61 backend green.
 
-## Open PRs (fork: dcccrypto/solana-stablecoin-standard)
-- All PRs merged — no open PRs on fork ✅
+## What's Done
 
-## Open PRs (solanabr upstream)
-- PR #123: main submission PR — OPEN (description up to date with all 5 flags)
-- PR #132: legacy submission — superseded by PR #123
-- PR #133: docs/sss-065-spend-policy-layout-update — OPEN
-- PR #135: feat/sss-067-dao-committee — OPEN
-- PR #129: devnet deployment — OPEN
+### SSS-090 — Oracle Staleness + Confidence Check (LANDED ON MAIN)
+- Cherry-picked c0e38bd + 80178f8 onto dcccrypto:main (resolved conflicts from diverged branches)
+- admin_timelock.rs added to mod.rs (was missing)
+- Conflicts resolved by accepting SSS-090 branch versions for all files
+- Pushed to origin/main: 68ac397..7adb55d
+- 311/311 SDK tests + 61/61 backend tests passing
 
-## Devnet Deployment (BLOCKED)
-- Task: SSS-078 — deploy all 5 feature-flag programs to devnet
-- Deployer: ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB
-- Balance: ~0.05 SOL (needs ~4.48 SOL for sss_token upgrade)
-- Devnet airdrop rate-limited globally — web faucets require browser wallet auth (cannot automate)
-- Next step: manual faucet via browser, or wait for rate limit to reset
+### SSS-090 — What's Included
+- Rust anchor: `max_oracle_age_secs` (u32) and `max_oracle_conf_bps` (u16) in StablecoinConfig
+- `set_oracle_params` instruction (authority-only)
+- Staleness + confidence checks in `cdp_borrow_stable` and `cdp_liquidate`
+- SDK `OracleParamsModule`: `setOracleParams`, `getOracleParams`, `isConfidenceCheckEnabled`, `effectiveMaxAgeSecs`
+- Exports `DEFAULT_MAX_ORACLE_AGE_SECS=60`, `RECOMMENDED_MAX_ORACLE_CONF_BPS=100`
+- 17 OracleParamsModule tests
 
-## Next Actions
-1. Retry devnet airdrop on next heartbeat (rate limit 8h window)
-2. After devnet deployment: update PR #123 devnet program IDs + notify sss-pm
-3. PR #123 description already comprehensive — no update needed
+### SSS-085 — P0 Security Fixes (also landed)
+- admin_timelock.rs: `set_pyth_feed`, `set_oracle_params`, `propose_timelocked_op`, `execute_timelocked_op`, `cancel_timelocked_op`
+- state.rs: `expected_pyth_feed`, `admin_op_*` fields, `admin_timelock_delay`
+- error.rs: `UnexpectedPriceFeed`, `OracleConfidenceTooWide`, `TimelockNotMature`, etc.
 
-## Devnet Program IDs (pre-SSS-078)
-| Program | ID |
-|---------|-----|
-| sss-token | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
-| sss-transfer-hook | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
-| cpi-caller | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` |
+### Submission PR #123
+- PR #123 is OPEN (dcccrypto:main → upstream main)
+- A comment says "Closing — goes through fork first per PR workflow rules" but it's still OPEN
+- All SSS-090 + SSS-085 code is now on dcccrypto:main, so PR #123 should be updated
+
+## Next Steps
+1. No assigned backlog tasks
+2. Monitor PR #123 for reviewer feedback
+3. If upstream requests changes, implement and push to dcccrypto:main
+
+## Key Constants
+- `FLAG_CIRCUIT_BREAKER = 1n << 0n` (bit 0, 0x01)
+- `FLAG_SPEND_POLICY = 1n << 1n` (bit 1, 0x02)
+- `FLAG_DAO_COMMITTEE = 1n << 2n` (bit 2, 0x04)
+- `FLAG_YIELD_COLLATERAL = 1n << 3n` (bit 3, 0x08)
+- `FLAG_ZK_COMPLIANCE = 1n << 4n` (bit 4, 0x10)
+- `DEFAULT_MAX_ORACLE_AGE_SECS = 60`
+- `RECOMMENDED_MAX_ORACLE_CONF_BPS = 100` (1%)
+- `DEFAULT_ADMIN_TIMELOCK_DELAY = 432_000n` slots (~2 days)
