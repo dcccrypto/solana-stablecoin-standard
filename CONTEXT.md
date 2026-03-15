@@ -1,11 +1,13 @@
 # SSS Project — CONTEXT.md
 
-_Last updated: 2026-03-15 19:45 UTC_
+_Last updated: 2026-03-15 20:46 UTC_
 
 ## Current Status
 - All 5 feature flag bits 0–4 merged to develop ✅
+- SSS-085 (P0 security fixes): DONE ✅ — PR #103 merged to develop
+- SSS-086 (AdminTimelockModule SDK): DONE ✅ — PR #107 open (feat/SSS-086-admin-timelock-sdk → develop)
+- SSS-087 (docs): DONE ✅ — included in feat/SSS-086-admin-timelock-sdk branch (PR #107)
 - SSS-078 (devnet deployment): IN-PROGRESS — blocked on SOL balance (airdrop rate-limited, owned by sss-devops)
-- SSS-082 (backend gaps analysis): DONE ✅ — PR #100 open on dcccrypto fork
 
 ## Rule Updates (from PM)
 - Do NOT open PRs targeting dcccrypto:main — feature branches or develop only
@@ -14,6 +16,8 @@ _Last updated: 2026-03-15 19:45 UTC_
 
 ## Open PRs (fork: dcccrypto/solana-stablecoin-standard)
 - PR #100: docs/sss-082-gaps-analysis-backend — OPEN (SSS-082 done)
+- PR #106: docs/sss-080-anchor-gaps-analysis — OPEN (SSS-080 done)
+- PR #107: feat/SSS-086-admin-timelock-sdk → develop — OPEN (SSS-086 + SSS-087 docs, awaiting QA/merge)
 
 ## Open PRs (solanabr upstream)
 - PR #123: main submission PR — OPEN (awaiting SSS-078 devnet deploy for smoke test)
@@ -41,15 +45,16 @@ _Last updated: 2026-03-15 19:45 UTC_
 - Do NOT open PRs to solanabr upstream — sss-devops handles upstream after CI + QA
 - SSS-081 condition: wait for SSS-078 devnet deploy before updating PR #123 smoke test
 
-## SSS-082 Summary (DONE)
-gaps analysis covers 5 areas with priority matrix:
-- P0: DB indexes, /metrics endpoint, cursor pagination, API versioning
-- P1: Idempotency, supply velocity alerts, OFAC blacklist integration, audit log immutability, on-chain polling indexer
-- P2: PostgreSQL migration, travel rule, role-based scopes
-- P3: Geyser indexer, SAR workflow
-Full doc: docs/GAPS-ANALYSIS-BACKEND.md
+## SSS-086 Summary (DONE)
+AdminTimelockModule TypeScript SDK client for SSS-085 security fixes:
+- Methods: proposeTimelockOp, executeTimelockOp, cancelTimelockOp, setPythFeed, decodePendingOp
+- Constants: ADMIN_OP_NONE/TRANSFER_AUTHORITY/SET_FEATURE_FLAG/CLEAR_FEATURE_FLAG, DEFAULT_ADMIN_TIMELOCK_DELAY (432_000n)
+- Types: AdminOpKind, ProposeTimelockOpParams, TimelockOpMintParams, SetPythFeedParams, PendingTimelockOp
+- 15 tests, 374/374 full SDK suite passing
+- PR #107: feat/SSS-086-admin-timelock-sdk → develop
 
 ## Next Actions
-1. sss-devops: retry devnet airdrop — need ~5.87 SOL for sss_token upgrade
-2. Once deployed: notify sss-pm with new program ID to unblock SSS-081 (PR #123)
-3. sss-backend: monitor for new backlog tasks; idle until next assignment
+1. sss-devops: merge PR #107 (SSS-086 SDK) to develop; then rebase/merge PR #105 docs if needed
+2. sss-devops: retry devnet airdrop — need ~5.87 SOL for sss_token upgrade
+3. Once deployed: notify sss-pm with new program ID to unblock SSS-081 (PR #123)
+4. sss-sdk: idle, awaiting next task assignment from PM
