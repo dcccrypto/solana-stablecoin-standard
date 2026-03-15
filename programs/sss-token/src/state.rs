@@ -28,14 +28,6 @@ pub const FLAG_YIELD_COLLATERAL: u64 = 1 << 3;
 /// SSS-2 only.  See docs/FEATURE-FLAGS-RESEARCH.md §Feature 4.
 pub const FLAG_ZK_COMPLIANCE: u64 = 1 << 4;
 
-/// Confidential transfers flag (bit 5): when set, the mint was initialized with
-/// an auditor ElGamal pubkey stored in `ConfidentialTransferConfig` PDA.
-/// Transfers are encrypted (private to observers) but the issuer/auditor can
-/// decrypt all amounts via their ElGamal private key.
-/// Foundation for Token-2022 ConfidentialTransferMint extension.
-/// See docs/confidential-transfers.md for the full compliance model.
-pub const FLAG_CONFIDENTIAL_TRANSFERS: u64 = 1 << 5;
-
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
 // ---------------------------------------------------------------------------
@@ -108,31 +100,6 @@ pub struct StablecoinConfig {
     /// SSS-085: Minimum slot delay for admin timelock (default 2 epochs ≈ 432 000 slots).
     /// Can be set at init or by authority via `set_timelock_delay`.
     pub admin_timelock_delay: u64,
-    /// SSS-090: Maximum Pyth price age in seconds for CDP operations.
-    /// 0 = use hardcoded default (60 s).  Set via `set_oracle_params`.
-    pub max_oracle_age_secs: u32,
-    /// SSS-090: Maximum acceptable Pyth confidence interval as a fraction of price,
-    /// expressed in basis points (e.g. 100 = 1%).  0 = disabled (no conf check).
-    /// Set via `set_oracle_params`.
-    pub max_oracle_conf_bps: u16,
-    /// SSS-092: Annual stability fee in basis points (e.g. 50 = 0.5% p.a.).
-    /// Accrues on outstanding CDP debt; collected via `collect_stability_fee`.
-    /// 0 = no stability fee (default).
-    pub stability_fee_bps: u16,
-    /// SSS-093: PSM redemption fee in basis points (e.g. 10 = 0.1%).
-    /// Deducted from collateral released on `redeem`.  Fee stays in vault.
-    /// 0 = no fee (default).  Set via `set_psm_fee` (authority-only).
-    pub redemption_fee_bps: u16,
-    /// SSS-097: Insurance fund vault — token account that holds backstop reserves.
-    /// Pubkey::default() = backstop disabled.  Set via `set_backstop_params` (authority-only).
-    pub insurance_fund_pubkey: Pubkey,
-    /// SSS-097: Maximum backstop draw as a fraction of total outstanding debt,
-    /// expressed in basis points (e.g. 500 = 5% of net supply).
-    /// 0 = unlimited (draw full shortfall up to insurance fund balance).
-    pub max_backstop_bps: u16,
-    /// SSS-106: Auditor ElGamal pubkey for confidential transfers.
-    /// All-zero if FLAG_CONFIDENTIAL_TRANSFERS is not enabled.
-    pub auditor_elgamal_pubkey: [u8; 32],
     pub bump: u8,
 }
 

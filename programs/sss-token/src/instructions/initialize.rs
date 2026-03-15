@@ -7,17 +7,7 @@ use spl_token_2022::extension::ExtensionType;
 use spl_token_2022::state::{AccountState, Mint};
 
 use crate::error::SssError;
-use crate::state::{
-    ConfidentialTransferConfig, InitializeParams, StablecoinConfig, ADMIN_OP_NONE,
-    DEFAULT_ADMIN_TIMELOCK_DELAY, FLAG_CONFIDENTIAL_TRANSFERS,
-};
-
-// SSS-091: Mint space = base Mint size + DefaultAccountState extension.
-// ExtensionType::try_calculate_account_len is const-unfriendly on-chain; we use
-// a pre-computed value: base Mint (82 B) + 1 account-type byte + 83 B padding
-// + 2 B type + 2 B length + 1 B state = 171 bytes.
-// Computed offline via ExtensionType::try_calculate_account_len::<Mint>(&[ExtensionType::DefaultAccountState]).unwrap()
-pub const MINT_WITH_DEFAULT_STATE_LEN: usize = 171;
+use crate::state::{DEFAULT_ADMIN_TIMELOCK_DELAY, InitializeParams, StablecoinConfig, ADMIN_OP_NONE};
 
 #[derive(Accounts)]
 #[instruction(params: InitializeParams)]
@@ -168,17 +158,6 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.admin_op_param = 0;
     config.admin_op_target = Pubkey::default();
     config.admin_timelock_delay = DEFAULT_ADMIN_TIMELOCK_DELAY;
-    // SSS-092: stability fee starts at 0 (disabled by default)
-    config.stability_fee_bps = 0;
-    // SSS-093: PSM redemption fee starts at 0 (disabled by default)
-    config.redemption_fee_bps = 0;
-    // SSS-106: confidential transfers
-    config.feature_flags = params.feature_flags.unwrap_or(0);
-    config.auditor_elgamal_pubkey = if ct_enabled {
-        params.auditor_elgamal_pubkey.unwrap()
-    } else {
-        [0u8; 32]
-    };
     config.bump = ctx.bumps.config;
 
     msg!(
