@@ -23,6 +23,7 @@ use db::Database;
 use routes::{
     apikeys::{create_api_key, delete_api_key, list_api_keys},
     cdp::{get_cdp_position, get_collateral_types, post_cdp_simulate},
+    circuit_breaker::set_circuit_breaker,
     compliance::{add_blacklist, get_audit, get_blacklist, remove_blacklist},
     compliance_rules::add_compliance_rule,
     confidential::initiate_confidential_transfer,
@@ -106,6 +107,7 @@ async fn main() {
         .route("/api/webhooks/:id", delete(delete_webhook))
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
+        .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
         .layer(cors)

@@ -1,6 +1,7 @@
 pub mod apikeys;
 pub mod burn;
 pub mod cdp;
+pub mod circuit_breaker;
 pub mod compliance;
 pub mod compliance_rules;
 pub mod confidential;

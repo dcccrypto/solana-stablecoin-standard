@@ -152,4 +152,14 @@ pub mod sss_token {
     pub fn cpi_burn(ctx: Context<CpiBurn>, amount: u64, required_version: u8) -> Result<()> {
         instructions::cpi_burn::cpi_burn_handler(ctx, amount, required_version)
     }
+
+    /// Set a feature flag bit. Authority only. Pass the FLAG_* constant value.
+    pub fn set_feature_flag(ctx: Context<UpdateFeatureFlag>, flag: u64) -> Result<()> {
+        instructions::feature_flags::set_feature_flag_handler(ctx, flag)
+    }
+
+    /// Clear a feature flag bit. Authority only. Pass the FLAG_* constant value.
+    pub fn clear_feature_flag(ctx: Context<UpdateFeatureFlag>, flag: u64) -> Result<()> {
+        instructions::feature_flags::clear_feature_flag_handler(ctx, flag)
+    }
 }
