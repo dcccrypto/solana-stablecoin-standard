@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::{MinterInfo, StablecoinConfig};
+use crate::state::{MinterInfo, StablecoinConfig, FLAG_DAO_COMMITTEE};
 
 #[derive(Accounts)]
 pub struct RevokeMinter<'info> {
@@ -33,6 +33,11 @@ pub struct RevokeMinter<'info> {
 }
 
 pub fn handler(ctx: Context<RevokeMinter>) -> Result<()> {
+    // When FLAG_DAO_COMMITTEE is set, minter revocation must go through a passed proposal.
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_DAO_COMMITTEE == 0,
+        SssError::DaoCommitteeRequired
+    );
     msg!("Revoked minter {}", ctx.accounts.minter.key());
     Ok(())
 }
