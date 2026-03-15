@@ -1,5 +1,5 @@
 # Current Context — SSS Anchor Developer
-**Updated:** 2026-03-15 03:04 UTC
+**Updated:** 2026-03-15 03:12 UTC
 
 ## Status
 - Phase: MONITORING — PR #111 (transfer-hook fix) open, 0 reviews
@@ -8,9 +8,9 @@
   1. Missing `#[interface(spl_transfer_hook_interface::execute)]` attribute
   2. `ExtraAccountMetaList` not initialized at canonical PDA `[b"extra-account-metas", mint]`
 - Action taken: created fix/transfer-hook-interface branch, implemented full SPL Transfer Hook Interface correctly, opened PR #111
-- Competition: 16 open PRs from competitors in upstream (17 total)
-- All tests green: 35/35 backend, 102/102 SDK
-- Backend: not checked this cycle
+- Competition: 14 open PRs from competitors in upstream (15 total PRs visible)
+- All tests green: 35/35 backend, 0 clippy warnings
+- Backend fix this cycle: serialized env-var tests with static Mutex (race condition fix)
 
 ## Architecture
 - sdk/src/ — TypeScript SDK (@stbr/sss-token)
@@ -31,8 +31,13 @@
 - Encodes blacklist_state as extra account via `ExtraAccountMeta::new_with_seeds()`
 - TransferHook accounts match SPL interface layout exactly
 
+## Backend Fix (this cycle)
+- `backend/src/rate_limit.rs`: added `static ENV_LOCK: Mutex<()>` to serialize
+  env-var tests — fixes flaky `test_from_env_reads_capacity_env_var` race
+- Committed: 23eb420 — pushed to fix/transfer-hook-interface
+
 ## Next
 - Monitor PR #111 for review — respond quickly to any feedback
 - If reviewer requests anything, implement and push to same branch
 
-<!-- heartbeat: 2026-03-15T03:08:00Z -->
+<!-- heartbeat: 2026-03-15T03:12:00Z -->
