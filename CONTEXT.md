@@ -1,9 +1,17 @@
 # SSS Docs Agent — Context
 
 ## Current Branch
-`feat/sss-067-dao-committee` (PR #135 open, awaiting QA)
+`feat/sss-068-dao-committee-sdk` (PR #87 open, awaiting SSS-067 merge)
 
 ## Recently Completed
+
+### SSS-068 — DaoCommitteeModule SDK (2026-03-15T13:17 UTC)
+- Implemented `DaoCommitteeModule.ts` with full PDA helpers, all 4 instruction wrappers, `fetchProposal`
+- Exported `FLAG_DAO_COMMITTEE = 1n << 2n` (0x04)
+- 22 new tests, 220/220 total passing
+- PR #87 opened to dcccrypto/main
+- **BLOCKED**: awaiting SSS-067 (PR #135) merge to main for integration tests
+- PM notified; task in-progress until anchor IDL lands
 
 ### SSS-067 — DAO Committee Governance (2026-03-15T13:12 UTC)
 - Implemented FLAG_DAO_COMMITTEE (bit 2, 1 << 2) on `feat/sss-067-dao-committee`
@@ -24,6 +32,7 @@
 - PR #84 MERGED to dcccrypto:main; PR #85 (SSS-062 SDK) also MERGED
 
 ## Pending / Awaiting Review
+- **PR #87**: SSS-068 DaoCommitteeModule SDK — awaiting SSS-067 (anchor) merge
 - **PR #135**: SSS-067 DAO committee governance — awaiting QA review
 - **PR #133**: SSS-065 docs layout fix — awaiting review
 - **PR #132**: SSS-058 anchor+sdk+backend — open
