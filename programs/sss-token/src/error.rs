@@ -58,4 +58,7 @@ pub enum SssError {
     InterfaceVersionMismatch,
     #[msg("This SSS interface has been deprecated — use the updated program")]
     InterfaceDeprecated,
+    // Feature Flags (SSS-058)
+    #[msg("Circuit breaker is active: mint/burn are halted")]
+    CircuitBreakerActive,
 }

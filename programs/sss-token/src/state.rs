@@ -33,6 +33,8 @@ pub struct StablecoinConfig {
     /// Pending compliance authority for two-step transfer (Pubkey::default if none)
     pub pending_compliance_authority: Pubkey,
     pub bump: u8,
+    /// Feature flags bitmask (SSS-058): FLAG_CIRCUIT_BREAKER = bit 0 (1u64)
+    pub feature_flags: u64,
 }
 
 impl StablecoinConfig {
