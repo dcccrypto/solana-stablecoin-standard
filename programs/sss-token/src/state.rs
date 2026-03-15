@@ -95,6 +95,9 @@ pub struct StablecoinConfig {
     pub bump: u8,
 }
 
+/// SSS-085: Default admin timelock delay in slots (~2 Solana epochs / ~2 days).
+pub const DEFAULT_ADMIN_TIMELOCK_DELAY: u64 = 432_000;
+
 /// SSS-085: Timelocked admin operation kind discriminants.
 pub const ADMIN_OP_NONE: u8 = 0;
 pub const ADMIN_OP_TRANSFER_AUTHORITY: u8 = 1;

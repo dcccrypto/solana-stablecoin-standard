@@ -102,7 +102,16 @@ pub struct CdpLiquidate<'info> {
     pub collateral_token_program: Interface<'info, TokenInterface>,
 }
 
-pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>) -> Result<()> {
+pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, min_collateral_amount: u64) -> Result<()> {
+    // SSS-085 Fix 1: Validate Pyth feed Pubkey — reject spoofed price feeds.
+    let expected_feed = ctx.accounts.config.expected_pyth_feed;
+    if expected_feed != Pubkey::default() {
+        require!(
+            ctx.accounts.pyth_price_feed.key() == expected_feed,
+            SssError::UnexpectedPriceFeed
+        );
+    }
+
     // 1. Fetch Pyth price
     let clock = Clock::get()?;
     let price_feed = SolanaPriceAccount::account_info_to_feed(
@@ -174,6 +183,15 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>) -> Result<()> {
         ratio_bps < CdpPosition::LIQUIDATION_THRESHOLD_BPS as u128,
         SssError::CdpNotLiquidatable
     );
+
+    // SSS-085 Fix 5: Slippage protection — caller specifies min collateral to receive.
+    // 0 = no slippage protection (backward compatible).
+    if min_collateral_amount > 0 {
+        require!(
+            deposited >= min_collateral_amount,
+            SssError::SlippageExceeded
+        );
+    }
 
     // 4. Liquidate full position: burn all debt, seize all collateral + 5% bonus
     // Liquidator burns debt tokens

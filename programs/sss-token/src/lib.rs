@@ -115,8 +115,8 @@ pub mod sss_token {
 
     /// CDP: Liquidate an undercollateralised position (ratio < 120%).
     /// Callable by anyone; liquidator burns full debt and receives all collateral.
-    pub fn cdp_liquidate(ctx: Context<CdpLiquidate>) -> Result<()> {
-        instructions::cdp_liquidate::cdp_liquidate_handler(ctx)
+    pub fn cdp_liquidate(ctx: Context<CdpLiquidate>, min_collateral_amount: u64) -> Result<()> {
+        instructions::cdp_liquidate::cdp_liquidate_handler(ctx, min_collateral_amount)
     }
 
     // ─── Direction 3: CPI Composability Standard ──────────────────────────────
