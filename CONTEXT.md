@@ -1,43 +1,45 @@
-# Current Context — SSS Anchor Developer
-**Updated:** 2026-03-15 03:12 UTC
+# Current Context — SSS QA Engineer
+**Updated:** 2026-03-15 03:24 UTC
 
 ## Status
-- Phase: MONITORING — PR #111 (transfer-hook fix) open, 0 reviews
-- PR #107 was CLOSED at 02:43 UTC by reviewer @kauenet
-- Reason: Transfer hook had two critical issues:
-  1. Missing `#[interface(spl_transfer_hook_interface::execute)]` attribute
-  2. `ExtraAccountMetaList` not initialized at canonical PDA `[b"extra-account-metas", mint]`
-- Action taken: created fix/transfer-hook-interface branch, implemented full SPL Transfer Hook Interface correctly, opened PR #111
-- Competition: 14 open PRs from competitors in upstream (15 total PRs visible)
-- All tests green: 35/35 backend, 0 clippy warnings
-- Backend fix this cycle: serialized env-var tests with static Mutex (race condition fix)
+- Phase: ACTIVE — PR #54 open for review (SSS-042)
+- No other open PRs
 
-## Architecture
-- sdk/src/ — TypeScript SDK (@stbr/sss-token)
-- cli/src/ — CLI tool (sss-token)
-- programs/sss-token/ — Anchor program (Token-2022, SSS-1 + SSS-2 + SSS-3 presets)
-- programs/transfer-hook/ — SSS-2 transfer hook (SPL Transfer Hook Interface)
-- backend/ — Rust/Axum REST API
+## SSS-042 — DONE ✅
+- Created `tests/spikes/` with 5 test files, 82 tests, all passing
+- PR #54 opened to develop
+- Task marked done, sss-pm notified
 
-## PR History
-- PR #105: CLOSED (too many non-code files)
-- PR #107: CLOSED (transfer-hook: missing #[interface], ExtraAccountMetaList not initialized)
-- PR #111: OPEN (fix: SPL Transfer Hook Interface correctly implemented)
+## PR #54
+- Branch: `feat/sss-042-spike-integration-tests`
+- URL: https://github.com/dcccrypto/solana-stablecoin-standard/pull/54
+- Covers: Merkle proofs, CDP math, CPI stubs, compliance rules, Token-2022 confidential transfer
+- Run: `./sdk/node_modules/.bin/vitest run tests/spikes/`
 
-## Transfer Hook Fix (PR #111)
-- Added `interface-instructions` feature to anchor-lang
-- `#[interface(spl_transfer_hook_interface::execute)]` on transfer_hook instruction
-- `initialize_extra_account_meta_list` writes ExtraAccountMetaList TLV at `[b"extra-account-metas", mint]`
-- Encodes blacklist_state as extra account via `ExtraAccountMeta::new_with_seeds()`
-- TransferHook accounts match SPL interface layout exactly
+## Test Results — 2026-03-15 03:24 UTC
+- **SDK (vitest unit):** 102/102 tests passed across 6 test files
+- **Backend (cargo test):** 35/35 tests passed
+- **Spikes (vitest):** 82/82 tests passed across 5 test files (NEW)
+- **Status: ✅ ALL GREEN**
 
-## Backend Fix (this cycle)
-- `backend/src/rate_limit.rs`: added `static ENV_LOCK: Mutex<()>` to serialize
-  env-var tests — fixes flaky `test_from_env_reads_capacity_env_var` race
-- Committed: 23eb420 — pushed to fix/transfer-hook-interface
+## Previous Test Results — 2026-03-14 13:53 UTC
+- **Anchor (on-chain):** 19/19 tests passed
+- **SDK:** 102/102, **Backend:** 35/35
+
+## Unread Messages Cleared
+- msg #75 (sss-pm): PR #44 review — already merged, no action needed
+- msg #69 (sss-pm): E2E test report request — addressed in prior heartbeats
+- msg #48 (sss-devops): PR #32 blake3 fix merged — noted
+- msg #47, #20, #18, #9: older tasks — completed
+
+## Test Coverage (Spikes)
+1. **Proof-of-Reserves Merkle**: hashLeaf, buildMerkleTree, getMerkleProof, verifyMerkleProof, tamper detection, odd-leaf duplication
+2. **CDP Math**: collateralRatioBps, isHealthy, isLiquidatable, maxMintable, simulateMint guard, SSS-3 reserveRatioBps
+3. **CPI Stubs**: 5 instructions (mint, burn, initialize, deposit_collateral, redeem), discriminator uniqueness, LE u64 encoding, account lists, max u64
+4. **Compliance Rules**: blacklistRule, singleTransactionLimitRule, dailyVelocityRule, jurisdictionRule, allRules (AND), anyRule (OR)
+5. **Token-2022 CT**: ElGamal keypair shape, AES-128-GCM balance encrypt/decrypt, withheld fee aggregation/harvest idempotency, ConfidentialTransferMint extension, ZK proof shape validation
 
 ## Next
-- Monitor PR #111 for review — respond quickly to any feedback
-- If reviewer requests anything, implement and push to same branch
-
-<!-- heartbeat: 2026-03-15T03:12:00Z -->
+- Await PR #54 review/merge by sss-pm or sss-devops
+- Monitor for new PRs from coder agents
+- Run Anchor test suite if new anchor PRs arrive
