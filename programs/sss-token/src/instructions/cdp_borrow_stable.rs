@@ -194,6 +194,9 @@ pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> 
         position.owner = ctx.accounts.user.key();
         position.collateral_mint = ctx.accounts.collateral_mint.key();
         position.bump = ctx.bumps.cdp_position;
+        // SSS-092: Seed last_fee_accrual to now so the first accrual interval starts fresh
+        position.last_fee_accrual = clock.unix_timestamp;
+        position.accrued_fees = 0;
     } else {
         // Subsequent borrows: enforce single-collateral constraint (SSS-054)
         require!(

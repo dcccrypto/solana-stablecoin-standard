@@ -122,6 +122,12 @@ pub mod sss_token {
         instructions::cdp_liquidate::cdp_liquidate_handler(ctx, min_collateral_amount)
     }
 
+    /// SSS-092: Accrue and burn stability fees on a CDP position.
+    /// Callable by the debtor (or any keeper); debtor signs to authorise the burn.
+    pub fn collect_stability_fee(ctx: Context<CollectStabilityFee>) -> Result<()> {
+        instructions::stability_fee::collect_stability_fee_handler(ctx)
+    }
+
     // ─── Direction 3: CPI Composability Standard ──────────────────────────────
 
     /// Initialize the InterfaceVersion PDA for this mint.
@@ -303,6 +309,13 @@ pub mod sss_token {
         max_conf_bps: u16,
     ) -> Result<()> {
         instructions::admin_timelock::set_oracle_params_handler(ctx, max_age_secs, max_conf_bps)
+    }
+
+    /// SSS-092: Set the annual stability fee (in basis points) for CDP borrows.
+    /// Max 2000 bps (20% p.a.).  0 = no fee (default).
+    /// Authority-only; takes effect on next `collect_stability_fee` call.
+    pub fn set_stability_fee(ctx: Context<SetStabilityFee>, fee_bps: u16) -> Result<()> {
+        instructions::stability_fee::set_stability_fee_handler(ctx, fee_bps)
     }
 
     /// Propose a timelocked admin operation (2-epoch delay by default).

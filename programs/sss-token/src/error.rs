@@ -124,4 +124,7 @@ pub enum SssError {
     // SSS-091: DefaultAccountState=Frozen
     #[msg("Token program must be Token-2022 (spl-token-2022 program)")]
     InvalidTokenProgram,
+    // SSS-092: Stability fee
+    #[msg("Stability fee bps exceeds maximum allowed (2000 = 20% p.a.)")]
+    StabilityFeeTooHigh,
 }
