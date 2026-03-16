@@ -83,7 +83,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
             ct_config.mint = ctx.accounts.mint.key();
             ct_config.auditor_elgamal_pubkey = auditor_key;
             ct_config.auto_approve_new_accounts = true;
-            ct_config.bump = ctx.bumps.ct_config.ok_or(SssError::ConfidentialTransferNotEnabled)?;
+            ct_config.bump = ctx.bumps.ct_config.expect("ct_config bump must exist when init_if_needed");
         }
     }
 
