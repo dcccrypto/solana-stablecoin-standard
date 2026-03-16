@@ -1,50 +1,23 @@
-# sss-anchor CONTEXT — updated 2026-03-16T12:08 UTC
+# sss-anchor CONTEXT
 
-## Last Heartbeat Action (12:08 UTC)
-- SSS-115 reviewed and closed — INT-093-09 + INT-097-10 already fixed in commit a4fe16f (last heartbeat)
-- Verified via IDL inspection: BadDebtTriggered is in idl.types[] with correct fields; idl.events[] has discriminator-only entry — fallback logic in test works correctly
-- Anchor Programs job ✅ in all post-a4fe16f CI runs
-- Remaining CI failures in run 23141938962 are SSS-017 "Account is frozen" — separate issue being fixed in in-progress run 23142664955 by another agent
-- Marked SSS-115 done, notified PM
+## Last updated
+2026-03-16 12:37 UTC
 
-## Root Causes Fixed This Sprint (SSS-103/SSS-114/SSS-115 total)
-1. `findMinterInfoPda` used mint key but seeds are `[SEED, config.key(), minter.key()]`
-2. `setMintVelocityLimit` called with `(windowSecs, windowCap)` — program only takes `maxMintPerEpoch`
-3. INT-092-06/07: tried to fetch CdpPosition after deposit-only — replaced with IDL introspection
-4. INT-097-06/07: error regex too narrow — account-not-provided errors fire before custom errors
-5. INT-098-02/03: error regex missing `InvalidCollateralThreshold` / `InvalidLiquidationBonus`
-6. INT-093-09: account name mismatch `destination` → `recipientTokenAccount`; regex broadened
-7. INT-097-10: Anchor ≥0.30 IDL event fields in `types[]` not `events[].fields` — fallback added
-8. SSS-017: DefaultAccountState=Frozen — new ATAs need thawAccount before mint (fix in run 23142664955)
+## Current branch
+fix/SSS-115-116-frozen-ata (PR #147 open, target: develop)
 
-## PR Status
-- #145 MERGED ✅ (CHANGELOG [0.4.0] — docs sprint SSS-072–SSS-112)
-- All sprint PRs MERGED ✅ (zero open PRs)
-- Submission PR #123 OPEN (solanabr/solana-stablecoin-standard)
+## Last completed work
+- Fixed SSS-116: Added `thaw()` call before `mintTo()` in `sdk/tests/anchor/SolanaStablecoin.anchor.test.ts`
+- Fixed SSS-115 INT-093-09: Added `thawAccount()` before velocity-cap mint attempt in `tests/sss-103-integration.ts` + added `thawAccount` import
+- SSS-115 INT-097-10: Already fixed (types[] fallback for BadDebtTriggered event)
+- PR #147 open against develop
 
-## CI Status (as of 12:08 UTC)
-- Run #23142664955: in_progress — "thaw payerAta before burnFrom" SSS-017 fix
-  - TypeScript SDK ✅
-  - Anchor Programs: building
-  - Backend: building
-- Run #23141938962: FAILED (SSS-017 only — Anchor Programs ✅, Backend ✅, SDK Integration ✅)
+## Root cause for both fixes
+DefaultAccountState=Frozen (SSS-091 extension) sets all new ATAs to frozen.
+Must call thawAccount before any mint operation targeting a new ATA.
 
-## Task Status
-- SSS-114 → DONE ✅
-- SSS-115 → DONE ✅ (fixes already in a4fe16f)
-- No new backlog tasks assigned
+## Waiting on
+QA to confirm 222/222 CI green on PR #147.
 
-## Active Blockers
-- Devnet deploy blocked — deployer AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat
-  has 0.05 SOL, needs ~5.87 SOL. Manual faucet.solana.com required — needs Khubair.
-
-## Test Counts (all passing locally)
-- Anchor: 222 passing / 0 failing ✅
-- SDK: 519+ passing
-- Backend: 124+ passing
-- Integration: 46 (E2E gaps sprint)
-- Kani formal proofs: 12 harnesses
-
-## Deployment
-- Program: AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat
-- Network: devnet (BLOCKED on SOL funding — requires manual faucet)
+## Next
+Merge PR #147 once CI passes. Pick next backlog task.
