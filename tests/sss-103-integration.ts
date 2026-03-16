@@ -135,6 +135,8 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           collateralMint: SystemProgram.programId,
           reserveVault: SystemProgram.programId,
           maxSupply: null,
+          featureFlags: new anchor.BN(0),
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -400,6 +402,8 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           collateralMint: collateralMint,
           reserveVault: SystemProgram.programId,
           maxSupply: null,
+          featureFlags: new anchor.BN(0),
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -620,6 +624,8 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           collateralMint: SystemProgram.programId,
           reserveVault: SystemProgram.programId,
           maxSupply: null,
+          featureFlags: new anchor.BN(0),
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -875,6 +881,8 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           collateralMint: SystemProgram.programId,
           reserveVault: SystemProgram.programId,
           maxSupply: null,
+          featureFlags: new anchor.BN(0),
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -1008,6 +1016,8 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           collateralMint: SystemProgram.programId,
           reserveVault: SystemProgram.programId,
           maxSupply: null,
+          featureFlags: new anchor.BN(0),
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -1189,6 +1199,8 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           collateralMint: collateralMint,
           reserveVault: SystemProgram.programId,
           maxSupply: null,
+          featureFlags: new anchor.BN(0),
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
