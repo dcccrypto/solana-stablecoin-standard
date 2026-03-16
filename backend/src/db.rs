@@ -931,4 +931,179 @@ impl Database {
         }
         Ok(inserted)
     }
+
+    // ─── SSS-108: Analytics queries ───────────────────────────────────────────
+
+    /// Liquidation analytics over the last `hours` hours.
+    pub fn liquidation_analytics(&self, hours: i64) -> Result<LiquidationAnalyticsStats, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        // SQLite datetime arithmetic: created_at is stored as RFC-3339 string.
+        let row: (i64, i64, i64) = conn.query_row(
+            "SELECT COUNT(*), \
+                    COALESCE(SUM(collateral_seized), 0), \
+                    COALESCE(SUM(debt_repaid), 0) \
+             FROM liquidation_history \
+             WHERE created_at >= datetime('now', ?1)",
+            rusqlite::params![format!("-{} hours", hours)],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        let count = row.0 as u64;
+        let total_collateral_seized = row.1;
+        let total_debt_repaid = row.2;
+        let avg_collateral_seized = if count > 0 {
+            total_collateral_seized / count as i64
+        } else {
+            0
+        };
+        Ok(LiquidationAnalyticsStats {
+            count,
+            total_collateral_seized,
+            total_debt_repaid,
+            avg_collateral_seized,
+        })
+    }
+
+    /// CDP health distribution derived from event_log cdp_deposit / cdp_borrow events.
+    ///
+    /// For each CDP address we compute:
+    ///   net_collateral = sum of cdp_deposit amounts - sum of cdp_withdraw amounts
+    ///   net_debt       = sum of cdp_borrow amounts  - sum of cdp_repay amounts
+    ///
+    /// Health factor = net_collateral / net_debt  (unitless; >1 = healthy relative to 1:1 peg).
+    /// Thresholds (conservative, no live price feed here):
+    ///   healthy      : health_factor >= 2.0  (collateral >= 2× debt)
+    ///   at_risk      : 1.0 <= health_factor < 2.0
+    ///   liquidatable : health_factor < 1.0  (or net_debt == 0 counts as healthy)
+    pub fn cdp_health_distribution(&self) -> Result<CdpHealthDistribution, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Pull aggregate deposit and borrow totals per CDP address from event_log.
+        // event_log.data is JSON with an `amount` field for deposit/borrow events.
+        let rows: Vec<(f64, f64)> = {
+            let mut stmt = conn.prepare(
+                "SELECT \
+                    SUM(CASE WHEN event_type = 'cdp_deposit'  THEN CAST(json_extract(data, '$.amount') AS REAL) ELSE 0 END) \
+                    - SUM(CASE WHEN event_type = 'cdp_withdraw' THEN CAST(json_extract(data, '$.amount') AS REAL) ELSE 0 END), \
+                    SUM(CASE WHEN event_type = 'cdp_borrow'   THEN CAST(json_extract(data, '$.amount') AS REAL) ELSE 0 END) \
+                    - SUM(CASE WHEN event_type = 'cdp_repay'   THEN CAST(json_extract(data, '$.amount') AS REAL) ELSE 0 END) \
+                 FROM event_log \
+                 WHERE event_type IN ('cdp_deposit','cdp_withdraw','cdp_borrow','cdp_repay') \
+                 GROUP BY address",
+            )?;
+            let iter = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, Option<f64>>(0)?.unwrap_or(0.0),
+                    row.get::<_, Option<f64>>(1)?.unwrap_or(0.0),
+                ))
+            })?;
+            iter.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| AppError::Internal(e.to_string()))?
+        };
+
+        let mut healthy = 0u64;
+        let mut at_risk = 0u64;
+        let mut liquidatable = 0u64;
+
+        for (net_collateral, net_debt) in &rows {
+            let nc = net_collateral.max(0.0);
+            let nd = net_debt.max(0.0);
+            if nd <= 0.0 {
+                // No debt → always healthy.
+                healthy += 1;
+            } else {
+                let hf = nc / nd;
+                if hf >= 2.0 {
+                    healthy += 1;
+                } else if hf >= 1.0 {
+                    at_risk += 1;
+                } else {
+                    liquidatable += 1;
+                }
+            }
+        }
+
+        // Also include CDPs that appear only in liquidation_history (fully liquidated).
+        // These count as liquidatable unless we already saw their events above.
+        // (Intentionally not double-counting — event_log is the source of truth.)
+
+        Ok(CdpHealthDistribution {
+            healthy,
+            at_risk,
+            liquidatable,
+        })
+    }
+
+    /// Protocol-level aggregate stats.
+    pub fn protocol_stats(&self) -> Result<ProtocolStats, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Total collateral locked: sum of total_deposited across all whitelisted configs.
+        let total_collateral_locked_native: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(total_deposited), 0) FROM collateral_config WHERE whitelisted = 1",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Total debt: total minted - total burned (native units).
+        let total_minted: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(amount), 0) FROM mint_events",
+            [],
+            |row| row.get(0),
+        )?;
+        let total_burned: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(amount), 0) FROM burn_events",
+            [],
+            |row| row.get(0),
+        )?;
+        let total_debt_native = (total_minted - total_burned).max(0);
+
+        // Backstop fund utilisation: total debt_repaid in liquidation_history.
+        let backstop_fund_debt_repaid: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(debt_repaid), 0) FROM liquidation_history",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Active collateral types: whitelisted configs with some deposited collateral.
+        let active_collateral_types: u32 = {
+            let count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM collateral_config WHERE whitelisted = 1 AND total_deposited > 0",
+                [],
+                |row| row.get(0),
+            )?;
+            count as u32
+        };
+
+        Ok(ProtocolStats {
+            total_collateral_locked_native,
+            total_debt_native,
+            backstop_fund_debt_repaid,
+            active_collateral_types,
+        })
+    }
+}
+
+// ─── Analytics result types ───────────────────────────────────────────────────
+
+/// Raw stats returned by `Db::liquidation_analytics`.
+pub struct LiquidationAnalyticsStats {
+    pub count: u64,
+    pub total_collateral_seized: i64,
+    pub total_debt_repaid: i64,
+    pub avg_collateral_seized: i64,
+}
+
+/// Raw CDP health bucket counts.
+pub struct CdpHealthDistribution {
+    pub healthy: u64,
+    pub at_risk: u64,
+    pub liquidatable: u64,
+}
+
+/// Raw protocol stats.
+pub struct ProtocolStats {
+    pub total_collateral_locked_native: i64,
+    pub total_debt_native: i64,
+    pub backstop_fund_debt_repaid: i64,
+    pub active_collateral_types: u32,
 }
