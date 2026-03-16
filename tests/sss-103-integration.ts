@@ -329,6 +329,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
 
       [collateralVaultPda] = findCollateralVaultPda(
         mintKp.publicKey,
+        authority.publicKey,
         collateralMint,
         program.programId
       );
@@ -752,7 +753,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
       );
 
       await program.methods
-        .addMinter(new BN(5_000_000)) // 5 token mint cap
+        .updateMinter(new BN(5_000_000)) // 5 token mint cap
         .accounts({
           authority: authority.publicKey,
           minter: minterKp.publicKey,
@@ -764,8 +765,9 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
         .rpc();
 
       const minterInfo = await program.account.minterInfo.fetch(minterInfoPda);
-      expect(minterInfo).to.have.property("mintCap");
-      expect(minterInfo.mintCap.toNumber()).to.equal(5_000_000);
+      // MinterInfo stores 'cap' field (Anchor camelCase from pub cap: u64)
+      expect(minterInfo).to.have.property("cap");
+      expect(minterInfo.cap.toNumber()).to.equal(5_000_000);
     });
 
     it("INT-093-08: velocity rate limit — set_velocity_limit stores window + cap on minter_info", async () => {
@@ -773,7 +775,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
       const windowCap = new BN(1_000_000); // 1 token per hour
 
       await program.methods
-        .setMintVelocityLimit(new BN(windowSecs), windowCap)
+        .setMintVelocityLimit(windowCap)  // epoch-based: single arg max_mint_per_epoch
         .accounts({
           authority: authority.publicKey,
           minter: minterKp.publicKey,
@@ -784,14 +786,14 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
         .rpc();
 
       const minterInfo = await program.account.minterInfo.fetch(minterInfoPda);
-      expect(minterInfo.velocityWindowSecs.toNumber()).to.equal(windowSecs);
-      expect(minterInfo.velocityWindowCap.toNumber()).to.equal(1_000_000);
+      // Epoch-based: program stores max_mint_per_epoch (single field)
+      expect(minterInfo.maxMintPerEpoch.toNumber()).to.equal(1_000_000);
     });
 
     it("INT-093-09: velocity rate limit — rejects when mint exceeds window cap", async () => {
       // Set a tiny window cap so next mint exceeds it
       await program.methods
-        .setMintVelocityLimit(new BN(3600), new BN(100)) // 100 µ-token cap
+        .setMintVelocityLimit(new BN(100)) // 100 µ-token epoch cap
         .accounts({
           authority: authority.publicKey,
           minter: minterKp.publicKey,
@@ -991,7 +993,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
         expect.fail("should have rejected shortfall=0");
       } catch (e: any) {
         // ZeroShortfall or account validation error — both acceptable
-        expect(e.toString()).to.match(/ZeroShortfall|shortfall|InvalidAccount|custom|AccountNotInit/i);
+        expect(e.toString()).to.match(/ZeroShortfall|shortfall|InvalidAccount|AccountNotPresent|custom|AccountNotInit/i);
       }
     });
 
@@ -1040,7 +1042,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           .rpc();
         expect.fail("should have rejected — backstop not configured");
       } catch (e: any) {
-        expect(e.toString()).to.match(/BackstopNotConfigured|NotConfigured|custom|AccountNotInit/i);
+        expect(e.toString()).to.match(/BackstopNotConfigured|NotConfigured|AccountNotPresent|custom|AccountNotInit/i);
       }
     });
 
@@ -1067,13 +1069,21 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
 
     it("INT-097-10: BadDebtTriggered event has correct fields in IDL", async () => {
       const rawIdl = program.idl as any;
-      const events = rawIdl.events as Array<{ name: string; fields: Array<{ name: string }> }>;
+      // Anchor 0.30+ IDL: events section has {name, discriminator}; fields are in types section
+      const events = rawIdl.events as Array<{ name: string }>;
       const evt = events?.find(
         (e: any) => e.name === "BadDebtTriggered" || e.name === "badDebtTriggered"
       );
-      expect(evt, "BadDebtTriggered event must be in IDL").to.not.be.undefined;
+      expect(evt, "BadDebtTriggered event must be in IDL events section").to.not.be.undefined;
 
-      const fieldNames = evt!.fields.map((f: any) => f.name);
+      // Find the struct type definition for the event fields
+      const types = rawIdl.types as Array<{ name: string; type: { kind: string; fields: Array<{ name: string }> } }>;
+      const eventType = types?.find(
+        (t: any) => t.name === "BadDebtTriggered" || t.name === "badDebtTriggered"
+      );
+      expect(eventType, "BadDebtTriggered type definition must be in IDL types").to.not.be.undefined;
+
+      const fieldNames = (eventType!.type.fields || []).map((f: any) => f.name);
       expect(fieldNames).to.include.oneOf(["sss_mint", "sssMint"]);
       expect(fieldNames).to.include.oneOf(["backstop_amount", "backstopAmount"]);
       expect(fieldNames).to.include.oneOf(["remaining_shortfall", "remainingShortfall"]);
@@ -1112,6 +1122,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
 
       [collateralVaultPda] = findCollateralVaultPda(
         mintKp.publicKey,
+        authority.publicKey,
         collateralMint,
         program.programId
       );
@@ -1265,7 +1276,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           .rpc();
         expect.fail("should have rejected threshold <= ltv");
       } catch (e: any) {
-        expect(e.toString()).to.match(/InvalidCollateralParams|InvalidThreshold|custom/i);
+        expect(e.toString()).to.match(/InvalidCollateralParams|InvalidCollateralThreshold|InvalidThreshold|custom/i);
       }
     });
 
@@ -1302,7 +1313,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           .rpc();
         expect.fail("should have rejected bonus > 5000");
       } catch (e: any) {
-        expect(e.toString()).to.match(/InvalidCollateralParams|InvalidBonus|custom/i);
+        expect(e.toString()).to.match(/InvalidCollateralParams|InvalidLiquidationBonus|InvalidBonus|custom/i);
       }
     });
 
