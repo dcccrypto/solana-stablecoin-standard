@@ -23,6 +23,8 @@
 //! - `cdp_liquidate`           — PositionLiquidated
 //! - `oracle_params_update`    — OracleParamsUpdated
 //! - `stability_fee_accrual`   — StabilityFeeAccrued
+//! - `collateral_registered`   — CollateralRegistered  (SSS-098)
+//! - `collateral_config_updated` — CollateralConfigUpdated  (SSS-098)
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -79,6 +81,15 @@ const EVENT_PATTERNS: &[EventPattern] = &[
     EventPattern {
         anchor_name: "StabilityFeeAccrued",
         event_type: "stability_fee_accrual",
+    },
+    // SSS-098: CollateralConfig PDA events
+    EventPattern {
+        anchor_name: "CollateralRegistered",
+        event_type: "collateral_registered",
+    },
+    EventPattern {
+        anchor_name: "CollateralConfigUpdated",
+        event_type: "collateral_config_updated",
     },
 ];
 
@@ -275,6 +286,10 @@ async fn fetch_and_index_tx(
         if let Some((event_type, address, data)) =
             parse_event_log(log_line, program_id)
         {
+            // SSS-098: side-effect — sync CollateralConfig table from on-chain events.
+            if event_type == "collateral_registered" || event_type == "collateral_config_updated" {
+                maybe_upsert_collateral_config(db, &data, Some(signature));
+            }
             db.insert_event_log(&event_type, &address, data, Some(signature), Some(slot))
                 .map_err(|e| format!("insert_event_log: {e}"))?;
             count += 1;
@@ -282,6 +297,62 @@ async fn fetch_and_index_tx(
     }
 
     Ok(count)
+}
+
+/// SSS-098: Try to extract CollateralConfig fields from an event data blob and
+/// upsert into the local collateral_config table.  Fields expected in `data`:
+///   sss_mint, collateral_mint, whitelisted, max_ltv_bps, liquidation_threshold_bps,
+///   liquidation_bonus_bps, max_deposit_cap, total_deposited.
+fn maybe_upsert_collateral_config(
+    db: &crate::db::Database,
+    data: &serde_json::Value,
+    tx_signature: Option<&str>,
+) {
+    let sss_mint = match data.get("sss_mint").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => return,
+    };
+    let collateral_mint = match data.get("collateral_mint").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => return,
+    };
+    let whitelisted = data.get("whitelisted").and_then(|v| v.as_bool()).unwrap_or(true);
+    let max_ltv_bps = data.get("max_ltv_bps").and_then(|v| v.as_u64()).unwrap_or(6667) as u16;
+    let liquidation_threshold_bps = data
+        .get("liquidation_threshold_bps")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(7500) as u16;
+    let liquidation_bonus_bps = data
+        .get("liquidation_bonus_bps")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(500) as u16;
+    let max_deposit_cap = data
+        .get("max_deposit_cap")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let total_deposited = data
+        .get("total_deposited")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+
+    if let Err(e) = db.upsert_collateral_config(
+        &sss_mint,
+        &collateral_mint,
+        whitelisted,
+        max_ltv_bps,
+        liquidation_threshold_bps,
+        liquidation_bonus_bps,
+        max_deposit_cap,
+        total_deposited,
+        tx_signature,
+    ) {
+        warn!("SSS-098: failed to upsert collateral_config from event: {e}");
+    } else {
+        info!(
+            "SSS-098: upserted CollateralConfig for {}/{}",
+            sss_mint, collateral_mint
+        );
+    }
 }
 
 /// Parse a single Anchor log line.

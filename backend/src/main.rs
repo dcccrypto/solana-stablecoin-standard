@@ -30,6 +30,7 @@ use routes::{
     confidential::initiate_confidential_transfer,
     cpi::get_cpi_interface,
     chain_events::chain_events,
+    collateral_config::get_collateral_configs,
     events::events,
     health::health,
     mint::mint,
@@ -104,6 +105,7 @@ async fn main() {
         .route("/api/cdp/position/:wallet", get(get_cdp_position))
         .route("/api/cdp/collateral-types", get(get_collateral_types))
         .route("/api/cdp/simulate", post(post_cdp_simulate))
+        .route("/api/cdp/collateral-configs", get(get_collateral_configs))
         .route("/api/cpi/interface", get(get_cpi_interface))
         .route("/api/confidential/transfer", post(initiate_confidential_transfer))
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
@@ -178,6 +180,7 @@ mod tests {
             .route("/api/cdp/position/:wallet", get(get_cdp_position))
             .route("/api/cdp/collateral-types", get(get_collateral_types))
             .route("/api/cdp/simulate", post(post_cdp_simulate))
+        .route("/api/cdp/collateral-configs", get(get_collateral_configs))
             .route("/api/cpi/interface", get(get_cpi_interface))
             .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
@@ -652,6 +655,7 @@ mod qa_tests {
             .route("/api/cdp/position/:wallet", get(get_cdp_position))
             .route("/api/cdp/collateral-types", get(get_collateral_types))
             .route("/api/cdp/simulate", post(post_cdp_simulate))
+        .route("/api/cdp/collateral-configs", get(get_collateral_configs))
             .route("/api/cpi/interface", get(get_cpi_interface))
             .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
