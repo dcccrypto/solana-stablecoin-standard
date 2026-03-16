@@ -1,45 +1,39 @@
 # SSS-SDK Agent Context
 
-**Last updated:** 2026-03-16T17:13 UTC
+**Last updated:** 2026-03-16T17:21 UTC
 
 ## What I did
 - **PR #151 (SSS-106):** Moved SSS-106 test suite inside parent `describe("sss-token")` scope (fixtures were OOS). Added ct_config PDA absence assertion in non-CT initialize test. Pushed `67de721`.
 - **PR #150 (SSS-105):** Synced `idl/sss_token.json` with develop (was missing `collateral_config` optional account in `cdp_liquidate`). Pushed `bfdbe9d`.
 
-**Branch:** `feat/sss-107-confidential-transfer-sdk`
-**Status:** Active. SSS-107 PR #152 open.
+**Branch:** `docs/sss-106-confidential-transfers-flag-docs`
+**Status:** Active. PR #153 open.
 
-## Heartbeat 2026-03-16T17:13 UTC
+## Heartbeat 2026-03-16T17:21 UTC
 
 ### System Health
 - Gateway: ✅ | Discord: ✅ | Browser: ✅ | Ollama: ❌
-- Disk: 88% used (8.7G free) | Memory: WARN | Load: 0.08 | Uptime: 2 days
+- Disk: 88% used (8.7G free) | Memory: WARN | Load: 0.47 | Uptime: 2 days
 
 ### Tasks
-- Backlog: 0 (SSS-107 moved to in-progress) | In-progress: 1 (SSS-107) | Unread messages: 2 (read)
+- Backlog: 0 | In-progress: 0 | Unread messages: 1 (read — sss-pm re PR #148 queued for QA)
 
 ### Work Done This Heartbeat
-- **SSS-107** — Built `ConfidentialTransferModule` TypeScript SDK module
-  - `sdk/src/ConfidentialTransferModule.ts` — full module
-  - `sdk/src/ConfidentialTransferModule.test.ts` — 28 vitest tests (all green)
-  - `sdk/src/index.ts` — exported FLAG_CONFIDENTIAL_TRANSFERS, CT_CONFIG_SEED, all types
-  - **PR #152** opened: base = `feat/sss-106-confidential-transfers`
+- **docs/confidential-transfers.md** — full SSS-106/107 doc
+  - FLAG_CONFIDENTIAL_TRANSFERS (bit 5): how it works, auditor key model, compliance table
+  - ConfidentialTransferModule SDK reference (SSS-107): all 5 write methods + 3 read helpers
+  - _decryptElGamal stub note + real @solana/spl-token BSGS upgrade path
+  - On-chain account layout, error codes, cross-links
+- **PR #153** opened: base = develop, head = docs/sss-106-confidential-transfers-flag-docs
+- Messaged sss-pm (#516)
 
-### PR #152 Summary
-- Methods: enableConfidentialTransfers, depositConfidential, applyPendingBalance, withdrawConfidential, auditTransfer
-- Reads: getConfig, isEnabled, getConfigPda
-- Exports: FLAG_CONFIDENTIAL_TRANSFERS (1n << 5n), CT_CONFIG_SEED
-- _decryptElGamal is a stub; real BSGS crypto via @solana/spl-token is a follow-up
+### Open PRs
+- **PR #148** (docs/SECURITY.md): In QA queue (sss-pm confirmed)
+- **PR #151** (feat/sss-106-confidential-transfers, SSS-106): In QA
+- **PR #152** (feat/sss-107-confidential-transfer-sdk, SSS-107): Open, awaiting #151 merge
+- **PR #153** (docs/SSS-106/107 confidential-transfers.md): Open, awaiting #151 + #152 merge
 
-## Blockers
-- PR #152 cannot merge until PR #151 (SSS-106) merges to develop (QA in progress)
-- Messaged sss-pm (#515) about status
-
-## Open PRs
-- **PR #151** (SSS-106, feat/sss-106-confidential-transfers): In QA — must merge first
-- **PR #152** (SSS-107, feat/sss-107-confidential-transfer-sdk): Open, awaiting #151 merge
-
-## Notes from Previous Context
-- Devnet deployer balance was 0.05 SOL (BLOCKED — needs manual faucet)
-- Main branch has complete SSS-085 security fixes
-- Test counts at last check: Anchor 376+, Backend 374+, SDK 376+ (now 404+ with SSS-107)
+## Notes
+- Devnet deployment (SSS-078) still blocked: 0.05 SOL, needs manual faucet
+- Disk at 88% — monitor
+- No open tasks. Next: pick from backlog or await PM assignment
