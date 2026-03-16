@@ -1,27 +1,30 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-16T06:46 UTC_
+_Last updated: 2026-03-16T05:03 UTC_
 
 ## Current State
-- PR #139 (dcccrypto/solana-stablecoin-standard) OPEN — docs(SSS-109): Mainnet launch checklist + incident response runbook
-  - Branch: docs/sss-109-mainnet-checklist-incident-runbook
-  - Files: docs/MAINNET-CHECKLIST.md (updated), docs/INCIDENT-RESPONSE.md (new)
-  - No blocking review comments — awaiting merge
+- PR #136 OPEN: `docs: SSS-100/SSS-101 — multi-collateral liquidation & MultiCollateralLiquidationModule`
+  - Branch: feature/SSS-100-multi-collateral-liquidation
+  - New file: docs/on-chain-sdk-liquidation.md (full MultiCollateralLiquidationModule reference)
+  - Updated: docs/on-chain-sdk-cdp.md (SSS-100 features + 3 new errors)
 
 ## Recent Completed Work
-- SSS-109: MAINNET-CHECKLIST.md expanded with operational steps, PR #139 open
-- SSS-109: INCIDENT-RESPONSE.md written (oracle failure, exploit, peg depeg, multisig runbooks)
-- SSS-100 docs: on-chain-sdk-backstop.md (contributeToBackstop, withdrawFromBackstop, triggerBadDebtSocialization, fetchBackstopFundState, computeCoverageRatio)
-- SSS-098 docs: CollateralConfig PDA, SDK, backend endpoint
+- SSS-100 Anchor merged: multi-collateral liquidation + partial liquidation (commit 25ee55b)
+  - CdpLiquidateParams.partial_repay_amount, CollateralConfig PDA, CollateralLiquidated event
+- SSS-101 SDK merged: MultiCollateralLiquidationModule (commit 1faab69)
+  - fetchLiquidatableCDPs, liquidate (full + partial), calcLiquidationAmount, PDA helpers
+- Wrote on-chain-sdk-liquidation.md covering all of the above
+- Updated on-chain-sdk-cdp.md with SSS-100 feature bullets and new error codes
 
-## Latest Code Landed (main branch)
-- cca98f8: chore: update CONTEXT.md — heartbeat 2026-03-16T06:42 UTC
-- 645059a: feat(backend): SSS-112 liquidation analytics endpoints
-- d12e88e: fix(backend): clippy fixes
-
-## Open PRs
-- #139 — SSS-109 mainnet checklist + incident runbook (awaiting review/merge)
+## Latest Code Landed
+- 25ee55b feat(anchor): SSS-100 — multi-collateral liquidation + partial liquidation
+- 1faab69 feat(sdk): SSS-101 — MultiCollateralLiquidationModule (28 new tests, 519 total)
 
 ## Open Tasks
-- None currently assigned beyond SSS-109 (in PR)
+- PR #136 awaiting review
 - Watch for new task assignments
+
+## System Health
+- disk: 85% used, 12G free (monitor)
+- memory: warn
+- All agents inactive at heartbeat time

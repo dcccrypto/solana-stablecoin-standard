@@ -1,31 +1,34 @@
-# SSS-Backend Agent Context
+# sss-sdk CONTEXT
 
-**Last updated:** 2026-03-16T06:42 UTC
+_Last updated: 2026-03-16T07:23 UTC_
 
 ## Current State
+- develop is clean and pushed (5b07f67)
+- 553/553 tests passing ✅
+- SSS-101 PR #128 open (feat/SSS-101-multi-collateral-liquidation-sdk → feature/SSS-100-multi-collateral-liquidation)
+- Devnet deployment BLOCKED: deployer balance 0.05 SOL (SSS-078, requires Khubair action)
 
-**Status:** All tasks done. Two PRs open awaiting review.
+## Recent Completed Work
+- 07:23 UTC: Committed cdp_liquidate_v2.rs cleanup — removed inline CollateralLiquidated struct,
+  now imported from events.rs (consolidated there with new fields: mint, liquidator, debt_burned,
+  ratio_before_bps, bonus_bps). Added CollateralLiquidatedEvent type + parseCollateralLiquidatedEvent()
+  helper to MultiCollateralLiquidationModule SDK; exported from barrel index.ts.
+- 03:13 UTC: SSS-101 scaffold — MultiCollateralLiquidationModule (28 new tests, 519 at time)
+- Previous: CI fix (02:54 UTC): IDL rebuild + SSS-075 thaw ATAs fix
 
-## What's Done Recently
+## Open Tasks
+- SSS-101: PR #128 open — liquidate() wiring to cdpLiquidateV2 complete; waiting for sss-anchor merge
+- SSS-078: devnet deploy blocked on SOL funding (requires Khubair manual action)
 
-### Heartbeat 2026-03-16T06:42 UTC
-- **PR #138** (feat/SSS-108): Liquidation analytics + CDP health + protocol stats — OPEN, no human reviews yet
-- **PR #141** (feature/SSS-112-analytics): SSS-112 liquidation analytics endpoints — OPEN, no human reviews yet
-- SSS-108 and SSS-112 are duplicate assignments (same analytics endpoints), both done
-- 116 tests pass, clippy clean on feature/SSS-112-analytics
-- Docker not available in env (docker not installed), skipped
-- No backlog tasks, no in-progress tasks
-- Unread messages: SSS-108 and SSS-112 PM assignments (both actioned)
+## Latest Code Landed
+- develop HEAD: 5b07f67
+  feat(anchor+sdk): SSS-100/101 — CollateralLiquidated event consolidation + SDK event type
 
-### Heartbeat 2026-03-16T05:22 UTC (docs agent wrote this — now superseded)
-- PR #136 (docs SSS-100/101) open
+## Blocking Issues
+- SSS-078: devnet deploy requires manual browser wallet at faucet.solana.com
+- No new blockers: event struct now canonical in events.rs
 
-## Open PRs (backend)
-- **#138** feat/SSS-108 — Liquidation analytics + CDP health + protocol stats — OPEN
-- **#141** feature/SSS-112-analytics — SSS-112 liquidation analytics endpoints — OPEN
-
-## System Health
-- Disk: 86% used, 11G free — creeping up, watch
-- Memory: warn status (persistent)
-- All agents inactive (normal for off-hours)
-- Ollama: offline (expected)
+## Notes
+- When SSS-100 IDL lands (Anchor build): rebuild IDL, update sdk/src/idl/, then
+  wire MultiCollateralLiquidationModule.liquidate() to exact instruction name from IDL
+- parseCollateralLiquidatedEvent() handles both camelCase (Anchor JS) and snake_case field names

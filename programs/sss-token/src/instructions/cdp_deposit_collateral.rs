@@ -4,6 +4,7 @@ use anchor_spl::token_interface::{
 };
 
 use crate::error::SssError;
+use crate::events::CdpCollateralDeposited;
 use crate::state::{
     CollateralConfig, CollateralVault, StablecoinConfig, YieldCollateralConfig,
     FLAG_YIELD_COLLATERAL,
@@ -158,11 +159,19 @@ pub fn cdp_deposit_collateral_handler(
         cc.total_deposited = cc.total_deposited.saturating_add(amount);
     }
 
+    emit!(CdpCollateralDeposited {
+        sss_mint: ctx.accounts.sss_mint.key(),
+        user: ctx.accounts.user.key(),
+        collateral_mint: ctx.accounts.collateral_mint.key(),
+        amount,
+        vault_total: ctx.accounts.collateral_vault.deposited_amount,
+    });
+
     msg!(
         "CDP: deposited {} of collateral {}. Vault total: {}",
         amount,
         ctx.accounts.collateral_mint.key(),
-        vault.deposited_amount,
+        ctx.accounts.collateral_vault.deposited_amount,
     );
     Ok(())
 }

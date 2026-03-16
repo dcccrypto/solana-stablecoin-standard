@@ -661,6 +661,9 @@ mod qa_tests {
             .route("/api/events", get(events))
             .route("/api/chain-events", get(chain_events))
             .route("/api/liquidations", get(get_liquidations))
+            .route("/api/analytics/liquidations", get(get_liquidation_analytics))
+            .route("/api/analytics/cdp-health", get(get_cdp_health))
+            .route("/api/analytics/protocol-stats", get(get_protocol_stats))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/audit", get(get_audit))
             .route("/api/compliance/rule", post(add_compliance_rule))
@@ -1524,6 +1527,445 @@ mod qa_tests {
         assert_eq!(even, 4); // 0,2,4,6
         let odd = db.count_liquidations(None, Some("MintOdd")).unwrap();
         assert_eq!(odd, 3); // 1,3,5
+    }
+
+    // ─── SSS-108: Analytics endpoint integration tests ────────────────────────
+
+    async fn analytics_get_json(app: Router<()>, uri: &str, key: &str) -> (StatusCode, serde_json::Value) {
+        use tower::ServiceExt;
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(uri)
+                    .header("X-Api-Key", key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+        (status, json)
+    }
+
+    fn build_analytics_app() -> (axum::Router, String) {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("analytics-test").unwrap();
+        let test_key = key_entry.key.clone();
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/analytics/liquidations", get(get_liquidation_analytics))
+            .route("/api/analytics/cdp-health", get(get_cdp_health))
+            .route("/api/analytics/protocol-stats", get(get_protocol_stats))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+        (app, test_key)
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_empty_db() {
+        let (app, key) = build_analytics_app();
+        let (status, json) = analytics_get_json(app, "/api/analytics/liquidations", &key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["count"], 0);
+        assert_eq!(json["data"]["window"], "24h");
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_with_data() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("test").unwrap();
+        let test_key = key_entry.key.clone();
+        // Insert 3 liquidations.
+        for i in 0..3u64 {
+            db.insert_liquidation(
+                &format!("CDP_{i}"),
+                "MintA",
+                (i as i64 + 1) * 1000,
+                (i as i64 + 1) * 800,
+                "Liq",
+                None,
+                None,
+            ).unwrap();
+        }
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/analytics/liquidations", get(get_liquidation_analytics))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+        let (status, json) = analytics_get_json(app, "/api/analytics/liquidations?window=24h", &test_key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["data"]["count"], 3);
+        // 1000+2000+3000 = 6000
+        assert_eq!(json["data"]["total_collateral_seized"], 6000);
+        // avg = 6000/3 = 2000
+        assert_eq!(json["data"]["avg_collateral_seized"], 2000);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_window_7d() {
+        let (app, key) = build_analytics_app();
+        let (status, json) = analytics_get_json(app, "/api/analytics/liquidations?window=7d", &key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["data"]["window"], "7d");
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_window_30d() {
+        let (app, key) = build_analytics_app();
+        let (status, json) = analytics_get_json(app, "/api/analytics/liquidations?window=30d", &key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["data"]["window"], "30d");
+    }
+
+    #[tokio::test]
+    async fn test_analytics_cdp_health_empty_db() {
+        let (app, key) = build_analytics_app();
+        let (status, json) = analytics_get_json(app, "/api/analytics/cdp-health", &key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["total"], 0);
+        assert_eq!(json["data"]["healthy"], 0);
+        assert_eq!(json["data"]["at_risk"], 0);
+        assert_eq!(json["data"]["liquidatable"], 0);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_cdp_health_with_events() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("test").unwrap();
+        let test_key = key_entry.key.clone();
+        // Healthy CDP: 5000 collateral, 1000 debt → hf=5.0
+        db.insert_event_log("cdp_deposit", "CDP_A",
+            serde_json::json!({"amount": 5000}), None, None).unwrap();
+        db.insert_event_log("cdp_borrow", "CDP_A",
+            serde_json::json!({"amount": 1000}), None, None).unwrap();
+        // At-risk CDP: 1500 collateral, 1000 debt → hf=1.5
+        db.insert_event_log("cdp_deposit", "CDP_B",
+            serde_json::json!({"amount": 1500}), None, None).unwrap();
+        db.insert_event_log("cdp_borrow", "CDP_B",
+            serde_json::json!({"amount": 1000}), None, None).unwrap();
+        // Liquidatable CDP: 800 collateral, 1000 debt → hf=0.8
+        db.insert_event_log("cdp_deposit", "CDP_C",
+            serde_json::json!({"amount": 800}), None, None).unwrap();
+        db.insert_event_log("cdp_borrow", "CDP_C",
+            serde_json::json!({"amount": 1000}), None, None).unwrap();
+
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/analytics/cdp-health", get(get_cdp_health))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+        let (status, json) = analytics_get_json(app, "/api/analytics/cdp-health", &test_key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["data"]["total"], 3);
+        assert_eq!(json["data"]["healthy"], 1);
+        assert_eq!(json["data"]["at_risk"], 1);
+        assert_eq!(json["data"]["liquidatable"], 1);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_protocol_stats_empty_db() {
+        let (app, key) = build_analytics_app();
+        let (status, json) = analytics_get_json(app, "/api/analytics/protocol-stats", &key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["total_collateral_locked_native"], 0);
+        assert_eq!(json["data"]["total_debt_native"], 0);
+        assert_eq!(json["data"]["backstop_fund_debt_repaid"], 0);
+        assert_eq!(json["data"]["active_collateral_types"], 0);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_requires_auth() {
+        let (app, _) = build_analytics_app();
+        let (status, _) = analytics_get_json(app, "/api/analytics/liquidations", "bad-key").await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SSS-112: Analytics endpoint tests
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod analytics_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    fn build_analytics_app() -> Router {
+        let db = Database::new(":memory:").expect("in-memory db for analytics tests");
+        // Seed some liquidation_history rows
+        for i in 0..5i64 {
+            db.insert_liquidation(
+                &format!("CDP_{i}"),
+                if i % 2 == 0 { "MintA" } else { "MintB" },
+                i * 100,
+                i * 50,
+                "Liq",
+                Some(i),
+                None,
+            ).unwrap();
+        }
+        // Seed event_log rows for TVL and debt
+        db.record_mint("sssMint", 1_000_000, "wallet1", None).unwrap();
+        db.record_burn("sssMint", 200_000, "wallet1", None).unwrap();
+        // CdpBorrowed events for health histogram
+        for i in 1..=4i64 {
+            db.insert_event_log(
+                "CdpBorrowed",
+                &format!("CDP_HEALTH_{i}"),
+                serde_json::json!({
+                    "collateral_amount": i * 200,
+                    "debt_amount": i * 100,
+                }),
+                None,
+                Some(i),
+            ).unwrap();
+        }
+
+        let state = AppState::new(db);
+        Router::new()
+            .route("/api/analytics/liquidations", get(routes::analytics::get_liquidation_analytics))
+            .route("/api/analytics/cdp-health", get(routes::analytics::get_cdp_health))
+            .route("/api/analytics/protocol-stats", get(routes::analytics::get_protocol_stats))
+            .with_state(state)
+    }
+
+    // Helper: deserialize response body
+    async fn parse_body(resp: axum::response::Response) -> serde_json::Value {
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    // --- /api/analytics/liquidations ---
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_200() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/liquidations").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_count() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/liquidations").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        assert_eq!(json["success"], true);
+        let count = json["data"]["count"].as_i64().unwrap();
+        assert_eq!(count, 5);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_total_collateral() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/liquidations").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        // sum of 0+100+200+300+400 = 1000
+        assert_eq!(json["data"]["total_collateral_seized"].as_i64().unwrap(), 1000);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_total_debt() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/liquidations").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        // sum of 0+50+100+150+200 = 500
+        assert_eq!(json["data"]["total_debt_covered"].as_i64().unwrap(), 500);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_by_collateral_mint() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/liquidations").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        let mints = json["data"]["by_collateral_mint"].as_array().unwrap();
+        assert!(!mints.is_empty(), "should have per-mint breakdown");
+        let mint_names: Vec<&str> = mints.iter()
+            .map(|m| m["collateral_mint"].as_str().unwrap())
+            .collect();
+        assert!(mint_names.contains(&"MintA") || mint_names.contains(&"MintB"));
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_filter_by_mint() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder()
+                .uri("/api/analytics/liquidations?collateral_mint=MintA")
+                .body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        assert_eq!(json["success"], true);
+        // MintA: indices 0,2,4 → 3 rows
+        assert_eq!(json["data"]["count"].as_i64().unwrap(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_filter_by_mint_b() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder()
+                .uri("/api/analytics/liquidations?collateral_mint=MintB")
+                .body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        // MintB: indices 1,3 → 2 rows
+        assert_eq!(json["data"]["count"].as_i64().unwrap(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_empty_range() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder()
+                .uri("/api/analytics/liquidations?from=2099-01-01T00:00:00Z&to=2099-12-31T00:00:00Z")
+                .body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        assert_eq!(json["data"]["count"].as_i64().unwrap(), 0);
+    }
+
+    // --- /api/analytics/cdp-health ---
+
+    #[tokio::test]
+    async fn test_cdp_health_200() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/cdp-health").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_cdp_health_has_buckets() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/cdp-health").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        let buckets = json["data"]["buckets"].as_array().unwrap();
+        assert!(!buckets.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_cdp_health_total_cdps() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/cdp-health").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        // 4 CdpBorrowed events with valid debt_amount
+        assert_eq!(json["data"]["total_cdps"].as_i64().unwrap(), 4);
+    }
+
+    #[tokio::test]
+    async fn test_cdp_health_bucket_count_param() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/cdp-health?buckets=5").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        // 5 regular + 1 overflow bucket = 6
+        let buckets = json["data"]["buckets"].as_array().unwrap();
+        assert_eq!(buckets.len(), 6);
+    }
+
+    #[tokio::test]
+    async fn test_cdp_health_ratios_distributed() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/cdp-health").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        let total: i64 = json["data"]["buckets"].as_array().unwrap()
+            .iter().map(|b| b["count"].as_i64().unwrap_or(0)).sum();
+        assert_eq!(total, json["data"]["total_cdps"].as_i64().unwrap());
+    }
+
+    // --- /api/analytics/protocol-stats ---
+
+    #[tokio::test]
+    async fn test_protocol_stats_200() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/protocol-stats").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_protocol_stats_debt_outstanding() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/protocol-stats").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        assert_eq!(json["success"], true);
+        // minted 1_000_000 - burned 200_000 = 800_000
+        assert_eq!(json["data"]["total_debt_outstanding"].as_i64().unwrap(), 800_000);
+    }
+
+    #[tokio::test]
+    async fn test_protocol_stats_has_fields() {
+        let app = build_analytics_app();
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/protocol-stats").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        let data = &json["data"];
+        assert!(data["total_tvl"].is_number());
+        assert!(data["total_debt_outstanding"].is_number());
+        assert!(data["backstop_balance"].is_number());
+        assert!(data["psm_balance"].is_number());
+    }
+
+    #[tokio::test]
+    async fn test_protocol_stats_backstop_balance() {
+        let db = Database::new(":memory:").unwrap();
+        db.insert_event_log("BackstopDeposit","addr1",serde_json::json!({"amount":500_000}),None,Some(1)).unwrap();
+        db.insert_event_log("BackstopWithdraw","addr1",serde_json::json!({"amount":100_000}),None,Some(2)).unwrap();
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/analytics/protocol-stats", get(routes::analytics::get_protocol_stats))
+            .with_state(state);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/protocol-stats").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        assert_eq!(json["data"]["backstop_balance"].as_i64().unwrap(), 400_000);
+    }
+
+    #[tokio::test]
+    async fn test_protocol_stats_psm_balance() {
+        let db = Database::new(":memory:").unwrap();
+        db.insert_event_log("PsmDeposit","addr1",serde_json::json!({"amount":300_000}),None,Some(1)).unwrap();
+        db.insert_event_log("PsmRedeem","addr1",serde_json::json!({"amount":50_000}),None,Some(2)).unwrap();
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/analytics/protocol-stats", get(routes::analytics::get_protocol_stats))
+            .with_state(state);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/analytics/protocol-stats").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = parse_body(resp).await;
+        assert_eq!(json["data"]["psm_balance"].as_i64().unwrap(), 250_000);
     }
 }
 
