@@ -1,34 +1,31 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-16T01:45 UTC_
+_Last updated: 2026-03-16T02:33 UTC_
 
 ## Current State
-- PR #123 (solanabr/solana-stablecoin-standard) is OPEN and up to date
-- All gaps sprint features SSS-090 through SSS-098 reflected in PR body
-- Test counts in PR body: 140+ Anchor, 470+ SDK, 68+ backend, ~680+ total
+- SSS-098 QA-confirmed fully shipped; PR #127 closed via manual rebase to develop
+- SDK 491/491 ✅, Backend 76/76 ✅, no regressions (QA msg #418)
+- Devnet deployment BLOCKED: deployer balance 0.05 SOL, devnet airdrop globally rate-limited (SSS-078 in-progress)
+- CI on develop: docs commit (run 23125366845) in-progress — Backend ✓, TypeScript SDK ✓; Anchor Programs + SDK Integration still running
 
 ## Recent Completed Work
-- SSS-098 SDK: CollateralConfigModule implemented and shipped
-  - `CollateralConfigModule`: registerCollateral, updateCollateralConfig, getCollateralConfig, isWhitelisted
-  - PDA derivation: [b"collateral-config", sssMint, collateralMint]
-  - 15 new unit tests; SDK suite 470 (was 455)
-  - Exported from index.ts
-  - PR #123 body updated: CollateralConfigModule methods, SDK test count 455→470
-- SSS-099: Updated PR #123 body with SSS-098 CollateralConfig additions
-- SSS-092/093 docs (stability-fee.md, psm-velocity.md) — merged
-- SSS-097 PR #123 — merged
-- SSS-095 event indexer — confirmed in develop
+- SSS-098: CollateralConfig PDA + SDK CollateralConfigModule fully shipped, QA-confirmed
+- SSS-075 fix: Added missing `rent` account to short-TTL hook initialize call in tests (commit e2c9f2e)
+  - Previous CI failures were `Account 'rent' not provided` at line ~3787 and `CollateralConfig must be in IDL` (now resolved)
+- ARCHITECTURE.md updated with all current SDK modules (commit 0e14eb8)
 
-## Latest Code Landed
-- SSS-098 SDK: CollateralConfigModule (commit 7ca65ed, branch feature/SSS-098-collateral-config)
-- SSS-098 Anchor: CollateralConfig PDA (register_collateral, update_collateral_config)
-  - Per-collateral LTV/liquidation threshold/bonus/deposit cap
-  - 11 new Anchor tests
-  - Backend endpoint at /api/collateral-config
+## Blocking Issues
+- SSS-078: Devnet deployment requires manual browser wallet auth at faucet.solana.com — must be Khubair
+- CI: Multiple prior runs failed with SSS-075/SSS-098 test bugs, now patched
 
 ## Open Tasks
-- None currently assigned
-- Watch for new task assignments
+- Backlog: none assigned
+- In-progress: SSS-078 (devnet deploy, blocked on SOL funding)
+
+## Latest Code Landed
+- develop HEAD: e2c9f2e (fix SSS-075 rent account)
+- SSS-098 SDK: CollateralConfigModule — registerCollateral, updateCollateralConfig, getCollateralConfig, isWhitelisted
+- SSS-098 Anchor: CollateralConfig PDA (register_collateral, update_collateral_config)
 
 ## Docs in PR #123
 - docs/GAPS-ANALYSIS-ANCHOR.md ✅
