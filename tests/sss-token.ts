@@ -6025,11 +6025,16 @@ describe("sss-token", () => {
     it("SSS-098: IDL exposes CollateralConfig account type with expected fields", async () => {
       const rawIdl = program.idl as any;
       const accounts = rawIdl.accounts as Array<{ name: string }>;
-      const acc = accounts?.find((a: any) => a.name === "CollateralConfig");
+      // Anchor v0.32+ may emit camelCase names; support both PascalCase and camelCase
+      const acc = accounts?.find(
+        (a: any) => a.name === "CollateralConfig" || a.name === "collateralConfig"
+      );
       expect(acc, "CollateralConfig must be in IDL accounts").to.not.be.undefined;
 
       const types = rawIdl.types as Array<{ name: string; type: { fields?: Array<{ name: string }> } }>;
-      const t = types?.find((t: any) => t.name === "CollateralConfig");
+      const t = types?.find(
+        (t: any) => t.name === "CollateralConfig" || t.name === "collateralConfig"
+      );
       expect(t, "CollateralConfig type must be in IDL types").to.not.be.undefined;
       const fieldNames = (t!.type.fields ?? []).map((f: any) => f.name);
       expect(fieldNames).to.include("sss_mint");
