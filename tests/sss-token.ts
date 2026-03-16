@@ -233,6 +233,18 @@ describe("sss-token", () => {
       new anchor.web3.Transaction().add(createAtaIx)
     );
 
+    // SSS-091: DefaultAccountState=Frozen — new ATAs start frozen; thaw before minting.
+    await program.methods
+      .thawAccount()
+      .accounts({
+        complianceAuthority: authority.publicKey,
+        config: capConfig,
+        mint: capMint.publicKey,
+        targetTokenAccount: capAta,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
     // Try to mint 501 (exceeds max_supply of 500)
     try {
       await program.methods
@@ -561,16 +573,21 @@ describe("sss-token", () => {
     );
     // SSS-091: DefaultAccountState=Frozen means the ATA may already be frozen.
     // Thaw first (no-op if already thawed) so the explicit freeze call succeeds.
-    await program.methods
-      .thawAccount()
-      .accounts({
-        complianceAuthority: authority.publicKey,
-        config: configPda,
-        mint: mintKeypair.publicKey,
-        targetTokenAccount: ata,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .rpc();
+    // Use try-catch: if the account is already thawed, thawAccount throws InvalidAccountState.
+    try {
+      await program.methods
+        .thawAccount()
+        .accounts({
+          complianceAuthority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          targetTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+    } catch (_) {
+      // Already thawed — safe to proceed
+    }
 
     await program.methods
       .freezeAccount()
@@ -3193,6 +3210,7 @@ describe("sss-token", () => {
           config: noFlagConfigPda,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([noFlagMintKeypair])
         .rpc();
@@ -3545,6 +3563,7 @@ describe("sss-token", () => {
             config: enfConfigPda,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
+            rent: anchor.web3.SYSVAR_RENT_PUBKEY,
           })
           .signers([enfMintKeypair])
           .rpc();
