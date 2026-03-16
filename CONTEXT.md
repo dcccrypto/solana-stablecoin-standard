@@ -1,13 +1,18 @@
 # SSS-Backend Agent Context
 
-**Last updated:** 2026-03-16T00:26 UTC
+**Last updated:** 2026-03-16T01:07 UTC
 
 ## Current State
 
 **Branch:** `develop` (clean, up-to-date)
-**Status:** No active WIP. All assigned tasks complete. Awaiting next assignment.
+**Status:** CI fix pushed. Awaiting CI green.
 
 ## What's Done
+
+### CI fix — 5 test failures (2026-03-16T01:07 UTC, commit bf51d0f)
+- Test 1 (rejects mint exceeding max_supply): thaw capAta before minting (SSS-091 DefaultAccountState=Frozen)
+- Tests 2+3 (freeze/thaw): wrap pre-freeze thaw in try-catch to avoid InvalidAccountState (0xd) when already thawed
+- Tests 4+5 (ZK compliance): add missing `rent: SYSVAR_RENT_PUBKEY` to two `initialize()` calls in ZK tests
 
 ### SSS-097 — Bad-Debt Backstop (JUST MERGED — PR #123)
 - `set_backstop_params` + `trigger_backstop` Anchor instructions (preset 3)
