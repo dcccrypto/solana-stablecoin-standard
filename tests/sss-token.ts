@@ -598,7 +598,7 @@ describe("sss-token", () => {
         targetTokenAccount: ata,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
-      .rpc();
+      .rpc({ commitment: "confirmed" });
 
     // Post-condition: token account should be frozen
     const tokenAccount = await getAccount(
@@ -994,6 +994,23 @@ describe("sss-token", () => {
       await provider.sendAndConfirm(tx);
     }
 
+    // SSS-091: ATA may be frozen (from freeze test or DefaultAccountState); thaw so
+    // CircuitBreakerActive error (not AccountFrozen) is the first check hit.
+    try {
+      await program.methods
+        .thawAccount()
+        .accounts({
+          complianceAuthority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          targetTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc({ commitment: "confirmed" });
+    } catch (_) {
+      // Already thawed — safe to proceed
+    }
+
     try {
       await program.methods
         .mint(new anchor.BN(100))
@@ -1074,6 +1091,22 @@ describe("sss-token", () => {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
 
+    // SSS-091: ATA may be frozen (from freeze test); thaw before minting.
+    try {
+      await program.methods
+        .thawAccount()
+        .accounts({
+          complianceAuthority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          targetTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc({ commitment: "confirmed" });
+    } catch (_) {
+      // Already thawed — safe to proceed
+    }
+
     await program.methods
       .mint(new anchor.BN(100))
       .accounts({
@@ -1124,6 +1157,22 @@ describe("sss-token", () => {
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
+
+    // SSS-091: ATA may be frozen; thaw so CircuitBreakerActive is the first error hit.
+    try {
+      await program.methods
+        .thawAccount()
+        .accounts({
+          complianceAuthority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          targetTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc({ commitment: "confirmed" });
+    } catch (_) {
+      // Already thawed — safe to proceed
+    }
 
     try {
       await program.methods
@@ -5933,14 +5982,17 @@ describe("sss-token", () => {
       );
       expect(t, "CollateralConfig type must be in IDL types").to.not.be.undefined;
       const fieldNames = (t!.type.fields ?? []).map((f: any) => f.name);
-      expect(fieldNames).to.include("sss_mint");
-      expect(fieldNames).to.include("collateral_mint");
-      expect(fieldNames).to.include("whitelisted");
-      expect(fieldNames).to.include("max_ltv_bps");
-      expect(fieldNames).to.include("liquidation_threshold_bps");
-      expect(fieldNames).to.include("liquidation_bonus_bps");
-      expect(fieldNames).to.include("max_deposit_cap");
-      expect(fieldNames).to.include("total_deposited");
+      // Anchor v0.32+ emits camelCase field names; support both snake_case and camelCase
+      const hasField = (snake: string, camel: string) =>
+        fieldNames.includes(snake) || fieldNames.includes(camel);
+      expect(hasField("sss_mint", "sssMint"), "missing sssMint/sss_mint").to.equal(true);
+      expect(hasField("collateral_mint", "collateralMint"), "missing collateralMint/collateral_mint").to.equal(true);
+      expect(hasField("whitelisted", "whitelisted"), "missing whitelisted").to.equal(true);
+      expect(hasField("max_ltv_bps", "maxLtvBps"), "missing maxLtvBps/max_ltv_bps").to.equal(true);
+      expect(hasField("liquidation_threshold_bps", "liquidationThresholdBps"), "missing liquidationThresholdBps/liquidation_threshold_bps").to.equal(true);
+      expect(hasField("liquidation_bonus_bps", "liquidationBonusBps"), "missing liquidationBonusBps/liquidation_bonus_bps").to.equal(true);
+      expect(hasField("max_deposit_cap", "maxDepositCap"), "missing maxDepositCap/max_deposit_cap").to.equal(true);
+      expect(hasField("total_deposited", "totalDeposited"), "missing totalDeposited/total_deposited").to.equal(true);
     });
 
     it("SSS-098: register_collateral instruction exists in IDL", async () => {
