@@ -931,4 +931,238 @@ impl Database {
         }
         Ok(inserted)
     }
+
+    // -----------------------------------------------------------------------
+    // SSS-112: Analytics DB methods
+    // -----------------------------------------------------------------------
+
+    /// Aggregated liquidation stats for a date range and optional collateral mint.
+    pub fn analytics_liquidations(
+        &self,
+        from: Option<&str>,
+        to: Option<&str>,
+        collateral_mint: Option<&str>,
+    ) -> Result<crate::routes::analytics::LiquidationAnalyticsResponse, AppError> {
+        use crate::routes::analytics::{CollateralMintStats, LiquidationAnalyticsResponse};
+
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Build WHERE clause
+        let mut conditions = Vec::new();
+        let mut bind_vals: Vec<String> = Vec::new();
+        if let Some(f) = from {
+            bind_vals.push(f.to_string());
+            conditions.push(format!("created_at >= ?{}", bind_vals.len()));
+        }
+        if let Some(t) = to {
+            bind_vals.push(t.to_string());
+            conditions.push(format!("created_at <= ?{}", bind_vals.len()));
+        }
+        if let Some(cm) = collateral_mint {
+            bind_vals.push(cm.to_string());
+            conditions.push(format!("collateral_mint = ?{}", bind_vals.len()));
+        }
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        // Aggregate totals
+        let totals_sql = format!(
+            "SELECT COUNT(*), COALESCE(SUM(collateral_seized),0), COALESCE(SUM(debt_repaid),0) \
+             FROM liquidation_history {where_clause}"
+        );
+        let (count, total_collateral_seized, total_debt_covered): (i64, i64, i64) =
+            conn.query_row(&totals_sql, rusqlite::params_from_iter(bind_vals.iter()), |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?;
+
+        // Per-collateral-mint breakdown
+        let breakdown_sql = format!(
+            "SELECT collateral_mint, COUNT(*), COALESCE(SUM(collateral_seized),0), COALESCE(SUM(debt_repaid),0) \
+             FROM liquidation_history {where_clause} \
+             GROUP BY collateral_mint ORDER BY COUNT(*) DESC"
+        );
+        let mut stmt = conn.prepare(&breakdown_sql)?;
+        let by_collateral_mint: Vec<CollateralMintStats> = stmt
+            .query_map(rusqlite::params_from_iter(bind_vals.iter()), |row| {
+                Ok(CollateralMintStats {
+                    collateral_mint: row.get(0)?,
+                    count: row.get(1)?,
+                    total_collateral_seized: row.get(2)?,
+                    total_debt_covered: row.get(3)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(LiquidationAnalyticsResponse {
+            count,
+            total_collateral_seized,
+            total_debt_covered,
+            by_collateral_mint,
+        })
+    }
+
+    /// CDP health ratio histogram derived from event_log CdpCollateralDeposited / CdpBorrowed events.
+    ///
+    /// Health ratio = collateral_value / debt_value. We approximate this per CDP from the
+    /// event_log data field. Buckets are evenly distributed from 0 to `max_ratio` (default 4.0).
+    pub fn analytics_cdp_health(
+        &self,
+        bucket_count: u32,
+    ) -> Result<crate::routes::analytics::CdpHealthResponse, AppError> {
+        use crate::routes::analytics::{CdpHealthResponse, HealthBucket};
+
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Pull the latest CdpBorrowed events per CDP from event_log.
+        // data JSON is expected to have: collateral_amount (u64), debt_amount (u64)
+        let sql = "SELECT address, data FROM event_log WHERE event_type = 'CdpBorrowed' \
+                   ORDER BY slot DESC";
+        let mut stmt = conn.prepare(sql)?;
+
+        // Compute health per CDP (only keep latest event per address).
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut ratios: Vec<f64> = Vec::new();
+
+        let rows = stmt.query_map([], |row| {
+            let addr: String = row.get(0)?;
+            let data_str: String = row.get(1)?;
+            Ok((addr, data_str))
+        })?;
+
+        for row_res in rows {
+            let (addr, data_str) = row_res?;
+            if seen.contains(&addr) {
+                continue;
+            }
+            seen.insert(addr);
+
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
+                let collateral = v.get("collateral_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                let debt = v.get("debt_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                if debt > 0.0 {
+                    ratios.push(collateral / debt);
+                } else if collateral > 0.0 {
+                    // No debt — infinite health, cap at 10.0
+                    ratios.push(10.0);
+                }
+            }
+        }
+        // Also pull from liquidation_history to capture liquidated CDPs (health ~ 1.0 at event)
+        // and supplement with cdp_liquidate events from event_log
+        let liq_sql = "SELECT data FROM event_log WHERE event_type IN ('cdp_liquidate','CdpLiquidated') ORDER BY slot DESC";
+        let mut lstmt = conn.prepare(liq_sql)?;
+        let liq_rows = lstmt.query_map([], |row| {
+            let data_str: String = row.get(0)?;
+            Ok(data_str)
+        })?;
+        for row_res in liq_rows {
+            let data_str = row_res?;
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
+                let collateral = v.get("collateral_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                let debt = v.get("debt_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                if debt > 0.0 {
+                    ratios.push(collateral / debt);
+                }
+            }
+        }
+
+        let total_cdps = ratios.len() as i64;
+        let max_ratio: f64 = 5.0;
+        let bucket_width = max_ratio / bucket_count as f64;
+
+        let mut buckets: Vec<HealthBucket> = (0..bucket_count)
+            .map(|i| {
+                let from = i as f64 * bucket_width;
+                let to = from + bucket_width;
+                HealthBucket { from, to, count: 0 }
+            })
+            .collect();
+        // Overflow bucket for ratios >= max_ratio
+        buckets.push(HealthBucket {
+            from: max_ratio,
+            to: f64::INFINITY,
+            count: 0,
+        });
+
+        for ratio in &ratios {
+            let idx = (ratio / bucket_width).floor() as usize;
+            let idx = idx.min(bucket_count as usize); // last bucket is overflow
+            buckets[idx].count += 1;
+        }
+
+        Ok(CdpHealthResponse { buckets, total_cdps })
+    }
+
+    /// Protocol-wide stats: TVL, debt, backstop, PSM.
+    pub fn analytics_protocol_stats(
+        &self,
+    ) -> Result<crate::routes::analytics::ProtocolStatsResponse, AppError> {
+        use crate::routes::analytics::ProtocolStatsResponse;
+
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // TVL = sum of collateral_deposited events in event_log
+        let total_tvl: i64 = {
+            let sql = "SELECT COALESCE(SUM(CAST(json_extract(data,'$.collateral_amount') AS INTEGER)), 0) \
+                       FROM event_log WHERE event_type IN ('CdpCollateralDeposited','cdp_deposit')";
+            conn.query_row(sql, [], |row| row.get(0)).unwrap_or(0)
+        };
+
+        // Debt outstanding = minted - repaid
+        let total_minted: i64 = conn
+            .query_row("SELECT COALESCE(SUM(amount),0) FROM mint_events", [], |row| row.get(0))
+            .unwrap_or(0);
+        let total_burned: i64 = conn
+            .query_row("SELECT COALESCE(SUM(amount),0) FROM burn_events", [], |row| row.get(0))
+            .unwrap_or(0);
+        let total_debt_outstanding = (total_minted - total_burned).max(0);
+
+        // Backstop balance — from event_log BackstopDeposit / BackstopWithdraw
+        let backstop_in: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
+                 FROM event_log WHERE event_type IN ('BackstopDeposit','backstop_deposit')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let backstop_out: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
+                 FROM event_log WHERE event_type IN ('BackstopWithdraw','backstop_withdraw')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let backstop_balance = (backstop_in - backstop_out).max(0);
+
+        // PSM balance — from event_log PsmDeposit / PsmRedeem
+        let psm_in: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
+                 FROM event_log WHERE event_type IN ('PsmDeposit','psm_deposit')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let psm_out: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
+                 FROM event_log WHERE event_type IN ('PsmRedeem','psm_redeem')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let psm_balance = (psm_in - psm_out).max(0);
+
+        Ok(ProtocolStatsResponse {
+            total_tvl,
+            total_debt_outstanding,
+            backstop_balance,
+            psm_balance,
+        })
+    }
 }
