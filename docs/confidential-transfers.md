@@ -1,7 +1,8 @@
-# Confidential Transfers (SSS-106)
+# Confidential Transfers (SSS-106 / SSS-107)
 
-> **Status:** Foundation complete (flag + config PDA). Full Token-2022
-> `ConfidentialTransferMint` extension wiring is tracked in **SSS-107**.
+> **Status:** Foundation complete. `FLAG_CONFIDENTIAL_TRANSFERS` (bit 5) is live
+> in the Anchor program (SSS-106). The TypeScript SDK module (`ConfidentialTransferModule`)
+> shipped in **SSS-107** and is available in `@sss/sdk`.
 
 ---
 
@@ -92,23 +93,172 @@ omit `auditorElgamalPubkey` (or pass `null`).
 
 ---
 
-## SDK Usage (placeholder — SSS-107)
+## SDK Usage (SSS-107)
 
-SSS-107 will deliver:
+`ConfidentialTransferModule` is the official TypeScript SDK client for all
+confidential transfer operations. Import it from `@sss/sdk`:
 
-- `initConfidentialTransferMintExtension(mint, auditorPubkey)` — wires the
-  Token-2022 `ConfidentialTransferMint` extension onto the mint after SSS init.
-- `configureConfidentialTransferAccount(tokenAccount)` — enables an individual
-  token account for confidential transfers.
-- `depositConfidential(amount, tokenAccount)` — moves tokens from the public
-  balance into the confidential balance.
-- `transferConfidential(amount, src, dst, proofContext)` — performs a
-  ZK-proven confidential transfer.
-- `withdrawConfidential(amount, tokenAccount, proofContext)` — moves tokens
-  back to public balance.
+```typescript
+import { ConfidentialTransferModule, FLAG_CONFIDENTIAL_TRANSFERS } from '@sss/sdk';
+```
 
-Until SSS-107 lands, the `ConfidentialTransferConfig` PDA acts as the
-on-chain registry for the auditor key and `auto_approve_new_accounts` setting.
+### Instantiation
+
+```typescript
+const ct = new ConfidentialTransferModule(provider, programId);
+```
+
+- `provider` — Anchor `AnchorProvider`. Wallet must be the admin authority
+  for write operations (`enableConfidentialTransfers`).
+- `programId` — SSS token program `PublicKey`.
+
+---
+
+### `enableConfidentialTransfers`
+
+Sets `FLAG_CONFIDENTIAL_TRANSFERS` and writes the `ConfidentialTransferConfig`
+PDA. Admin authority only.
+
+```typescript
+await ct.enableConfidentialTransfers({
+  mint,
+  auditorElGamalPubkey: myElGamalPubkeyBytes, // Uint8Array, 32 bytes
+  autoApproveNewAccounts: true,               // optional, default false
+});
+```
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `mint` | `PublicKey` | The stablecoin mint |
+| `auditorElGamalPubkey` | `Uint8Array` (32 bytes) | Issuer/auditor ElGamal pubkey (Ristretto255) |
+| `autoApproveNewAccounts` | `boolean` | Auto-approve new token accounts for CT (default `false`) |
+
+**Returns:** `TransactionSignature`
+
+---
+
+### `depositConfidential`
+
+Moves tokens from the public balance into the **pending encrypted balance**
+(Token-2022 `Deposit` instruction). Called by the token account owner.
+
+```typescript
+await ct.depositConfidential({
+  mint,
+  amount: 1_000_000n,       // bigint, base units (e.g. 1 USDS at 6 decimals)
+  tokenAccount?: myATA,     // optional, defaults to provider wallet's ATA
+});
+```
+
+After a deposit, balances appear as "pending" until `applyPendingBalance` is called.
+
+---
+
+### `applyPendingBalance`
+
+Moves the **pending encrypted balance** into the available encrypted balance
+(Token-2022 `ApplyPendingBalance` instruction). Must be called by the token
+account owner after each deposit.
+
+```typescript
+await ct.applyPendingBalance({
+  mint,
+  tokenAccount?: myATA,  // optional
+});
+```
+
+---
+
+### `withdrawConfidential`
+
+Converts the **available encrypted balance** back into the public token
+balance (Token-2022 `Withdraw` instruction). A ZK proof is auto-generated
+client-side.
+
+```typescript
+await ct.withdrawConfidential({
+  mint,
+  amount: 500_000n,       // must not exceed available encrypted balance
+  tokenAccount?: myATA,
+});
+```
+
+---
+
+### `auditTransfer`
+
+Client-side ElGamal decryption of an encrypted transfer amount. Uses the
+auditor's secret key to recover the plaintext amount. **No RPC call.**
+
+```typescript
+const { amount } = await ct.auditTransfer({
+  mint,
+  auditorElGamalSecretKey: auditorSecret,   // Uint8Array, 32 bytes
+  encryptedAmount: ciphertextBytes,          // Uint8Array, 64 bytes
+});
+console.log('Transfer amount:', amount, 'base units');
+```
+
+> **Note:** The current implementation uses a placeholder decryption stub.
+> Production integration requires replacing `_decryptElGamal` with the real
+> BSGS implementation from `@solana/spl-token`:
+> ```typescript
+> import { ElGamalSecretKey, ElGamalCiphertext } from '@solana/spl-token';
+> const sk = ElGamalSecretKey.fromBytes(secretKey);
+> const ct = ElGamalCiphertext.fromBytes(encryptedAmount);
+> return BigInt(sk.decrypt(ct));
+> ```
+
+---
+
+### Read Helpers
+
+```typescript
+// Derive PDA address (pure computation, no RPC)
+const [pda, bump] = ct.getConfigPda(mint);
+
+// Fetch full ConfidentialTransferConfig account
+const config = await ct.getConfig(mint);
+// → { mint, auditorElGamalPubkey: Uint8Array, autoApproveNewAccounts: boolean } | null
+
+// Quick flag check (PDA existence only)
+const enabled = await ct.isEnabled(mint);
+// → boolean
+```
+
+---
+
+### Full Usage Example
+
+```typescript
+import { ConfidentialTransferModule, FLAG_CONFIDENTIAL_TRANSFERS } from '@sss/sdk';
+import { AnchorProvider } from '@coral-xyz/anchor';
+
+const ct = new ConfidentialTransferModule(provider, programId);
+
+// 1. Enable on a mint (admin only)
+await ct.enableConfidentialTransfers({
+  mint,
+  auditorElGamalPubkey: auditorKeyBytes,
+  autoApproveNewAccounts: false,
+});
+
+// 2. Deposit 1 USDS into pending encrypted balance
+await ct.depositConfidential({ mint, amount: 1_000_000n });
+
+// 3. Apply pending credits → available encrypted balance
+await ct.applyPendingBalance({ mint });
+
+// 4. Withdraw 500k base units back to public balance
+await ct.withdrawConfidential({ mint, amount: 500_000n });
+
+// 5. Audit a transfer (auditor only, offline)
+const { amount } = await ct.auditTransfer({
+  mint,
+  auditorElGamalSecretKey: auditorSecretKeyBytes,
+  encryptedAmount: ciphertextFrom transaction log,
+});
+```
 
 ---
 
@@ -137,6 +287,16 @@ chain surveillance.
 | `ConfidentialTransferConfig` | `["ct-config", mint]` | Auditor key + auto-approve flag |
 | `StablecoinConfig.auditor_elgamal_pubkey` | — | Mirror field for fast on-chain reads |
 
+### `ConfidentialTransferConfig` Layout
+
+```
+[0..8]    discriminator               (8 bytes, Anchor)
+[8..40]   mint                        (Pubkey, 32 bytes)
+[40..72]  auditor_elgamal_pubkey      (32 bytes, Ristretto255 compressed)
+[72]      auto_approve_new_accounts   (bool, 1 byte)
+[73]      bump                        (u8, 1 byte)
+```
+
 ---
 
 ## Error Codes
@@ -153,4 +313,5 @@ chain surveillance.
 - [`docs/feature-flags.md`](./feature-flags.md) — full FLAG_* reference
 - [`docs/on-chain-sdk-zk.md`](./on-chain-sdk-zk.md) — ZK compliance (FLAG_ZK_COMPLIANCE, bit 4)
 - [Token-2022 Confidential Transfers spec](https://spl.solana.com/confidential-token/deep-dive/overview)
-- SSS-107 — SDK module for confidential transfer operations (follow-up)
+- SSS-106 — Anchor program: FLAG_CONFIDENTIAL_TRANSFERS flag + ConfidentialTransferConfig PDA
+- SSS-107 — TypeScript SDK: ConfidentialTransferModule
