@@ -56,8 +56,8 @@ describe("sss-token", () => {
         collateralMint: null,
         reserveVault: null,
         maxSupply: null,
-      featureFlags: null,
-      auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
       })
       .accounts({
         payer: authority.publicKey,
@@ -100,8 +100,8 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
-        featureFlags: null,
-        auditorElgamalPubkey: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -142,8 +142,8 @@ describe("sss-token", () => {
         collateralMint: null,
         reserveVault: null,
         maxSupply: new anchor.BN(1_000_000),
-      featureFlags: null,
-      auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
       })
       .accounts({
         payer: authority.publicKey,
@@ -180,8 +180,8 @@ describe("sss-token", () => {
         collateralMint: null,
         reserveVault: null,
         maxSupply: new anchor.BN(500),
-      featureFlags: null,
-      auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
       })
       .accounts({
         payer: authority.publicKey,
@@ -1661,8 +1661,8 @@ describe("sss-token", () => {
           collateralMint: collateralMint,
           reserveVault: vaultTokenAccount, // re-use vault as "reserve" for SSS-3 init
           maxSupply: null,
-        featureFlags: null,
-        auditorElgamalPubkey: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -2749,8 +2749,8 @@ describe("sss-token", () => {
           collateralMint: mockStSolMint,
           reserveVault: vaultStSolTokenAccount,
           maxSupply: null,
-        featureFlags: null,
-        auditorElgamalPubkey: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -3150,8 +3150,8 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
-        featureFlags: null,
-        auditorElgamalPubkey: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           authority: authority.publicKey,
@@ -3177,8 +3177,8 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
-        featureFlags: null,
-        auditorElgamalPubkey: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           authority: authority.publicKey,
@@ -3333,8 +3333,8 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
-        featureFlags: null,
-        auditorElgamalPubkey: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           authority: authority.publicKey,
@@ -3689,8 +3689,8 @@ describe("sss-token", () => {
             collateralMint: null,
             reserveVault: null,
             maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+            featureFlags: null,
+            auditorElgamalPubkey: null,
           })
           .accounts({
             authority: authority.publicKey,
@@ -3917,8 +3917,8 @@ describe("sss-token", () => {
             collateralMint: null,
             reserveVault: null,
             maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+            featureFlags: null,
+            auditorElgamalPubkey: null,
           })
           .accounts({
             authority: authority.publicKey,
@@ -4193,6 +4193,8 @@ describe("sss-token", () => {
           collateralMint: sec085CollateralMint,
           reserveVault: sec085VaultTokenAccount,
           maxSupply: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -4511,6 +4513,8 @@ describe("sss-token", () => {
             collateralMint: daoColMint,
             reserveVault: daoVaultTaKp.publicKey,
             maxSupply: null,
+            featureFlags: null,
+            auditorElgamalPubkey: null,
           })
           .accounts({
             payer: authority.publicKey,
@@ -4669,6 +4673,8 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -4800,6 +4806,8 @@ describe("sss-token", () => {
           collateralMint: sss090CollateralMint,
           reserveVault: sss090VaultTokenAccount,
           maxSupply: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -5120,6 +5128,8 @@ describe("sss-token", () => {
           collateralMint: Keypair.generate().publicKey,
           reserveVault: Keypair.generate().publicKey,
           maxSupply: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -5269,6 +5279,8 @@ describe("sss-token", () => {
           collateralMint: sss097CollateralMint,
           reserveVault: sss097ReserveVault,
           maxSupply: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -5384,6 +5396,8 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -5592,6 +5606,8 @@ describe("sss-token", () => {
           collateralMint: sss098CollateralMint,
           reserveVault: sss098ReserveVault,
           maxSupply: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
