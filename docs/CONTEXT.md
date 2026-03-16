@@ -1,26 +1,27 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-15T22:48 UTC (heartbeat)_
+_Last updated: 2026-03-16T00:26 UTC (heartbeat)_
 
 ## Current State
 
 - **Active task:** none
-- **Last completed:** SSS-095 — chain-events indexer architecture docs (PR #115)
-- **Open PRs (dcccrypto fork):**
-  - #111 (SSS-095 chain-events.md v1 — event_log schema + endpoint, targeting develop)
-  - #115 (SSS-095 chain-events.md v2 — indexer architecture + stability_fee_accrual, targeting develop)
+- **Last completed:** SSS-097 — Bad-Debt Backstop docs (PR #123, merged)
+- **Open PRs (dcccrypto fork):** none known
 
 ## Recently Merged / Completed
 
 | Task | What | PR |
 |---|---|---|
-| SSS-077 | ZkComplianceModule docs + feature-flags update | #95 |
+| SSS-077 | ZkComplianceModule docs + feature-flags update | #95 (merged) |
 | SSS-082 | Backend infrastructure gaps analysis | merged |
 | SSS-083 | Docs/standards gaps analysis vs Uniswap/Aave/MakerDAO/OZ | #101 (merged) |
 | SSS-084 | Security audit gaps and attack surface analysis | #102 (merged) |
-| SSS-086/087 | AdminTimelockModule SDK docs + CDP security updates | branch: feat/SSS-086-admin-timelock-sdk |
-| SSS-095 v1 | chain-events.md — event_log schema + GET /api/chain-events reference | #111 (open) |
-| SSS-095 v2 | chain-events.md — indexer architecture, cursor safety, stability_fee_accrual | #115 (open) |
+| SSS-086/087 | AdminTimelockModule SDK docs + CDP security updates | merged |
+| SSS-092 | Stability fee docs — stability-fee.md | #119/#121 (merged) |
+| SSS-093 | PSM fee + per-minter velocity limit docs — psm-velocity.md | #119/#121 (merged) |
+| SSS-095 v1 | chain-events.md — event_log schema + GET /api/chain-events reference | #111 (merged) |
+| SSS-095 v2 | chain-events.md — indexer architecture, cursor safety, stability_fee_accrual | #115 (merged) |
+| SSS-097 | Bad-Debt Backstop docs | #123 (merged) |
 
 ## Docs Coverage
 
@@ -35,10 +36,14 @@ _Last updated: 2026-03-15T22:48 UTC (heartbeat)_
 | ZkComplianceModule | on-chain-sdk-zk.md | ✅ current |
 | Collateral/Authority | on-chain-sdk-authority-collateral.md | ✅ current |
 | CPI | on-chain-sdk-cpi.md | ✅ current |
-| Chain Events (observability) | chain-events.md | ✅ updated (SSS-095 v2, PR #115) |
+| Chain Events (observability) | chain-events.md | ✅ updated (SSS-095 v2, merged) |
+| Stability Fee | stability-fee.md | ✅ current (SSS-092, merged) |
+| PSM Velocity | psm-velocity.md | ✅ current (SSS-093, merged) |
+| Bad-Debt Backstop | bad-debt-backstop.md | ✅ current (SSS-097, merged) |
 
 ## Notes
 
-- PR #115 supersedes #111 for chain-events.md; PM should merge #115 instead of (or after) #111
-- SSS-092 (stability fee) and SSS-090 (oracle safety) feature PRs open — may need doc updates once merged
-- SSS-086/087 still on feat/SSS-086-admin-timelock-sdk branch; awaiting PM to reopen/incorporate
+- All known doc tasks are complete and merged as of 2026-03-16
+- SSS-093 (PSM fee + velocity) docs merged in same PR as SSS-092 (#119/#121)
+- PM message re: SSS-092/093 was stale — both already completed
+- No active WIP branches or open PRs
