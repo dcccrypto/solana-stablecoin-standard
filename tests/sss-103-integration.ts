@@ -811,15 +811,15 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
             config: configPda,
             minterInfo: minterInfoPda,
             mint: mintKp.publicKey,
-            destination: minterSssAta,
+            recipientTokenAccount: minterSssAta,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
           })
           .signers([minterKp])
           .rpc();
         expect.fail("should have rejected mint exceeding velocity cap");
       } catch (e: any) {
-        // VelocityLimitExceeded or MintCapExceeded
-        expect(e.toString()).to.match(/VelocityLimit|MintCap|custom/i);
+        // MintVelocityExceeded or MinterCapExceeded — match program error names or Anchor custom
+        expect(e.toString()).to.match(/MintVelocityExceeded|MinterCapExceeded|VelocityLimit|MintCap|custom/i);
       }
     });
 
@@ -1048,13 +1048,24 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
 
     it("INT-097-10: BadDebtTriggered event has correct fields in IDL", async () => {
       const rawIdl = program.idl as any;
-      const events = rawIdl.events as Array<{ name: string; fields: Array<{ name: string }> }>;
+      // Anchor ≥0.30 IDL: events[] has discriminators only; field defs live in types[].
+      const events = rawIdl.events as Array<{ name: string; fields?: Array<{ name: string }> }>;
       const evt = events?.find(
         (e: any) => e.name === "BadDebtTriggered" || e.name === "badDebtTriggered"
       );
       expect(evt, "BadDebtTriggered event must be in IDL").to.not.be.undefined;
 
-      const fieldNames = evt!.fields.map((f: any) => f.name);
+      // Resolve fields: prefer inline (legacy IDL) or fall back to types[] (Anchor ≥0.30)
+      let fieldNames: string[];
+      if (evt!.fields && evt!.fields.length > 0) {
+        fieldNames = evt!.fields.map((f: any) => f.name);
+      } else {
+        const types = (rawIdl.types as Array<{ name: string; type: { fields: Array<{ name: string }> } }>) || [];
+        const typeDef = types.find((t: any) => t.name === "BadDebtTriggered" || t.name === "badDebtTriggered");
+        expect(typeDef, "BadDebtTriggered type def must be in IDL types").to.not.be.undefined;
+        fieldNames = typeDef!.type.fields.map((f: any) => f.name);
+      }
+
       expect(fieldNames).to.include.oneOf(["sss_mint", "sssMint"]);
       expect(fieldNames).to.include.oneOf(["backstop_amount", "backstopAmount"]);
       expect(fieldNames).to.include.oneOf(["remaining_shortfall", "remainingShortfall"]);
