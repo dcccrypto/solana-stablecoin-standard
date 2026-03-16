@@ -2,10 +2,12 @@
  * SSS-101: MultiCollateralLiquidationModule tests
  *
  * Tests cover:
- *  - PDA derivation helpers (4 tests)
+ *  - PDA derivation helpers (5 tests)
  *  - calcLiquidationAmount pure math (12 tests)
  *  - fetchLiquidatableCDPs logic via mocked program (4 tests)
- *  - liquidate method account derivation (2 tests)
+ *  - liquidate() — cdpLiquidateV2 wiring (8 tests)
+ *  - Module class property checks (4 tests)
+ *  - Constants sanity (3 tests)
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -299,6 +301,157 @@ describe('fetchLiquidatableCDPs', () => {
     // No price for this collateral
     const result = await mod.fetchLiquidatableCDPs(SSS_MINT, {});
     expect(result).toHaveLength(0);
+  });
+});
+
+// ─── 4. liquidate() — cdpLiquidateV2 wiring (SSS-100) ───────────────────────
+
+describe('liquidate() — cdpLiquidateV2 wiring', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let program: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let provider: any;
+  let mod: MultiCollateralLiquidationModule;
+
+  const PYTH_FEED = new PublicKey('7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE');
+  // Fake tx sig
+  const FAKE_SIG = 'fakeSig111111111111111111111111111111111111111111111111111111111111111111';
+
+  beforeEach(() => {
+    // Mock program.methods.cdpLiquidateV2 chain
+    const rpc = vi.fn().mockResolvedValue(FAKE_SIG);
+    const accountsPartial = vi.fn().mockReturnValue({ rpc });
+    const cdpLiquidateV2 = vi.fn().mockReturnValue({ accountsPartial });
+    program = {
+      programId: PROGRAM_ID,
+      account: {},
+      methods: { cdpLiquidateV2 },
+    };
+    provider = { wallet: { publicKey: USER }, connection: {} };
+    mod = new MultiCollateralLiquidationModule(program, provider);
+  });
+
+  it('calls cdpLiquidateV2 (not cdpLiquidate)', async () => {
+    await mod.liquidate({
+      sssMint: SSS_MINT,
+      cdpOwner: USER,
+      collateralMint: COLLATERAL_MINT,
+      pythPriceFeed: PYTH_FEED,
+      minCollateralAmount: 0n,
+    });
+    expect(program.methods.cdpLiquidateV2).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes debtToRepay=0 (BN) as first arg for full liquidation by default', async () => {
+    await mod.liquidate({
+      sssMint: SSS_MINT,
+      cdpOwner: USER,
+      collateralMint: COLLATERAL_MINT,
+      pythPriceFeed: PYTH_FEED,
+      minCollateralAmount: 0n,
+    });
+    const [debtArg, minArg] = program.methods.cdpLiquidateV2.mock.calls[0];
+    expect(debtArg.toString()).toBe('0');
+    expect(minArg.toString()).toBe('0');
+  });
+
+  it('passes explicit debtToRepay as first arg for partial liquidation', async () => {
+    await mod.liquidate({
+      sssMint: SSS_MINT,
+      cdpOwner: USER,
+      collateralMint: COLLATERAL_MINT,
+      pythPriceFeed: PYTH_FEED,
+      minCollateralAmount: 0n,
+      debtToRepay: 500_000n,
+    });
+    const [debtArg] = program.methods.cdpLiquidateV2.mock.calls[0];
+    expect(debtArg.toString()).toBe('500000');
+  });
+
+  it('passes minCollateralAmount as second arg', async () => {
+    await mod.liquidate({
+      sssMint: SSS_MINT,
+      cdpOwner: USER,
+      collateralMint: COLLATERAL_MINT,
+      pythPriceFeed: PYTH_FEED,
+      minCollateralAmount: 999_999n,
+    });
+    const [, minArg] = program.methods.cdpLiquidateV2.mock.calls[0];
+    expect(minArg.toString()).toBe('999999');
+  });
+
+  it('includes collateralConfig in accountsPartial', async () => {
+    await mod.liquidate({
+      sssMint: SSS_MINT,
+      cdpOwner: USER,
+      collateralMint: COLLATERAL_MINT,
+      pythPriceFeed: PYTH_FEED,
+      minCollateralAmount: 0n,
+    });
+    const accounts = program.methods.cdpLiquidateV2()
+      .accountsPartial.mock?.calls?.[0]?.[0] ??
+      // Re-read from the mock chain set up in beforeEach
+      program.methods.cdpLiquidateV2.mock.results[0].value.accountsPartial.mock.calls[0][0];
+    const [expectedConfigPda] = deriveCollateralConfigPda(SSS_MINT, COLLATERAL_MINT, PROGRAM_ID);
+    expect(accounts.collateralConfig.toBase58()).toBe(expectedConfigPda.toBase58());
+  });
+
+  it('collateralConfig PDA matches deriveCollateralConfigPda', async () => {
+    await mod.liquidate({
+      sssMint: SSS_MINT,
+      cdpOwner: USER,
+      collateralMint: COLLATERAL_MINT,
+      pythPriceFeed: PYTH_FEED,
+      minCollateralAmount: 0n,
+    });
+    const [expected] = deriveCollateralConfigPda(SSS_MINT, COLLATERAL_MINT, PROGRAM_ID);
+    const accounts =
+      program.methods.cdpLiquidateV2.mock.results[0].value.accountsPartial.mock.calls[0][0];
+    expect(accounts.collateralConfig.toBase58()).toBe(expected.toBase58());
+  });
+
+  it('returns transaction signature from rpc()', async () => {
+    const sig = await mod.liquidate({
+      sssMint: SSS_MINT,
+      cdpOwner: USER,
+      collateralMint: COLLATERAL_MINT,
+      pythPriceFeed: PYTH_FEED,
+      minCollateralAmount: 0n,
+    });
+    expect(sig).toBe(FAKE_SIG);
+  });
+
+  it('uses Token-2022 for collateral when collateralIsToken2022=true', async () => {
+    await mod.liquidate({
+      sssMint: SSS_MINT,
+      cdpOwner: USER,
+      collateralMint: COLLATERAL_MINT,
+      pythPriceFeed: PYTH_FEED,
+      minCollateralAmount: 0n,
+      collateralIsToken2022: true,
+    });
+    const accounts =
+      program.methods.cdpLiquidateV2.mock.results[0].value.accountsPartial.mock.calls[0][0];
+    // collateralTokenProgram should be TOKEN_2022_PROGRAM_ID
+    expect(accounts.collateralTokenProgram.toBase58()).toBe(
+      'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',
+    );
+  });
+
+  it('uses SPL Token program for collateral by default', async () => {
+    await mod.liquidate({
+      sssMint: SSS_MINT,
+      cdpOwner: USER,
+      collateralMint: COLLATERAL_MINT,
+      pythPriceFeed: PYTH_FEED,
+      minCollateralAmount: 0n,
+    });
+    const accounts =
+      program.methods.cdpLiquidateV2.mock.results[0].value.accountsPartial.mock.calls[0][0];
+    // collateralTokenProgram should be TOKEN_PROGRAM_ID (classic SPL)
+    expect(accounts.collateralTokenProgram.toBase58()).toBe(
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    );
   });
 });
 
