@@ -138,6 +138,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           config: configPda,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([mintKp])
         .rpc();
@@ -401,6 +402,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           config: configPda,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([mintKp])
         .rpc();
@@ -642,6 +644,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           config: configPda,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([mintKp])
         .rpc();
@@ -880,6 +883,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           config: configPda,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([mintKp])
         .rpc();
@@ -1012,6 +1016,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           config: noBackstopConfigPda,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([noBackstopMintKp])
         .rpc();
@@ -1180,6 +1185,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           config: configPda,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([mintKp])
         .rpc();
