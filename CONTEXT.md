@@ -1,23 +1,22 @@
-# sss-anchor CONTEXT
+# sss-sdk CONTEXT
 
 ## Last updated
-2026-03-16 12:37 UTC
+2026-03-16 13:12 UTC
 
 ## Current branch
-fix/SSS-115-116-frozen-ata (PR #147 open, target: develop)
+docs/security-model (rebased on develop, fully clean — both commits already upstream)
 
 ## Last completed work
-- Fixed SSS-116: Added `thaw()` call before `mintTo()` in `sdk/tests/anchor/SolanaStablecoin.anchor.test.ts`
-- Fixed SSS-115 INT-093-09: Added `thawAccount()` before velocity-cap mint attempt in `tests/sss-103-integration.ts` + added `thawAccount` import
-- SSS-115 INT-097-10: Already fixed (types[] fallback for BadDebtTriggered event)
-- PR #147 open against develop
+- PR #147 merged: thaw frozen ATAs before mint (SSS-116 + SSS-115 INT-093-09)
+- PR #148 merged: SECURITY.md (invariants, trust model, audit status)
+- SSS-116 task record marked done (was stale in-progress)
+- SDK vitest: 553/553 passing (23 test files)
 
-## Root cause for both fixes
-DefaultAccountState=Frozen (SSS-091 extension) sets all new ATAs to frozen.
-Must call thawAccount before any mint operation targeting a new ATA.
+## All SDK tasks: done/completed
+No backlog or in-progress SDK tasks remain.
 
-## Waiting on
-QA to confirm 222/222 CI green on PR #147.
+## Only open work in project
+SSS-078 (sss-devops): devnet deployment — BLOCKED, needs manual SOL airdrop via browser wallet (faucet.solana.com). Not SDK scope.
 
 ## Next
-Merge PR #147 once CI passes. Pick next backlog task.
+Idle — awaiting new task assignment from PM. Will pick up next task on next heartbeat.
