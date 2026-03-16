@@ -585,16 +585,21 @@ describe("sss-token", () => {
     );
     // SSS-091: DefaultAccountState=Frozen means the ATA may already be frozen.
     // Thaw first (no-op if already thawed) so the explicit freeze call succeeds.
-    await program.methods
-      .thawAccount()
-      .accounts({
-        complianceAuthority: authority.publicKey,
-        config: configPda,
-        mint: mintKeypair.publicKey,
-        targetTokenAccount: ata,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .rpc();
+    // Use try-catch: if the account is already thawed, thawAccount throws InvalidAccountState.
+    try {
+      await program.methods
+        .thawAccount()
+        .accounts({
+          complianceAuthority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          targetTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+    } catch (_) {
+      // Already thawed — safe to proceed
+    }
 
     await program.methods
       .freezeAccount()
