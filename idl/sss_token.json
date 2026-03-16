@@ -2681,6 +2681,38 @@
           }
         },
         {
+          "name": "ct_config",
+          "docs": [
+            "SSS-106: Confidential transfer config PDA.",
+            "Required (init) when FLAG_CONFIDENTIAL_TRANSFERS is set in params.feature_flags.",
+            "Must be omitted otherwise."
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  116,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
           "name": "token_program"
         },
         {
@@ -4980,6 +5012,19 @@
       ]
     },
     {
+      "name": "ConfidentialTransferConfig",
+      "discriminator": [
+        212,
+        76,
+        180,
+        128,
+        60,
+        248,
+        58,
+        199
+      ]
+    },
+    {
       "name": "DaoCommitteeConfig",
       "discriminator": [
         17,
@@ -5613,6 +5658,16 @@
       "code": 6068,
       "name": "InvalidLiquidationBonus",
       "msg": "liquidation_bonus_bps cannot exceed 5000 (50%)"
+    },
+    {
+      "code": 6069,
+      "name": "ConfidentialTransferNotEnabled",
+      "msg": "Confidential transfer not enabled for this mint"
+    },
+    {
+      "code": 6070,
+      "name": "MissingAuditorKey",
+      "msg": "Auditor ElGamal pubkey required for confidential transfers"
     }
   ],
   "types": [
@@ -5965,6 +6020,55 @@
       }
     },
     {
+      "name": "ConfidentialTransferConfig",
+      "docs": [
+        "Confidential transfer config PDA — one per mint when FLAG_CONFIDENTIAL_TRANSFERS is set.",
+        "Seeds: [b\"ct-config\", mint]",
+        "",
+        "Stores the issuer's auditor ElGamal pubkey for confidential transfers.",
+        "The auditor can decrypt all transfer amounts; external observers cannot.",
+        "This is the foundation for Token-2022 ConfidentialTransferMint extension integration.",
+        "The actual ConfidentialTransferMint extension wiring is a follow-up (SSS-107)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "docs": [
+              "The SSS mint this config belongs to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "auditor_elgamal_pubkey",
+            "docs": [
+              "The issuer's ElGamal public key used to audit (decrypt) all transfer amounts.",
+              "Must be a valid ElGamal pubkey on the Ristretto255 curve (32 bytes)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "auto_approve_new_accounts",
+            "docs": [
+              "When true, new token accounts are automatically approved for confidential transfers.",
+              "When false, the authority must manually approve each account."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "DaoCommitteeConfig",
       "docs": [
         "DAO Committee Config PDA — tracks committee members and proposal counter.",
@@ -6089,6 +6193,29 @@
             ],
             "type": {
               "option": "u64"
+            }
+          },
+          {
+            "name": "feature_flags",
+            "docs": [
+              "Initial feature flags bitmask (see FLAG_* constants). Optional — defaults to 0."
+            ],
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "auditor_elgamal_pubkey",
+            "docs": [
+              "Auditor ElGamal pubkey for confidential transfers (required if FLAG_CONFIDENTIAL_TRANSFERS is set)"
+            ],
+            "type": {
+              "option": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
             }
           }
         ]
@@ -6714,6 +6841,19 @@
               "0 = unlimited (draw full shortfall up to insurance fund balance)."
             ],
             "type": "u16"
+          },
+          {
+            "name": "auditor_elgamal_pubkey",
+            "docs": [
+              "SSS-106: Auditor ElGamal pubkey for confidential transfers.",
+              "All-zero if FLAG_CONFIDENTIAL_TRANSFERS is not enabled."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           },
           {
             "name": "bump",
