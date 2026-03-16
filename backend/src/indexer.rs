@@ -31,6 +31,7 @@ use std::time::Duration;
 
 use reqwest::Client;
 use serde_json::Value;
+use tokio::sync::broadcast;
 use tracing::{debug, error, info, warn};
 
 use crate::db::Database;
@@ -112,9 +113,10 @@ pub fn spawn_indexer(state: AppState) {
             return;
         }
 
+        let ws_tx = state.ws_tx.clone();
         loop {
             for (label, program_id) in WATCHED_PROGRAMS {
-                if let Err(e) = poll_program(&client, &state.db, &rpc_url, label, program_id).await
+                if let Err(e) = poll_program(&client, &state.db, &rpc_url, label, program_id, &ws_tx).await
                 {
                     warn!("indexer: poll error for {label}: {e}");
                 }
@@ -131,6 +133,7 @@ async fn poll_program(
     rpc_url: &str,
     label: &str,
     program_id: &str,
+    ws_tx: &broadcast::Sender<serde_json::Value>,
 ) -> Result<(), String> {
     // Load the last seen signature for this program.
     let last_sig = db
@@ -157,7 +160,7 @@ async fn poll_program(
             // The first (i.e., most-recent after reversal) becomes the cursor.
             // Actually we want the newest (last in original order).
         }
-        match fetch_and_index_tx(client, db, rpc_url, sig, *slot, program_id).await {
+        match fetch_and_index_tx(client, db, rpc_url, sig, *slot, program_id, ws_tx).await {
             Ok(n) => {
                 if n > 0 {
                     debug!("indexer: {sig} → {n} event(s) inserted");
@@ -244,6 +247,7 @@ async fn fetch_and_index_tx(
     signature: &str,
     slot: i64,
     program_id: &str,
+    ws_tx: &broadcast::Sender<serde_json::Value>,
 ) -> Result<usize, String> {
     let resp: Value = client
         .post(rpc_url)
@@ -290,8 +294,18 @@ async fn fetch_and_index_tx(
             if event_type == "collateral_registered" || event_type == "collateral_config_updated" {
                 maybe_upsert_collateral_config(db, &data, Some(signature));
             }
-            db.insert_event_log(&event_type, &address, data, Some(signature), Some(slot))
+            db.insert_event_log(&event_type, &address, data.clone(), Some(signature), Some(slot))
                 .map_err(|e| format!("insert_event_log: {e}"))?;
+            // SSS-105: broadcast event to WebSocket subscribers.
+            let ws_event = serde_json::json!({
+                "event_type": event_type,
+                "address": address,
+                "data": data,
+                "signature": signature,
+                "slot": slot,
+            });
+            // send() only errors if there are no receivers; that's fine.
+            let _ = ws_tx.send(ws_event);
             count += 1;
         }
     }
