@@ -936,12 +936,13 @@ impl Database {
     // SSS-112: Analytics DB methods
     // -----------------------------------------------------------------------
 
-    /// Aggregated liquidation stats for a date range and optional collateral mint.
+    /// Aggregated liquidation stats for a date range, window shorthand, and optional collateral mint.
     pub fn analytics_liquidations(
         &self,
         from: Option<&str>,
         to: Option<&str>,
         collateral_mint: Option<&str>,
+        window: &str,
     ) -> Result<crate::routes::analytics::LiquidationAnalyticsResponse, AppError> {
         use crate::routes::analytics::{CollateralMintStats, LiquidationAnalyticsResponse};
 
@@ -978,6 +979,8 @@ impl Database {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?))
             })?;
 
+        let avg_collateral_seized = if count > 0 { total_collateral_seized / count } else { 0 };
+
         // Per-collateral-mint breakdown
         let breakdown_sql = format!(
             "SELECT collateral_mint, COUNT(*), COALESCE(SUM(collateral_seized),0), COALESCE(SUM(debt_repaid),0) \
@@ -997,8 +1000,10 @@ impl Database {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(LiquidationAnalyticsResponse {
+            window: window.to_string(),
             count,
             total_collateral_seized,
+            avg_collateral_seized,
             total_debt_covered,
             by_collateral_mint,
         })
@@ -1016,56 +1021,100 @@ impl Database {
 
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // Pull the latest CdpBorrowed events per CDP from event_log.
-        // data JSON is expected to have: collateral_amount (u64), debt_amount (u64)
-        let sql = "SELECT address, data FROM event_log WHERE event_type = 'CdpBorrowed' \
-                   ORDER BY slot DESC";
-        let mut stmt = conn.prepare(sql)?;
+        // Build per-CDP collateral and debt maps from event_log.
+        // Strategy 1: CdpBorrowed events with both collateral_amount + debt_amount in one event.
+        // Strategy 2: Separate cdp_deposit (collateral) + cdp_borrow (debt) events per address.
+        let mut cdp_collateral: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+        let mut cdp_debt: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
 
-        // Compute health per CDP (only keep latest event per address).
-        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-        let mut ratios: Vec<f64> = Vec::new();
-
-        let rows = stmt.query_map([], |row| {
-            let addr: String = row.get(0)?;
-            let data_str: String = row.get(1)?;
-            Ok((addr, data_str))
-        })?;
-
-        for row_res in rows {
-            let (addr, data_str) = row_res?;
-            if seen.contains(&addr) {
-                continue;
-            }
-            seen.insert(addr);
-
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
-                let collateral = v.get("collateral_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
-                let debt = v.get("debt_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
-                if debt > 0.0 {
-                    ratios.push(collateral / debt);
-                } else if collateral > 0.0 {
-                    // No debt — infinite health, cap at 10.0
-                    ratios.push(10.0);
+        // Strategy 1: combined CdpBorrowed events
+        {
+            let sql = "SELECT address, data FROM event_log WHERE event_type = 'CdpBorrowed' ORDER BY slot DESC";
+            let mut stmt = conn.prepare(sql)?;
+            let rows = stmt.query_map([], |row| {
+                let addr: String = row.get(0)?;
+                let data_str: String = row.get(1)?;
+                Ok((addr, data_str))
+            })?;
+            for row_res in rows {
+                let (addr, data_str) = row_res?;
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
+                    let collateral = v.get("collateral_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                    let debt = v.get("debt_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                    // Only record if not already seen (latest wins due to ORDER BY slot DESC)
+                    cdp_collateral.entry(addr.clone()).or_insert(collateral);
+                    cdp_debt.entry(addr).or_insert(debt);
                 }
             }
         }
-        // Also pull from liquidation_history to capture liquidated CDPs (health ~ 1.0 at event)
-        // and supplement with cdp_liquidate events from event_log
-        let liq_sql = "SELECT data FROM event_log WHERE event_type IN ('cdp_liquidate','CdpLiquidated') ORDER BY slot DESC";
-        let mut lstmt = conn.prepare(liq_sql)?;
-        let liq_rows = lstmt.query_map([], |row| {
-            let data_str: String = row.get(0)?;
-            Ok(data_str)
-        })?;
-        for row_res in liq_rows {
-            let data_str = row_res?;
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
-                let collateral = v.get("collateral_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
-                let debt = v.get("debt_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
-                if debt > 0.0 {
-                    ratios.push(collateral / debt);
+
+        // Strategy 2: separate cdp_deposit / cdp_borrow events
+        {
+            // Sum all deposits per address
+            let sql = "SELECT address, data FROM event_log WHERE event_type = 'cdp_deposit'";
+            let mut stmt = conn.prepare(sql)?;
+            let rows = stmt.query_map([], |row| {
+                let addr: String = row.get(0)?;
+                let data_str: String = row.get(1)?;
+                Ok((addr, data_str))
+            })?;
+            for row_res in rows {
+                let (addr, data_str) = row_res?;
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
+                    let amount = v.get("amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                    *cdp_collateral.entry(addr).or_insert(0.0) += amount;
                 }
+            }
+        }
+        {
+            // Sum all borrows per address
+            let sql = "SELECT address, data FROM event_log WHERE event_type = 'cdp_borrow'";
+            let mut stmt = conn.prepare(sql)?;
+            let rows = stmt.query_map([], |row| {
+                let addr: String = row.get(0)?;
+                let data_str: String = row.get(1)?;
+                Ok((addr, data_str))
+            })?;
+            for row_res in rows {
+                let (addr, data_str) = row_res?;
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
+                    let amount = v.get("amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                    *cdp_debt.entry(addr).or_insert(0.0) += amount;
+                }
+            }
+        }
+
+        // Also supplement with cdp_liquidate events
+        {
+            let liq_sql = "SELECT data FROM event_log WHERE event_type IN ('cdp_liquidate','CdpLiquidated')";
+            let mut lstmt = conn.prepare(liq_sql)?;
+            let liq_rows = lstmt.query_map([], |row| {
+                let data_str: String = row.get(0)?;
+                Ok(data_str)
+            })?;
+            for row_res in liq_rows {
+                let data_str = row_res?;
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
+                    let collateral = v.get("collateral_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                    let debt = v.get("debt_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                    if debt > 0.0 {
+                        // These are anonymous (no specific address key needed for ratio)
+                        let key = format!("__liq_{}", cdp_collateral.len());
+                        cdp_collateral.insert(key.clone(), collateral);
+                        cdp_debt.insert(key, debt);
+                    }
+                }
+            }
+        }
+
+        // Compute health ratios from combined maps
+        let mut ratios: Vec<f64> = Vec::new();
+        for (addr, &collateral) in &cdp_collateral {
+            let debt = *cdp_debt.get(addr).unwrap_or(&0.0);
+            if debt > 0.0 {
+                ratios.push(collateral / debt);
+            } else if collateral > 0.0 {
+                ratios.push(10.0); // infinite health, capped
             }
         }
 
@@ -1093,7 +1142,28 @@ impl Database {
             buckets[idx].count += 1;
         }
 
-        Ok(CdpHealthResponse { buckets, total_cdps })
+        // Flat health counts (qa_tests schema): ratio > 1.5 = healthy, [1.0, 1.5] = at_risk, <1.0 = liquidatable
+        let mut healthy: i64 = 0;
+        let mut at_risk: i64 = 0;
+        let mut liquidatable: i64 = 0;
+        for ratio in &ratios {
+            if *ratio > 1.5 {
+                healthy += 1;
+            } else if *ratio >= 1.0 {
+                at_risk += 1;
+            } else {
+                liquidatable += 1;
+            }
+        }
+
+        Ok(CdpHealthResponse {
+            buckets,
+            total_cdps,
+            total: total_cdps,
+            healthy,
+            at_risk,
+            liquidatable,
+        })
     }
 
     /// Protocol-wide stats: TVL, debt, backstop, PSM.
@@ -1158,11 +1228,34 @@ impl Database {
             .unwrap_or(0);
         let psm_balance = (psm_in - psm_out).max(0);
 
+        // backstop_fund_debt_repaid — from BackstopDebtRepaid events
+        let backstop_fund_debt_repaid: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
+                 FROM event_log WHERE event_type IN ('BackstopDebtRepaid','backstop_debt_repaid')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        // active_collateral_types — distinct collateral mints in liquidation_history
+        let active_collateral_types: i64 = conn
+            .query_row(
+                "SELECT COUNT(DISTINCT collateral_mint) FROM liquidation_history",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
         Ok(ProtocolStatsResponse {
             total_tvl,
             total_debt_outstanding,
             backstop_balance,
             psm_balance,
+            total_collateral_locked_native: total_tvl,
+            total_debt_native: total_debt_outstanding,
+            backstop_fund_debt_repaid,
+            active_collateral_types,
         })
     }
 }
