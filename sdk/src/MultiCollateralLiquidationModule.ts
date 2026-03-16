@@ -130,6 +130,33 @@ export interface CalcLiquidationParams {
 }
 
 /**
+ * Typed representation of the on-chain `CollateralLiquidated` event (SSS-100).
+ *
+ * Emitted by `cdp_liquidate_v2` on every successful liquidation.
+ * Field names mirror the Anchor event struct in `events.rs`.
+ */
+export interface CollateralLiquidatedEvent {
+  /** SSS stablecoin mint */
+  mint: PublicKey;
+  /** Collateral mint that was seized */
+  collateralMint: PublicKey;
+  /** CDP owner whose position was (partially) liquidated */
+  cdpOwner: PublicKey;
+  /** Liquidator who initiated the liquidation */
+  liquidator: PublicKey;
+  /** Amount of SSS debt burned */
+  debtBurned: bigint;
+  /** Amount of collateral transferred to the liquidator */
+  collateralSeized: bigint;
+  /** Collateral ratio before liquidation (basis points) */
+  ratioBeforeBps: bigint;
+  /** Whether this was a partial liquidation */
+  partial: boolean;
+  /** Liquidation bonus applied (basis points) */
+  bonusBps: number;
+}
+
+/**
  * Result of `calcLiquidationAmount`.
  */
 export interface LiquidationAmountResult {
@@ -574,6 +601,51 @@ export class MultiCollateralLiquidationModule {
         collateralTokenProgram,
       })
       .rpc();
+  }
+
+  // ── Event parsing ─────────────────────────────────────────────────────────
+
+  /**
+   * Parse a `CollateralLiquidated` event from an Anchor program event listener
+   * or `getParsedTransaction` log output.
+   *
+   * Usage with Anchor event listener:
+   * ```ts
+   * program.addEventListener('CollateralLiquidated', (raw) => {
+   *   const evt = mod.parseCollateralLiquidatedEvent(raw);
+   *   console.log('liquidated', evt.cdpOwner.toBase58(), 'debtBurned', evt.debtBurned);
+   * });
+   * ```
+   *
+   * @param raw   The raw event object emitted by the Anchor listener.
+   * @returns     A strongly-typed `CollateralLiquidatedEvent`.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  parseCollateralLiquidatedEvent(raw: any): CollateralLiquidatedEvent {
+    return {
+      mint: raw.mint instanceof PublicKey ? raw.mint : new PublicKey(raw.mint),
+      collateralMint:
+        raw.collateralMint instanceof PublicKey
+          ? raw.collateralMint
+          : new PublicKey(raw.collateralMint),
+      cdpOwner:
+        raw.cdpOwner instanceof PublicKey
+          ? raw.cdpOwner
+          : new PublicKey(raw.cdpOwner),
+      liquidator:
+        raw.liquidator instanceof PublicKey
+          ? raw.liquidator
+          : new PublicKey(raw.liquidator),
+      debtBurned: BigInt(raw.debtBurned?.toString() ?? raw.debt_burned?.toString() ?? '0'),
+      collateralSeized: BigInt(
+        raw.collateralSeized?.toString() ?? raw.collateral_seized?.toString() ?? '0',
+      ),
+      ratioBeforeBps: BigInt(
+        raw.ratioBeforeBps?.toString() ?? raw.ratio_before_bps?.toString() ?? '0',
+      ),
+      partial: Boolean(raw.partial),
+      bonusBps: Number(raw.bonusBps ?? raw.bonus_bps ?? 0),
+    };
   }
 
   // ── Convenience re-exports ────────────────────────────────────────────────
