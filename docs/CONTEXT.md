@@ -1,28 +1,38 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-16T02:05 UTC_
+_Last updated: 2026-03-15T15:21 UTC (heartbeat)_
 
 ## Current State
-- PR #127 (solanabr/solana-stablecoin-standard) is OPEN on feature/SSS-098-collateral-config
-- PR body updated with SSS-100 docs addition
-- Test counts: 140+ Anchor, 476+ SDK, 68+ backend
 
-## Recent Completed Work
-- SSS-100 docs: on-chain-sdk-backstop.md written and pushed
-  - Extended methods: contributeToBackstop, withdrawFromBackstop, triggerBadDebtSocialization, fetchBackstopFundState, computeCoverageRatio
-  - Full type reference, layout notes, end-to-end example
-  - PR #127 body updated
-- SSS-098 SDK: CollateralConfigModule (commit 7ca65ed)
-- SSS-098 Anchor: CollateralConfig PDA (register_collateral, update_collateral_config)
-- SSS-098 backend: /api/collateral-config endpoint
+- **Active task:** none (SSS-077 complete)
+- **Last completed:** SSS-077 — ZkComplianceModule docs + feature-flags.md update
+- **Open PRs (dcccrypto fork):** #95 (SSS-077 docs/on-chain-sdk-zk.md)
 
-## Latest Code Landed
-- SSS-100 SDK: BadDebtBackstopModule extended (commit 9345d4c — 21 new tests, 476 total)
-- 7b03e8f: fix(tests) collateralConfig null backwards-compat for CDP instructions
+## Recently Merged
 
-## Open Tasks
-- None currently assigned
-- Watch for new task assignments
+| Task | What | PR |
+|---|---|---|
+| SSS-074 | YieldCollateralModule docs + feature-flags update | #137 (merged) |
+| SSS-076 | ZkComplianceModule SDK (46 tests) | #94 (merged to main) |
 
-## Docs in PR #127
-- docs/on-chain-sdk-backstop.md ✅ (SSS-100 extended methods)
+## Recent Commits
+
+- `82ce63b` docs(sss-077): ZkComplianceModule reference + feature-flags FLAG_ZK_COMPLIANCE (bit 4)
+- `90974bc` chore: heartbeat 2026-03-15T15:13 UTC — PRs #138 + #139 re-opened after SSS-070 merged to main
+- `6be36f7` chore: update CONTEXT.md after SSS-076 SDK PR #94
+- `c05fff7` feat(sdk): SSS-076 — ZkComplianceModule (FLAG_ZK_COMPLIANCE, bit 4, 46 tests)
+
+## Docs Coverage
+
+| Module | Doc file | Status |
+|---|---|---|
+| FeatureFlagsModule | feature-flags.md | ✅ current (bits 0–4) |
+| YieldCollateralModule | on-chain-sdk-yield.md | ✅ current |
+| ZkComplianceModule | on-chain-sdk-zk.md | ✅ new (PR #95) |
+| DaoCommitteeModule | on-chain-sdk-dao.md | ✅ current |
+
+## Notes
+
+- FLAG_ZK_COMPLIANCE = bit 4 (0x10); SSS-075 anchor instruction pending (submit_zk_proof)
+- Error codes SssError::ZkComplianceAlreadyInitialised, ZkComplianceNotEnabled, InvalidZkProof expected when anchor side lands
+- No backlog tasks remaining; awaiting new sprint items

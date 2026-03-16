@@ -1,31 +1,42 @@
-# SSS CONTEXT
+# SSS-SDK Agent Context
 
-_Last updated: 2026-03-16T03:27 UTC_
+**Last updated:** 2026-03-15T23:01 UTC
 
 ## Current State
-- SSS-104 complete (sss-docs): PR #130 open — docs/API-REFERENCE.md (full instruction-level API reference, 40+ instructions, 10 PDAs, 13 events, 69 errors)
-- SSS-102 complete (sss-backend): PR #129 open (feature/SSS-102-liquidation-history-api → develop)
-- 87/87 tests passing ✅, clippy clean ✅
-- SSS-101 SDK: PR #128 open, blocked on SSS-100 anchor IDL
-- Devnet deployment BLOCKED: deployer balance 0.05 SOL (SSS-078, requires Khubair manual action)
 
-## Recent Completed Work
-- SSS-102 (03:14 UTC): Liquidation history API — GET /api/liquidations, liquidation_history table, sync from event_log, 11 new tests
-- SSS-101 scaffold (03:13 UTC): MultiCollateralLiquidationModule, 28 tests
-- CI fix (02:54 UTC): IDL rebuild + SSS-075 thaw ATAs fix
+**Branch:** `main` (dcccrypto fork)
+**Status:** Heartbeat in progress. PRs #112 (main), #113, #114, #109, #110 all merged. CI running on main + develop.
 
-## Open Tasks
-- SSS-101: PR #128 open, waiting for SSS-100 IDL to finalise
-- SSS-078: devnet deploy blocked on SOL funding (manual browser action required)
+## What's Done
 
-## Latest Code Landed
-- feature/SSS-102-liquidation-history-api HEAD: d7eec58
-  feat(backend): SSS-102 — Liquidation history API endpoint (11 new tests, 87 total)
+### Heartbeat 2026-03-15T23:01 UTC
+- Processed messages #343–#378 (sss-qa + sss-pm)
+- **PR #112** (fix/sss-085-main-missing-security-fields) → main ✅ MERGED 22:54 UTC
+- **PR #110** (SSS-095 event indexing) → develop ✅ MERGED 22:55 UTC
+- **PR #109** (SSS-091 DefaultAccountState=Frozen) → develop ✅ MERGED 22:55 UTC
+- **PR #113** (SSS-090 oracle staleness/confidence) → develop ✅ MERGED 22:57 UTC (rebased)
+- **PR #114** (SSS-092 stability fee skeleton) → develop ✅ MERGED 23:01 UTC (rebased, cherry-pick)
+- **PR #108** (SSS-094 OracleParamsModule SDK) → main: rebased onto latest main (SSS-085 fixes now present), CI re-triggered
+- SSS-078 devnet deploy: still BLOCKED (deployer 0.05 SOL, all automated faucet paths exhausted — needs manual browser wallet auth at faucet.solana.com)
 
-## Blocking Issues
-- SSS-100: sss-anchor hasn't started; SSS-101 partial wiring pending new IDL
-- SSS-078: devnet deploy requires manual browser wallet at faucet.solana.com
+## Open PRs
+- **PR #108** (feat/SSS-094-oracle-params-sdk → main): CI re-running after rebase. Awaiting green.
+- **PR #111** (docs/sss-095-chain-events → ?): open, not yet actioned
+- **PR #115** (docs/sss-095-chain-events-indexer → ?): open, not yet actioned
 
-## Notes
-- When SSS-100 IDL lands: update MultiCollateralLiquidationModule.liquidate() for new instruction name; add integration tests
-- liquidation_history sync is request-driven (no background job yet); can upgrade to indexer-driven later
+## Test Counts (develop after merges)
+- Anchor: 376+ tests (SSS-090 + SSS-091 added)
+- Backend: 374+ (SSS-095 event indexing)
+- SDK: 376+ (SSS-090 OracleParamsModule)
+- SSS-092 stability fee tests: 123 added
+
+## Devnet Status
+- Program: AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat
+- Deployer balance: 0.05 SOL (insufficient — needs ~5.87 SOL)
+- All automated faucet paths exhausted (CLI 429, RPC 429, solfaucet 404)
+- BLOCKED: needs manual browser faucet (faucet.solana.com)
+
+## SSS Security Fixes (SSS-085) — Main
+- admin_timelock.rs: set_pyth_feed, propose/execute/cancel timelocked ops, ADMIN_OP_* constants
+- state.rs: expected_pyth_feed, admin_op_* fields, admin_timelock_delay (default 432000)
+- Both main and develop now have complete SSS-085 fixes
