@@ -157,4 +157,8 @@ pub enum SssError {
     ConfidentialTransferNotEnabled,
     #[msg("Auditor ElGamal pubkey required for confidential transfers")]
     MissingAuditorKey,
+    #[msg("Invalid amount")]
+    InvalidAmount,
+    #[msg("Insufficient repayment amount for partial liquidation")]
+    PartialLiquidationInsufficientRepay,
 }
