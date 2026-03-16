@@ -128,8 +128,8 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           symbol: "ORC",
           uri: "",
           transferHookProgram: null,
-          collateralMint: null,
-          reserveVault: null,
+          collateralMint: SystemProgram.programId,
+          reserveVault: SystemProgram.programId,
           maxSupply: null,
         })
         .accounts({
@@ -393,7 +393,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           uri: "",
           transferHookProgram: null,
           collateralMint: collateralMint,
-          reserveVault: null,
+          reserveVault: SystemProgram.programId,
           maxSupply: null,
         })
         .accounts({
@@ -634,8 +634,8 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           symbol: "PSM",
           uri: "",
           transferHookProgram: null,
-          collateralMint: null,
-          reserveVault: null,
+          collateralMint: SystemProgram.programId,
+          reserveVault: SystemProgram.programId,
           maxSupply: null,
         })
         .accounts({
@@ -873,8 +873,8 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           symbol: "BST",
           uri: "",
           transferHookProgram: null,
-          collateralMint: null,
-          reserveVault: null,
+          collateralMint: SystemProgram.programId,
+          reserveVault: SystemProgram.programId,
           maxSupply: null,
         })
         .accounts({
@@ -1006,8 +1006,8 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           symbol: "NBC",
           uri: "",
           transferHookProgram: null,
-          collateralMint: null,
-          reserveVault: null,
+          collateralMint: SystemProgram.programId,
+          reserveVault: SystemProgram.programId,
           maxSupply: null,
         })
         .accounts({
@@ -1176,7 +1176,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           uri: "",
           transferHookProgram: null,
           collateralMint: collateralMint,
-          reserveVault: null,
+          reserveVault: SystemProgram.programId,
           maxSupply: null,
         })
         .accounts({
