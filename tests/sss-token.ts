@@ -400,6 +400,18 @@ describe("sss-token", () => {
     const ataTx = new anchor.web3.Transaction().add(createAtaIx);
     await provider.sendAndConfirm(ataTx);
 
+    // SSS-091: DefaultAccountState=Frozen — new ATAs start frozen; thaw before minting.
+    await program.methods
+      .thawAccount()
+      .accounts({
+        complianceAuthority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        targetTokenAccount: ata,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
     await program.methods
       .mint(new anchor.BN(500_000_000))
       .accounts({
@@ -547,7 +559,20 @@ describe("sss-token", () => {
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    const freezeTx = await program.methods
+    // SSS-091: DefaultAccountState=Frozen means the ATA may already be frozen.
+    // Thaw first (no-op if already thawed) so the explicit freeze call succeeds.
+    await program.methods
+      .thawAccount()
+      .accounts({
+        complianceAuthority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        targetTokenAccount: ata,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    await program.methods
       .freezeAccount()
       .accounts({
         complianceAuthority: authority.publicKey,
@@ -556,13 +581,7 @@ describe("sss-token", () => {
         targetTokenAccount: ata,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
-      .transaction();
-    const { blockhash, lastValidBlockHeight } =
-      await provider.connection.getLatestBlockhash("confirmed");
-    freezeTx.recentBlockhash = blockhash;
-    freezeTx.lastValidBlockHeight = lastValidBlockHeight;
-    freezeTx.feePayer = authority.publicKey;
-    await provider.sendAndConfirm(freezeTx, [], { commitment: "confirmed", skipPreflight: true });
+      .rpc();
 
     // Post-condition: token account should be frozen
     const tokenAccount = await getAccount(
@@ -2997,6 +3016,7 @@ describe("sss-token", () => {
           config: zkConfigPda,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([zkSssMintKeypair])
         .rpc();
@@ -3020,6 +3040,7 @@ describe("sss-token", () => {
           config: zkSss1ConfigPda,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         })
         .signers([zkSss1MintKeypair])
         .rpc();
