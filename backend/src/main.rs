@@ -39,6 +39,7 @@ use routes::{
     reserves::get_reserves_proof,
     supply::supply,
     webhooks::{delete_webhook, list_webhooks, register_webhook},
+    ws_events::ws_events_handler,
 };
 use state::AppState;
 
@@ -115,6 +116,7 @@ async fn main() {
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
         .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+        .route("/api/ws/events", get(ws_events_handler))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
         .layer(cors)

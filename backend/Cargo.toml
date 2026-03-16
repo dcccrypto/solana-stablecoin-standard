@@ -8,7 +8,7 @@ name = "sss-backend"
 path = "src/main.rs"
 
 [dependencies]
-axum = "0.7"
+axum = { version = "0.7", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -29,6 +29,9 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 bs58 = "0.5"
 solana-program = "=2.3.0"
 reqwest = { version = "0.12", features = ["rustls-tls", "json"], default-features = false }
+axum-extra = { version = "0.9", features = [] }
+futures = "0.3"
+tokio-tungstenite = "0.21"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
