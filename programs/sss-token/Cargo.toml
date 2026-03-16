@@ -22,3 +22,6 @@ anchor-lang = { workspace = true }
 anchor-spl = { workspace = true }
 spl-token-2022 = { workspace = true }
 pyth-sdk-solana = "0.10.6"
+
+[dev-dependencies]
+proptest = "1"
