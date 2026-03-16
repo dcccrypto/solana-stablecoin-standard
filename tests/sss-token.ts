@@ -3800,6 +3800,7 @@ describe("sss-token", () => {
             authority: authority.publicKey,
             mint: shortTtlMintKp.publicKey,
             config: shortConfigPda,
+            rent: anchor.web3.SYSVAR_RENT_PUBKEY,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
