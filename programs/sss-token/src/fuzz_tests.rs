@@ -175,9 +175,13 @@ mod proptest_fuzz {
             supply in 1u64..u64::MAX
         ) {
             let ratio = (collateral as u128).saturating_mul(10_000) / (supply as u128);
-            let _r = ratio.min(u64::MAX as u128) as u64;
-            // Just assert it doesn't panic
-            prop_assert!(true);
+            let result = ratio.min(u64::MAX as u128) as u64;
+            // Ratio must be in [0, 10_000 * (u64::MAX / supply)] — always fits in u64 after clamping
+            prop_assert!(result as u128 <= ratio);
+            // A fully-collateralised supply (collateral == supply) must yield exactly 10_000 bps
+            if collateral == supply {
+                prop_assert_eq!(ratio, 10_000u128);
+            }
         }
 
         #[test]
@@ -187,9 +191,18 @@ mod proptest_fuzz {
             amount in 1u64..u64::MAX
         ) {
             if minted <= cap {
-                if let Some(new_minted) = minted.checked_add(amount) {
-                    if new_minted <= cap {
-                        prop_assert!(new_minted <= cap);
+                match minted.checked_add(amount) {
+                    Some(new_minted) if new_minted <= cap => {
+                        // Mint allowed: result must be strictly larger than previous total
+                        prop_assert!(new_minted > minted);
+                    }
+                    _ => {
+                        // Mint must be rejected (overflow or would exceed cap) — nothing to assert
+                        // but we verify the rejection condition holds
+                        let would_exceed = minted
+                            .checked_add(amount)
+                            .map_or(true, |n| n > cap);
+                        prop_assert!(would_exceed);
                     }
                 }
             }
