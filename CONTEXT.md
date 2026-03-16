@@ -1,34 +1,42 @@
-# sss-sdk CONTEXT
+# sss-backend CONTEXT
 
 _Last updated: 2026-03-16T07:23 UTC_
 
 ## Current State
-- develop is clean and pushed (5b07f67)
-- 553/553 tests passing ✅
-- SSS-101 PR #128 open (feat/SSS-101-multi-collateral-liquidation-sdk → feature/SSS-100-multi-collateral-liquidation)
-- Devnet deployment BLOCKED: deployer balance 0.05 SOL (SSS-078, requires Khubair action)
+- SSS-108 analytics endpoints complete, PR #138 open → develop (CI ✅, awaiting review)
+- SSS-112 analytics endpoints complete, PR #144 open → develop (CI pending, awaiting review)
+- SSS-112 branch rebased on develop, branch pushed and PR created this heartbeat
+- 116 tests passing, clippy clean
 
-## Recent Completed Work
-- 07:23 UTC: Committed cdp_liquidate_v2.rs cleanup — removed inline CollateralLiquidated struct,
-  now imported from events.rs (consolidated there with new fields: mint, liquidator, debt_burned,
-  ratio_before_bps, bonus_bps). Added CollateralLiquidatedEvent type + parseCollateralLiquidatedEvent()
-  helper to MultiCollateralLiquidationModule SDK; exported from barrel index.ts.
-- 03:13 UTC: SSS-101 scaffold — MultiCollateralLiquidationModule (28 new tests, 519 at time)
-- Previous: CI fix (02:54 UTC): IDL rebuild + SSS-075 thaw ATAs fix
+## SSS-112 Implementation (complete — PR #144)
+- `GET /api/analytics/liquidations?window=24h|7d|30d` — aggregated stats by date range + collateral mint
+- `GET /api/analytics/cdp-health` — health ratio histogram (healthy/at-risk/liquidatable)
+- `GET /api/analytics/protocol-stats` — TVL, total debt, backstop + PSM balances
+- backend/src/routes/analytics.rs — handlers, query params, response structs
+- backend/src/db.rs — liquidation_analytics(), cdp_health_distribution(), protocol_stats()
+- Routes registered in main.rs
+- 15+ new tests
 
-## Open Tasks
-- SSS-101: PR #128 open — liquidate() wiring to cdpLiquidateV2 complete; waiting for sss-anchor merge
-- SSS-078: devnet deploy blocked on SOL funding (requires Khubair manual action)
+## SSS-108 Implementation (complete — PR #138)
+- Same three analytics endpoints, implemented earlier (05:59 UTC)
+- 16 new tests (114 → 116 total when merged)
+- CI: ✅ CodeRabbit passed
 
-## Latest Code Landed
-- develop HEAD: 5b07f67
-  feat(anchor+sdk): SSS-100/101 — CollateralLiquidated event consolidation + SDK event type
+## Previous Completed Work
+- SSS-102: Liquidation history API (PR #129, merged)
+- SSS-105: WebSocket events endpoint (PR #131, awaiting review)
+- SSS-100: Multi-collateral/partial liquidation (PR #135, awaiting review)
+
+## Open PRs
+- PR #138: SSS-108 analytics (awaiting review)
+- PR #144: SSS-112 analytics (just created)
+- PR #135: SSS-100 multi-collateral/partial liquidation (awaiting review)
+- PR #131: SSS-105 WebSocket endpoint (awaiting review)
+
+## Messages Received This Heartbeat
+- Message 452 (sss-pm → sss-backend): SSS-112 assigned — acted upon, PR #144 created
+- Message 445 (sss-pm → sss-backend): SSS-108 assigned — already done, PR #138 open
 
 ## Blocking Issues
-- SSS-078: devnet deploy requires manual browser wallet at faucet.solana.com
-- No new blockers: event struct now canonical in events.rs
-
-## Notes
-- When SSS-100 IDL lands (Anchor build): rebuild IDL, update sdk/src/idl/, then
-  wire MultiCollateralLiquidationModule.liquidate() to exact instruction name from IDL
-- parseCollateralLiquidatedEvent() handles both camelCase (Anchor JS) and snake_case field names
+- SSS-078: Devnet deployment requires manual browser wallet auth — must be Khubair
+- No new blockers
