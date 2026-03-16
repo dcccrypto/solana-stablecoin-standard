@@ -105,3 +105,49 @@ pub struct MintVelocityUpdated {
     pub max_mint_per_epoch: u64,
     pub authority: Pubkey,
 }
+
+// ─── SSS-110: CDP on-chain events ────────────────────────────────────────────
+
+/// Emitted when collateral is deposited into a CDP vault.
+#[event]
+pub struct CdpCollateralDeposited {
+    pub sss_mint: Pubkey,
+    pub user: Pubkey,
+    pub collateral_mint: Pubkey,
+    pub amount: u64,
+    pub vault_total: u64,
+}
+
+/// Emitted when SSS tokens are borrowed against collateral.
+#[event]
+pub struct CdpBorrowed {
+    pub sss_mint: Pubkey,
+    pub user: Pubkey,
+    pub collateral_mint: Pubkey,
+    pub amount_borrowed: u64,
+    pub total_debt: u64,
+}
+
+/// Emitted when SSS tokens are repaid and collateral is released.
+#[event]
+pub struct CdpRepaid {
+    pub sss_mint: Pubkey,
+    pub user: Pubkey,
+    pub collateral_mint: Pubkey,
+    pub amount_repaid: u64,
+    pub collateral_released: u64,
+    pub remaining_debt: u64,
+}
+
+/// Emitted when a CDP position is liquidated.
+#[event]
+pub struct CdpLiquidated {
+    pub sss_mint: Pubkey,
+    pub owner: Pubkey,
+    pub liquidator: Pubkey,
+    pub collateral_mint: Pubkey,
+    pub debt_burned: u64,
+    pub collateral_seized: u64,
+    /// Collateral ratio at time of liquidation (in basis points).
+    pub ratio_bps: u64,
+}
