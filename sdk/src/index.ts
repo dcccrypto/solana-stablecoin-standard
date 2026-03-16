@@ -50,3 +50,22 @@ export type {
 } from './BadDebtBackstopModule';
 export { CollateralConfigModule, COLLATERAL_CONFIG_SEED } from './CollateralConfigModule';
 export type { CollateralConfigAccount, RegisterCollateralParams, UpdateCollateralConfigParams } from './CollateralConfigModule';
+export {
+  MultiCollateralLiquidationModule,
+  calcLiquidationAmount,
+  deriveCdpPositionPda,
+  deriveCollateralVaultPda,
+  deriveCollateralConfigPda,
+  deriveStablecoinConfigPda,
+  LIQUIDATION_THRESHOLD_BPS,
+  DEFAULT_LIQUIDATION_BONUS_BPS,
+  BPS_DENOMINATOR,
+  CDP_POSITION_SEED,
+  COLLATERAL_VAULT_SEED,
+} from './MultiCollateralLiquidationModule';
+export type {
+  LiquidatableCDP,
+  LiquidateParams,
+  CalcLiquidationParams,
+  LiquidationAmountResult,
+} from './MultiCollateralLiquidationModule';
