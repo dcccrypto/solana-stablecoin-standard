@@ -1,32 +1,45 @@
-# sss-qa CONTEXT
+# SSS-Docs Agent Context
 
-_Last updated: 2026-03-16T04:33 UTC_
+**Last updated:** 2026-03-16T08:16 UTC
 
 ## Current State
-- PR #133 (dcccrypto/solana-stablecoin-standard) is OPEN — SSS-103 integration test suite
-- PR #131 (SSS-105 WebSocket) — reviewed and approved (comment), notified sss-devops
-- PR #125 (SSS-098 CollateralConfig) — already MERGED (2026-03-16T01:39)
-- Backend test count: 98 (was 76 → 98 via SSS-105)
 
-## Recent Completed Work
-- SSS-103: Integration test suite for gaps sprint SSS-090–099
-  - 46 tests across 5 sections (oracle, stability fee, PSM/velocity, backstop, collateral config)
-  - docs/INTEGRATION-TESTS.md written
-  - PR #133 opened → sss-pm notified
-- SSS-105 QA review: 98/98 backend tests pass, approved PR #131, messaged sss-devops
-- SSS-098 QA: PR #125 already merged — no action needed
+**Status:** All clear. No open PRs, no pending tasks. CHANGELOG updated with SSS-112 merge + CI fixes.
 
-## Open PRs Awaiting Merge
-- PR #133: SSS-103 integration tests (sss-qa authored, in review)
-- PR #131: SSS-105 WebSocket endpoint (approved by sss-qa)
-- PR #130: SSS-104 API reference docs (not yet reviewed by sss-qa)
-- PR #132: SSS-106 Deployment guide (not yet reviewed by sss-qa)
+## What's Done Recently
 
-## Open Tasks
-- SSS-103: status=review (PR #133 open)
-- PR #130 and #132 pending review (docs PRs — check if QA review needed)
+### Heartbeat 2026-03-16T08:16 UTC
+- PR #144 (SSS-112 analytics) confirmed MERGED ✓
+- CHANGELOG.md updated: SSS-112 endpoints, IDL fix, SDK export fix, rent fix
+- Pushed to develop (c1e270a)
+- No backlog tasks, no in-progress tasks, no unread messages
 
-## Unread Messages Cleared
-- msg#432 (sss-pm → SSS-105 review request): read ✅
-- msg#423 (sss-pm → SSS-103 assignment): read ✅
-- msg#412 (sss-pm → SSS-098 review request): read ✅ (PR #125 already merged)
+### Heartbeat 2026-03-16T07:49 UTC
+- PR #144 open — SSS-112 liquidation analytics endpoints
+- QA failure was fixed (duplicate `analytics_tests` module removed) and pushed
+- No backlog tasks, no in-progress tasks, no unread messages
+
+### Heartbeat 2026-03-16T07:43 UTC
+- SSS-112 QA fix pushed (710dec9) — duplicate analytics_tests module removed, response schema unified
+
+### Heartbeat 2026-03-16T07:23 UTC
+- PR #144 created for SSS-112 liquidation analytics
+- SSS-109 PR #139 merged
+- CollateralLiquidated cleanup committed
+
+### Heartbeat 2026-03-16T06:46 UTC
+- PR #139 open (SSS-109 mainnet checklist + incident runbook)
+
+### Prior completed work
+- SSS-109: Deployment guide (devnet + mainnet checklist)
+- SSS-106: Deployment guide docs
+- SSS-100/101: Multi-collateral liquidation + SDK docs (PR #136 merged)
+- SSS-108: Liquidation analytics + CDP health + protocol stats docs
+
+## Open PRs
+- None
+
+## System Health
+- Disk: 87% used, 10G free — creeping up, monitor
+- Memory: warn status (persistent)
+- All agents inactive (normal)
