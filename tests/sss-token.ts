@@ -4242,6 +4242,7 @@ describe("sss-token", () => {
           vaultTokenAccount: sec085VaultTokenAccount,
           userCollateralAccount: sec085UserCollateralAta,
           yieldCollateralConfig: program.programId,
+          collateralConfig: null, // no per-collateral config (backwards compat)
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -4837,6 +4838,7 @@ describe("sss-token", () => {
           vaultTokenAccount: sss090VaultTokenAccount,
           userCollateralAccount: sss090UserCollateralAta,
           yieldCollateralConfig: null,
+          collateralConfig: null, // no per-collateral config (backwards compat)
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -6044,8 +6046,13 @@ describe("sss-token", () => {
     it("SSS-098: register_collateral instruction exists in IDL", async () => {
       const rawIdl = program.idl as any;
       const ixs = rawIdl.instructions as Array<{ name: string }>;
-      const reg = ixs?.find((i: any) => i.name === "register_collateral");
-      const upd = ixs?.find((i: any) => i.name === "update_collateral_config");
+      // Anchor v0.30+ emits camelCase names in IDL; support both conventions
+      const reg = ixs?.find(
+        (i: any) => i.name === "register_collateral" || i.name === "registerCollateral"
+      );
+      const upd = ixs?.find(
+        (i: any) => i.name === "update_collateral_config" || i.name === "updateCollateralConfig"
+      );
       expect(reg, "register_collateral must be in IDL").to.not.be.undefined;
       expect(upd, "update_collateral_config must be in IDL").to.not.be.undefined;
     });
