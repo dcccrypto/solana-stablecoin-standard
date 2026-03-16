@@ -6899,9 +6899,8 @@ describe("sss-token", () => {
       expect(cc.collateralMint).to.be.instanceOf(PublicKey);
     });
   });
-});
 
-// ── SSS-106: FLAG_CONFIDENTIAL_TRANSFERS (bit 5) ────────────────────────
+  // ── SSS-106: FLAG_CONFIDENTIAL_TRANSFERS (bit 5) ────────────────────────
 
   describe("SSS-106: FLAG_CONFIDENTIAL_TRANSFERS (bit 5)", () => {
     let sss106MintKeypair: Keypair;
@@ -6996,6 +6995,14 @@ describe("sss-token", () => {
       const config = await program.account.stablecoinConfig.fetch(plainConfig);
       // feature_flags should be 0; auditor key stored only in ConfidentialTransferConfig PDA
       expect(config.featureFlags.toNumber()).to.equal(0);
+
+      // Assert CT PDA was NOT created
+      const [plainCtConfigPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("ct-config"), plainMint.publicKey.toBuffer()],
+        program.programId
+      );
+      const plainCtInfo = await provider.connection.getAccountInfo(plainCtConfigPda);
+      expect(plainCtInfo, "ConfidentialTransferConfig PDA must not exist when flag is unset").to.be.null;
     });
 
     it("SSS-106: initialize with FLAG_CONFIDENTIAL_TRANSFERS but no auditor key fails", async () => {
