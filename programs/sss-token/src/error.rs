@@ -152,4 +152,9 @@ pub enum SssError {
     InvalidCollateralThreshold,
     #[msg("liquidation_bonus_bps cannot exceed 5000 (50%)")]
     InvalidLiquidationBonus,
+    // SSS-106: Confidential Transfers
+    #[msg("Confidential transfer not enabled for this mint")]
+    ConfidentialTransferNotEnabled,
+    #[msg("Auditor ElGamal pubkey required for confidential transfers")]
+    MissingAuditorKey,
 }

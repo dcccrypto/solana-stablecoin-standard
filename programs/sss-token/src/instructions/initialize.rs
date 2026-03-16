@@ -7,7 +7,10 @@ use spl_token_2022::extension::ExtensionType;
 use spl_token_2022::state::{AccountState, Mint};
 
 use crate::error::SssError;
-use crate::state::{InitializeParams, StablecoinConfig, ADMIN_OP_NONE, DEFAULT_ADMIN_TIMELOCK_DELAY};
+use crate::state::{
+    ConfidentialTransferConfig, InitializeParams, StablecoinConfig, ADMIN_OP_NONE,
+    DEFAULT_ADMIN_TIMELOCK_DELAY, FLAG_CONFIDENTIAL_TRANSFERS,
+};
 
 // SSS-091: Mint space = base Mint size + DefaultAccountState extension.
 // ExtensionType::try_calculate_account_len is const-unfriendly on-chain; we use
@@ -38,6 +41,18 @@ pub struct Initialize<'info> {
     )]
     pub config: Account<'info, StablecoinConfig>,
 
+    /// SSS-106: Confidential transfer config PDA.
+    /// Required (init) when FLAG_CONFIDENTIAL_TRANSFERS is set in params.feature_flags.
+    /// Must be omitted otherwise.
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = 8 + ConfidentialTransferConfig::INIT_SPACE,
+        seeds = [ConfidentialTransferConfig::SEED, mint.key().as_ref()],
+        bump,
+    )]
+    pub ct_config: Option<Account<'info, ConfidentialTransferConfig>>,
+
     /// CHECK: Token-2022 program — validated by address check in handler.
     pub token_program: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
@@ -57,6 +72,19 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     if params.preset == 3 {
         require!(params.collateral_mint.is_some(), SssError::InvalidCollateralMint);
         require!(params.reserve_vault.is_some(), SssError::InvalidVault);
+    }
+
+    // SSS-106: Validate and store confidential transfer config if FLAG is set.
+    let ct_enabled = params.feature_flags.unwrap_or(0) & FLAG_CONFIDENTIAL_TRANSFERS != 0;
+    if ct_enabled {
+        require!(params.auditor_elgamal_pubkey.is_some(), SssError::MissingAuditorKey);
+        let auditor_key = params.auditor_elgamal_pubkey.unwrap();
+        if let Some(ct_config) = &mut ctx.accounts.ct_config {
+            ct_config.mint = ctx.accounts.mint.key();
+            ct_config.auditor_elgamal_pubkey = auditor_key;
+            ct_config.auto_approve_new_accounts = true;
+            ct_config.bump = ctx.bumps.ct_config.expect("ct_config bump must exist when init_if_needed");
+        }
     }
 
     // Validate token_program is TOKEN-2022
@@ -144,6 +172,13 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.stability_fee_bps = 0;
     // SSS-093: PSM redemption fee starts at 0 (disabled by default)
     config.redemption_fee_bps = 0;
+    // SSS-106: confidential transfers
+    config.feature_flags = params.feature_flags.unwrap_or(0);
+    config.auditor_elgamal_pubkey = if ct_enabled {
+        params.auditor_elgamal_pubkey.unwrap()
+    } else {
+        [0u8; 32]
+    };
     config.bump = ctx.bumps.config;
 
     msg!(

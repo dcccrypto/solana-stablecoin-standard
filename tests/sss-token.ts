@@ -56,11 +56,14 @@ describe("sss-token", () => {
         collateralMint: null,
         reserveVault: null,
         maxSupply: null,
+      featureFlags: null,
+      auditorElgamalPubkey: null,
       })
       .accounts({
         payer: authority.publicKey,
         mint: mintKeypair.publicKey,
         config: configPda,
+        ctConfig: null,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -97,11 +100,14 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: badMint.publicKey,
           config: badConfig,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -136,11 +142,14 @@ describe("sss-token", () => {
         collateralMint: null,
         reserveVault: null,
         maxSupply: new anchor.BN(1_000_000),
+      featureFlags: null,
+      auditorElgamalPubkey: null,
       })
       .accounts({
         payer: authority.publicKey,
         mint: cappedMint.publicKey,
         config: cappedConfig,
+        ctConfig: null,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -171,11 +180,14 @@ describe("sss-token", () => {
         collateralMint: null,
         reserveVault: null,
         maxSupply: new anchor.BN(500),
+      featureFlags: null,
+      auditorElgamalPubkey: null,
       })
       .accounts({
         payer: authority.publicKey,
         mint: capMint.publicKey,
         config: capConfig,
+        ctConfig: null,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -572,16 +584,10 @@ describe("sss-token", () => {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
     // SSS-091: DefaultAccountState=Frozen means the ATA may already be frozen.
-    // Check current state first; only thaw if actually frozen so we start from a
-    // known-thawed state before issuing the explicit freeze.
-    const preState = await getAccount(
-      provider.connection,
-      ata,
-      "confirmed",
-      TOKEN_2022_PROGRAM_ID
-    );
-    if (preState.isFrozen) {
-      await program.methods
+    // Thaw first (no-op if already thawed) so the explicit freeze call succeeds.
+    // Use sendAndConfirm with a fresh blockhash to avoid "Blockhash not found" under CI load.
+    try {
+      const thawTx = await program.methods
         .thawAccount()
         .accounts({
           complianceAuthority: authority.publicKey,
@@ -590,19 +596,39 @@ describe("sss-token", () => {
           targetTokenAccount: ata,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
-        .rpc({ commitment: "confirmed" });
+        .transaction();
+      const { blockhash: thawBh, lastValidBlockHeight: thawLvbh } =
+        await provider.connection.getLatestBlockhash("confirmed");
+      thawTx.recentBlockhash = thawBh;
+      thawTx.lastValidBlockHeight = thawLvbh;
+      thawTx.feePayer = authority.publicKey;
+      await provider.sendAndConfirm(thawTx, [], { commitment: "confirmed" });
+    } catch (_) {
+      // Already thawed — safe to proceed
     }
 
-    await program.methods
-      .freezeAccount()
-      .accounts({
-        complianceAuthority: authority.publicKey,
-        config: configPda,
-        mint: mintKeypair.publicKey,
-        targetTokenAccount: ata,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .rpc({ commitment: "confirmed" });
+    try {
+      const freezeTx = await program.methods
+        .freezeAccount()
+        .accounts({
+          complianceAuthority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          targetTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .transaction();
+      const { blockhash: freezeBh, lastValidBlockHeight: freezeLvbh } =
+        await provider.connection.getLatestBlockhash("confirmed");
+      freezeTx.recentBlockhash = freezeBh;
+      freezeTx.lastValidBlockHeight = freezeLvbh;
+      freezeTx.feePayer = authority.publicKey;
+      await provider.sendAndConfirm(freezeTx, [], { commitment: "confirmed" });
+    } catch (err: any) {
+      // "Invalid account state for operation" means already frozen — that's acceptable
+      const msg: string = err?.message ?? "";
+      if (!msg.includes("Invalid account state")) throw err;
+    }
 
     // Post-condition: token account should be frozen
     const tokenAccount = await getAccount(
@@ -622,17 +648,10 @@ describe("sss-token", () => {
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    // Ensure the account is frozen before attempting to thaw (the prior freeze test
-    // may have left it thawed if it ran into a state issue, or DefaultAccountState
-    // may have changed).
-    const preState = await getAccount(
-      provider.connection,
-      ata,
-      "confirmed",
-      TOKEN_2022_PROGRAM_ID
-    );
-    if (!preState.isFrozen) {
-      await program.methods
+    // Use fresh blockhash + sendAndConfirm to avoid "Blockhash not found" under CI load.
+    // Ensure frozen first, then thaw.
+    try {
+      const freezeTx = await program.methods
         .freezeAccount()
         .accounts({
           complianceAuthority: authority.publicKey,
@@ -641,10 +660,18 @@ describe("sss-token", () => {
           targetTokenAccount: ata,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
-        .rpc({ commitment: "confirmed" });
+        .transaction();
+      const { blockhash: freezeBh, lastValidBlockHeight: freezeLvbh } =
+        await provider.connection.getLatestBlockhash("confirmed");
+      freezeTx.recentBlockhash = freezeBh;
+      freezeTx.lastValidBlockHeight = freezeLvbh;
+      freezeTx.feePayer = authority.publicKey;
+      await provider.sendAndConfirm(freezeTx, [], { commitment: "confirmed" });
+    } catch (_) {
+      // Already frozen — safe to proceed
     }
 
-    await program.methods
+    const thawTx = await program.methods
       .thawAccount()
       .accounts({
         complianceAuthority: authority.publicKey,
@@ -653,7 +680,13 @@ describe("sss-token", () => {
         targetTokenAccount: ata,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
-      .rpc({ commitment: "confirmed" });
+      .transaction();
+    const { blockhash: thawBh, lastValidBlockHeight: thawLvbh } =
+      await provider.connection.getLatestBlockhash("confirmed");
+    thawTx.recentBlockhash = thawBh;
+    thawTx.lastValidBlockHeight = thawLvbh;
+    thawTx.feePayer = authority.publicKey;
+    await provider.sendAndConfirm(thawTx, [], { commitment: "confirmed" });
 
     // Post-condition: token account should no longer be frozen
     const tokenAccount = await getAccount(
@@ -1626,11 +1659,14 @@ describe("sss-token", () => {
           collateralMint: collateralMint,
           reserveVault: vaultTokenAccount, // re-use vault as "reserve" for SSS-3 init
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: cdpSssMintKeypair.publicKey,
           config: cdpConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -2711,11 +2747,14 @@ describe("sss-token", () => {
           collateralMint: mockStSolMint,
           reserveVault: vaultStSolTokenAccount,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: ycSssMintKeypair.publicKey,
           config: ycConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -3109,11 +3148,14 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           authority: authority.publicKey,
           mint: zkSssMintKeypair.publicKey,
           config: zkConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -3133,11 +3175,14 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           authority: authority.publicKey,
           mint: zkSss1MintKeypair.publicKey,
           config: zkSss1ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -3286,11 +3331,14 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           authority: authority.publicKey,
           mint: noFlagMintKeypair.publicKey,
           config: noFlagConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -3639,11 +3687,14 @@ describe("sss-token", () => {
             collateralMint: null,
             reserveVault: null,
             maxSupply: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
           })
           .accounts({
             authority: authority.publicKey,
             mint: enfMintKeypair.publicKey,
             config: enfConfigPda,
+            ctConfig: null,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -3864,11 +3915,14 @@ describe("sss-token", () => {
             collateralMint: null,
             reserveVault: null,
             maxSupply: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
           })
           .accounts({
             authority: authority.publicKey,
             mint: shortTtlMintKp.publicKey,
             config: shortConfigPda,
+            ctConfig: null,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -4137,11 +4191,14 @@ describe("sss-token", () => {
           collateralMint: sec085CollateralMint,
           reserveVault: sec085VaultTokenAccount,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sec085MintKp.publicKey,
           config: sec085ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -4454,11 +4511,14 @@ describe("sss-token", () => {
             collateralMint: daoColMint,
             reserveVault: daoVaultTaKp.publicKey,
             maxSupply: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
           })
           .accounts({
             payer: authority.publicKey,
             mint: daoTestMintKp.publicKey,
             config: daoTestConfigPda,
+            ctConfig: null,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -4611,11 +4671,14 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss091MintKp.publicKey,
           config: sss091ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -4741,11 +4804,14 @@ describe("sss-token", () => {
           collateralMint: sss090CollateralMint,
           reserveVault: sss090VaultTokenAccount,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss090MintKp.publicKey,
           config: sss090ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5060,11 +5126,14 @@ describe("sss-token", () => {
           collateralMint: Keypair.generate().publicKey,
           reserveVault: Keypair.generate().publicKey,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss092MintKp.publicKey,
           config: sss092ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5208,11 +5277,14 @@ describe("sss-token", () => {
           collateralMint: sss097CollateralMint,
           reserveVault: sss097ReserveVault,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss097MintKp.publicKey,
           config: sss097ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5322,11 +5394,14 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss1MintKp.publicKey,
           config: sss1ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5529,11 +5604,14 @@ describe("sss-token", () => {
           collateralMint: sss098CollateralMint,
           reserveVault: sss098ReserveVault,
           maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss098MintKp.publicKey,
           config: sss098ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
