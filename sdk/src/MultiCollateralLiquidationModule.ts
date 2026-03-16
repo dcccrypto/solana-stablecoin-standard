@@ -96,11 +96,12 @@ export interface LiquidateParams {
   /** Minimum collateral tokens the liquidator expects to receive (slippage guard). 0 = disabled. */
   minCollateralAmount: bigint;
   /**
-   * Optional partial debt to repay (SSS-100 feature).
-   * When provided, only enough debt is burned to restore the CDP to a healthy ratio.
-   * When undefined, the full debt is burned (full liquidation).
+   * SSS tokens to burn (SSS-100 cdp_liquidate_v2 `debt_to_repay` arg).
+   * 0n = full liquidation (burns all outstanding debt).
+   * >0n = partial liquidation (burns exactly this amount; position must be healthy after).
+   * Defaults to 0n (full liquidation).
    */
-  partialDebtAmount?: bigint;
+  debtToRepay?: bigint;
   /** Whether the collateral mint uses Token-2022 (default: false = Token). */
   collateralIsToken2022?: boolean;
   /** Liquidator's SSS ATA (defaults to derived ATA). */
@@ -492,14 +493,10 @@ export class MultiCollateralLiquidationModule {
   /**
    * Execute liquidation of an undercollateralised CDP position.
    *
-   * Wraps the on-chain `cdp_liquidate` instruction (SSS-100 extended version).
+   * Wraps the on-chain `cdp_liquidate_v2` instruction (SSS-100).
    *
    * @param params  See `LiquidateParams`.
    * @returns Transaction signature.
-   *
-   * @note Once SSS-100 IDL is live the instruction gains a `collateral_mint`
-   *       arg and optional `partial_debt_amount`. This method already passes
-   *       both; the anchor client will forward them to the program.
    */
   async liquidate(params: LiquidateParams): Promise<TransactionSignature> {
     const {
@@ -508,7 +505,7 @@ export class MultiCollateralLiquidationModule {
       collateralMint,
       pythPriceFeed,
       minCollateralAmount,
-      partialDebtAmount,
+      debtToRepay = 0n,
       collateralIsToken2022 = false,
       liquidatorSssAccount,
       liquidatorCollateralAccount,
@@ -521,6 +518,11 @@ export class MultiCollateralLiquidationModule {
     const [collateralVaultPda] = deriveCollateralVaultPda(
       sssMint,
       cdpOwner,
+      collateralMint,
+      this.programId,
+    );
+    const [collateralConfigPda] = deriveCollateralConfigPda(
+      sssMint,
       collateralMint,
       this.programId,
     );
@@ -549,17 +551,12 @@ export class MultiCollateralLiquidationModule {
         collateralTokenProgram,
       );
 
-    // Build instruction args. SSS-100 adds `partial_debt_amount` (optional u64).
-    // Until SSS-100 IDL is deployed the program ignores unknown trailing args;
-    // the field is included here ready for IDL promotion.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const args: any[] = [new BN(minCollateralAmount.toString())];
-    if (partialDebtAmount !== undefined) {
-      args.push(new BN(partialDebtAmount.toString()));
-    }
-
+    // SSS-100: cdp_liquidate_v2(debt_to_repay: u64, min_collateral_amount: u64)
     return this.program.methods
-      .cdpLiquidate(...args)
+      .cdpLiquidateV2(
+        new BN(debtToRepay.toString()),
+        new BN(minCollateralAmount.toString()),
+      )
       .accountsPartial({
         liquidator,
         config: configPda,
@@ -571,6 +568,7 @@ export class MultiCollateralLiquidationModule {
         collateralMint,
         vaultTokenAccount,
         liquidatorCollateralAccount: liquidatorCollateral,
+        collateralConfig: collateralConfigPda,
         pythPriceFeed,
         sssTokenProgram: TOKEN_2022_PROGRAM_ID,
         collateralTokenProgram,
