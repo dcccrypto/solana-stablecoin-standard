@@ -120,6 +120,18 @@ describe("SSS-055: CPI Composability Standard (Direction 3)", () => {
       )
     );
     await provider.sendAndConfirm(createAtaTx, [], { commitment: "confirmed" });
+
+    // SSS-091: DefaultAccountState=Frozen — new ATAs start frozen; thaw before minting.
+    await program.methods
+      .thawAccount()
+      .accounts({
+        complianceAuthority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        targetTokenAccount: recipientAta,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: "confirmed" });
   });
 
   // ── Test 1: init_interface_version ────────────────────────────────────────

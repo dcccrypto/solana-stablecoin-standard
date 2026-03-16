@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "description": "Modular stablecoin SDK for Solana with SSS-1 (Minimal) and SSS-2 (Compliant) presets",
   "private": true,
-  "workspaces": ["sdk", "cli"],
+  "workspaces": [
+    "sdk",
+    "cli"
+  ],
   "scripts": {
     "build": "yarn workspace @stbr/sss-token build && yarn workspace sss-token-cli build",
     "test": "anchor test",
@@ -18,7 +21,8 @@
     "@types/mocha": "^9.0.0",
     "chai": "^4.3.6",
     "mocha": "^9.0.3",
-    "ts-mocha": "^10.0.0",
-    "typescript": "^5.4.0"
+    "ts-mocha": "^11.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
   }
 }

@@ -121,4 +121,35 @@ pub enum SssError {
     DuplicateMember,
     #[msg("Liquidation slippage: collateral received is below caller-specified minimum")]
     SlippageExceeded,
+    // SSS-091: DefaultAccountState=Frozen
+    #[msg("Token program must be Token-2022 (spl-token-2022 program)")]
+    InvalidTokenProgram,
+    // SSS-092: Stability fee
+    #[msg("Stability fee bps exceeds maximum allowed (2000 = 20% p.a.)")]
+    StabilityFeeTooHigh,
+    // SSS-093: PSM fee + velocity
+    #[msg("Minter epoch velocity limit exceeded — too much minted in this epoch")]
+    MintVelocityExceeded,
+    #[msg("PSM redemption fee too high — max 1000 bps (10%)")]
+    InvalidPsmFee,
+    // SSS-097: Bad Debt Backstop
+    #[msg("Bad debt backstop is not configured — set insurance_fund_pubkey first")]
+    BackstopNotConfigured,
+    #[msg("No bad debt detected — collateral covers outstanding debt")]
+    NoBadDebt,
+    #[msg("Insurance fund balance is zero — cannot backstop")]
+    InsuranceFundEmpty,
+    #[msg("max_backstop_bps exceeds maximum allowed (10000 = 100%)")]
+    InvalidBackstopBps,
+    #[msg("Caller is not the liquidation handler — only cdp_liquidate may trigger backstop")]
+    UnauthorizedBackstopCaller,
+    // SSS-098: CollateralConfig PDA
+    #[msg("Collateral mint is not whitelisted in CollateralConfig")]
+    CollateralNotWhitelisted,
+    #[msg("CollateralConfig deposit cap exceeded")]
+    DepositCapExceeded,
+    #[msg("liquidation_threshold_bps must be > max_ltv_bps")]
+    InvalidCollateralThreshold,
+    #[msg("liquidation_bonus_bps cannot exceed 5000 (50%)")]
+    InvalidLiquidationBonus,
 }

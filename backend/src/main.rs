@@ -1,6 +1,7 @@
 mod auth;
 mod db;
 mod error;
+mod indexer;
 mod models;
 mod rate_limit;
 mod routes;
@@ -28,8 +29,11 @@ use routes::{
     compliance_rules::add_compliance_rule,
     confidential::initiate_confidential_transfer,
     cpi::get_cpi_interface,
+    chain_events::chain_events,
+    collateral_config::get_collateral_configs,
     events::events,
     health::health,
+    liquidations::get_liquidations,
     mint::mint,
     burn::burn,
     reserves::get_reserves_proof,
@@ -93,6 +97,8 @@ async fn main() {
         .route("/api/burn", post(burn))
         .route("/api/supply", get(supply))
         .route("/api/events", get(events))
+        .route("/api/chain-events", get(chain_events))
+        .route("/api/liquidations", get(get_liquidations))
         .route("/api/reserves/proof", get(get_reserves_proof))
         .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
         .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
@@ -101,6 +107,7 @@ async fn main() {
         .route("/api/cdp/position/:wallet", get(get_cdp_position))
         .route("/api/cdp/collateral-types", get(get_collateral_types))
         .route("/api/cdp/simulate", post(post_cdp_simulate))
+        .route("/api/cdp/collateral-configs", get(get_collateral_configs))
         .route("/api/cpi/interface", get(get_cpi_interface))
         .route("/api/confidential/transfer", post(initiate_confidential_transfer))
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
@@ -111,7 +118,7 @@ async fn main() {
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
-        .with_state(state);
+        .with_state(state.clone());
 
     // Determine port
     let port: u16 = std::env::var("PORT")
@@ -126,6 +133,10 @@ async fn main() {
         .await
         .expect("Failed to bind address");
 
+    // Spawn the on-chain event indexer (SSS-095).
+    // Reads SOLANA_RPC_URL env var (default: devnet).
+    indexer::spawn_indexer(state.clone());
+
     axum::serve(listener, app)
         .await
         .expect("Server error");
@@ -134,6 +145,7 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use axum::{
         body::Body,
         http::{Method, Request, StatusCode},
@@ -161,6 +173,8 @@ mod tests {
             .route("/api/burn", post(burn))
             .route("/api/supply", get(supply))
             .route("/api/events", get(events))
+            .route("/api/chain-events", get(chain_events))
+            .route("/api/liquidations", get(get_liquidations))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
             .route("/api/compliance/audit", get(get_audit))
@@ -169,6 +183,7 @@ mod tests {
             .route("/api/cdp/position/:wallet", get(get_cdp_position))
             .route("/api/cdp/collateral-types", get(get_collateral_types))
             .route("/api/cdp/simulate", post(post_cdp_simulate))
+        .route("/api/cdp/collateral-configs", get(get_collateral_configs))
             .route("/api/cpi/interface", get(get_cpi_interface))
             .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
@@ -372,6 +387,102 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
+    // SSS-095: event_log table + GET /api/chain-events
+    #[tokio::test]
+    async fn test_chain_events_endpoint_empty() {
+        let (app, key) = build_app();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/chain-events")
+                    .header("X-Api-Key", key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["data"].as_array().unwrap().len(), 0, "empty event_log returns empty array");
+    }
+
+    #[tokio::test]
+    async fn test_chain_events_insert_and_query() {
+        let db = Database::new(":memory:").expect("db");
+        // Insert two events of different types
+        db.insert_event_log(
+            "circuit_breaker_toggle",
+            "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
+            serde_json::json!({"halted": true, "authority": "test"}),
+            Some("sig1"),
+            Some(12345),
+        ).unwrap();
+        db.insert_event_log(
+            "cdp_liquidate",
+            "someposition123",
+            serde_json::json!({"debt_cleared": 1000, "collateral_seized": 500}),
+            Some("sig2"),
+            Some(12350),
+        ).unwrap();
+
+        let key_entry = db.create_api_key("test").unwrap();
+        let test_key = key_entry.key.clone();
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/chain-events", get(chain_events))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+
+        // Query all
+        let resp = app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/chain-events")
+                    .header("X-Api-Key", &test_key)
+                    .body(Body::empty())
+                    .unwrap(),
+            ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["data"].as_array().unwrap().len(), 2, "should return both events");
+
+        // Query by type
+        let resp = app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/chain-events?type=circuit_breaker_toggle")
+                    .header("X-Api-Key", &test_key)
+                    .body(Body::empty())
+                    .unwrap(),
+            ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let entries = json["data"].as_array().unwrap();
+        assert_eq!(entries.len(), 1, "type filter: only circuit_breaker_toggle");
+        assert_eq!(entries[0]["event_type"], "circuit_breaker_toggle");
+        assert_eq!(entries[0]["slot"], 12345);
+
+        // Query by address
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/chain-events?address=someposition123")
+                    .header("X-Api-Key", &test_key)
+                    .body(Body::empty())
+                    .unwrap(),
+            ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let entries = json["data"].as_array().unwrap();
+        assert_eq!(entries.len(), 1, "address filter: only cdp_liquidate");
+        assert_eq!(entries[0]["event_type"], "cdp_liquidate");
+    }
+
     #[tokio::test]
     async fn test_blacklist_endpoint() {
         let (app, key) = build_app();
@@ -539,6 +650,8 @@ mod qa_tests {
             .route("/api/burn", post(burn))
             .route("/api/supply", get(supply))
             .route("/api/events", get(events))
+            .route("/api/chain-events", get(chain_events))
+            .route("/api/liquidations", get(get_liquidations))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/audit", get(get_audit))
             .route("/api/compliance/rule", post(add_compliance_rule))
@@ -546,6 +659,7 @@ mod qa_tests {
             .route("/api/cdp/position/:wallet", get(get_cdp_position))
             .route("/api/cdp/collateral-types", get(get_collateral_types))
             .route("/api/cdp/simulate", post(post_cdp_simulate))
+        .route("/api/cdp/collateral-configs", get(get_collateral_configs))
             .route("/api/cpi/interface", get(get_cpi_interface))
             .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
@@ -1093,5 +1207,313 @@ mod qa_tests {
         // Response is valid JSON with mint/burn arrays
         assert!(json["data"]["mint_events"].is_array());
         assert!(json["data"]["burn_events"].is_array());
+    }
+
+    // ─── SSS-102: Liquidation history API tests ───────────────────────────────
+
+    /// Build a minimal app with just the /api/liquidations route for focused tests.
+    #[tokio::test]
+    async fn test_liquidations_endpoint_empty() {
+        let (app, key) = build_app();
+        let (status, json) = get_json(app, "/api/liquidations", &key).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["total"], 0);
+        assert!(json["data"]["items"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_liquidations_insert_and_list() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("test").unwrap();
+        let test_key = key_entry.key.clone();
+        // Seed two liquidation entries.
+        db.insert_liquidation(
+            "CDP111",
+            "MintAAA",
+            1000,
+            500,
+            "Liquidator1",
+            Some(9_000_000),
+            Some("sig111"),
+        ).unwrap();
+        db.insert_liquidation(
+            "CDP222",
+            "MintBBB",
+            2000,
+            1000,
+            "Liquidator2",
+            Some(9_000_001),
+            Some("sig222"),
+        ).unwrap();
+
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/liquidations", get(get_liquidations))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+
+        let resp = app.clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/liquidations")
+                    .header("X-Api-Key", &test_key)
+                    .body(Body::empty())
+                    .unwrap(),
+            ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["data"]["total"], 2);
+        assert_eq!(json["data"]["items"].as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_liquidations_filter_by_cdp_address() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("test").unwrap();
+        let test_key = key_entry.key.clone();
+        db.insert_liquidation("CDP_A", "MintX", 100, 50, "Liq1", None, None).unwrap();
+        db.insert_liquidation("CDP_B", "MintX", 200, 100, "Liq2", None, None).unwrap();
+
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/liquidations", get(get_liquidations))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+
+        let resp = app.oneshot(
+            Request::builder()
+                .uri("/api/liquidations?cdp_address=CDP_A")
+                .header("X-Api-Key", &test_key)
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["data"]["total"], 1);
+        let items = json["data"]["items"].as_array().unwrap();
+        assert_eq!(items[0]["cdp_address"], "CDP_A");
+    }
+
+    #[tokio::test]
+    async fn test_liquidations_filter_by_collateral_mint() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("test").unwrap();
+        let test_key = key_entry.key.clone();
+        db.insert_liquidation("CDP1", "MintSOL", 100, 50, "LiqA", None, None).unwrap();
+        db.insert_liquidation("CDP2", "MintUSDC", 200, 100, "LiqB", None, None).unwrap();
+        db.insert_liquidation("CDP3", "MintSOL", 300, 150, "LiqC", None, None).unwrap();
+
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/liquidations", get(get_liquidations))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+
+        let resp = app.oneshot(
+            Request::builder()
+                .uri("/api/liquidations?collateral_mint=MintSOL")
+                .header("X-Api-Key", &test_key)
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["data"]["total"], 2, "should return only MintSOL entries");
+    }
+
+    #[tokio::test]
+    async fn test_liquidations_pagination_limit_offset() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("test").unwrap();
+        let test_key = key_entry.key.clone();
+        for i in 0..5u64 {
+            db.insert_liquidation(
+                &format!("CDP_{i}"),
+                "MintX",
+                i as i64 * 100,
+                i as i64 * 50,
+                "Liquidator",
+                Some(i as i64),
+                None,
+            ).unwrap();
+        }
+
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/liquidations", get(get_liquidations))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+
+        // Page 1: limit=2, offset=0
+        let resp = app.clone().oneshot(
+            Request::builder()
+                .uri("/api/liquidations?limit=2&offset=0")
+                .header("X-Api-Key", &test_key)
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["data"]["total"], 5);
+        assert_eq!(json["data"]["items"].as_array().unwrap().len(), 2);
+        assert_eq!(json["data"]["limit"], 2);
+        assert_eq!(json["data"]["offset"], 0);
+
+        // Page 2: limit=2, offset=2
+        let resp2 = app.oneshot(
+            Request::builder()
+                .uri("/api/liquidations?limit=2&offset=2")
+                .header("X-Api-Key", &test_key)
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        let body2 = axum::body::to_bytes(resp2.into_body(), usize::MAX).await.unwrap();
+        let json2: serde_json::Value = serde_json::from_slice(&body2).unwrap();
+        assert_eq!(json2["data"]["total"], 5);
+        assert_eq!(json2["data"]["items"].as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_liquidations_requires_auth() {
+        let (app, _key) = build_app();
+        let resp = app.oneshot(
+            Request::builder()
+                .uri("/api/liquidations")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_liquidations_limit_capped_at_1000() {
+        let (app, key) = build_app();
+        let (status, json) = get_json(app, "/api/liquidations?limit=99999", &key).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["data"]["limit"], 1000, "limit should be capped to 1000");
+    }
+
+    #[tokio::test]
+    async fn test_liquidations_response_fields() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("test").unwrap();
+        let test_key = key_entry.key.clone();
+        db.insert_liquidation(
+            "CDP_FIELD_TEST",
+            "MintField",
+            9876,
+            4321,
+            "LiqFieldTester",
+            Some(42_000_000),
+            Some("sig_field_test"),
+        ).unwrap();
+
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/liquidations", get(get_liquidations))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+
+        let resp = app.oneshot(
+            Request::builder()
+                .uri("/api/liquidations")
+                .header("X-Api-Key", &test_key)
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let item = &json["data"]["items"][0];
+        assert_eq!(item["cdp_address"], "CDP_FIELD_TEST");
+        assert_eq!(item["collateral_mint"], "MintField");
+        assert_eq!(item["collateral_seized"], 9876);
+        assert_eq!(item["debt_repaid"], 4321);
+        assert_eq!(item["liquidator"], "LiqFieldTester");
+        assert_eq!(item["slot"], 42_000_000);
+        assert_eq!(item["tx_sig"], "sig_field_test");
+        assert!(item["id"].is_string());
+        assert!(item["created_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn test_liquidations_sync_from_event_log() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        // Seed a cdp_liquidate event into event_log.
+        db.insert_event_log(
+            "cdp_liquidate",
+            "CDP_FROM_LOG",
+            serde_json::json!({
+                "cdp_address": "CDP_FROM_LOG",
+                "collateral_mint": "MintFromLog",
+                "collateral_seized": 500,
+                "debt_repaid": 250,
+                "liquidator": "LiqFromLog"
+            }),
+            Some("sig_from_log"),
+            Some(1_234_567),
+        ).unwrap();
+
+        // sync_liquidations_from_event_log should materialise the entry.
+        let synced = db.sync_liquidations_from_event_log().unwrap();
+        assert_eq!(synced, 1, "should have synced 1 event");
+
+        let rows = db.list_liquidations(None, None, 100, 0).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].cdp_address, "CDP_FROM_LOG");
+        assert_eq!(rows[0].collateral_mint, "MintFromLog");
+        assert_eq!(rows[0].collateral_seized, 500);
+        assert_eq!(rows[0].debt_repaid, 250);
+        assert_eq!(rows[0].liquidator, "LiqFromLog");
+    }
+
+    #[tokio::test]
+    async fn test_liquidations_sync_idempotent() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        db.insert_event_log(
+            "cdp_liquidate",
+            "CDP_IDEM",
+            serde_json::json!({
+                "cdp_address": "CDP_IDEM",
+                "collateral_mint": "MintIdem",
+                "collateral_seized": 100,
+                "debt_repaid": 50,
+                "liquidator": "LiqIdem"
+            }),
+            Some("sig_idem"),
+            Some(999),
+        ).unwrap();
+
+        let synced1 = db.sync_liquidations_from_event_log().unwrap();
+        let synced2 = db.sync_liquidations_from_event_log().unwrap();
+        assert_eq!(synced1, 1);
+        assert_eq!(synced2, 0, "second sync should insert nothing (already present)");
+
+        let rows = db.list_liquidations(None, None, 100, 0).unwrap();
+        assert_eq!(rows.len(), 1, "still exactly 1 row after duplicate sync");
+    }
+
+    #[tokio::test]
+    async fn test_liquidations_db_count() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        for i in 0..7u64 {
+            db.insert_liquidation(
+                &format!("CDP_{i}"),
+                if i % 2 == 0 { "MintEven" } else { "MintOdd" },
+                i as i64 * 10,
+                i as i64 * 5,
+                "Liq",
+                None,
+                None,
+            ).unwrap();
+        }
+        let total = db.count_liquidations(None, None).unwrap();
+        assert_eq!(total, 7);
+        let even = db.count_liquidations(None, Some("MintEven")).unwrap();
+        assert_eq!(even, 4); // 0,2,4,6
+        let odd = db.count_liquidations(None, Some("MintOdd")).unwrap();
+        assert_eq!(odd, 3); // 1,3,5
     }
 }

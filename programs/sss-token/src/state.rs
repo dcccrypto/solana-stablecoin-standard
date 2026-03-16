@@ -28,6 +28,21 @@ pub const FLAG_YIELD_COLLATERAL: u64 = 1 << 3;
 /// SSS-2 only.  See docs/FEATURE-FLAGS-RESEARCH.md §Feature 4.
 pub const FLAG_ZK_COMPLIANCE: u64 = 1 << 4;
 
+// ---------------------------------------------------------------------------
+// SSS-085: Admin timelock operation kinds
+// ---------------------------------------------------------------------------
+/// No pending operation.
+pub const ADMIN_OP_NONE: u8 = 0;
+/// Pending: transfer authority to `admin_op_target`.
+pub const ADMIN_OP_TRANSFER_AUTHORITY: u8 = 1;
+/// Pending: set feature flag `admin_op_param` bits.
+pub const ADMIN_OP_SET_FEATURE_FLAG: u8 = 2;
+/// Pending: clear feature flag `admin_op_param` bits.
+pub const ADMIN_OP_CLEAR_FEATURE_FLAG: u8 = 3;
+
+/// Default timelock delay: 2 Solana epochs ≈ 432 000 slots (at 2 days/epoch).
+pub const DEFAULT_ADMIN_TIMELOCK_DELAY: u64 = 432_000;
+
 /// Global stablecoin configuration (one per mint).
 #[account]
 #[derive(InitSpace)]
@@ -92,17 +107,23 @@ pub struct StablecoinConfig {
     /// expressed in basis points (e.g. 100 = 1%).  0 = disabled (no conf check).
     /// Set via `set_oracle_params`.
     pub max_oracle_conf_bps: u16,
+    /// SSS-092: Annual stability fee in basis points (e.g. 50 = 0.5% p.a.).
+    /// Accrues on outstanding CDP debt; collected via `collect_stability_fee`.
+    /// 0 = no stability fee (default).
+    pub stability_fee_bps: u16,
+    /// SSS-093: PSM redemption fee in basis points (e.g. 10 = 0.1%).
+    /// Deducted from collateral released on `redeem`.  Fee stays in vault.
+    /// 0 = no fee (default).  Set via `set_psm_fee` (authority-only).
+    pub redemption_fee_bps: u16,
+    /// SSS-097: Insurance fund vault — token account that holds backstop reserves.
+    /// Pubkey::default() = backstop disabled.  Set via `set_backstop_params` (authority-only).
+    pub insurance_fund_pubkey: Pubkey,
+    /// SSS-097: Maximum backstop draw as a fraction of total outstanding debt,
+    /// expressed in basis points (e.g. 500 = 5% of net supply).
+    /// 0 = unlimited (draw full shortfall up to insurance fund balance).
+    pub max_backstop_bps: u16,
     pub bump: u8,
 }
-
-/// SSS-085: Default admin timelock delay in slots (~2 Solana epochs / ~2 days).
-pub const DEFAULT_ADMIN_TIMELOCK_DELAY: u64 = 432_000;
-
-/// SSS-085: Timelocked admin operation kind discriminants.
-pub const ADMIN_OP_NONE: u8 = 0;
-pub const ADMIN_OP_TRANSFER_AUTHORITY: u8 = 1;
-pub const ADMIN_OP_SET_FEATURE_FLAG: u8 = 2;
-pub const ADMIN_OP_CLEAR_FEATURE_FLAG: u8 = 3;
 
 impl StablecoinConfig {
     pub const SEED: &'static [u8] = b"stablecoin-config";
@@ -149,6 +170,14 @@ pub struct MinterInfo {
     pub cap: u64,
     /// Total minted by this minter so far
     pub minted: u64,
+    /// SSS-093: Maximum tokens this minter may mint per epoch (0 = unlimited).
+    /// Prevents flash-mint attacks by rate-limiting per Solana epoch.
+    pub max_mint_per_epoch: u64,
+    /// SSS-093: Amount minted in the current epoch (resets when epoch advances).
+    pub minted_this_epoch: u64,
+    /// SSS-093: The epoch slot-number when `minted_this_epoch` was last reset.
+    /// Solana epoch = `clock.epoch` (u64).
+    pub last_epoch_reset: u64,
     pub bump: u8,
 }
 
@@ -224,6 +253,12 @@ pub struct CdpPosition {
     /// The single collateral mint for this position (set on first borrow, immutable).
     /// Enforces 1:1 CollateralVault-to-CdpPosition to prevent liquidation insolvency.
     pub collateral_mint: Pubkey,
+    /// SSS-092: Unix timestamp of the last stability fee accrual for this position.
+    /// Initialised to 0; set on first borrow and updated each time fees are collected.
+    pub last_fee_accrual: i64,
+    /// SSS-092: Total stability fees accrued (in SSS token native units) but not yet
+    /// collected by the protocol.  Debtor must repay principal + accrued_fees.
+    pub accrued_fees: u64,
     pub bump: u8,
 }
 
@@ -437,4 +472,49 @@ pub struct VerificationRecord {
 
 impl VerificationRecord {
     pub const SEED: &'static [u8] = b"zk-verification";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-098: CollateralConfig PDA — per-collateral parameters
+// ---------------------------------------------------------------------------
+
+/// Per-collateral configuration PDA.
+/// Seeds: [b"collateral-config", sss_mint, collateral_mint]
+///
+/// Stores per-collateral LTV, liquidation threshold/bonus, deposit cap, and
+/// a whitelist flag.  `cdp_deposit_collateral` reads this when it is passed
+/// as an optional account.
+#[account]
+#[derive(InitSpace)]
+pub struct CollateralConfig {
+    /// The SSS-3 stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// The collateral token mint.
+    pub collateral_mint: Pubkey,
+    /// When false, CDP deposits for this mint are rejected.
+    pub whitelisted: bool,
+    /// Maximum loan-to-value ratio in basis points (e.g. 7500 = 75%).
+    pub max_ltv_bps: u16,
+    /// Collateral ratio below which a position becomes liquidatable.
+    /// Must be > max_ltv_bps.
+    pub liquidation_threshold_bps: u16,
+    /// Extra collateral awarded to the liquidator, in basis points.
+    pub liquidation_bonus_bps: u16,
+    /// Maximum total deposited amount for this collateral (0 = unlimited).
+    pub max_deposit_cap: u64,
+    /// Running total of collateral deposited through CDP (informational).
+    pub total_deposited: u64,
+    pub bump: u8,
+}
+
+impl CollateralConfig {
+    pub const SEED: &'static [u8] = b"collateral-config";
+
+    /// Validate params: threshold > ltv, bonus <= 50%.
+    pub fn validate(ltv: u16, threshold: u16, bonus: u16) -> anchor_lang::Result<()> {
+        use crate::error::SssError;
+        require!(threshold > ltv, SssError::InvalidCollateralThreshold);
+        require!(bonus <= 5000, SssError::InvalidLiquidationBonus);
+        Ok(())
+    }
 }

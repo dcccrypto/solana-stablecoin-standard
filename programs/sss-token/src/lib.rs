@@ -115,8 +115,17 @@ pub mod sss_token {
 
     /// CDP: Liquidate an undercollateralised position (ratio < 120%).
     /// Callable by anyone; liquidator burns full debt and receives all collateral.
+    /// Liquidate an undercollateralised CDP position.
+    /// `min_collateral_amount`: minimum collateral tokens the liquidator expects to receive
+    /// (slippage protection). Pass 0 to disable (backward compatible).
     pub fn cdp_liquidate(ctx: Context<CdpLiquidate>, min_collateral_amount: u64) -> Result<()> {
         instructions::cdp_liquidate::cdp_liquidate_handler(ctx, min_collateral_amount)
+    }
+
+    /// SSS-092: Accrue and burn stability fees on a CDP position.
+    /// Callable by the debtor (or any keeper); debtor signs to authorise the burn.
+    pub fn collect_stability_fee(ctx: Context<CollectStabilityFee>) -> Result<()> {
+        instructions::stability_fee::collect_stability_fee_handler(ctx)
     }
 
     // ─── Direction 3: CPI Composability Standard ──────────────────────────────
@@ -302,6 +311,13 @@ pub mod sss_token {
         instructions::admin_timelock::set_oracle_params_handler(ctx, max_age_secs, max_conf_bps)
     }
 
+    /// SSS-092: Set the annual stability fee (in basis points) for CDP borrows.
+    /// Max 2000 bps (20% p.a.).  0 = no fee (default).
+    /// Authority-only; takes effect on next `collect_stability_fee` call.
+    pub fn set_stability_fee(ctx: Context<SetStabilityFee>, fee_bps: u16) -> Result<()> {
+        instructions::stability_fee::set_stability_fee_handler(ctx, fee_bps)
+    }
+
     /// Propose a timelocked admin operation (2-epoch delay by default).
     /// `op_kind`: 1=TransferAuthority, 2=SetFeatureFlag, 3=ClearFeatureFlag.
     pub fn propose_timelocked_op(
@@ -321,5 +337,71 @@ pub mod sss_token {
     /// Cancel a pending timelocked admin operation.
     pub fn cancel_timelocked_op(ctx: Context<CancelTimelockOp>) -> Result<()> {
         instructions::admin_timelock::cancel_timelocked_op_handler(ctx)
+    }
+
+    // -----------------------------------------------------------------------
+    // SSS-093: PSM fee + per-minter velocity limit
+    // -----------------------------------------------------------------------
+
+    /// Set the PSM redemption fee in basis points (SSS-3 only). Authority-only.
+    /// 0 = no fee.  Max 1000 bps (10%).
+    pub fn set_psm_fee(ctx: Context<SetPsmFee>, fee_bps: u16) -> Result<()> {
+        instructions::psm_fee::set_psm_fee_handler(ctx, fee_bps)
+    }
+
+    /// Set a per-epoch velocity limit for a registered minter.
+    /// `max_mint_per_epoch` = 0 disables the limit.  Authority-only.
+    pub fn set_mint_velocity_limit(
+        ctx: Context<SetMintVelocityLimit>,
+        max_mint_per_epoch: u64,
+    ) -> Result<()> {
+        instructions::psm_fee::set_mint_velocity_limit_handler(ctx, max_mint_per_epoch)
+    }
+
+    // ─── SSS-097: Bad Debt Backstop ───────────────────────────────────────────
+
+    /// Authority-only: configure the insurance fund vault and max backstop draw cap.
+    /// Set `insurance_fund_pubkey` to `Pubkey::default()` to disable the backstop.
+    /// `max_backstop_bps`: max draw as pct of net supply in bps (0 = unlimited).
+    pub fn set_backstop_params(
+        ctx: Context<SetBackstopParams>,
+        insurance_fund_pubkey: Pubkey,
+        max_backstop_bps: u16,
+    ) -> Result<()> {
+        instructions::bad_debt_backstop::set_backstop_params_handler(
+            ctx,
+            insurance_fund_pubkey,
+            max_backstop_bps,
+        )
+    }
+
+    /// Trigger the bad debt backstop after a liquidation leaves collateral < debt.
+    /// Draws up to `max_backstop_bps` of outstanding debt from the insurance fund.
+    /// Only callable by the config PDA (i.e. via CPI from `cdp_liquidate`).
+    /// Emits `BadDebtTriggered`.
+    pub fn trigger_backstop(
+        ctx: Context<TriggerBackstop>,
+        shortfall_amount: u64,
+    ) -> Result<()> {
+        instructions::bad_debt_backstop::trigger_backstop_handler(ctx, shortfall_amount)
+    }
+
+    // ─── SSS-098: CollateralConfig PDA ───────────────────────────────────────
+
+    /// Register a new collateral type with per-collateral params (SSS-3, authority-only).
+    /// Creates the CollateralConfig PDA keyed by (sss_mint, collateral_mint).
+    pub fn register_collateral(
+        ctx: Context<RegisterCollateral>,
+        params: RegisterCollateralParams,
+    ) -> Result<()> {
+        instructions::collateral_config::register_collateral_handler(ctx, params)
+    }
+
+    /// Update an existing CollateralConfig PDA (SSS-3, authority-only).
+    pub fn update_collateral_config(
+        ctx: Context<UpdateCollateralConfig>,
+        params: UpdateCollateralConfigParams,
+    ) -> Result<()> {
+        instructions::collateral_config::update_collateral_config_handler(ctx, params)
     }
 }

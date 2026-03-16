@@ -192,3 +192,106 @@ pub struct ReservesProofResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub holder: Option<String>,
 }
+
+/// SSS-095: on-chain event log entry (circuit-breaker, CDP, oracle).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EventLogEntry {
+    pub id: String,
+    /// Event type: "circuit_breaker_toggle" | "cdp_deposit" | "cdp_borrow" | "cdp_liquidate" | "oracle_params_update"
+    pub event_type: String,
+    /// Token mint / CDP position address / program address
+    pub address: String,
+    /// JSON blob with event-specific fields (raw string)
+    pub data: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot: Option<i64>,
+    pub created_at: String,
+}
+
+/// SSS-095: query params for GET /api/chain-events
+#[derive(Debug, Deserialize)]
+pub struct ChainEventsQuery {
+    /// Filter by event type (e.g. "circuit_breaker_toggle", "cdp_borrow")
+    #[serde(rename = "type")]
+    pub event_type: Option<String>,
+    /// Filter by address (token mint, CDP position, or program address)
+    pub address: Option<String>,
+    /// Maximum number of entries to return (default: 100, max: 1000)
+    pub limit: Option<u32>,
+}
+
+/// SSS-098: on-chain CollateralConfig PDA record (per-collateral parameters).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CollateralConfigEntry {
+    /// SSS stablecoin mint this config belongs to.
+    pub sss_mint: String,
+    /// The collateral token mint this config applies to.
+    pub collateral_mint: String,
+    /// Whether this collateral is whitelisted for CDP use.
+    pub whitelisted: bool,
+    /// Maximum LTV in basis points (e.g. 6667 = 66.67%).
+    pub max_ltv_bps: u16,
+    /// Liquidation threshold in basis points (e.g. 7500 = 75%).
+    pub liquidation_threshold_bps: u16,
+    /// Liquidation bonus in basis points (e.g. 500 = 5%).
+    pub liquidation_bonus_bps: u16,
+    /// Maximum deposit cap in collateral native units (0 = unlimited).
+    pub max_deposit_cap: i64,
+    /// Total collateral deposited (native units) across all CDPs.
+    pub total_deposited: i64,
+    /// Transaction signature of the last register/update.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_signature: Option<String>,
+    pub updated_at: String,
+}
+
+/// SSS-098: query params for GET /api/cdp/collateral-configs
+#[derive(Debug, Deserialize)]
+pub struct CollateralConfigsQuery {
+    /// Filter by SSS stablecoin mint address (optional).
+    pub sss_mint: Option<String>,
+    /// Filter by collateral mint address (optional).
+    pub collateral_mint: Option<String>,
+    /// When true, return only whitelisted configs (default: return all).
+    pub whitelisted_only: Option<bool>,
+}
+
+// ─── SSS-102: Liquidation history ────────────────────────────────────────────
+
+/// A single liquidation event as stored in `liquidation_history`.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LiquidationHistoryEntry {
+    pub id: String,
+    /// CDP position address (base58).
+    pub cdp_address: String,
+    /// Collateral token mint that was seized.
+    pub collateral_mint: String,
+    /// Amount of collateral seized (native units).
+    pub collateral_seized: i64,
+    /// Amount of stablecoin debt repaid (native units).
+    pub debt_repaid: i64,
+    /// Liquidator wallet address.
+    pub liquidator: String,
+    /// Slot at which the liquidation occurred.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot: Option<i64>,
+    /// Transaction signature of the liquidation tx.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_sig: Option<String>,
+    pub created_at: String,
+}
+
+/// SSS-102: query params for GET /api/liquidations
+#[derive(Debug, Deserialize)]
+pub struct LiquidationsQuery {
+    /// Filter by CDP address (optional).
+    pub cdp_address: Option<String>,
+    /// Filter by collateral mint (optional).
+    pub collateral_mint: Option<String>,
+    /// Maximum rows to return (default: 100, max: 1000).
+    pub limit: Option<u32>,
+    /// Row offset for pagination (default: 0).
+    pub offset: Option<u32>,
+}

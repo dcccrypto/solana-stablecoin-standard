@@ -9,30 +9,14 @@ import { AnchorProvider, BN } from '@coral-xyz/anchor';
  * When this flag is set in `StablecoinConfig.feature_flags`, all
  * mint and burn operations are halted until the flag is cleared.
  *
- * Matches `FLAG_CIRCUIT_BREAKER` in the Anchor program (bit 0 = 0x01).
+ * Matches `FLAG_CIRCUIT_BREAKER` in the Anchor program (bit 7 = 0x80).
  *
  * @example
  * ```ts
  * const active = featureFlags.isFeatureFlagSet(mint, FLAG_CIRCUIT_BREAKER);
  * ```
  */
-export const FLAG_CIRCUIT_BREAKER = 1n << 0n; // 0x01
-
-/**
- * Bit flag for the spend-policy feature (SSS-063).
- *
- * When this flag is set in `StablecoinConfig.feature_flags`, the on-chain
- * spend-policy enforcement logic is active (per-transfer limits, velocity
- * caps, etc.).  Clear it to disable spend-policy checks.
- *
- * Matches `FLAG_SPEND_POLICY` in the Anchor program (bit 1 = 0x02).
- *
- * @example
- * ```ts
- * const active = featureFlags.isFeatureFlagSet(mint, FLAG_SPEND_POLICY);
- * ```
- */
-export const FLAG_SPEND_POLICY = 1n << 1n; // 0x02
+export const FLAG_CIRCUIT_BREAKER = 1n << 7n; // 0x80
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

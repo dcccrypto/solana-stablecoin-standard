@@ -4,7 +4,10 @@ use anchor_spl::token_interface::{
 };
 
 use crate::error::SssError;
-use crate::state::{CollateralVault, StablecoinConfig, YieldCollateralConfig, FLAG_YIELD_COLLATERAL};
+use crate::state::{
+    CollateralConfig, CollateralVault, StablecoinConfig, YieldCollateralConfig,
+    FLAG_YIELD_COLLATERAL,
+};
 
 /// Deposit SPL tokens as collateral into a per-user CDP vault.
 ///
@@ -71,6 +74,12 @@ pub struct CdpDepositCollateral<'info> {
     /// Seeds: [b"yield-collateral", sss_mint]
     pub yield_collateral_config: Option<Box<Account<'info, YieldCollateralConfig>>>,
 
+    /// Optional: CollateralConfig PDA for per-collateral params (SSS-098).
+    /// Seeds: [b"collateral-config", sss_mint, collateral_mint]
+    /// When present, whitelist + deposit cap are enforced and total_deposited is updated.
+    #[account(mut)]
+    pub collateral_config: Option<Box<Account<'info, CollateralConfig>>>,
+
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
@@ -100,6 +109,24 @@ pub fn cdp_deposit_collateral_handler(
     }
     // ─────────────────────────────────────────────────────────────────────────
 
+    // ── SSS-098: CollateralConfig guard ──────────────────────────────────────
+    if let Some(cc) = ctx.accounts.collateral_config.as_ref() {
+        // Ensure the PDA is for this exact (sss_mint, collateral_mint) pair.
+        require!(
+            cc.sss_mint == ctx.accounts.sss_mint.key()
+                && cc.collateral_mint == ctx.accounts.collateral_mint.key(),
+            SssError::CollateralNotWhitelisted
+        );
+        require!(cc.whitelisted, SssError::CollateralNotWhitelisted);
+        if cc.max_deposit_cap > 0 {
+            require!(
+                cc.total_deposited.saturating_add(amount) <= cc.max_deposit_cap,
+                SssError::DepositCapExceeded
+            );
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // Initialise vault metadata on first deposit
     let vault = &mut ctx.accounts.collateral_vault;
     if vault.owner == Pubkey::default() {
@@ -125,6 +152,11 @@ pub fn cdp_deposit_collateral_handler(
     )?;
 
     vault.deposited_amount = vault.deposited_amount.checked_add(amount).unwrap();
+
+    // Update CollateralConfig running total (SSS-098)
+    if let Some(cc) = ctx.accounts.collateral_config.as_mut() {
+        cc.total_deposited = cc.total_deposited.saturating_add(amount);
+    }
 
     msg!(
         "CDP: deposited {} of collateral {}. Vault total: {}",
