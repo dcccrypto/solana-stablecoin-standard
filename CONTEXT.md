@@ -1,28 +1,29 @@
-# sss-docs CONTEXT
+# sss-sdk CONTEXT
 
-_Last updated: 2026-03-16T02:54 UTC_
+_Last updated: 2026-03-16T03:13 UTC_
 
 ## Current State
-- 2 CI failures fixed and pushed: SSS-098 IDL (CollateralConfig missing) + SSS-075 frozen ATA
-- SSS-098 QA-confirmed fully shipped; PR #127 closed via manual rebase to develop
-- SDK 491/491 ✅, Backend 76/76 ✅
-- Devnet deployment BLOCKED: deployer balance 0.05 SOL, devnet airdrop globally rate-limited (SSS-078 in-progress)
-- develop HEAD: 8cd1089 (CI fix commit)
+- SSS-101 SDK scaffold complete and pushed: PR #128 (feat/SSS-101-multi-collateral-liquidation-sdk → feature/SSS-100-multi-collateral-liquidation)
+- 519/519 tests passing ✅
+- Blocking on SSS-100 sss-anchor (multi-collateral liquidation engine — still backlog)
+- Devnet deployment BLOCKED: deployer balance 0.05 SOL (SSS-078, ongoing)
 
 ## Recent Completed Work
-- CI fix (02:54 UTC): Rebuilt IDL — CollateralConfig account now in sss_token.json; fixed SSS-075 test missing thaw calls for DefaultAccountState=Frozen ATAs
-- SSS-098: CollateralConfig PDA + SDK CollateralConfigModule fully shipped, QA-confirmed
-- SSS-075 fix: Added missing `rent` account to short-TTL hook initialize call in tests (commit e2c9f2e)
-- ARCHITECTURE.md updated with all current SDK modules (commit 0e14eb8)
-
-## Blocking Issues
-- SSS-078: Devnet deployment requires manual browser wallet auth at faucet.solana.com — must be Khubair
+- SSS-101 scaffold (03:13 UTC): MultiCollateralLiquidationModule — calcLiquidationAmount, fetchLiquidatableCDPs, liquidate, PDA helpers. 28 new tests.
+- Previous: CI fix (02:54 UTC): IDL rebuild + SSS-075 thaw ATAs fix
+- SSS-098: CollateralConfigModule fully shipped
 
 ## Open Tasks
-- Backlog: none assigned
-- In-progress: SSS-078 (devnet deploy, blocked on SOL funding)
+- SSS-101: in-progress — PR #128 open, waiting for SSS-100 IDL to finalise partial_debt_amount arg
+- SSS-078: devnet deploy blocked on SOL funding (requires Khubair manual action)
 
 ## Latest Code Landed
-- develop HEAD: 8cd1089 — fix(ci): SSS-098 IDL missing CollateralConfig + SSS-075 thaw ATAs before mint
-- SSS-098 SDK: CollateralConfigModule — registerCollateral, updateCollateralConfig, getCollateralConfig, isWhitelisted
-- SSS-098 Anchor: CollateralConfig PDA (register_collateral, update_collateral_config)
+- feat/SSS-101-multi-collateral-liquidation-sdk HEAD: 9b40e31
+  feat(sdk): SSS-101 — MultiCollateralLiquidationModule (28 new tests, 519 total)
+
+## Blocking Issues
+- SSS-100: sss-anchor hasn't started; SSS-101 is partially blocked (scaffold done, final wiring needs new IDL)
+- SSS-078: devnet deploy requires manual browser wallet at faucet.solana.com
+
+## Notes
+- When SSS-100 IDL lands: update MultiCollateralLiquidationModule.liquidate() to use .cdpLiquidateWithCollateralMint or whatever the new instruction name is; also add integration tests against the new instruction
