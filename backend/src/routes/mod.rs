@@ -15,3 +15,4 @@ pub mod mint;
 pub mod reserves;
 pub mod supply;
 pub mod webhooks;
+pub mod ws_events;
