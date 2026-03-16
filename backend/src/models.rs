@@ -221,3 +221,39 @@ pub struct ChainEventsQuery {
     /// Maximum number of entries to return (default: 100, max: 1000)
     pub limit: Option<u32>,
 }
+
+/// SSS-098: on-chain CollateralConfig PDA record (per-collateral parameters).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CollateralConfigEntry {
+    /// SSS stablecoin mint this config belongs to.
+    pub sss_mint: String,
+    /// The collateral token mint this config applies to.
+    pub collateral_mint: String,
+    /// Whether this collateral is whitelisted for CDP use.
+    pub whitelisted: bool,
+    /// Maximum LTV in basis points (e.g. 6667 = 66.67%).
+    pub max_ltv_bps: u16,
+    /// Liquidation threshold in basis points (e.g. 7500 = 75%).
+    pub liquidation_threshold_bps: u16,
+    /// Liquidation bonus in basis points (e.g. 500 = 5%).
+    pub liquidation_bonus_bps: u16,
+    /// Maximum deposit cap in collateral native units (0 = unlimited).
+    pub max_deposit_cap: i64,
+    /// Total collateral deposited (native units) across all CDPs.
+    pub total_deposited: i64,
+    /// Transaction signature of the last register/update.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_signature: Option<String>,
+    pub updated_at: String,
+}
+
+/// SSS-098: query params for GET /api/cdp/collateral-configs
+#[derive(Debug, Deserialize)]
+pub struct CollateralConfigsQuery {
+    /// Filter by SSS stablecoin mint address (optional).
+    pub sss_mint: Option<String>,
+    /// Filter by collateral mint address (optional).
+    pub collateral_mint: Option<String>,
+    /// When true, return only whitelisted configs (default: return all).
+    pub whitelisted_only: Option<bool>,
+}

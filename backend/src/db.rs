@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, EventLogEntry, MintEvent, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, MintEvent, WebhookEntry};
 
 pub struct Database {
     pub conn: Mutex<Connection>,
@@ -75,6 +75,20 @@ impl Database {
             );
             CREATE INDEX IF NOT EXISTS idx_event_log_type ON event_log(event_type);
             CREATE INDEX IF NOT EXISTS idx_event_log_address ON event_log(address);
+            CREATE TABLE IF NOT EXISTS collateral_config (
+                sss_mint TEXT NOT NULL,
+                collateral_mint TEXT NOT NULL,
+                whitelisted INTEGER NOT NULL DEFAULT 0,
+                max_ltv_bps INTEGER NOT NULL,
+                liquidation_threshold_bps INTEGER NOT NULL,
+                liquidation_bonus_bps INTEGER NOT NULL,
+                max_deposit_cap INTEGER NOT NULL DEFAULT 0,
+                total_deposited INTEGER NOT NULL DEFAULT 0,
+                tx_signature TEXT,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (sss_mint, collateral_mint)
+            );
+            CREATE INDEX IF NOT EXISTS idx_collateral_config_sss_mint ON collateral_config(sss_mint);
         ")?;
         Ok(())
     }
@@ -574,5 +588,112 @@ impl Database {
             rusqlite::params![program_id, signature, updated_at],
         )?;
         Ok(())
+    }
+
+    // ─── SSS-098: CollateralConfig PDA registry ───────────────────────────────
+
+    /// Upsert a CollateralConfig entry (insert or update on-conflict).
+    /// Called by the indexer when it detects CollateralRegistered / CollateralUpdated events.
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_collateral_config(
+        &self,
+        sss_mint: &str,
+        collateral_mint: &str,
+        whitelisted: bool,
+        max_ltv_bps: u16,
+        liquidation_threshold_bps: u16,
+        liquidation_bonus_bps: u16,
+        max_deposit_cap: i64,
+        total_deposited: i64,
+        tx_signature: Option<&str>,
+    ) -> Result<CollateralConfigEntry, AppError> {
+        let conn = self.conn.lock().expect("db lock");
+        let updated_at = Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO collateral_config \
+             (sss_mint, collateral_mint, whitelisted, max_ltv_bps, liquidation_threshold_bps, \
+              liquidation_bonus_bps, max_deposit_cap, total_deposited, tx_signature, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) \
+             ON CONFLICT(sss_mint, collateral_mint) DO UPDATE SET \
+               whitelisted = ?3, max_ltv_bps = ?4, liquidation_threshold_bps = ?5, \
+               liquidation_bonus_bps = ?6, max_deposit_cap = ?7, total_deposited = ?8, \
+               tx_signature = ?9, updated_at = ?10",
+            rusqlite::params![
+                sss_mint,
+                collateral_mint,
+                whitelisted as i32,
+                max_ltv_bps as i32,
+                liquidation_threshold_bps as i32,
+                liquidation_bonus_bps as i32,
+                max_deposit_cap,
+                total_deposited,
+                tx_signature,
+                updated_at,
+            ],
+        )?;
+        Ok(CollateralConfigEntry {
+            sss_mint: sss_mint.to_string(),
+            collateral_mint: collateral_mint.to_string(),
+            whitelisted,
+            max_ltv_bps,
+            liquidation_threshold_bps,
+            liquidation_bonus_bps,
+            max_deposit_cap,
+            total_deposited,
+            tx_signature: tx_signature.map(str::to_string),
+            updated_at,
+        })
+    }
+
+    /// List CollateralConfig entries with optional filters.
+    pub fn list_collateral_configs(
+        &self,
+        sss_mint: Option<&str>,
+        collateral_mint: Option<&str>,
+        whitelisted_only: bool,
+    ) -> Result<Vec<CollateralConfigEntry>, AppError> {
+        let conn = self.conn.lock().expect("db lock");
+        let mut sql = String::from(
+            "SELECT sss_mint, collateral_mint, whitelisted, max_ltv_bps, \
+             liquidation_threshold_bps, liquidation_bonus_bps, max_deposit_cap, \
+             total_deposited, tx_signature, updated_at \
+             FROM collateral_config WHERE 1=1",
+        );
+        let mut binds: Vec<String> = Vec::new();
+
+        if let Some(sm) = sss_mint {
+            binds.push(sm.to_string());
+            sql.push_str(&format!(" AND sss_mint = ?{}", binds.len()));
+        }
+        if let Some(cm) = collateral_mint {
+            binds.push(cm.to_string());
+            sql.push_str(&format!(" AND collateral_mint = ?{}", binds.len()));
+        }
+        if whitelisted_only {
+            sql.push_str(" AND whitelisted = 1");
+        }
+        sql.push_str(" ORDER BY updated_at DESC");
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(binds.iter()),
+            |row| {
+                let whitelisted_int: i32 = row.get(2)?;
+                Ok(CollateralConfigEntry {
+                    sss_mint: row.get(0)?,
+                    collateral_mint: row.get(1)?,
+                    whitelisted: whitelisted_int != 0,
+                    max_ltv_bps: row.get::<_, i32>(3)? as u16,
+                    liquidation_threshold_bps: row.get::<_, i32>(4)? as u16,
+                    liquidation_bonus_bps: row.get::<_, i32>(5)? as u16,
+                    max_deposit_cap: row.get(6)?,
+                    total_deposited: row.get(7)?,
+                    tx_signature: row.get(8)?,
+                    updated_at: row.get(9)?,
+                })
+            },
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Internal(e.to_string()))
     }
 }

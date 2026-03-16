@@ -30,6 +30,7 @@ use routes::{
     confidential::initiate_confidential_transfer,
     cpi::get_cpi_interface,
     chain_events::chain_events,
+    collateral_config::get_collateral_configs,
     events::events,
     health::health,
     liquidations::get_liquidations,

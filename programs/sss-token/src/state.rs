@@ -522,32 +522,3 @@ impl CollateralConfig {
         Ok(())
     }
 }
-
-// ---------------------------------------------------------------------------
-// SSS-106: Confidential Transfers — ConfidentialTransferConfig PDA
-// ---------------------------------------------------------------------------
-
-/// Confidential transfer config PDA — one per mint when FLAG_CONFIDENTIAL_TRANSFERS is set.
-/// Seeds: [b"ct-config", mint]
-///
-/// Stores the issuer's auditor ElGamal pubkey for confidential transfers.
-/// The auditor can decrypt all transfer amounts; external observers cannot.
-/// This is the foundation for Token-2022 ConfidentialTransferMint extension integration.
-/// The actual ConfidentialTransferMint extension wiring is a follow-up (SSS-107).
-#[account]
-#[derive(InitSpace)]
-pub struct ConfidentialTransferConfig {
-    /// The SSS mint this config belongs to.
-    pub mint: Pubkey,
-    /// The issuer's ElGamal public key used to audit (decrypt) all transfer amounts.
-    /// Must be a valid ElGamal pubkey on the Ristretto255 curve (32 bytes).
-    pub auditor_elgamal_pubkey: [u8; 32],
-    /// When true, new token accounts are automatically approved for confidential transfers.
-    /// When false, the authority must manually approve each account.
-    pub auto_approve_new_accounts: bool,
-    pub bump: u8,
-}
-
-impl ConfidentialTransferConfig {
-    pub const SEED: &'static [u8] = b"ct-config";
-}
