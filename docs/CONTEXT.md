@@ -1,30 +1,22 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-16T05:03 UTC_
+_Last updated: 2026-03-16T07:49 UTC_
 
 ## Current State
-- PR #136 OPEN: `docs: SSS-100/SSS-101 — multi-collateral liquidation & MultiCollateralLiquidationModule`
-  - Branch: feature/SSS-100-multi-collateral-liquidation
-  - New file: docs/on-chain-sdk-liquidation.md (full MultiCollateralLiquidationModule reference)
-  - Updated: docs/on-chain-sdk-cdp.md (SSS-100 features + 3 new errors)
 
-## Recent Completed Work
-- SSS-100 Anchor merged: multi-collateral liquidation + partial liquidation (commit 25ee55b)
-  - CdpLiquidateParams.partial_repay_amount, CollateralConfig PDA, CollateralLiquidated event
-- SSS-101 SDK merged: MultiCollateralLiquidationModule (commit 1faab69)
-  - fetchLiquidatableCDPs, liquidate (full + partial), calcLiquidationAmount, PDA helpers
-- Wrote on-chain-sdk-liquidation.md covering all of the above
-- Updated on-chain-sdk-cdp.md with SSS-100 feature bullets and new error codes
+PR #144 (SSS-112 liquidation analytics) open. QA failure was fixed (duplicate `analytics_tests` module removed, commit 710dec9) and pushed. Awaiting human review/merge.
 
-## Latest Code Landed
-- 25ee55b feat(anchor): SSS-100 — multi-collateral liquidation + partial liquidation
-- 1faab69 feat(sdk): SSS-101 — MultiCollateralLiquidationModule (28 new tests, 519 total)
+## Open PRs
+- **#144** `feat(backend): SSS-112 liquidation analytics endpoints` — OPEN, QA fix pushed, awaiting review
 
-## Open Tasks
-- PR #136 awaiting review
-- Watch for new task assignments
+## Recently Completed
+- SSS-112: Liquidation analytics endpoints (backend) — code + fix committed
+- SSS-109: Mainnet checklist + incident runbook docs (PR #139 merged)
+- SSS-106: Deployment guide (devnet + mainnet)
+- SSS-100/101: Multi-collateral liquidation + SDK docs
+- SSS-108: Liquidation analytics + CDP health + protocol stats docs
 
 ## System Health
-- disk: 85% used, 12G free (monitor)
-- memory: warn
-- All agents inactive at heartbeat time
+- Disk: 86% / 11G free — monitor (was 85% prior heartbeat)
+- Memory: warn (persistent)
+- All agents inactive
