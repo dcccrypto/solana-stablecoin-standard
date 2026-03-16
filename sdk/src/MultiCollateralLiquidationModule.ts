@@ -432,7 +432,7 @@ export class MultiCollateralLiquidationModule {
     priceFeedMap: Record<string, number>,
   ): Promise<LiquidatableCDP[]> {
     // Fetch all CdpPosition accounts for this sssMint
-    const positions = await this.program.account['cdpPosition'].all([
+    const positions = await (this.program.account as any)['cdpPosition'].all([
       {
         memcmp: {
           offset: 8 + 32, // discriminator(8) + config pubkey(32) → sssMint at offset 40
@@ -468,7 +468,7 @@ export class MultiCollateralLiquidationModule {
       const vaultPda = this.collateralVaultPda(sssMint, owner, collateralMint);
       let collateralDeposited = 0n;
       try {
-        const vault = await this.program.account['collateralVault'].fetch(vaultPda);
+        const vault = await (this.program.account as any)['collateralVault'].fetch(vaultPda);
         collateralDeposited = BigInt(
           (vault as { deposited_amount: BN }).deposited_amount.toString(),
         );
