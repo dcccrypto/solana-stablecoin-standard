@@ -945,27 +945,27 @@ impl Database {
         window: &str,
     ) -> Result<crate::routes::analytics::LiquidationAnalyticsResponse, AppError> {
         use crate::routes::analytics::{CollateralMintStats, LiquidationAnalyticsResponse};
-
-    /// Liquidation analytics over the last `hours` hours.
-    pub fn liquidation_analytics(&self, hours: i64) -> Result<LiquidationAnalyticsStats, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        // SQLite datetime arithmetic: created_at is stored as RFC-3339 string.
-        let row: (i64, i64, i64) = conn.query_row(
-            "SELECT COUNT(*), \
-                    COALESCE(SUM(collateral_seized), 0), \
-                    COALESCE(SUM(debt_repaid), 0) \
-             FROM liquidation_history \
-             WHERE created_at >= datetime('now', ?1)",
-            rusqlite::params![format!("-{} hours", hours)],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )?;
-        let count = row.0 as u64;
-        let total_collateral_seized = row.1;
-        let total_debt_repaid = row.2;
-        let avg_collateral_seized = if count > 0 {
-            total_collateral_seized / count as i64
+
+        // Build dynamic WHERE clause from optional filters.
+        let mut conditions: Vec<String> = Vec::new();
+        let mut bind_vals: Vec<String> = Vec::new();
+        if let Some(f) = from {
+            bind_vals.push(f.to_string());
+            conditions.push(format!("created_at >= ?{}", bind_vals.len()));
+        }
+        if let Some(t) = to {
+            bind_vals.push(t.to_string());
+            conditions.push(format!("created_at <= ?{}", bind_vals.len()));
+        }
+        if let Some(m) = collateral_mint {
+            bind_vals.push(m.to_string());
+            conditions.push(format!("collateral_mint = ?{}", bind_vals.len()));
+        }
+        let where_clause = if conditions.is_empty() {
+            String::new()
         } else {
-            0
+            format!("WHERE {}", conditions.join(" AND "))
         };
 
         // Aggregate totals
@@ -1005,6 +1005,35 @@ impl Database {
             avg_collateral_seized,
             total_debt_covered,
             by_collateral_mint,
+        })
+    }
+
+    /// Liquidation analytics over the last `hours` hours.
+    pub fn liquidation_analytics(&self, hours: i64) -> Result<LiquidationAnalyticsStats, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        // SQLite datetime arithmetic: created_at is stored as RFC-3339 string.
+        let row: (i64, i64, i64) = conn.query_row(
+            "SELECT COUNT(*), \
+                    COALESCE(SUM(collateral_seized), 0), \
+                    COALESCE(SUM(debt_repaid), 0) \
+             FROM liquidation_history \
+             WHERE created_at >= datetime('now', ?1)",
+            rusqlite::params![format!("-{} hours", hours)],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        let count = row.0 as u64;
+        let total_collateral_seized = row.1;
+        let total_debt_repaid = row.2;
+        let avg_collateral_seized = if count > 0 {
+            total_collateral_seized / count as i64
+        } else {
+            0
+        };
+        Ok(LiquidationAnalyticsStats {
+            count,
+            total_collateral_seized,
+            total_debt_repaid,
+            avg_collateral_seized,
         })
     }
 
