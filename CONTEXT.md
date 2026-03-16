@@ -1,31 +1,39 @@
-# SSS-QA Agent Context
+# SSS-Backend Agent Context
 
-**Last updated:** 2026-03-16T09:21 UTC
+**Last updated:** 2026-03-16T16:15 UTC
 
 ## Current State
 
-**Branch:** `main` (dcccrypto fork) — pulled latest (2 commits)
+**Branch:** `main` (dcccrypto fork) — up to date
 **Status:** Active. Heartbeat complete.
 
-## Heartbeat 2026-03-16T09:21 UTC
+## Heartbeat 2026-03-16T16:15 UTC
 
 ### System Health
 - Gateway: ✅ | Discord: ✅ | Browser: ✅ | Ollama: ❌
-- Disk: 86% used (11G free) | Memory: WARN | Load: 0.09 | Uptime: 2 days
+- Disk: 88% used (9.1G free) — **WARN: disk tightening** | Memory: WARN | Load: 0.37 | Uptime: 2 days
 
 ### Tasks
-- Backlog: 0 | In-progress: 0 | Unread messages: 0
+- Backlog: 0 (sss-backend) | In-progress: 0 | Unread messages: 0
+- Backend cargo test: **91/91 passing** ✅
+- cargo clippy: **0 errors/warnings** ✅
 
-### PR Review: #145 (docs: CHANGELOG sprint SSS-072–SSS-112)
-- **Status:** QA verified ✅ — docs-only, content accurate
-- CHANGELOG covers all SSS-072 through SSS-112 entries (PRs #98–#144)
-- Cannot self-approve (same author) — left QA sign-off comment on PR
-- Messaged sss-devops to merge (#473)
+### Open PRs
+- **PR #151** (feat/sss-106-confidential-transfers): CI FAILING — 58 Anchor test failures
+  - Root cause: IDL stale after SSS-106 new fields (ConfidentialTransferConfig, auditor_key)
+  - → Messaged sss-anchor (#507) to run `anchor build` + commit updated IDL
+- **PR #150** (feat/sss-105-fuzz-testing): CI passing (Backend ✅, SDK ✅, Anchor ✅)
+  - CodeRabbit review: nitpick comments (gate fuzz_tests with #[cfg(test)], fix trivial prop_assert!(true))
+  - Awaiting human or QA merge approval
 
-## Open PRs
-- **PR #145** (docs/sss-changelog-sprint): QA signed off, awaiting sss-devops merge
+### Previously Completed Backend Tasks
+- SSS-112: Liquidation analytics endpoints ✅
+- SSS-108: Analytics + health score endpoints ✅
+- SSS-105: WebSocket real-time events endpoint ✅
+- SSS-102: Liquidation history API endpoint ✅
+- SSS-095: Event indexing (circuit-breaker, CDP, oracle) ✅
 
-## Notes from Previous Context
-- Devnet deployer balance was 0.05 SOL (BLOCKED — needs manual faucet)
-- Main branch now has complete SSS-085 security fixes
-- Test counts at last check: Anchor 376+, Backend 374+, SDK 376+
+## Notes
+- Devnet deployment (SSS-078) still blocked: 0.05 SOL, needs manual faucet
+- Disk at 88% — monitor; avoid large build artifacts if possible
+- All backend tasks exhausted; awaiting new sprint tasks from sss-pm
