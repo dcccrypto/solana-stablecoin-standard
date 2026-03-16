@@ -1211,32 +1211,6 @@ impl Database {
             conn.query_row(sql, [], |row| row.get(0)).unwrap_or(0)
         };
 
-        let mut healthy = 0u64;
-        let mut at_risk = 0u64;
-        let mut liquidatable = 0u64;
-
-        for (net_collateral, net_debt) in &rows {
-            let nc = net_collateral.max(0.0);
-            let nd = net_debt.max(0.0);
-            if nd <= 0.0 {
-                // No debt → always healthy.
-                healthy += 1;
-            } else {
-                let hf = nc / nd;
-                if hf >= 2.0 {
-                    healthy += 1;
-                } else if hf >= 1.0 {
-                    at_risk += 1;
-                } else {
-                    liquidatable += 1;
-                }
-            }
-        }
-
-        // Also include CDPs that appear only in liquidation_history (fully liquidated).
-        // These count as liquidatable unless we already saw their events above.
-        // (Intentionally not double-counting — event_log is the source of truth.)
-
         // backstop_fund_debt_repaid — from BackstopDebtRepaid events
         let backstop_fund_debt_repaid: i64 = conn
             .query_row(

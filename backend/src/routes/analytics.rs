@@ -169,12 +169,7 @@ pub async fn get_cdp_health(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<CdpHealthResponse>>, AppError> {
     let dist = state.db.cdp_health_distribution()?;
-    Ok(Json(ApiResponse::ok(CdpHealthResponse {
-        healthy: dist.healthy,
-        at_risk: dist.at_risk,
-        liquidatable: dist.liquidatable,
-        total: dist.healthy + dist.at_risk + dist.liquidatable,
-    })))
+    Ok(Json(ApiResponse::ok(dist)))
 }
 
 /// `GET /api/analytics/protocol-stats`
@@ -184,13 +179,8 @@ pub async fn get_cdp_health(
 pub async fn get_protocol_stats(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<ProtocolStatsResponse>>, AppError> {
-    let stats = state.db.protocol_stats()?;
-    Ok(Json(ApiResponse::ok(ProtocolStatsResponse {
-        total_collateral_locked_native: stats.total_collateral_locked_native,
-        total_debt_native: stats.total_debt_native,
-        backstop_fund_debt_repaid: stats.backstop_fund_debt_repaid,
-        active_collateral_types: stats.active_collateral_types,
-    })))
+    let stats = state.db.analytics_protocol_stats()?;
+    Ok(Json(ApiResponse::ok(stats)))
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

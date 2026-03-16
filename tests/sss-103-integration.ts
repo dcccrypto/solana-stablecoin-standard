@@ -747,6 +747,8 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           authority: authority.publicKey,
           config: configPda,
           mint: mintKp.publicKey,
+          minter: minterKp.publicKey,
+          minterInfo: minterInfoPda,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })

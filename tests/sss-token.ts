@@ -24,6 +24,38 @@ import {
 } from "@solana/spl-token";
 import { expect } from "chai";
 
+/** Retry a transaction up to `attempts` times, re-fetching blockhash each time.
+ *  Handles "Blockhash not found" flakiness on CI localnet. */
+async function sendWithRetry(
+  provider: anchor.AnchorProvider,
+  buildTx: () => Promise<anchor.web3.Transaction>,
+  signers: anchor.web3.Signer[] = [],
+  attempts = 3
+): Promise<void> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    const tx = await buildTx();
+    const { blockhash, lastValidBlockHeight } =
+      await provider.connection.getLatestBlockhash("confirmed");
+    tx.recentBlockhash = blockhash;
+    tx.lastValidBlockHeight = lastValidBlockHeight;
+    tx.feePayer = provider.wallet.publicKey;
+    try {
+      await provider.sendAndConfirm(tx, signers, { commitment: "confirmed" });
+      return;
+    } catch (err: any) {
+      const msg: string = err?.message ?? "";
+      if (msg.includes("Blockhash not found") || msg.includes("BlockhashNotFound")) {
+        lastErr = err;
+        await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
 describe("sss-token", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
@@ -584,25 +616,20 @@ describe("sss-token", () => {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
     // SSS-091: DefaultAccountState=Frozen means the ATA may already be frozen.
-    // Thaw first (no-op if already thawed) so the explicit freeze call succeeds.
-    // Use sendAndConfirm with a fresh blockhash to avoid "Blockhash not found" under CI load.
+    // Thaw first (no-op if already thawed). Use sendWithRetry (SSS-117) for CI blockhash flakiness.
     try {
-      const thawTx = await program.methods
-        .thawAccount()
-        .accounts({
-          complianceAuthority: authority.publicKey,
-          config: configPda,
-          mint: mintKeypair.publicKey,
-          targetTokenAccount: ata,
-          tokenProgram: TOKEN_2022_PROGRAM_ID,
-        })
-        .transaction();
-      const { blockhash: thawBh, lastValidBlockHeight: thawLvbh } =
-        await provider.connection.getLatestBlockhash("confirmed");
-      thawTx.recentBlockhash = thawBh;
-      thawTx.lastValidBlockHeight = thawLvbh;
-      thawTx.feePayer = authority.publicKey;
-      await provider.sendAndConfirm(thawTx, [], { commitment: "confirmed" });
+      await sendWithRetry(provider, () =>
+        program.methods
+          .thawAccount()
+          .accounts({
+            complianceAuthority: authority.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            targetTokenAccount: ata,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction()
+      );
     } catch (_) {
       // Already thawed — safe to proceed
     }
@@ -610,22 +637,18 @@ describe("sss-token", () => {
     // SSS-091: DefaultAccountState=Frozen — account may already be frozen after thaw
     // attempt. Issue another freeze; if already frozen (Invalid account state), skip.
     try {
-      const freezeTx = await program.methods
-        .freezeAccount()
-        .accounts({
-          complianceAuthority: authority.publicKey,
-          config: configPda,
-          mint: mintKeypair.publicKey,
-          targetTokenAccount: ata,
-          tokenProgram: TOKEN_2022_PROGRAM_ID,
-        })
-        .transaction();
-      const { blockhash: freezeBh, lastValidBlockHeight: freezeLvbh } =
-        await provider.connection.getLatestBlockhash("confirmed");
-      freezeTx.recentBlockhash = freezeBh;
-      freezeTx.lastValidBlockHeight = freezeLvbh;
-      freezeTx.feePayer = authority.publicKey;
-      await provider.sendAndConfirm(freezeTx, [], { commitment: "confirmed" });
+      await sendWithRetry(provider, () =>
+        program.methods
+          .freezeAccount()
+          .accounts({
+            complianceAuthority: authority.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            targetTokenAccount: ata,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction()
+      );
     } catch (err: any) {
       // "Invalid account state for operation" means already frozen — that's acceptable
       const msg: string = err?.message ?? "";
@@ -650,10 +673,27 @@ describe("sss-token", () => {
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    // Ensure frozen first (prior test may have left it thawed), then thaw with fresh blockhash.
+    // Ensure frozen first (prior test may have left it thawed). Use sendWithRetry (SSS-117).
     try {
-      const freezeTx = await program.methods
-        .freezeAccount()
+      await sendWithRetry(provider, () =>
+        program.methods
+          .freezeAccount()
+          .accounts({
+            complianceAuthority: authority.publicKey,
+            config: configPda,
+            mint: mintKeypair.publicKey,
+            targetTokenAccount: ata,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .transaction()
+      );
+    } catch (_) {
+      // Already frozen — safe to proceed
+    }
+
+    await sendWithRetry(provider, () =>
+      program.methods
+        .thawAccount()
         .accounts({
           complianceAuthority: authority.publicKey,
           config: configPda,
@@ -661,33 +701,8 @@ describe("sss-token", () => {
           targetTokenAccount: ata,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
-        .transaction();
-      const { blockhash: freezeBh, lastValidBlockHeight: freezeLvbh } =
-        await provider.connection.getLatestBlockhash("confirmed");
-      freezeTx.recentBlockhash = freezeBh;
-      freezeTx.lastValidBlockHeight = freezeLvbh;
-      freezeTx.feePayer = authority.publicKey;
-      await provider.sendAndConfirm(freezeTx, [], { commitment: "confirmed" });
-    } catch (_) {
-      // Already frozen — safe to proceed
-    }
-
-    const thawTx = await program.methods
-      .thawAccount()
-      .accounts({
-        complianceAuthority: authority.publicKey,
-        config: configPda,
-        mint: mintKeypair.publicKey,
-        targetTokenAccount: ata,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .transaction();
-    const { blockhash: thawBh, lastValidBlockHeight: thawLvbh } =
-      await provider.connection.getLatestBlockhash("confirmed");
-    thawTx.recentBlockhash = thawBh;
-    thawTx.lastValidBlockHeight = thawLvbh;
-    thawTx.feePayer = authority.publicKey;
-    await provider.sendAndConfirm(thawTx, [], { commitment: "confirmed" });
+        .transaction()
+    );
 
     // Post-condition: token account should no longer be frozen
     const tokenAccount = await getAccount(
