@@ -6,16 +6,36 @@ use anchor_spl::token_interface::{
 use pyth_sdk_solana::state::SolanaPriceAccount;
 
 use crate::error::SssError;
-use crate::events::CdpLiquidated;
-use crate::state::{CdpPosition, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
+use crate::events::{CdpLiquidated, CollateralLiquidated};
+use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
 
 /// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
 /// Overridden by `StablecoinConfig.max_oracle_age_secs` when non-zero.
 const DEFAULT_MAX_PRICE_AGE_SECS: u64 = 60;
 
+/// Global fallback liquidation bonus (5%) when no CollateralConfig is provided.
+const DEFAULT_LIQUIDATION_BONUS_BPS: u16 = 500;
+
+/// Params for the `cdp_liquidate` instruction.
+///
+/// - `min_collateral_amount`: slippage protection — reverts if less collateral
+///   would be received.  Pass 0 for no protection (backward-compatible).
+/// - `partial_repay_amount`: when > 0, only this many debt tokens are burned and
+///   just enough collateral to cover them (plus bonus) is seized.  When 0 the
+///   entire debt is burned (full liquidation).
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct CdpLiquidateParams {
+    pub min_collateral_amount: u64,
+    pub partial_repay_amount: u64,
+}
+
 /// Liquidate an undercollateralised CDP position.
-/// Callable by anyone (liquidator) when the user's collateral ratio < 120%.
-/// Liquidator supplies SSS debt tokens to burn, receives collateral at a 5% discount.
+/// Callable by anyone (liquidator) when the user's collateral ratio < liquidation threshold.
+///
+/// SSS-100: Extended with:
+///   - Optional `collateral_config` account — uses per-collateral threshold/bonus when present.
+///   - Partial liquidation via `partial_repay_amount`.
+///   - Emits `CollateralLiquidated` event on every liquidation.
 #[derive(Accounts)]
 pub struct CdpLiquidate<'info> {
     /// The liquidator — anyone who calls this and holds enough SSS
@@ -96,6 +116,21 @@ pub struct CdpLiquidate<'info> {
     /// CHECK: Pyth price feed account — validated in handler via SolanaPriceAccount
     pub pyth_price_feed: AccountInfo<'info>,
 
+    /// SSS-100: Optional per-collateral configuration PDA.
+    /// When provided, overrides the global liquidation threshold and bonus.
+    /// Seeds: [b"collateral-config", sss_mint, collateral_mint]
+    #[account(
+        seeds = [
+            CollateralConfig::SEED,
+            sss_mint.key().as_ref(),
+            collateral_mint.key().as_ref(),
+        ],
+        bump = collateral_config.bump,
+        constraint = collateral_config.sss_mint == sss_mint.key() @ SssError::Unauthorized,
+        constraint = collateral_config.collateral_mint == collateral_mint.key() @ SssError::WrongCollateralMint,
+    )]
+    pub collateral_config: Option<Account<'info, CollateralConfig>>,
+
     /// Token program for SSS-3 (Token-2022)
     pub sss_token_program: Interface<'info, TokenInterface>,
 
@@ -103,7 +138,10 @@ pub struct CdpLiquidate<'info> {
     pub collateral_token_program: Interface<'info, TokenInterface>,
 }
 
-pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, min_collateral_amount: u64) -> Result<()> {
+pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidateParams) -> Result<()> {
+    let min_collateral_amount = params.min_collateral_amount;
+    let partial_repay_amount = params.partial_repay_amount;
+
     // SSS-110: Circuit breaker — halt liquidations when FLAG_CIRCUIT_BREAKER is set.
     require!(
         ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
@@ -140,7 +178,6 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, min_collateral_amount: 
     require!(price.price > 0, SssError::InvalidPrice);
 
     // SSS-090: Confidence interval check — reject liquidations with uncertain prices.
-    // If max_oracle_conf_bps is set, refuse to liquidate on noisy oracle data.
     let conf_bps_limit = ctx.accounts.config.max_oracle_conf_bps;
     if conf_bps_limit > 0 {
         let conf_ratio_bps = price
@@ -169,12 +206,11 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, min_collateral_amount: 
         / 10u128.pow(price_expo_abs)
         / 10u128.pow(collateral_decimals);
 
-    // 3. Compute current collateral ratio
+    // 3. Compute current collateral ratio and check liquidatability
     let debt = ctx.accounts.cdp_position.debt_amount;
     require!(debt > 0, SssError::InsufficientDebt);
 
     let sss_decimals = ctx.accounts.sss_mint.decimals as u32;
-    // debt in USD e6 terms
     let debt_usd_e6: u128 = (debt as u128)
         .checked_mul(1_000_000u128)
         .unwrap()
@@ -186,22 +222,101 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, min_collateral_amount: 
         .ok_or(error!(SssError::InvalidPrice))?
         / debt_usd_e6;
 
+    // SSS-100: Use per-collateral threshold from CollateralConfig when available,
+    // otherwise fall back to global CdpPosition::LIQUIDATION_THRESHOLD_BPS.
+    let (liquidation_threshold_bps, bonus_bps) = if let Some(cc) = &ctx.accounts.collateral_config {
+        (cc.liquidation_threshold_bps as u128, cc.liquidation_bonus_bps)
+    } else {
+        (
+            CdpPosition::LIQUIDATION_THRESHOLD_BPS as u128,
+            DEFAULT_LIQUIDATION_BONUS_BPS,
+        )
+    };
+
     require!(
-        ratio_bps < CdpPosition::LIQUIDATION_THRESHOLD_BPS as u128,
+        ratio_bps < liquidation_threshold_bps,
         SssError::CdpNotLiquidatable
     );
 
-    // SSS-085 Fix 5: Slippage protection — caller specifies min collateral to receive.
-    // 0 = no slippage protection (backward compatible).
+    // 4. Determine debt to burn and collateral to seize.
+    //
+    // Full liquidation: burn all debt, seize all collateral.
+    // Partial liquidation: burn `partial_repay_amount`, seize exactly
+    //   enough collateral (at market price + bonus) to cover that debt.
+    //   After the partial liquidation the ratio must be >= healthy (120% == 12000 bps).
+    let is_partial = partial_repay_amount > 0 && partial_repay_amount < debt;
+
+    let (debt_to_burn, collateral_to_seize) = if is_partial {
+        let repay = partial_repay_amount;
+        require!(repay <= debt, SssError::InvalidAmount);
+
+        // Collateral equivalent to the repaid debt, scaled by bonus
+        // collateral_for_repay = repay_usd_e6 * 10^coll_decimals / (price * 10^(6 - expo_abs)) * (10000 + bonus) / 10000
+        let repay_usd_e6: u128 = (repay as u128)
+            .checked_mul(1_000_000u128)
+            .unwrap()
+            / 10u128.pow(sss_decimals);
+
+        // collateral_amount = repay_usd_e6 * 10^coll_decimals * (10000 + bonus_bps) / (price_val * 10^(6 - expo_abs) * 10000)
+        // We keep the full formula in u128 to avoid overflow:
+        let bonus_factor = 10_000u128 + bonus_bps as u128;
+        let coll_amount_raw: u128 = repay_usd_e6
+            .checked_mul(10u128.pow(collateral_decimals))
+            .ok_or(error!(SssError::InvalidPrice))?
+            .checked_mul(bonus_factor)
+            .ok_or(error!(SssError::InvalidPrice))?
+            / price_val
+            / 10u128.pow(price_expo_abs.saturating_sub(6))
+            / 10_000u128;
+
+        // Clamp to available collateral (can't seize more than exists)
+        let coll_to_seize = coll_amount_raw.min(deposited as u128) as u64;
+
+        // Verify the remaining position would be healthy (>= 12000 bps = 120%).
+        // If remaining_debt == 0 treat as full liquidation path.
+        let remaining_debt = debt.saturating_sub(repay);
+        if remaining_debt > 0 {
+            let remaining_collateral = deposited.saturating_sub(coll_to_seize);
+            let remaining_coll_value: u128 = (remaining_collateral as u128)
+                .checked_mul(price_val)
+                .ok_or(error!(SssError::InvalidPrice))?
+                .checked_mul(1_000_000u128)
+                .ok_or(error!(SssError::InvalidPrice))?
+                / 10u128.pow(price_expo_abs)
+                / 10u128.pow(collateral_decimals);
+
+            let remaining_debt_usd_e6: u128 = (remaining_debt as u128)
+                .checked_mul(1_000_000u128)
+                .unwrap()
+                / 10u128.pow(sss_decimals);
+
+            let post_ratio_bps = remaining_coll_value
+                .checked_mul(10_000)
+                .ok_or(error!(SssError::InvalidPrice))?
+                / remaining_debt_usd_e6;
+
+            // Must restore to >= liquidation threshold (so the CDP is no longer liquidatable)
+            require!(
+                post_ratio_bps >= liquidation_threshold_bps,
+                SssError::PartialLiquidationInsufficientRepay
+            );
+        }
+
+        (repay, coll_to_seize)
+    } else {
+        // Full liquidation: burn all debt, seize all collateral
+        (debt, deposited)
+    };
+
+    // SSS-085 Fix 5: Slippage protection
     if min_collateral_amount > 0 {
         require!(
-            deposited >= min_collateral_amount,
+            collateral_to_seize >= min_collateral_amount,
             SssError::SlippageExceeded
         );
     }
 
-    // 4. Liquidate full position: burn all debt, seize all collateral + 5% bonus
-    // Liquidator burns debt tokens
+    // 5. Burn debt tokens from liquidator
     spl_burn_checked(
         CpiContext::new(
             ctx.accounts.sss_token_program.to_account_info(),
@@ -211,17 +326,11 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, min_collateral_amount: 
                 authority: ctx.accounts.liquidator.to_account_info(),
             },
         ),
-        debt,
+        debt_to_burn,
         ctx.accounts.sss_mint.decimals,
     )?;
 
-    // Collateral seized = all deposited (capped at vault balance)
-    // 5% bonus already implicit because collateral ratio was < 120%
-    // i.e., liquidator pays 1.0 debt USD but gets back < 1.2 USD of collateral
-    // The entire remaining collateral is transferred to the liquidator
-    let collateral_to_seize = deposited;
-
-    // Transfer collateral vault → liquidator (collateral_vault PDA signs)
+    // 6. Transfer collateral vault → liquidator (collateral_vault PDA signs)
     let sss_mint_key = ctx.accounts.sss_mint.key();
     let owner_key = ctx.accounts.cdp_owner.key();
     let collateral_mint_key = ctx.accounts.collateral_mint.key();
@@ -250,15 +359,28 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, min_collateral_amount: 
         ctx.accounts.collateral_mint.decimals,
     )?;
 
-    // 5. Update state
+    // 7. Update state
     let position = &mut ctx.accounts.cdp_position;
-    position.debt_amount = 0;
+    position.debt_amount = position.debt_amount.saturating_sub(debt_to_burn);
 
     let vault = &mut ctx.accounts.collateral_vault;
-    vault.deposited_amount = 0;
+    vault.deposited_amount = vault.deposited_amount.saturating_sub(collateral_to_seize);
 
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(debt).unwrap();
+    config.total_burned = config.total_burned.checked_add(debt_to_burn).unwrap();
+
+    // 8. Emit SSS-100 CollateralLiquidated event
+    emit!(CollateralLiquidated {
+        mint: ctx.accounts.sss_mint.key(),
+        collateral_mint: collateral_mint_key,
+        cdp_owner: owner_key,
+        liquidator: ctx.accounts.liquidator.key(),
+        debt_burned: debt_to_burn,
+        collateral_seized: collateral_to_seize,
+        ratio_before_bps: ratio_bps as u64,
+        partial: is_partial,
+        bonus_bps,
+    });
 
     emit!(CdpLiquidated {
         sss_mint: ctx.accounts.sss_mint.key(),
@@ -271,11 +393,13 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, min_collateral_amount: 
     });
 
     msg!(
-        "CDP liquidated: burned {} SSS debt, seized {} collateral. Ratio was {}bps (threshold {}bps)",
-        debt,
+        "CDP liquidated: burned {} SSS debt, seized {} collateral. Ratio was {}bps (threshold {}bps). partial={} bonus={}bps",
+        debt_to_burn,
         collateral_to_seize,
         ratio_bps,
-        CdpPosition::LIQUIDATION_THRESHOLD_BPS,
+        liquidation_threshold_bps,
+        is_partial,
+        bonus_bps,
     );
     Ok(())
 }
