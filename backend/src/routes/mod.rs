@@ -1,3 +1,4 @@
+pub mod analytics;
 pub mod apikeys;
 pub mod burn;
 pub mod cdp;
