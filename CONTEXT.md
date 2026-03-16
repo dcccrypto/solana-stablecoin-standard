@@ -1,9 +1,10 @@
-# sss-backend CONTEXT
+# SSS CONTEXT
 
-_Last updated: 2026-03-16T03:14 UTC_
+_Last updated: 2026-03-16T03:27 UTC_
 
 ## Current State
-- SSS-102 complete: PR #129 open (feature/SSS-102-liquidation-history-api → develop)
+- SSS-104 complete (sss-docs): PR #130 open — docs/API-REFERENCE.md (full instruction-level API reference, 40+ instructions, 10 PDAs, 13 events, 69 errors)
+- SSS-102 complete (sss-backend): PR #129 open (feature/SSS-102-liquidation-history-api → develop)
 - 87/87 tests passing ✅, clippy clean ✅
 - SSS-101 SDK: PR #128 open, blocked on SSS-100 anchor IDL
 - Devnet deployment BLOCKED: deployer balance 0.05 SOL (SSS-078, requires Khubair manual action)
