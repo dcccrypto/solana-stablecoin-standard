@@ -3844,6 +3844,30 @@ describe("sss-token", () => {
         );
         await provider.sendAndConfirm(setupTx);
 
+        // SSS-091: DefaultAccountState=Frozen — new ATAs start frozen; thaw before minting.
+        await program.methods
+          .thawAccount()
+          .accounts({
+            complianceAuthority: authority.publicKey,
+            config: shortConfigPda,
+            mint: shortTtlMintKp.publicKey,
+            targetTokenAccount: shortSenderAta,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
+
+        // Also thaw receiver ATA so the transfer attempt can proceed.
+        await program.methods
+          .thawAccount()
+          .accounts({
+            complianceAuthority: authority.publicKey,
+            config: shortConfigPda,
+            mint: shortTtlMintKp.publicKey,
+            targetTokenAccount: shortReceiverAta,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
+
         // Register authority as minter for this short-TTL mint
         const [shortMinterInfoPda] = PublicKey.findProgramAddressSync(
           [Buffer.from("minter-info"), shortConfigPda.toBuffer(), authority.publicKey.toBuffer()],
