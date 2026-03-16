@@ -595,22 +595,30 @@ describe("sss-token", () => {
       // Already thawed — safe to proceed
     }
 
-    const freezeTx = await program.methods
-      .freezeAccount()
-      .accounts({
-        complianceAuthority: authority.publicKey,
-        config: configPda,
-        mint: mintKeypair.publicKey,
-        targetTokenAccount: ata,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .transaction();
-    const { blockhash: freezeBh, lastValidBlockHeight: freezeLvbh } =
-      await provider.connection.getLatestBlockhash("confirmed");
-    freezeTx.recentBlockhash = freezeBh;
-    freezeTx.lastValidBlockHeight = freezeLvbh;
-    freezeTx.feePayer = authority.publicKey;
-    await provider.sendAndConfirm(freezeTx, [], { commitment: "confirmed" });
+    // SSS-091: DefaultAccountState=Frozen — account may already be frozen after thaw
+    // attempt. Issue another freeze; if already frozen (Invalid account state), skip.
+    try {
+      const freezeTx = await program.methods
+        .freezeAccount()
+        .accounts({
+          complianceAuthority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          targetTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .transaction();
+      const { blockhash: freezeBh, lastValidBlockHeight: freezeLvbh } =
+        await provider.connection.getLatestBlockhash("confirmed");
+      freezeTx.recentBlockhash = freezeBh;
+      freezeTx.lastValidBlockHeight = freezeLvbh;
+      freezeTx.feePayer = authority.publicKey;
+      await provider.sendAndConfirm(freezeTx, [], { commitment: "confirmed" });
+    } catch (err: any) {
+      // "Invalid account state for operation" means already frozen — that's acceptable
+      const msg: string = err?.message ?? "";
+      if (!msg.includes("Invalid account state")) throw err;
+    }
 
     // Post-condition: token account should be frozen
     const tokenAccount = await getAccount(
@@ -5933,21 +5941,29 @@ describe("sss-token", () => {
     it("SSS-098: IDL exposes CollateralConfig account type with expected fields", async () => {
       const rawIdl = program.idl as any;
       const accounts = rawIdl.accounts as Array<{ name: string }>;
-      const acc = accounts?.find((a: any) => a.name === "CollateralConfig");
+      // Anchor v0.30+ normalises names to camelCase at runtime; support both
+      const acc = accounts?.find(
+        (a: any) => a.name === "CollateralConfig" || a.name === "collateralConfig"
+      );
       expect(acc, "CollateralConfig must be in IDL accounts").to.not.be.undefined;
 
       const types = rawIdl.types as Array<{ name: string; type: { fields?: Array<{ name: string }> } }>;
-      const t = types?.find((t: any) => t.name === "CollateralConfig");
+      const t = types?.find(
+        (t: any) => t.name === "CollateralConfig" || t.name === "collateralConfig"
+      );
       expect(t, "CollateralConfig type must be in IDL types").to.not.be.undefined;
+      // Fields may be snake_case or camelCase depending on anchor version
       const fieldNames = (t!.type.fields ?? []).map((f: any) => f.name);
-      expect(fieldNames).to.include("sss_mint");
-      expect(fieldNames).to.include("collateral_mint");
-      expect(fieldNames).to.include("whitelisted");
-      expect(fieldNames).to.include("max_ltv_bps");
-      expect(fieldNames).to.include("liquidation_threshold_bps");
-      expect(fieldNames).to.include("liquidation_bonus_bps");
-      expect(fieldNames).to.include("max_deposit_cap");
-      expect(fieldNames).to.include("total_deposited");
+      const hasField = (snake: string, camel: string) =>
+        fieldNames.includes(snake) || fieldNames.includes(camel);
+      expect(hasField("sss_mint", "sssMint"), "sss_mint field").to.be.true;
+      expect(hasField("collateral_mint", "collateralMint"), "collateral_mint field").to.be.true;
+      expect(hasField("whitelisted", "whitelisted"), "whitelisted field").to.be.true;
+      expect(hasField("max_ltv_bps", "maxLtvBps"), "max_ltv_bps field").to.be.true;
+      expect(hasField("liquidation_threshold_bps", "liquidationThresholdBps"), "liquidation_threshold_bps field").to.be.true;
+      expect(hasField("liquidation_bonus_bps", "liquidationBonusBps"), "liquidation_bonus_bps field").to.be.true;
+      expect(hasField("max_deposit_cap", "maxDepositCap"), "max_deposit_cap field").to.be.true;
+      expect(hasField("total_deposited", "totalDeposited"), "total_deposited field").to.be.true;
     });
 
     it("SSS-098: register_collateral instruction exists in IDL", async () => {
@@ -6215,10 +6231,14 @@ describe("sss-token", () => {
       expect(ixs).to.not.be.undefined;
       expect(ixs!.length).to.be.greaterThan(0);
       // If the IDL does include events, verify CollateralLiquidated is present
+      // Anchor v0.30+ normalises event names to camelCase at runtime
       const events = rawIdl.events as Array<{ name: string }> | undefined;
       if (events && events.length > 0) {
         const ev = events.find(
-          (e: any) => e.name === "CollateralLiquidated" || e.name === "collateral_liquidated"
+          (e: any) =>
+            e.name === "CollateralLiquidated" ||
+            e.name === "collateralLiquidated" ||
+            e.name === "collateral_liquidated"
         );
         expect(ev, "CollateralLiquidated event must be in IDL when events are present").to.not.be.undefined;
       }

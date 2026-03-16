@@ -55,11 +55,13 @@ function findConfigPda(mintPk: PublicKey, programId: PublicKey): [PublicKey, num
 
 function findCollateralVaultPda(
   mintPk: PublicKey,
+  owner: PublicKey,
   collateralMintPk: PublicKey,
   programId: PublicKey
 ): [PublicKey, number] {
+  // seeds = [b"cdp-collateral-vault", sss_mint, user, collateral_mint]
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("collateral-vault"), mintPk.toBuffer(), collateralMintPk.toBuffer()],
+    [Buffer.from("cdp-collateral-vault"), mintPk.toBuffer(), owner.toBuffer(), collateralMintPk.toBuffer()],
     programId
   );
 }
