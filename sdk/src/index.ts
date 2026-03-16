@@ -70,6 +70,7 @@ export type {
   TimelockReadinessResult,
   DeduplicationResult,
 } from './SecurityHardeningModule';
+export {
   MultiCollateralLiquidationModule,
   calcLiquidationAmount,
   deriveCdpPositionPda,
