@@ -70,3 +70,21 @@ export type {
   TimelockReadinessResult,
   DeduplicationResult,
 } from './SecurityHardeningModule';
+  MultiCollateralLiquidationModule,
+  calcLiquidationAmount,
+  deriveCdpPositionPda,
+  deriveCollateralVaultPda,
+  deriveCollateralConfigPda,
+  deriveStablecoinConfigPda,
+  LIQUIDATION_THRESHOLD_BPS,
+  DEFAULT_LIQUIDATION_BONUS_BPS,
+  BPS_DENOMINATOR,
+  CDP_POSITION_SEED,
+  COLLATERAL_VAULT_SEED,
+} from './MultiCollateralLiquidationModule';
+export type {
+  LiquidatableCDP,
+  LiquidateParams,
+  CalcLiquidationParams,
+  LiquidationAmountResult,
+} from './MultiCollateralLiquidationModule';
