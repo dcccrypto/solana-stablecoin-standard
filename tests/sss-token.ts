@@ -573,9 +573,9 @@ describe("sss-token", () => {
     );
     // SSS-091: DefaultAccountState=Frozen means the ATA may already be frozen.
     // Thaw first (no-op if already thawed) so the explicit freeze call succeeds.
-    // Use try-catch: if the account is already thawed, thawAccount throws InvalidAccountState.
+    // Use sendAndConfirm with a fresh blockhash to avoid "Blockhash not found" under CI load.
     try {
-      await program.methods
+      const thawTx = await program.methods
         .thawAccount()
         .accounts({
           complianceAuthority: authority.publicKey,
@@ -584,12 +584,18 @@ describe("sss-token", () => {
           targetTokenAccount: ata,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
-        .rpc();
+        .transaction();
+      const { blockhash: thawBh, lastValidBlockHeight: thawLvbh } =
+        await provider.connection.getLatestBlockhash("confirmed");
+      thawTx.recentBlockhash = thawBh;
+      thawTx.lastValidBlockHeight = thawLvbh;
+      thawTx.feePayer = authority.publicKey;
+      await provider.sendAndConfirm(thawTx, [], { commitment: "confirmed" });
     } catch (_) {
       // Already thawed — safe to proceed
     }
 
-    await program.methods
+    const freezeTx = await program.methods
       .freezeAccount()
       .accounts({
         complianceAuthority: authority.publicKey,
@@ -598,7 +604,13 @@ describe("sss-token", () => {
         targetTokenAccount: ata,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
-      .rpc();
+      .transaction();
+    const { blockhash: freezeBh, lastValidBlockHeight: freezeLvbh } =
+      await provider.connection.getLatestBlockhash("confirmed");
+    freezeTx.recentBlockhash = freezeBh;
+    freezeTx.lastValidBlockHeight = freezeLvbh;
+    freezeTx.feePayer = authority.publicKey;
+    await provider.sendAndConfirm(freezeTx, [], { commitment: "confirmed" });
 
     // Post-condition: token account should be frozen
     const tokenAccount = await getAccount(
