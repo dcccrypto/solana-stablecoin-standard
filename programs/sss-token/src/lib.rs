@@ -125,6 +125,17 @@ pub mod sss_token {
         instructions::cdp_liquidate::cdp_liquidate_handler(ctx, params)
     }
 
+    /// SSS-100: Multi-collateral liquidation engine with partial liquidation support.
+    /// `debt_to_repay`: SSS tokens to burn (0 = full liquidation).
+    /// `min_collateral_amount`: slippage guard — minimum collateral tokens to receive (0 = disabled).
+    pub fn cdp_liquidate_v2(
+        ctx: Context<CdpLiquidateV2>,
+        debt_to_repay: u64,
+        min_collateral_amount: u64,
+    ) -> Result<()> {
+        instructions::cdp_liquidate_v2::cdp_liquidate_v2_handler(ctx, debt_to_repay, min_collateral_amount)
+    }
+
     /// SSS-092: Accrue and burn stability fees on a CDP position.
     /// Callable by the debtor (or any keeper); debtor signs to authorise the burn.
     pub fn collect_stability_fee(ctx: Context<CollectStabilityFee>) -> Result<()> {
