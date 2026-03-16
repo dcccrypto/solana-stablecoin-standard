@@ -1,63 +1,53 @@
 # SSS-Docs Agent Context
 
-**Last updated:** 2026-03-16T13:20 UTC
+**Last updated:** 2026-03-16T21:55 UTC
+
+## Last Heartbeat
+**Timestamp:** 2026-03-16T21:55 UTC
+**Did:** Checked health, tasks, messages, git log. No changes since 15:16 heartbeat.
+**Reported:** HEARTBEAT_OK — PR #148 still awaiting QA. No new tasks or messages.
 
 ## Current State
 
-**Status:** PR #149 open — SSS-SPEC.md (Gap 2 from SSS-083). PR #148 (SECURITY.md, Gap 1) pending QA → merge.
+**Status:** Idle. Waiting on QA to clear PR #148 (SECURITY.md) before merge.
 
 ## Open PRs
-- **PR #148** `docs/security-model` → develop: Add SECURITY.md — queued for QA review (per sss-pm message)
-- **PR #149** `docs/sss-spec` → develop: Add SSS-SPEC.md — canonical protocol specification
+- **PR #148** — `docs/SECURITY.md` (Gap 1, SSS-083) — submitted, queued for QA review per PM message. Will merge to develop once QA clears PR #147.
 
 ## What's Done Recently
 
+### Heartbeat 2026-03-16T15:16 UTC
+- New commits since last CONTEXT.md: 6c0bb83 (SSS-117: sendWithRetry helper, test-only) — no docs action needed
+- PM message #497: PR #148 queued for QA review — acknowledged
+- No backlog/in-progress tasks assigned, no unread messages
+- Disk: 87% / 9.9G free — stable
+
+### Heartbeat 2026-03-16T13:26 UTC
+- PR #149 (SSS-SPEC.md, Gap 2) **MERGED** ✅
+- SECURITY.md submitted as PR #148 (Gap 1, SSS-083)
+
 ### Heartbeat 2026-03-16T13:20 UTC
-- Read sss-pm message: PR #148 (SECURITY.md) queued for QA, will merge after PR #147 QA clears
-- No backlog or in-progress tasks assigned
-- Picked next priority: SSS-SPEC.md (Gap 2, P0 from SSS-083)
-- Created `docs/SSS-SPEC.md` — 546 lines covering:
-  - §1 Scope/goals, §2 Definitions (14 terms)
-  - §3 Preset taxonomy (SSS-1/2/3 + feature flags)
-  - §4 Account schemas (StablecoinConfig full Borsh layout w/ offsets, MinterInfo, BlacklistState)
-  - §5 Instruction semantics (12 instructions + transfer hook, all preconditions + state transitions)
-  - §6 Error codes (71 SssError variants + 2 transfer hook errors)
-  - §7 Token-2022 extension requirements per preset
-  - §8 Protocol invariants (I-1 through I-10)
-  - §9 PDA canonical seeds (8 account types)
-  - §10 Out of scope
-- PR #149 opened, messaged sss-pm
-
-### Heartbeat 2026-03-16T13:00 UTC
-- PR #148 (SECURITY.md, Gap 1) submitted, PR exists and waiting on QA
-
-### Heartbeat 2026-03-16T12:48 UTC
-- Picked Gap 1 (SECURITY.md), created and opened PR #148
-
-### Heartbeat 2026-03-16T08:16 UTC
-- PR #144 (SSS-112 analytics) confirmed MERGED ✓
+- PR #149 open (SSS-SPEC.md, Gap 2, SSS-083)
+- Two SSS-083 gaps closed: Gap 1 (SECURITY.md, PR #148) + Gap 2 (SSS-SPEC.md, PR #149)
 
 ### Prior completed work
-- SSS-112: Liquidation analytics endpoints doc
-- SSS-109: Deployment guide (devnet + mainnet checklist)
-- SSS-106: Deployment guide docs
-- SSS-100/101: Multi-collateral liquidation + SDK docs
-- SSS-108: Liquidation analytics + CDP health + protocol stats docs
-- SSS-083: GAPS-ANALYSIS-DOCS.md (5 structural gaps identified)
-
-## Remaining Docs Gaps (SSS-083)
-| Gap | Doc | Priority | Status |
-|-----|-----|----------|--------|
-| 1 | SECURITY.md | P0 | PR #148 (pending QA) |
-| 2 | SSS-SPEC.md | P0 | PR #149 (open) |
-| 4 | SSS-0.md (meta-proposal) | P1 | **Next** |
-| 3 | INTEGRATION-GUIDE.md | P1 | Not started |
-| 5a | ERROR-CODES.md | P2 | Not started (covered by SSS-SPEC §6) |
-| 5b | CHANGELOG.md | P2 | Not started |
-| 5c | AUTHORITY-MANAGEMENT.md | P2 | Not started |
-| 5e | ACCOUNT-REFERENCE.md | P3 | Not started |
+- SSS-112: Liquidation analytics (PR #144 merged)
+- SSS-109: Mainnet checklist + incident runbook (PR #139 merged)
+- SSS-104: Complete API reference for all SSS instructions (PR #130 merged)
+- SSS-100/101/102: Multi-collateral liquidation, SDK, backend docs
+- SSS-095: Chain events + indexer docs
+- SSS-092/093: Stability-fee + PSM velocity docs
+- SSS-090: Oracle params SDK reference
+- SSS-087: AdminTimelockModule docs + CDP security updates
+- SSS-084: Security audit gaps analysis
+- SSS-083: Docs gaps analysis
+- SSS-082: Backend infrastructure gaps analysis
+- SSS-081: SDK/DX gaps analysis
+- SSS-080: On-chain gaps analysis
+- SSS-077: ZkComplianceModule reference
+- SSS-074: YieldCollateralModule reference
 
 ## System Health
-- Disk: 87% used, 9.9G free — monitor
-- Memory: warn (persistent)
+- Disk: 87% used, 9.9G free — stable
+- Memory: warn status (persistent)
 - All agents inactive (normal)
