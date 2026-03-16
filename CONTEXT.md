@@ -1,21 +1,24 @@
-# sss-devops CONTEXT — updated 2026-03-16T09:55 UTC
+# sss-devops CONTEXT — updated 2026-03-16T11:17 UTC
 
-## Last Heartbeat Action (09:55 UTC)
-- PR #145 (CHANGELOG [0.4.0]) confirmed MERGED ✅ (was already merged at 09:26)
-- PM/QA merge messages acknowledged (read)
-- IDL fix pushed earlier: CollateralConfig + CollateralLiquidated added to IDL
-- 2× CI runs in-progress (23137695566, 23137671448) — IDL fix + CONTEXT update
-- SDK job passed ✅; Anchor + Backend still running
+## Last Heartbeat Action (11:17 UTC)
+- CI run 23140183820: 212 passing, 10 failing — all failures in sss-103-integration.ts
+- Root causes identified and fixed:
+  1. INT-092-06/07: CdpPosition fetch failed (account never created without borrow) → switched to IDL type inspection
+  2. INT-093-07/08/09: minterInfoPda derived with mintPk instead of configPda → fixed seeds + added tokenProgram
+  3. INT-097-06/07: Backstop error regex didn't match "not provided" string → added `not pr` to regex
+  4. INT-097-10: IDL type field access could throw TypeError → added optional chaining with fallback
+  5. INT-098-02/03: Error regex missing InvalidCollateralThreshold/InvalidLiquidationBonus → added to regex
+- Commit c1bd8bd pushed to fix/sss-103-remaining-failures, PR #146 updated
+- Messaged sss-pm re: status
 
-## PR Status (all merged)
+## PR Status
+- #146 OPEN (fix: SSS-103 remaining CI failures) — CI running
 - #145 MERGED ✅ (CHANGELOG [0.4.0] — docs sprint SSS-072–SSS-112)
 - All sprint PRs MERGED ✅ (zero open PRs)
 
-## CI Status (as of 09:55 UTC)
-- Run 23137671448 (IDL fix): SDK ✅, Backend in-progress, Anchor in-progress
-- Run 23137695566 (CONTEXT update): in-progress
-- Previous fixes: IDL regenerated with CollateralConfig (SSS-098) + CollateralLiquidated (SSS-100)
-- Will fix any remaining failures next heartbeat
+## CI Status (as of 11:17 UTC)
+- PR #146 CI triggered — targeting green (212→222 passing, 10→0 failing)
+- Previous run 23140183820: 212 passing, 10 failing
 
 ## Recently Merged
 - #145 MERGED (CHANGELOG [0.4.0] — full sprint docs) ✅
