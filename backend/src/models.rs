@@ -257,3 +257,41 @@ pub struct CollateralConfigsQuery {
     /// When true, return only whitelisted configs (default: return all).
     pub whitelisted_only: Option<bool>,
 }
+
+// ─── SSS-102: Liquidation history ────────────────────────────────────────────
+
+/// A single liquidation event as stored in `liquidation_history`.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LiquidationHistoryEntry {
+    pub id: String,
+    /// CDP position address (base58).
+    pub cdp_address: String,
+    /// Collateral token mint that was seized.
+    pub collateral_mint: String,
+    /// Amount of collateral seized (native units).
+    pub collateral_seized: i64,
+    /// Amount of stablecoin debt repaid (native units).
+    pub debt_repaid: i64,
+    /// Liquidator wallet address.
+    pub liquidator: String,
+    /// Slot at which the liquidation occurred.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot: Option<i64>,
+    /// Transaction signature of the liquidation tx.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_sig: Option<String>,
+    pub created_at: String,
+}
+
+/// SSS-102: query params for GET /api/liquidations
+#[derive(Debug, Deserialize)]
+pub struct LiquidationsQuery {
+    /// Filter by CDP address (optional).
+    pub cdp_address: Option<String>,
+    /// Filter by collateral mint (optional).
+    pub collateral_mint: Option<String>,
+    /// Maximum rows to return (default: 100, max: 1000).
+    pub limit: Option<u32>,
+    /// Row offset for pagination (default: 0).
+    pub offset: Option<u32>,
+}

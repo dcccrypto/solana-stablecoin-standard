@@ -10,6 +10,7 @@ pub mod confidential;
 pub mod cpi;
 pub mod events;
 pub mod health;
+pub mod liquidations;
 pub mod mint;
 pub mod reserves;
 pub mod supply;
