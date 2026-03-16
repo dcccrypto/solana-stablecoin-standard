@@ -1,42 +1,37 @@
-# SSS-Backend Agent Context
+# sss-docs CONTEXT
 
-**Last updated:** 2026-03-16T01:07 UTC
+_Last updated: 2026-03-16T01:36 UTC_
 
 ## Current State
+- PR #123 (solanabr/solana-stablecoin-standard) is OPEN and up to date
+- All gaps sprint features SSS-090 through SSS-098 reflected in PR body
+- Test counts in PR body: 140+ Anchor, 455+ SDK, 68+ backend, 675+ total
 
-**Branch:** `develop` (clean, up-to-date)
-**Status:** CI fix pushed. Awaiting CI green.
+## Recent Completed Work
+- SSS-099: Updated PR #123 body with SSS-098 CollateralConfig additions
+  - Added SSS-098 row to gaps sprint table
+  - Updated Anchor test count 129+ → 140+, total 664+ → 675+
+  - Added register_collateral/update_collateral_config to instructions list
+  - Added CollateralConfig security hardening and roadmap entries
+  - Added CollateralConfigModule SDK entry
+- SSS-092/093 docs (stability-fee.md, psm-velocity.md) — merged
+- SSS-097 PR #123 — merged
+- SSS-095 event indexer — confirmed in develop
 
-## What's Done
+## Latest Code Landed
+- SSS-098: CollateralConfig PDA (register_collateral, update_collateral_config)
+  - Per-collateral LTV/liquidation threshold/bonus/deposit cap
+  - 11 new Anchor tests
+  - Backend endpoint at /api/collateral-config
 
-### CI fix — 5 test failures (2026-03-16T01:07 UTC, commit bf51d0f)
-- Test 1 (rejects mint exceeding max_supply): thaw capAta before minting (SSS-091 DefaultAccountState=Frozen)
-- Tests 2+3 (freeze/thaw): wrap pre-freeze thaw in try-catch to avoid InvalidAccountState (0xd) when already thawed
-- Tests 4+5 (ZK compliance): add missing `rent: SYSVAR_RENT_PUBKEY` to two `initialize()` calls in ZK tests
+## Open Tasks
+- None currently assigned
+- Watch for SSS-093 docs if not already complete (psm-velocity.md already in PR body)
 
-### SSS-097 — Bad-Debt Backstop (JUST MERGED — PR #123)
-- `set_backstop_params` + `trigger_backstop` Anchor instructions (preset 3)
-- `BadDebtBackstopModule.ts` SDK: setBackstopParams, triggerBackstop, fetchBackstopConfig, computeMaxDraw, computeRemainingShortfall
-- 10 Anchor tests + 26 SDK tests
-- Merged to develop 2026-03-16T00:25 UTC
-
-### SSS-095 — On-Chain Event Indexing (COMPLETE, in develop)
-- PM re-assigned at 22:01 UTC but work was already done and landed in develop
-- `backend/src/indexer.rs`: polls Solana RPC every 30s, parses Anchor logs
-- Events: CircuitBreakerToggled, CollateralDeposited, StablecoinsIssued, PositionLiquidated, OracleParamsUpdated, StabilityFeeAccrued
-- `event_log` table + `GET /api/chain-events?type=&address=` endpoint
-
-### Prior completed work
-- SSS-096 StabilityFeeModule SDK (PR #117 merged)
-- SSS-094 OracleParamsModule SDK (PR #122 merged)
-- SSS-092/SSS-093 stability-fee + PSM velocity (PRs #116, #119 merged)
-- SSS-090 oracle safety params
-- SSS-086 AdminTimelockModule SDK
-- SSS-085 P0 security fixes
-
-## Open PRs
-- None (all merged)
-
-## System Health
-- Disk: 80% used, 15G free — monitor but not critical
-- All 68 backend tests green, 455 SDK tests green, 0 clippy warnings
+## Docs in PR #123
+- docs/GAPS-ANALYSIS-ANCHOR.md ✅
+- docs/GAPS-ANALYSIS-SECURITY.md ✅
+- docs/GAPS-ANALYSIS-SDK.md ✅
+- docs/GAPS-ANALYSIS-BACKEND.md ✅
+- docs/stability-fee.md ✅
+- docs/psm-velocity.md ✅
