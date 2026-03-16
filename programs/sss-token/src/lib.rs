@@ -385,4 +385,23 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::bad_debt_backstop::trigger_backstop_handler(ctx, shortfall_amount)
     }
+
+    // ─── SSS-098: CollateralConfig PDA ───────────────────────────────────────
+
+    /// Register a new collateral type with per-collateral params (SSS-3, authority-only).
+    /// Creates the CollateralConfig PDA keyed by (sss_mint, collateral_mint).
+    pub fn register_collateral(
+        ctx: Context<RegisterCollateral>,
+        params: RegisterCollateralParams,
+    ) -> Result<()> {
+        instructions::collateral_config::register_collateral_handler(ctx, params)
+    }
+
+    /// Update an existing CollateralConfig PDA (SSS-3, authority-only).
+    pub fn update_collateral_config(
+        ctx: Context<UpdateCollateralConfig>,
+        params: UpdateCollateralConfigParams,
+    ) -> Result<()> {
+        instructions::collateral_config::update_collateral_config_handler(ctx, params)
+    }
 }

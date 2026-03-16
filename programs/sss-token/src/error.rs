@@ -143,4 +143,13 @@ pub enum SssError {
     InvalidBackstopBps,
     #[msg("Caller is not the liquidation handler — only cdp_liquidate may trigger backstop")]
     UnauthorizedBackstopCaller,
+    // SSS-098: CollateralConfig PDA
+    #[msg("Collateral mint is not whitelisted in CollateralConfig")]
+    CollateralNotWhitelisted,
+    #[msg("CollateralConfig deposit cap exceeded")]
+    DepositCapExceeded,
+    #[msg("liquidation_threshold_bps must be > max_ltv_bps")]
+    InvalidCollateralThreshold,
+    #[msg("liquidation_bonus_bps cannot exceed 5000 (50%)")]
+    InvalidLiquidationBonus,
 }

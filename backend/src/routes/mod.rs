@@ -3,6 +3,7 @@ pub mod burn;
 pub mod cdp;
 pub mod chain_events;
 pub mod circuit_breaker;
+pub mod collateral_config;
 pub mod compliance;
 pub mod compliance_rules;
 pub mod confidential;

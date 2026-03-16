@@ -473,3 +473,48 @@ pub struct VerificationRecord {
 impl VerificationRecord {
     pub const SEED: &'static [u8] = b"zk-verification";
 }
+
+// ---------------------------------------------------------------------------
+// SSS-098: CollateralConfig PDA — per-collateral parameters
+// ---------------------------------------------------------------------------
+
+/// Per-collateral configuration PDA.
+/// Seeds: [b"collateral-config", sss_mint, collateral_mint]
+///
+/// Stores per-collateral LTV, liquidation threshold/bonus, deposit cap, and
+/// a whitelist flag.  `cdp_deposit_collateral` reads this when it is passed
+/// as an optional account.
+#[account]
+#[derive(InitSpace)]
+pub struct CollateralConfig {
+    /// The SSS-3 stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// The collateral token mint.
+    pub collateral_mint: Pubkey,
+    /// When false, CDP deposits for this mint are rejected.
+    pub whitelisted: bool,
+    /// Maximum loan-to-value ratio in basis points (e.g. 7500 = 75%).
+    pub max_ltv_bps: u16,
+    /// Collateral ratio below which a position becomes liquidatable.
+    /// Must be > max_ltv_bps.
+    pub liquidation_threshold_bps: u16,
+    /// Extra collateral awarded to the liquidator, in basis points.
+    pub liquidation_bonus_bps: u16,
+    /// Maximum total deposited amount for this collateral (0 = unlimited).
+    pub max_deposit_cap: u64,
+    /// Running total of collateral deposited through CDP (informational).
+    pub total_deposited: u64,
+    pub bump: u8,
+}
+
+impl CollateralConfig {
+    pub const SEED: &'static [u8] = b"collateral-config";
+
+    /// Validate params: threshold > ltv, bonus <= 50%.
+    pub fn validate(ltv: u16, threshold: u16, bonus: u16) -> anchor_lang::Result<()> {
+        use crate::error::SssError;
+        require!(threshold > ltv, SssError::InvalidCollateralThreshold);
+        require!(bonus <= 5000, SssError::InvalidLiquidationBonus);
+        Ok(())
+    }
+}

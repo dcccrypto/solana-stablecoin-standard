@@ -5337,4 +5337,549 @@ describe("sss-token", () => {
       expect(cfg.maxBackstopBps).to.equal(10000);
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SSS-098: CollateralConfig PDA — per-collateral parameters
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("SSS-098: CollateralConfig PDA — register_collateral + update_collateral_config", () => {
+    const sss098MintKp = Keypair.generate();
+    let sss098ConfigPda: PublicKey;
+    let sss098CollateralMint: PublicKey;
+    let sss098CollateralConfigPda: PublicKey;
+    let sss098ReserveVault: PublicKey;
+    // second collateral mint for cap/whitelist tests
+    const sss098ColMint2Kp = Keypair.generate();
+
+    // CDP deposit vars
+    let sss098UserKp: Keypair;
+    let sss098CollateralVaultPda: PublicKey;
+    let sss098VaultTokenAccount: PublicKey;
+    let sss098UserCollateralAta: PublicKey;
+
+    before(async () => {
+      [sss098ConfigPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("stablecoin-config"), sss098MintKp.publicKey.toBuffer()],
+        program.programId
+      );
+
+      // Create collateral mint
+      sss098CollateralMint = await createMint(
+        provider.connection,
+        (authority as any).payer,
+        authority.publicKey,
+        null,
+        6,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Reserve vault
+      sss098ReserveVault = await createTokenAccount(
+        provider.connection,
+        (authority as any).payer,
+        sss098CollateralMint,
+        authority.publicKey,
+        Keypair.generate()
+      );
+
+      // Initialize SSS-3 config
+      await program.methods
+        .initialize({
+          preset: 3,
+          decimals: 6,
+          name: "SSS098 Stablecoin",
+          symbol: "SSS098",
+          uri: "https://example.com/sss098",
+          transferHookProgram: null,
+          collateralMint: sss098CollateralMint,
+          reserveVault: sss098ReserveVault,
+          maxSupply: null,
+        })
+        .accounts({
+          payer: authority.publicKey,
+          mint: sss098MintKp.publicKey,
+          config: sss098ConfigPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([sss098MintKp])
+        .rpc();
+
+      // CollateralConfig PDA address
+      [sss098CollateralConfigPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("collateral-config"),
+          sss098MintKp.publicKey.toBuffer(),
+          sss098CollateralMint.toBuffer ? sss098CollateralMint.toBuffer() : Buffer.from(sss098CollateralMint.toBytes()),
+        ],
+        program.programId
+      );
+
+      // CDP deposit setup — user keypair
+      sss098UserKp = Keypair.generate();
+      const userAirdrop = await provider.connection.requestAirdrop(
+        sss098UserKp.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await provider.connection.confirmTransaction(userAirdrop);
+
+      // CollateralVault PDA
+      [sss098CollateralVaultPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("cdp-collateral-vault"),
+          sss098MintKp.publicKey.toBuffer(),
+          sss098UserKp.publicKey.toBuffer(),
+          sss098CollateralMint.toBuffer ? sss098CollateralMint.toBuffer() : Buffer.from(sss098CollateralMint.toBytes()),
+        ],
+        program.programId
+      );
+
+      // Vault token account (owned by vault PDA)
+      sss098VaultTokenAccount = await createTokenAccount(
+        provider.connection,
+        (authority as any).payer,
+        sss098CollateralMint,
+        sss098CollateralVaultPda,
+        Keypair.generate()
+      );
+
+      // User's collateral ATA
+      sss098UserCollateralAta = await createTokenAccount(
+        provider.connection,
+        (authority as any).payer,
+        sss098CollateralMint,
+        sss098UserKp.publicKey,
+        Keypair.generate()
+      );
+
+      // Mint 10_000_000 (10 tokens) to user
+      await splMintTo(
+        provider.connection,
+        (authority as any).payer,
+        sss098CollateralMint,
+        sss098UserCollateralAta,
+        authority.publicKey,
+        10_000_000
+      );
+    });
+
+    // ── register_collateral ─────────────────────────────────────────────────
+
+    it("SSS-098: register_collateral creates CollateralConfig PDA with correct params", async () => {
+      await program.methods
+        .registerCollateral({
+          whitelisted: true,
+          maxLtvBps: 7500,
+          liquidationThresholdBps: 8000,
+          liquidationBonusBps: 500,
+          maxDepositCap: new anchor.BN(100_000_000),
+        })
+        .accounts({
+          authority: authority.publicKey,
+          config: sss098ConfigPda,
+          sssMint: sss098MintKp.publicKey,
+          collateralMint: sss098CollateralMint,
+          collateralConfig: sss098CollateralConfigPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const cc = await program.account.collateralConfig.fetch(sss098CollateralConfigPda);
+      expect(cc.sssMint.toString()).to.equal(sss098MintKp.publicKey.toString());
+      expect(cc.collateralMint.toString()).to.equal(sss098CollateralMint.toString());
+      expect(cc.whitelisted).to.equal(true);
+      expect(cc.maxLtvBps).to.equal(7500);
+      expect(cc.liquidationThresholdBps).to.equal(8000);
+      expect(cc.liquidationBonusBps).to.equal(500);
+      expect(cc.maxDepositCap.toNumber()).to.equal(100_000_000);
+      expect(cc.totalDeposited.toNumber()).to.equal(0);
+    });
+
+    it("SSS-098: register_collateral rejects threshold <= ltv", async () => {
+      const [badPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("collateral-config"),
+          sss098MintKp.publicKey.toBuffer(),
+          sss098ColMint2Kp.publicKey.toBuffer(),
+        ],
+        program.programId
+      );
+      // Create a dummy second collateral mint on-the-fly
+      const colMint2 = await createMint(
+        provider.connection,
+        (authority as any).payer,
+        authority.publicKey,
+        null,
+        6,
+        sss098ColMint2Kp,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      try {
+        await program.methods
+          .registerCollateral({
+            whitelisted: true,
+            maxLtvBps: 8000,
+            liquidationThresholdBps: 7500, // threshold < ltv — invalid
+            liquidationBonusBps: 200,
+            maxDepositCap: new anchor.BN(0),
+          })
+          .accounts({
+            authority: authority.publicKey,
+            config: sss098ConfigPda,
+            sssMint: sss098MintKp.publicKey,
+            collateralMint: colMint2,
+            collateralConfig: badPda,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (e: any) {
+        expect(e.message).to.include("InvalidCollateralThreshold");
+      }
+    });
+
+    it("SSS-098: register_collateral rejects liquidation_bonus_bps > 5000", async () => {
+      const colMint3Kp = Keypair.generate();
+      const colMint3 = await createMint(
+        provider.connection,
+        (authority as any).payer,
+        authority.publicKey,
+        null,
+        6,
+        colMint3Kp,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const [pda3] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("collateral-config"),
+          sss098MintKp.publicKey.toBuffer(),
+          colMint3.toBuffer ? colMint3.toBuffer() : Buffer.from(colMint3.toBytes()),
+        ],
+        program.programId
+      );
+      try {
+        await program.methods
+          .registerCollateral({
+            whitelisted: true,
+            maxLtvBps: 5000,
+            liquidationThresholdBps: 6000,
+            liquidationBonusBps: 5001, // exceeds max
+            maxDepositCap: new anchor.BN(0),
+          })
+          .accounts({
+            authority: authority.publicKey,
+            config: sss098ConfigPda,
+            sssMint: sss098MintKp.publicKey,
+            collateralMint: colMint3,
+            collateralConfig: pda3,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (e: any) {
+        expect(e.message).to.include("InvalidLiquidationBonus");
+      }
+    });
+
+    it("SSS-098: register_collateral rejects non-authority signer", async () => {
+      const nonAuth = Keypair.generate();
+      const airdrop = await provider.connection.requestAirdrop(
+        nonAuth.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL
+      );
+      await provider.connection.confirmTransaction(airdrop);
+      const colMint4Kp = Keypair.generate();
+      const colMint4 = await createMint(
+        provider.connection,
+        (authority as any).payer,
+        authority.publicKey,
+        null,
+        6,
+        colMint4Kp,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const [pda4] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("collateral-config"),
+          sss098MintKp.publicKey.toBuffer(),
+          colMint4.toBuffer ? colMint4.toBuffer() : Buffer.from(colMint4.toBytes()),
+        ],
+        program.programId
+      );
+      try {
+        await program.methods
+          .registerCollateral({
+            whitelisted: true,
+            maxLtvBps: 7500,
+            liquidationThresholdBps: 8000,
+            liquidationBonusBps: 300,
+            maxDepositCap: new anchor.BN(0),
+          })
+          .accounts({
+            authority: nonAuth.publicKey,
+            config: sss098ConfigPda,
+            sssMint: sss098MintKp.publicKey,
+            collateralMint: colMint4,
+            collateralConfig: pda4,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([nonAuth])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (e: any) {
+        expect(e.message).to.match(/Unauthorized|ConstraintRaw/);
+      }
+    });
+
+    // ── update_collateral_config ────────────────────────────────────────────
+
+    it("SSS-098: update_collateral_config changes params", async () => {
+      await program.methods
+        .updateCollateralConfig({
+          whitelisted: false,
+          maxLtvBps: 6000,
+          liquidationThresholdBps: 7000,
+          liquidationBonusBps: 300,
+          maxDepositCap: new anchor.BN(500_000_000),
+        })
+        .accounts({
+          authority: authority.publicKey,
+          config: sss098ConfigPda,
+          sssMint: sss098MintKp.publicKey,
+          collateralMint: sss098CollateralMint,
+          collateralConfig: sss098CollateralConfigPda,
+        })
+        .rpc();
+
+      const cc = await program.account.collateralConfig.fetch(sss098CollateralConfigPda);
+      expect(cc.whitelisted).to.equal(false);
+      expect(cc.maxLtvBps).to.equal(6000);
+      expect(cc.liquidationThresholdBps).to.equal(7000);
+      expect(cc.liquidationBonusBps).to.equal(300);
+      expect(cc.maxDepositCap.toNumber()).to.equal(500_000_000);
+    });
+
+    it("SSS-098: update_collateral_config rejects invalid threshold", async () => {
+      try {
+        await program.methods
+          .updateCollateralConfig({
+            whitelisted: true,
+            maxLtvBps: 9000,
+            liquidationThresholdBps: 8000, // bad: threshold < ltv
+            liquidationBonusBps: 100,
+            maxDepositCap: new anchor.BN(0),
+          })
+          .accounts({
+            authority: authority.publicKey,
+            config: sss098ConfigPda,
+            sssMint: sss098MintKp.publicKey,
+            collateralMint: sss098CollateralMint,
+            collateralConfig: sss098CollateralConfigPda,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (e: any) {
+        expect(e.message).to.include("InvalidCollateralThreshold");
+      }
+    });
+
+    // ── CDP deposit with CollateralConfig ───────────────────────────────────
+
+    it("SSS-098: cdp_deposit_collateral blocked when whitelisted=false", async () => {
+      // CollateralConfig currently has whitelisted=false from the update test
+      try {
+        await program.methods
+          .cdpDepositCollateral(new anchor.BN(1_000_000))
+          .accounts({
+            user: sss098UserKp.publicKey,
+            config: sss098ConfigPda,
+            sssMint: sss098MintKp.publicKey,
+            collateralMint: sss098CollateralMint,
+            collateralVault: sss098CollateralVaultPda,
+            vaultTokenAccount: sss098VaultTokenAccount,
+            userCollateralAccount: sss098UserCollateralAta,
+            yieldCollateralConfig: null,
+            collateralConfig: sss098CollateralConfigPda,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([sss098UserKp])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (e: any) {
+        expect(e.message).to.include("CollateralNotWhitelisted");
+      }
+    });
+
+    it("SSS-098: cdp_deposit_collateral succeeds when whitelisted=true and within cap", async () => {
+      // Re-whitelist with a generous cap
+      await program.methods
+        .updateCollateralConfig({
+          whitelisted: true,
+          maxLtvBps: 7500,
+          liquidationThresholdBps: 8000,
+          liquidationBonusBps: 500,
+          maxDepositCap: new anchor.BN(5_000_000),
+        })
+        .accounts({
+          authority: authority.publicKey,
+          config: sss098ConfigPda,
+          sssMint: sss098MintKp.publicKey,
+          collateralMint: sss098CollateralMint,
+          collateralConfig: sss098CollateralConfigPda,
+        })
+        .rpc();
+
+      await program.methods
+        .cdpDepositCollateral(new anchor.BN(1_000_000))
+        .accounts({
+          user: sss098UserKp.publicKey,
+          config: sss098ConfigPda,
+          sssMint: sss098MintKp.publicKey,
+          collateralMint: sss098CollateralMint,
+          collateralVault: sss098CollateralVaultPda,
+          vaultTokenAccount: sss098VaultTokenAccount,
+          userCollateralAccount: sss098UserCollateralAta,
+          yieldCollateralConfig: null,
+          collateralConfig: sss098CollateralConfigPda,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([sss098UserKp])
+        .rpc();
+
+      const vault = await program.account.collateralVault.fetch(sss098CollateralVaultPda);
+      expect(vault.depositedAmount.toNumber()).to.equal(1_000_000);
+
+      const cc = await program.account.collateralConfig.fetch(sss098CollateralConfigPda);
+      expect(cc.totalDeposited.toNumber()).to.equal(1_000_000);
+    });
+
+    it("SSS-098: cdp_deposit_collateral blocks deposit exceeding cap", async () => {
+      // Cap = 5_000_000; already 1_000_000 deposited; try depositing 4_500_000 (over cap)
+      try {
+        await program.methods
+          .cdpDepositCollateral(new anchor.BN(4_500_000))
+          .accounts({
+            user: sss098UserKp.publicKey,
+            config: sss098ConfigPda,
+            sssMint: sss098MintKp.publicKey,
+            collateralMint: sss098CollateralMint,
+            collateralVault: sss098CollateralVaultPda,
+            vaultTokenAccount: sss098VaultTokenAccount,
+            userCollateralAccount: sss098UserCollateralAta,
+            yieldCollateralConfig: null,
+            collateralConfig: sss098CollateralConfigPda,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([sss098UserKp])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (e: any) {
+        expect(e.message).to.include("DepositCapExceeded");
+      }
+    });
+
+    it("SSS-098: cdp_deposit_collateral with cap=0 (unlimited) allows large deposit", async () => {
+      // Set cap to 0 = unlimited
+      await program.methods
+        .updateCollateralConfig({
+          whitelisted: true,
+          maxLtvBps: 7500,
+          liquidationThresholdBps: 8000,
+          liquidationBonusBps: 500,
+          maxDepositCap: new anchor.BN(0),
+        })
+        .accounts({
+          authority: authority.publicKey,
+          config: sss098ConfigPda,
+          sssMint: sss098MintKp.publicKey,
+          collateralMint: sss098CollateralMint,
+          collateralConfig: sss098CollateralConfigPda,
+        })
+        .rpc();
+
+      await program.methods
+        .cdpDepositCollateral(new anchor.BN(5_000_000))
+        .accounts({
+          user: sss098UserKp.publicKey,
+          config: sss098ConfigPda,
+          sssMint: sss098MintKp.publicKey,
+          collateralMint: sss098CollateralMint,
+          collateralVault: sss098CollateralVaultPda,
+          vaultTokenAccount: sss098VaultTokenAccount,
+          userCollateralAccount: sss098UserCollateralAta,
+          yieldCollateralConfig: null,
+          collateralConfig: sss098CollateralConfigPda,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([sss098UserKp])
+        .rpc();
+
+      const vault = await program.account.collateralVault.fetch(sss098CollateralVaultPda);
+      expect(vault.depositedAmount.toNumber()).to.equal(6_000_000); // 1M + 5M
+    });
+
+    it("SSS-098: cdp_deposit_collateral without collateral_config still works (backwards compat)", async () => {
+      // null collateralConfig — no whitelist enforcement
+      await program.methods
+        .cdpDepositCollateral(new anchor.BN(500_000))
+        .accounts({
+          user: sss098UserKp.publicKey,
+          config: sss098ConfigPda,
+          sssMint: sss098MintKp.publicKey,
+          collateralMint: sss098CollateralMint,
+          collateralVault: sss098CollateralVaultPda,
+          vaultTokenAccount: sss098VaultTokenAccount,
+          userCollateralAccount: sss098UserCollateralAta,
+          yieldCollateralConfig: null,
+          collateralConfig: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([sss098UserKp])
+        .rpc();
+
+      const vault = await program.account.collateralVault.fetch(sss098CollateralVaultPda);
+      expect(vault.depositedAmount.toNumber()).to.equal(6_500_000);
+    });
+
+    // ── IDL shape ───────────────────────────────────────────────────────────
+
+    it("SSS-098: IDL exposes CollateralConfig account type with expected fields", async () => {
+      const rawIdl = program.idl as any;
+      const accounts = rawIdl.accounts as Array<{ name: string }>;
+      const acc = accounts?.find((a: any) => a.name === "CollateralConfig");
+      expect(acc, "CollateralConfig must be in IDL accounts").to.not.be.undefined;
+
+      const types = rawIdl.types as Array<{ name: string; type: { fields?: Array<{ name: string }> } }>;
+      const t = types?.find((t: any) => t.name === "CollateralConfig");
+      expect(t, "CollateralConfig type must be in IDL types").to.not.be.undefined;
+      const fieldNames = (t!.type.fields ?? []).map((f: any) => f.name);
+      expect(fieldNames).to.include("sss_mint");
+      expect(fieldNames).to.include("collateral_mint");
+      expect(fieldNames).to.include("whitelisted");
+      expect(fieldNames).to.include("max_ltv_bps");
+      expect(fieldNames).to.include("liquidation_threshold_bps");
+      expect(fieldNames).to.include("liquidation_bonus_bps");
+      expect(fieldNames).to.include("max_deposit_cap");
+      expect(fieldNames).to.include("total_deposited");
+    });
+
+    it("SSS-098: register_collateral instruction exists in IDL", async () => {
+      const rawIdl = program.idl as any;
+      const ixs = rawIdl.instructions as Array<{ name: string }>;
+      const reg = ixs?.find((i: any) => i.name === "register_collateral");
+      const upd = ixs?.find((i: any) => i.name === "update_collateral_config");
+      expect(reg, "register_collateral must be in IDL").to.not.be.undefined;
+      expect(upd, "update_collateral_config must be in IDL").to.not.be.undefined;
+    });
+  });
 });
