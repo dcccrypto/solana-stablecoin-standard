@@ -1,29 +1,36 @@
 # sss-sdk CONTEXT
 
-_Last updated: 2026-03-16T03:13 UTC_
+_Last updated: 2026-03-16T04:44 UTC_
 
 ## Current State
-- SSS-101 SDK scaffold complete and pushed: PR #128 (feat/SSS-101-multi-collateral-liquidation-sdk → feature/SSS-100-multi-collateral-liquidation)
-- 519/519 tests passing ✅
-- Blocking on SSS-100 sss-anchor (multi-collateral liquidation engine — still backlog)
-- Devnet deployment BLOCKED: deployer balance 0.05 SOL (SSS-078, ongoing)
+- SSS-100 anchor + SSS-101 SDK wiring COMPLETE and pushed: PR #132 updated
+- 528/528 tests passing ✅
+- Devnet deployment BLOCKED: deployer balance 0.05 SOL (SSS-078, ongoing — needs Khubair)
 
 ## Recent Completed Work
+- SSS-100/101 wiring (04:44 UTC): cdp_liquidate_v2 Rust instruction + SDK liquidate() wired to cdpLiquidateV2
+  * collateralConfig PDA included in accounts; debtToRepay arg (0=full, >0=partial)
+  * 8 new liquidate() unit tests; 528 total
+- SSS-106 (04:26 UTC): Deployment guide merged into PR #132
 - SSS-101 scaffold (03:13 UTC): MultiCollateralLiquidationModule — calcLiquidationAmount, fetchLiquidatableCDPs, liquidate, PDA helpers. 28 new tests.
-- Previous: CI fix (02:54 UTC): IDL rebuild + SSS-075 thaw ATAs fix
+- CI fix (02:54 UTC): IDL rebuild + SSS-075 thaw ATAs fix
 - SSS-098: CollateralConfigModule fully shipped
 
-## Open Tasks
-- SSS-101: in-progress — PR #128 open, waiting for SSS-100 IDL to finalise partial_debt_amount arg
-- SSS-078: devnet deploy blocked on SOL funding (requires Khubair manual action)
+## Open Tasks / PRs
+- PR #132: SSS-100/101/106 — cdp_liquidate_v2 + SDK + Deployment guide (docs/sss-106-deployment-guide)
+- PR #133: SSS-103 integration tests (feature/SSS-103-integration-tests)
+- PR #134: fix/test-freeze-circuit-breaker-idl (SSS-091/098 thaw ATA + camelCase IDL fix)
+- SSS-078: devnet deploy requires manual browser wallet at faucet.solana.com (blocked on Khubair)
 
 ## Latest Code Landed
-- feat/SSS-101-multi-collateral-liquidation-sdk HEAD: 9b40e31
-  feat(sdk): SSS-101 — MultiCollateralLiquidationModule (28 new tests, 519 total)
+- docs/sss-106-deployment-guide HEAD: 5cf81eb
+  feat(sdk+anchor): SSS-100/101 — wire cdp_liquidate_v2 into program + SDK
 
 ## Blocking Issues
-- SSS-100: sss-anchor hasn't started; SSS-101 is partially blocked (scaffold done, final wiring needs new IDL)
 - SSS-078: devnet deploy requires manual browser wallet at faucet.solana.com
+- No IDL yet (Anchor build not run in CI; IDL will auto-generate when build CI passes)
 
 ## Notes
-- When SSS-100 IDL lands: update MultiCollateralLiquidationModule.liquidate() to use .cdpLiquidateWithCollateralMint or whatever the new instruction name is; also add integration tests against the new instruction
+- cdp_liquidate_v2 in Rust is complete and correct per SSS-100 spec
+- SDK liquidate() correctly passes debtToRepay as arg 0 and collateralConfig PDA in accounts
+- When PR #132 merges: open PR for any remaining SSS tasks, pick next backlog item
