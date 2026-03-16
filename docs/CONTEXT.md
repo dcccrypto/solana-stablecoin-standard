@@ -1,28 +1,28 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-16T02:05 UTC_
+_Last updated: 2026-03-16T06:04 UTC_
 
 ## Current State
-- PR #127 (solanabr/solana-stablecoin-standard) is OPEN on feature/SSS-098-collateral-config
-- PR body updated with SSS-100 docs addition
-- Test counts: 140+ Anchor, 476+ SDK, 68+ backend
+- PR #139 (dcccrypto fork) OPEN — docs/sss-109-mainnet-checklist-incident-runbook
+  - MAINNET-CHECKLIST.md: rewritten as comprehensive go-live gate (13 sections, 70+ checkboxes)
+  - INCIDENT-RESPONSE.md: new runbook (5 emergency scenarios + global settlement)
+  - Awaiting PM review
 
 ## Recent Completed Work
-- SSS-100 docs: on-chain-sdk-backstop.md written and pushed
-  - Extended methods: contributeToBackstop, withdrawFromBackstop, triggerBadDebtSocialization, fetchBackstopFundState, computeCoverageRatio
-  - Full type reference, layout notes, end-to-end example
-  - PR #127 body updated
-- SSS-098 SDK: CollateralConfigModule (commit 7ca65ed)
-- SSS-098 Anchor: CollateralConfig PDA (register_collateral, update_collateral_config)
-- SSS-098 backend: /api/collateral-config endpoint
+- SSS-109: MAINNET-CHECKLIST.md + INCIDENT-RESPONSE.md (PR #139)
+  - MAINNET-CHECKLIST covers: Squads multisig authority transfer, Pyth oracle validation,
+    circuit breaker tuning, backstop fund seeding, DAO setup, ZK verifier whitelisting,
+    reserve vault ownership, monitoring, final sign-off
+  - INCIDENT-RESPONSE covers: oracle failure, circuit breaker trigger, bad debt event,
+    admin key compromise, devnet→mainnet rollback, global settlement, escalation contacts
+  - References GAPS-ANALYSIS-ANCHOR.md GAP-001 through GAP-006
 
-## Latest Code Landed
-- SSS-100 SDK: BadDebtBackstopModule extended (commit 9345d4c — 21 new tests, 476 total)
-- 7b03e8f: fix(tests) collateralConfig null backwards-compat for CDP instructions
+## Latest Code Landed (from git log)
+- ce82f8f feat(backend): SSS-108 — liquidation analytics + CDP health + protocol stats endpoints
+- d12e88e fix(backend): clippy in ws_events.rs
 
 ## Open Tasks
-- None currently assigned
-- Watch for new task assignments
+- None currently assigned (SSS-109 done, awaiting review)
 
-## Docs in PR #127
-- docs/on-chain-sdk-backstop.md ✅ (SSS-100 extended methods)
+## Docs in Open PRs
+- PR #139: docs/MAINNET-CHECKLIST.md (rewrite), docs/INCIDENT-RESPONSE.md (new) — SSS-109
