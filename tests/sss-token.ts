@@ -3640,6 +3640,30 @@ describe("sss-token", () => {
         const setupTx = new anchor.web3.Transaction().add(createSenderAtaIx, createReceiverAtaIx);
         await provider.sendAndConfirm(setupTx);
 
+        // SSS-091: DefaultAccountState=Frozen — new ATAs start frozen; thaw before minting.
+        await program.methods
+          .thawAccount()
+          .accounts({
+            complianceAuthority: authority.publicKey,
+            config: enfConfigPda,
+            mint: enfMintKeypair.publicKey,
+            targetTokenAccount: senderAta,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
+
+        // Also thaw receiver ATA so transfers can land.
+        await program.methods
+          .thawAccount()
+          .accounts({
+            complianceAuthority: authority.publicKey,
+            config: enfConfigPda,
+            mint: enfMintKeypair.publicKey,
+            targetTokenAccount: receiverAta,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
+
         // Mint tokens to sender ATA
         await program.methods
           .mint(new anchor.BN(1_000_000))
