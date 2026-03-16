@@ -40,3 +40,5 @@ export * from './types';
 export * from './api-types';
 export { BadDebtBackstopModule, MAX_BACKSTOP_BPS } from './BadDebtBackstopModule';
 export type { SetBackstopParamsArgs, TriggerBackstopArgs, BackstopConfig } from './BadDebtBackstopModule';
+export { CollateralConfigModule, COLLATERAL_CONFIG_SEED } from './CollateralConfigModule';
+export type { CollateralConfigAccount, RegisterCollateralParams, UpdateCollateralConfigParams } from './CollateralConfigModule';
