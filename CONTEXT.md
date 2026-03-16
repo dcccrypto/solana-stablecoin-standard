@@ -1,31 +1,29 @@
-# SSS-Backend Agent Context
+# sss-sdk CONTEXT
 
-**Last updated:** 2026-03-16T06:42 UTC
+_Last updated: 2026-03-16T03:13 UTC_
 
 ## Current State
+- SSS-101 SDK scaffold complete and pushed: PR #128 (feat/SSS-101-multi-collateral-liquidation-sdk → feature/SSS-100-multi-collateral-liquidation)
+- 519/519 tests passing ✅
+- Blocking on SSS-100 sss-anchor (multi-collateral liquidation engine — still backlog)
+- Devnet deployment BLOCKED: deployer balance 0.05 SOL (SSS-078, ongoing)
 
-**Status:** All tasks done. Two PRs open awaiting review.
+## Recent Completed Work
+- SSS-101 scaffold (03:13 UTC): MultiCollateralLiquidationModule — calcLiquidationAmount, fetchLiquidatableCDPs, liquidate, PDA helpers. 28 new tests.
+- Previous: CI fix (02:54 UTC): IDL rebuild + SSS-075 thaw ATAs fix
+- SSS-098: CollateralConfigModule fully shipped
 
-## What's Done Recently
+## Open Tasks
+- SSS-101: in-progress — PR #128 open, waiting for SSS-100 IDL to finalise partial_debt_amount arg
+- SSS-078: devnet deploy blocked on SOL funding (requires Khubair manual action)
 
-### Heartbeat 2026-03-16T06:42 UTC
-- **PR #138** (feat/SSS-108): Liquidation analytics + CDP health + protocol stats — OPEN, no human reviews yet
-- **PR #141** (feature/SSS-112-analytics): SSS-112 liquidation analytics endpoints — OPEN, no human reviews yet
-- SSS-108 and SSS-112 are duplicate assignments (same analytics endpoints), both done
-- 116 tests pass, clippy clean on feature/SSS-112-analytics
-- Docker not available in env (docker not installed), skipped
-- No backlog tasks, no in-progress tasks
-- Unread messages: SSS-108 and SSS-112 PM assignments (both actioned)
+## Latest Code Landed
+- feat/SSS-101-multi-collateral-liquidation-sdk HEAD: 9b40e31
+  feat(sdk): SSS-101 — MultiCollateralLiquidationModule (28 new tests, 519 total)
 
-### Heartbeat 2026-03-16T05:22 UTC (docs agent wrote this — now superseded)
-- PR #136 (docs SSS-100/101) open
+## Blocking Issues
+- SSS-100: sss-anchor hasn't started; SSS-101 is partially blocked (scaffold done, final wiring needs new IDL)
+- SSS-078: devnet deploy requires manual browser wallet at faucet.solana.com
 
-## Open PRs (backend)
-- **#138** feat/SSS-108 — Liquidation analytics + CDP health + protocol stats — OPEN
-- **#141** feature/SSS-112-analytics — SSS-112 liquidation analytics endpoints — OPEN
-
-## System Health
-- Disk: 86% used, 11G free — creeping up, watch
-- Memory: warn status (persistent)
-- All agents inactive (normal for off-hours)
-- Ollama: offline (expected)
+## Notes
+- When SSS-100 IDL lands: update MultiCollateralLiquidationModule.liquidate() to use .cdpLiquidateWithCollateralMint or whatever the new instruction name is; also add integration tests against the new instruction

@@ -152,4 +152,9 @@ pub enum SssError {
     InvalidCollateralThreshold,
     #[msg("liquidation_bonus_bps cannot exceed 5000 (50%)")]
     InvalidLiquidationBonus,
+    // SSS-100: Multi-collateral / partial liquidation
+    #[msg("partial_repay_amount would not restore CDP to healthy ratio — increase repay amount")]
+    PartialLiquidationInsufficientRepay,
+    #[msg("invalid amount: partial_repay_amount exceeds total debt")]
+    InvalidAmount,
 }
