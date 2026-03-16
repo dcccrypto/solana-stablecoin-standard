@@ -1,7 +1,7 @@
 # SSS — Feature Flags Reference
 
 > **SDK class:** `FeatureFlagsModule` (`sdk/src/FeatureFlagsModule.ts`)
-> **Added:** SSS-059 | **Updated:** SSS-060 (FLAG_SPEND_POLICY — SSS-063), SSS-065 (FLAG_DAO_COMMITTEE — SSS-067), SSS-070 (FLAG_YIELD_COLLATERAL), SSS-075 (FLAG_ZK_COMPLIANCE)
+> **Added:** SSS-059 | **Updated:** SSS-060 (FLAG_SPEND_POLICY — SSS-063), SSS-065 (FLAG_DAO_COMMITTEE — SSS-067), SSS-070 (FLAG_YIELD_COLLATERAL), SSS-075 (FLAG_ZK_COMPLIANCE), SSS-106 (FLAG_CONFIDENTIAL_TRANSFERS), SSS-107 (ConfidentialTransferModule SDK)
 
 ---
 
@@ -25,8 +25,9 @@ corresponding behaviour; clearing it deactivates it.
 | `FLAG_DAO_COMMITTEE` | 2 | `0x04` | Gates privileged admin operations behind on-chain proposals that require committee quorum approval. Enabled atomically by `init_dao_committee`. |
 | `FLAG_YIELD_COLLATERAL` | 3 | `0x08` | Enables yield-bearing SPL tokens (e.g. stSOL, mSOL) as CDP collateral. Enabled atomically by `init_yield_collateral`. SSS-3 only. |
 | `FLAG_ZK_COMPLIANCE` | 4 | `0x10` | Enforces zero-knowledge proof verification on transfers: sender must hold a valid, non-expired `VerificationRecord` PDA. Enabled atomically by `init_zk_compliance`. SSS-2 only. |
+| `FLAG_CONFIDENTIAL_TRANSFERS` | 5 | `0x20` | Enables Token-2022 ElGamal encrypted confidential transfers. Stores an auditor ElGamal pubkey in `ConfidentialTransferConfig` PDA. Managed via `ConfidentialTransferModule` (SSS-107). |
 
-> **Reserved bits:** bits 5–63 are reserved for future protocol flags.
+> **Reserved bits:** bits 6–63 are reserved for future protocol flags.
 > Do not set them directly.
 
 ---
@@ -315,6 +316,54 @@ await program.methods
 
 ---
 
+### `FLAG_CONFIDENTIAL_TRANSFERS`
+
+```typescript
+export const FLAG_CONFIDENTIAL_TRANSFERS = 1n << 5n; // 0x20
+```
+
+**Anchor constant:**
+```rust
+pub const FLAG_CONFIDENTIAL_TRANSFERS: u64 = 1 << 5; // 0x20
+```
+
+When `FLAG_CONFIDENTIAL_TRANSFERS` is set in `StablecoinConfig.feature_flags`:
+
+- The issuer provides an **auditor ElGamal public key** (32 bytes) at init time.
+- The key is stored in a `ConfidentialTransferConfig` PDA (`["ct-config", mint]`).
+- Transfer amounts are encrypted via Token-2022 `ConfidentialTransferMint` — only the auditor key holder can decrypt amounts.
+- The `StablecoinConfig.auditor_elgamal_pubkey` field mirrors the key for fast on-chain reads.
+- Compatible with `FLAG_ZK_COMPLIANCE` (both can be set simultaneously).
+
+**Use case:** privacy-preserving stablecoin transfers that remain fully auditable
+by the issuer — satisfies FATF Travel Rule for VASPs while protecting user balances
+from public chain surveillance.
+
+> **Note:** `FLAG_CONFIDENTIAL_TRANSFERS` is managed via the dedicated
+> `ConfidentialTransferModule` SDK class (`enableConfidentialTransfers`,
+> `depositConfidential`, `applyPendingBalance`, `withdrawConfidential`, `auditTransfer`).
+> See [`confidential-transfers.md`](./confidential-transfers.md) for full reference.
+
+#### `ConfidentialTransferConfig` PDA
+
+Seeds: `["ct-config", mint]`
+
+| Field | Type | Description |
+|---|---|---|
+| `mint` | `Pubkey` | The stablecoin mint this config governs. |
+| `auditor_elgamal_pubkey` | `[u8; 32]` | Issuer ElGamal pubkey (Ristretto255 compressed). |
+| `auto_approve_new_accounts` | `bool` | Whether new token accounts are auto-approved for CT. |
+| `bump` | `u8` | PDA bump. |
+
+#### Confidential Transfer Error Codes
+
+| Error | Description |
+|---|---|
+| `SssError::ConfidentialTransferNotEnabled` | CT operation attempted when FLAG is not set. |
+| `SssError::MissingAuditorKey` | FLAG set but no auditor ElGamal key provided at init. |
+
+---
+
 ## Error Codes
 
 | Error | Code | Description |
@@ -330,6 +379,8 @@ await program.methods
 | `SssError::VerificationRecordNotExpired` | — | `close_verification_record` called before expiry. |
 | `SssError::VerificationRecordMissing` | — | Transfer attempted with no `VerificationRecord` PDA. |
 | `SssError::Unauthorized` | — | Signer is not the admin authority for any flag write. |
+| `SssError::ConfidentialTransferNotEnabled` | — | CT operation attempted when `FLAG_CONFIDENTIAL_TRANSFERS` is not set. |
+| `SssError::MissingAuditorKey` | — | `FLAG_CONFIDENTIAL_TRANSFERS` set at init but no auditor ElGamal key provided. |
 
 ---
 
@@ -343,6 +394,8 @@ import {
   FLAG_DAO_COMMITTEE,
   FLAG_YIELD_COLLATERAL,
   FLAG_ZK_COMPLIANCE,
+  FLAG_CONFIDENTIAL_TRANSFERS,
+  ConfidentialTransferModule,
 } from '@stbr/sss-token';
 // or, from the SDK source directly:
 import {
@@ -352,12 +405,15 @@ import {
   FLAG_DAO_COMMITTEE,
   FLAG_YIELD_COLLATERAL,
   FLAG_ZK_COMPLIANCE,
+  FLAG_CONFIDENTIAL_TRANSFERS,
+  ConfidentialTransferModule,
 } from '@sss/sdk';
 ```
 
-> **Note:** `FLAG_DAO_COMMITTEE`, `FLAG_YIELD_COLLATERAL`, and `FLAG_ZK_COMPLIANCE`
-> are exported from `@stbr/sss-token` but their management instructions are called
-> directly via the Anchor `Program` object (no SDK module wrapper in this release).
+> **Note:** `FLAG_DAO_COMMITTEE`, `FLAG_YIELD_COLLATERAL`, `FLAG_ZK_COMPLIANCE`, and
+> `FLAG_CONFIDENTIAL_TRANSFERS` are exported from `@stbr/sss-token`. The first three
+> are managed via the Anchor `Program` object directly; `FLAG_CONFIDENTIAL_TRANSFERS`
+> is managed via `ConfidentialTransferModule` (SSS-107).
 
 ---
 
@@ -603,18 +659,20 @@ console.assert(spendPolicyActive === false);
 
 ```typescript
 const flags = await ff.getFeatureFlags(mint);
-const circuitBreakerOn    = (flags & FLAG_CIRCUIT_BREAKER)    !== 0n;
-const spendPolicyOn       = (flags & FLAG_SPEND_POLICY)       !== 0n;
-const daoCommitteeOn      = (flags & FLAG_DAO_COMMITTEE)      !== 0n;
-const yieldCollateralOn   = (flags & FLAG_YIELD_COLLATERAL)   !== 0n;
-const zkComplianceOn      = (flags & FLAG_ZK_COMPLIANCE)      !== 0n;
+const circuitBreakerOn        = (flags & FLAG_CIRCUIT_BREAKER)        !== 0n;
+const spendPolicyOn           = (flags & FLAG_SPEND_POLICY)           !== 0n;
+const daoCommitteeOn          = (flags & FLAG_DAO_COMMITTEE)          !== 0n;
+const yieldCollateralOn       = (flags & FLAG_YIELD_COLLATERAL)       !== 0n;
+const zkComplianceOn          = (flags & FLAG_ZK_COMPLIANCE)          !== 0n;
+const confidentialTransfersOn = (flags & FLAG_CONFIDENTIAL_TRANSFERS) !== 0n;
 
-console.log(`Circuit breaker:   ${circuitBreakerOn}`);
-console.log(`Spend policy:      ${spendPolicyOn}`);
-console.log(`DAO committee:     ${daoCommitteeOn}`);
-console.log(`Yield collateral:  ${yieldCollateralOn}`);
-console.log(`ZK compliance:     ${zkComplianceOn}`);
-console.log(`Raw bitmask:       0x${flags.toString(16).padStart(16, '0')}`);
+console.log(`Circuit breaker:        ${circuitBreakerOn}`);
+console.log(`Spend policy:           ${spendPolicyOn}`);
+console.log(`DAO committee:          ${daoCommitteeOn}`);
+console.log(`Yield collateral:       ${yieldCollateralOn}`);
+console.log(`ZK compliance:          ${zkComplianceOn}`);
+console.log(`Confidential transfers: ${confidentialTransfersOn}`);
+console.log(`Raw bitmask:            0x${flags.toString(16).padStart(16, '0')}`);
 ```
 
 ---
@@ -796,4 +854,5 @@ sss-cli spend-policy clear \
 - [on-chain-sdk-cdp.md](./on-chain-sdk-cdp.md) — CDP collateral deposits (FLAG_YIELD_COLLATERAL integration)
 - [transfer-hook.md](./transfer-hook.md) — transfer-hook extra account metas (FLAG_ZK_COMPLIANCE index 7)
 - [compliance-module.md](./compliance-module.md) — compliance authority, ZK oracle patterns
+- [confidential-transfers.md](./confidential-transfers.md) — FLAG_CONFIDENTIAL_TRANSFERS full reference + ConfidentialTransferModule SDK
 - [SSS-3.md](./SSS-3.md) — protocol specification
