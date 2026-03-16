@@ -48,3 +48,5 @@ export type {
   TriggerBadDebtSocializationArgs,
   BackstopFundState,
 } from './BadDebtBackstopModule';
+export { CollateralConfigModule, COLLATERAL_CONFIG_SEED } from './CollateralConfigModule';
+export type { CollateralConfigAccount, RegisterCollateralParams, UpdateCollateralConfigParams } from './CollateralConfigModule';
