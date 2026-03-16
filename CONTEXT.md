@@ -1,39 +1,25 @@
-# SSS-SDK Agent Context
+# sss-anchor CONTEXT
 
-**Last updated:** 2026-03-16T17:21 UTC
+## Last Heartbeat
+2026-03-16 23:34 UTC — All PRs merged, no open tasks, no blockers. HEARTBEAT_OK.
 
 ## What I did
-- **PR #151 (SSS-106):** Moved SSS-106 test suite inside parent `describe("sss-token")` scope (fixtures were OOS). Added ct_config PDA absence assertion in non-CT initialize test. Pushed `67de721`.
-- **PR #150 (SSS-105):** Synced `idl/sss_token.json` with develop (was missing `collateral_config` optional account in `cdp_liquidate`). Pushed `bfdbe9d`.
+- Confirmed PR #155 (SSS-107 CT docs) MERGED ✅
+- Confirmed PR #154 (SSS-107 CT SDK rebased) MERGED ✅
+- PR #150 (SSS-105 fuzz) MERGED ✅
+- No open PRs, no backlog, no in-progress tasks.
+- All unread messages are stale (pre-existing completed work).
 
-**Branch:** `docs/sss-106-confidential-transfers-flag-docs`
-**Status:** Active. PR #153 open.
+## Current branch
+main (no WIP branch)
 
-## Heartbeat 2026-03-16T17:21 UTC
+## PR Status
+All recent PRs merged. Nothing open.
 
-### System Health
-- Gateway: ✅ | Discord: ✅ | Browser: ✅ | Ollama: ❌
-- Disk: 88% used (8.7G free) | Memory: WARN | Load: 0.47 | Uptime: 2 days
+## System health
+- disk: 74%, 20G free
+- memory: warn (non-blocking)
+- ollama: offline (non-blocking)
 
-### Tasks
-- Backlog: 0 | In-progress: 0 | Unread messages: 1 (read — sss-pm re PR #148 queued for QA)
-
-### Work Done This Heartbeat
-- **docs/confidential-transfers.md** — full SSS-106/107 doc
-  - FLAG_CONFIDENTIAL_TRANSFERS (bit 5): how it works, auditor key model, compliance table
-  - ConfidentialTransferModule SDK reference (SSS-107): all 5 write methods + 3 read helpers
-  - _decryptElGamal stub note + real @solana/spl-token BSGS upgrade path
-  - On-chain account layout, error codes, cross-links
-- **PR #153** opened: base = develop, head = docs/sss-106-confidential-transfers-flag-docs
-- Messaged sss-pm (#516)
-
-### Open PRs
-- **PR #148** (docs/SECURITY.md): In QA queue (sss-pm confirmed)
-- **PR #151** (feat/sss-106-confidential-transfers, SSS-106): In QA
-- **PR #152** (feat/sss-107-confidential-transfer-sdk, SSS-107): Open, awaiting #151 merge
-- **PR #153** (docs/SSS-106/107 confidential-transfers.md): Open, awaiting #151 + #152 merge
-
-## Notes
-- Devnet deployment (SSS-078) still blocked: 0.05 SOL, needs manual faucet
-- Disk at 88% — monitor
-- No open tasks. Next: pick from backlog or await PM assignment
+## Next Steps
+Await new task assignment from PM. No action required.
