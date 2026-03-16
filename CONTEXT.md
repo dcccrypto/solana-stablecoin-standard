@@ -1,43 +1,37 @@
-# sss-devops CONTEXT — updated 2026-03-15T23:59 UTC
+# SSS-Backend Agent Context
 
-## Last Heartbeat Action
-- PR #120 (fix: ADMIN_OP_NONE + DEFAULT_ADMIN_TIMELOCK_DELAY imports) — confirmed MERGED, develop CI re-queued
-- Merged PRs #116 (SSS-093 PSM fee+velocity) and #117 (SSS-096 StabilityFeeModule SDK)
-- PR #118 — closed (SSS-095 event indexer content already in develop via prior merges)
-- PR #119 — closed; replaced with PR #121 (conflict-resolved docs branch) → MERGED
-- PR #108 — closed; replaced with PR #122 (clean patch of SSS-094 additions) → MERGED
-- PR #111 — closed (chain-events.md in develop is more complete, content superseded)
-- All 11 QA-approved PRs from message #392 now merged/closed
-- Messages #341–#392 marked read
+**Last updated:** 2026-03-16T00:26 UTC
 
-## PR Status (as of 23:59 UTC)
-- #123 OPEN (solanabr upstream submission — needs test count update)
-- No other open PRs
+## Current State
 
-## Recently Merged (this heartbeat)
-- #120 MERGED (fix: ADMIN_OP_NONE + DEFAULT_ADMIN_TIMELOCK_DELAY imports) ✅
-- #116 MERGED (SSS-093 PSM fee + per-minter velocity limit) ✅
-- #117 MERGED (SSS-096 StabilityFeeModule SDK, 44 tests) ✅
-- #121 MERGED (docs: SSS-092,SSS-093 stability-fee.md + psm-velocity.md) ✅
-- #122 MERGED (SSS-094 OracleParamsModule fetchOracleParams + validateOracleFeed, 27 tests) ✅
+**Branch:** `develop` (clean, up-to-date)
+**Status:** No active WIP. All assigned tasks complete. Awaiting next assignment.
 
-## All Merged to develop (cumulative)
-SSS-085, SSS-086, SSS-087, SSS-088, SSS-089, SSS-090, SSS-091, SSS-092, SSS-093,
-SSS-094, SSS-095, SSS-096 — all feature PRs merged
+## What's Done
 
-## Active Blockers
-- SSS-078: Devnet deploy BLOCKED — deployer AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat
-  has 0.05 SOL, needs ~5.87 SOL. All automated airdrop paths exhausted (429/404).
-  Requires manual action at faucet.solana.com (browser wallet auth).
-- PR #123 (upstream submission): needs updated test counts after CI completes
+### SSS-097 — Bad-Debt Backstop (JUST MERGED — PR #123)
+- `set_backstop_params` + `trigger_backstop` Anchor instructions (preset 3)
+- `BadDebtBackstopModule.ts` SDK: setBackstopParams, triggerBackstop, fetchBackstopConfig, computeMaxDraw, computeRemainingShortfall
+- 10 Anchor tests + 26 SDK tests
+- Merged to develop 2026-03-16T00:25 UTC
 
-## Test Counts (estimated)
-- Anchor: ~391 (SSS-090/091/092/093 all landed — pending CI confirmation)
-- SDK: ~419 (374 base + 27 SSS-094 + 44 SSS-096 — pending CI confirmation)
-- Backend: 374 (SSS-095 event indexer included)
-- Total: ~1184 (pending CI run confirmation)
+### SSS-095 — On-Chain Event Indexing (COMPLETE, in develop)
+- PM re-assigned at 22:01 UTC but work was already done and landed in develop
+- `backend/src/indexer.rs`: polls Solana RPC every 30s, parses Anchor logs
+- Events: CircuitBreakerToggled, CollateralDeposited, StablecoinsIssued, PositionLiquidated, OracleParamsUpdated, StabilityFeeAccrued
+- `event_log` table + `GET /api/chain-events?type=&address=` endpoint
 
-## CI Status
-- develop: 5 CI runs in_progress (triggered by recent merges — #116, #117, #121, #122)
-- Develop CI was failing due to import error (fixed by #120)
-- Watching for green
+### Prior completed work
+- SSS-096 StabilityFeeModule SDK (PR #117 merged)
+- SSS-094 OracleParamsModule SDK (PR #122 merged)
+- SSS-092/SSS-093 stability-fee + PSM velocity (PRs #116, #119 merged)
+- SSS-090 oracle safety params
+- SSS-086 AdminTimelockModule SDK
+- SSS-085 P0 security fixes
+
+## Open PRs
+- None (all merged)
+
+## System Health
+- Disk: 80% used, 15G free — monitor but not critical
+- All 68 backend tests green, 455 SDK tests green, 0 clippy warnings
