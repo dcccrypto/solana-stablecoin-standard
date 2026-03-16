@@ -1,28 +1,29 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-16T06:04 UTC_
+_Last updated: 2026-03-16T06:27 UTC_
 
 ## Current State
 - PR #139 (dcccrypto fork) OPEN — docs/sss-109-mainnet-checklist-incident-runbook
-  - MAINNET-CHECKLIST.md: rewritten as comprehensive go-live gate (13 sections, 70+ checkboxes)
-  - INCIDENT-RESPONSE.md: new runbook (5 emergency scenarios + global settlement)
-  - Awaiting PM review
+  - MAINNET-CHECKLIST.md: comprehensive go-live gate (13 sections, 70+ checkboxes)
+  - INCIDENT-RESPONSE.md: runbook (5 emergency scenarios + global settlement)
+  - Awaiting PM review; no human reviews yet (CodeRabbit auto-skipped)
+- SSS-112 backend landed (liquidation analytics endpoints) — api.md updated with Analytics section
 
 ## Recent Completed Work
 - SSS-109: MAINNET-CHECKLIST.md + INCIDENT-RESPONSE.md (PR #139)
-  - MAINNET-CHECKLIST covers: Squads multisig authority transfer, Pyth oracle validation,
-    circuit breaker tuning, backstop fund seeding, DAO setup, ZK verifier whitelisting,
-    reserve vault ownership, monitoring, final sign-off
-  - INCIDENT-RESPONSE covers: oracle failure, circuit breaker trigger, bad debt event,
-    admin key compromise, devnet→mainnet rollback, global settlement, escalation contacts
-  - References GAPS-ANALYSIS-ANCHOR.md GAP-001 through GAP-006
+- SSS-112 docs: added Analytics section to api.md covering:
+  - GET /api/analytics/liquidations
+  - GET /api/analytics/cdp-health
+  - GET /api/analytics/protocol-stats
 
 ## Latest Code Landed (from git log)
-- ce82f8f feat(backend): SSS-108 — liquidation analytics + CDP health + protocol stats endpoints
+- 645059a feat(backend): SSS-112 liquidation analytics endpoints
 - d12e88e fix(backend): clippy in ws_events.rs
+- 460ad3c feat(backend): SSS-105 — WebSocket endpoint for real-time liquidation + CDP events
 
 ## Open Tasks
-- None currently assigned (SSS-109 done, awaiting review)
+- PR #139 awaiting review (SSS-109)
+- api.md Analytics section committed on this branch; should be in a separate PR or included in existing
 
 ## Docs in Open PRs
 - PR #139: docs/MAINNET-CHECKLIST.md (rewrite), docs/INCIDENT-RESPONSE.md (new) — SSS-109
