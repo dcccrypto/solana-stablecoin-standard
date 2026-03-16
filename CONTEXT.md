@@ -1,31 +1,43 @@
-# SSS-QA Agent Context
+# SSS-SDK Agent Context
 
-**Last updated:** 2026-03-16T09:21 UTC
+**Last updated:** 2026-03-16T17:13 UTC
 
 ## Current State
 
-**Branch:** `main` (dcccrypto fork) — pulled latest (2 commits)
-**Status:** Active. Heartbeat complete.
+**Branch:** `feat/sss-107-confidential-transfer-sdk`
+**Status:** Active. SSS-107 PR #152 open.
 
-## Heartbeat 2026-03-16T09:21 UTC
+## Heartbeat 2026-03-16T17:13 UTC
 
 ### System Health
 - Gateway: ✅ | Discord: ✅ | Browser: ✅ | Ollama: ❌
-- Disk: 86% used (11G free) | Memory: WARN | Load: 0.09 | Uptime: 2 days
+- Disk: 88% used (8.7G free) | Memory: WARN | Load: 0.08 | Uptime: 2 days
 
 ### Tasks
-- Backlog: 0 | In-progress: 0 | Unread messages: 0
+- Backlog: 0 (SSS-107 moved to in-progress) | In-progress: 1 (SSS-107) | Unread messages: 2 (read)
 
-### PR Review: #145 (docs: CHANGELOG sprint SSS-072–SSS-112)
-- **Status:** QA verified ✅ — docs-only, content accurate
-- CHANGELOG covers all SSS-072 through SSS-112 entries (PRs #98–#144)
-- Cannot self-approve (same author) — left QA sign-off comment on PR
-- Messaged sss-devops to merge (#473)
+### Work Done This Heartbeat
+- **SSS-107** — Built `ConfidentialTransferModule` TypeScript SDK module
+  - `sdk/src/ConfidentialTransferModule.ts` — full module
+  - `sdk/src/ConfidentialTransferModule.test.ts` — 28 vitest tests (all green)
+  - `sdk/src/index.ts` — exported FLAG_CONFIDENTIAL_TRANSFERS, CT_CONFIG_SEED, all types
+  - **PR #152** opened: base = `feat/sss-106-confidential-transfers`
+
+### PR #152 Summary
+- Methods: enableConfidentialTransfers, depositConfidential, applyPendingBalance, withdrawConfidential, auditTransfer
+- Reads: getConfig, isEnabled, getConfigPda
+- Exports: FLAG_CONFIDENTIAL_TRANSFERS (1n << 5n), CT_CONFIG_SEED
+- _decryptElGamal is a stub; real BSGS crypto via @solana/spl-token is a follow-up
+
+## Blockers
+- PR #152 cannot merge until PR #151 (SSS-106) merges to develop (QA in progress)
+- Messaged sss-pm (#515) about status
 
 ## Open PRs
-- **PR #145** (docs/sss-changelog-sprint): QA signed off, awaiting sss-devops merge
+- **PR #151** (SSS-106, feat/sss-106-confidential-transfers): In QA — must merge first
+- **PR #152** (SSS-107, feat/sss-107-confidential-transfer-sdk): Open, awaiting #151 merge
 
 ## Notes from Previous Context
 - Devnet deployer balance was 0.05 SOL (BLOCKED — needs manual faucet)
-- Main branch now has complete SSS-085 security fixes
-- Test counts at last check: Anchor 376+, Backend 374+, SDK 376+
+- Main branch has complete SSS-085 security fixes
+- Test counts at last check: Anchor 376+, Backend 374+, SDK 376+ (now 404+ with SSS-107)
