@@ -58,8 +58,50 @@ Primary class. Provides `create()`, `mintTo()`, `burn()`, `pause()`, `unpause()`
 ### `ComplianceModule`
 Compliance class for SSS-2 stablecoins. Wraps blacklist management (`initializeBlacklist`, `addToBlacklist`, `removeFromBlacklist`, `isBlacklisted`) and Token-2022 freeze/thaw.
 
+### `AdminTimelockModule`
+Governance time-lock for admin operations. Schedules and executes delayed authority changes.
+
+### `BadDebtBackstopModule`
+Insurance fund management for SSS-3 (reserve-backed). Covers CDP liquidation shortfalls. Methods: `contributeToBackstop`, `withdrawFromBackstop`, `triggerBadDebtSocialization`, `fetchBackstopFundState`, `computeCoverageRatio`. See [on-chain-sdk-backstop.md](./on-chain-sdk-backstop.md).
+
+### `CdpModule`
+Collateralized Debt Position management. Create, manage, and liquidate CDPs.
+
+### `CircuitBreakerModule`
+Automatic kill-switch when anomalous mint/burn velocity is detected.
+
+### `CollateralConfigModule`
+Register and configure collateral types: `registerCollateral`, `updateCollateralConfig`, `getCollateralConfig`, `isWhitelisted`. See [on-chain-sdk-authority-collateral.md](./on-chain-sdk-authority-collateral.md).
+
+### `CpiModule`
+Cross-Program Invocation helpers for composing with external Solana programs.
+
+### `DaoCommitteeModule`
+Multi-sig DAO committee governance for protocol parameter changes.
+
+### `FeatureFlagsModule`
+On-chain feature flag management for staged rollouts.
+
+### `OracleParamsModule`
+Oracle configuration and price feed management. See [on-chain-sdk-oracle-params.md](./on-chain-sdk-oracle-params.md).
+
+### `ProofOfReserves`
+Off-chain reserve attestation helpers and on-chain verification. See [PROOF-OF-RESERVES.md](./PROOF-OF-RESERVES.md).
+
+### `SpendPolicyModule`
+Per-address velocity limits and spend policy enforcement.
+
+### `StabilityFeeModule`
+Accrual and collection of stability fees on active CDPs. See [stability-fee.md](./stability-fee.md).
+
+### `YieldCollateralModule`
+Yield-bearing collateral integration (e.g., staked SOL, liquid staking tokens).
+
+### `ZkComplianceModule`
+Zero-knowledge compliance proofs for privacy-preserving KYC/AML checks.
+
 ### Config Helpers
-`sss1Config(params)` and `sss2Config(params)` — typed preset builders that produce the correct `InitializeParams` for each preset.
+`sss1Config(params)`, `sss2Config(params)`, and `sss3Config(params)` — typed preset builders that produce the correct `InitializeParams` for each preset.
 
 ---
 
