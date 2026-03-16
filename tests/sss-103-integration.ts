@@ -756,10 +756,11 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
         .updateMinter(new BN(5_000_000)) // 5 token mint cap
         .accounts({
           authority: authority.publicKey,
-          minter: minterKp.publicKey,
           config: configPda,
-          minterInfo: minterInfoPda,
           mint: mintKp.publicKey,
+          minter: minterKp.publicKey,
+          minterInfo: minterInfoPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
