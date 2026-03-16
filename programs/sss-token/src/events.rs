@@ -139,7 +139,7 @@ pub struct CdpRepaid {
     pub remaining_debt: u64,
 }
 
-/// Emitted when a CDP position is liquidated.
+/// Emitted when a CDP position is liquidated (SSS-110 circuit breaker compatible).
 #[event]
 pub struct CdpLiquidated {
     pub sss_mint: Pubkey,
@@ -150,4 +150,27 @@ pub struct CdpLiquidated {
     pub collateral_seized: u64,
     /// Collateral ratio at time of liquidation (in basis points).
     pub ratio_bps: u64,
+}
+
+/// SSS-100: Emitted on every CDP liquidation (full and partial) with multi-collateral details.
+#[event]
+pub struct CollateralLiquidated {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// The specific collateral mint seized.
+    pub collateral_mint: Pubkey,
+    /// The CDP owner whose position was (partially) liquidated.
+    pub cdp_owner: Pubkey,
+    /// The liquidator who initiated the liquidation.
+    pub liquidator: Pubkey,
+    /// Amount of SSS debt burned.
+    pub debt_burned: u64,
+    /// Amount of collateral transferred to the liquidator.
+    pub collateral_seized: u64,
+    /// Collateral ratio before liquidation (basis points).
+    pub ratio_before_bps: u64,
+    /// Whether this was a partial liquidation (true) or full (false).
+    pub partial: bool,
+    /// Liquidation bonus applied in basis points (from CollateralConfig or global default).
+    pub bonus_bps: u16,
 }
