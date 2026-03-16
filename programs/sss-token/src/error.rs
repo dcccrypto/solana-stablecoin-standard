@@ -132,4 +132,15 @@ pub enum SssError {
     MintVelocityExceeded,
     #[msg("PSM redemption fee too high — max 1000 bps (10%)")]
     InvalidPsmFee,
+    // SSS-097: Bad Debt Backstop
+    #[msg("Bad debt backstop is not configured — set insurance_fund_pubkey first")]
+    BackstopNotConfigured,
+    #[msg("No bad debt detected — collateral covers outstanding debt")]
+    NoBadDebt,
+    #[msg("Insurance fund balance is zero — cannot backstop")]
+    InsuranceFundEmpty,
+    #[msg("max_backstop_bps exceeds maximum allowed (10000 = 100%)")]
+    InvalidBackstopBps,
+    #[msg("Caller is not the liquidation handler — only cdp_liquidate may trigger backstop")]
+    UnauthorizedBackstopCaller,
 }

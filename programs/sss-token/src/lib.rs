@@ -357,4 +357,32 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::psm_fee::set_mint_velocity_limit_handler(ctx, max_mint_per_epoch)
     }
+
+    // ─── SSS-097: Bad Debt Backstop ───────────────────────────────────────────
+
+    /// Authority-only: configure the insurance fund vault and max backstop draw cap.
+    /// Set `insurance_fund_pubkey` to `Pubkey::default()` to disable the backstop.
+    /// `max_backstop_bps`: max draw as pct of net supply in bps (0 = unlimited).
+    pub fn set_backstop_params(
+        ctx: Context<SetBackstopParams>,
+        insurance_fund_pubkey: Pubkey,
+        max_backstop_bps: u16,
+    ) -> Result<()> {
+        instructions::bad_debt_backstop::set_backstop_params_handler(
+            ctx,
+            insurance_fund_pubkey,
+            max_backstop_bps,
+        )
+    }
+
+    /// Trigger the bad debt backstop after a liquidation leaves collateral < debt.
+    /// Draws up to `max_backstop_bps` of outstanding debt from the insurance fund.
+    /// Only callable by the config PDA (i.e. via CPI from `cdp_liquidate`).
+    /// Emits `BadDebtTriggered`.
+    pub fn trigger_backstop(
+        ctx: Context<TriggerBackstop>,
+        shortfall_amount: u64,
+    ) -> Result<()> {
+        instructions::bad_debt_backstop::trigger_backstop_handler(ctx, shortfall_amount)
+    }
 }

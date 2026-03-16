@@ -1,3 +1,4 @@
+pub mod bad_debt_backstop;
 pub mod accept_authority;
 pub mod admin_timelock;
 pub mod burn;
@@ -26,6 +27,7 @@ pub mod update_roles;
 pub mod yield_collateral;
 pub mod zk_compliance;
 
+pub use bad_debt_backstop::*;
 pub use accept_authority::*;
 pub use admin_timelock::*;
 pub use burn::*;

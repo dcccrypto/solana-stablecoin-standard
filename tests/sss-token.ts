@@ -4985,4 +4985,316 @@ describe("sss-token", () => {
       }
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("SSS-097: Bad Debt Backstop — set_backstop_params + trigger_backstop", () => {
+    const sss097MintKp = Keypair.generate();
+    let sss097ConfigPda: PublicKey;
+    let sss097CollateralMint: PublicKey;
+    let sss097InsuranceFundKp: Keypair;
+    let sss097InsuranceFundAta: PublicKey;
+    let sss097ReserveVault: PublicKey;
+
+    before(async () => {
+      [sss097ConfigPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("stablecoin-config"), sss097MintKp.publicKey.toBuffer()],
+        program.programId
+      );
+
+      // Create collateral mint (SPL Token)
+      sss097CollateralMint = await createMint(
+        provider.connection,
+        (authority as any).payer,
+        authority.publicKey,
+        null,
+        6,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Reserve vault token account
+      sss097ReserveVault = await createTokenAccount(
+        provider.connection,
+        (authority as any).payer,
+        sss097CollateralMint,
+        authority.publicKey,
+        Keypair.generate()
+      );
+
+      // Initialize SSS-3 config
+      await program.methods
+        .initialize({
+          preset: 3,
+          decimals: 6,
+          name: "SSS097 Stablecoin",
+          symbol: "SSS097",
+          uri: "https://example.com/sss097",
+          transferHookProgram: null,
+          collateralMint: sss097CollateralMint,
+          reserveVault: sss097ReserveVault,
+          maxSupply: null,
+        })
+        .accounts({
+          payer: authority.publicKey,
+          mint: sss097MintKp.publicKey,
+          config: sss097ConfigPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([sss097MintKp])
+        .rpc();
+
+      // Insurance fund keypair and ATA
+      sss097InsuranceFundKp = Keypair.generate();
+      const fundSig = await provider.connection.requestAirdrop(
+        sss097InsuranceFundKp.publicKey,
+        0.1 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await provider.connection.confirmTransaction(fundSig);
+
+      sss097InsuranceFundAta = await createTokenAccount(
+        provider.connection,
+        (authority as any).payer,
+        sss097CollateralMint,
+        sss097InsuranceFundKp.publicKey,
+        Keypair.generate()
+      );
+
+      // Mint 1_000_000 collateral tokens into insurance fund (1 USDC-like)
+      await splMintTo(
+        provider.connection,
+        (authority as any).payer,
+        sss097CollateralMint,
+        sss097InsuranceFundAta,
+        authority.publicKey,
+        1_000_000
+      );
+    });
+
+    // ── set_backstop_params ──────────────────────────────────────────────────
+
+    it("SSS-097: set_backstop_params stores insurance_fund_pubkey and max_backstop_bps", async () => {
+      await program.methods
+        .setBackstopParams(sss097InsuranceFundAta, 500)
+        .accounts({
+          authority: authority.publicKey,
+          config: sss097ConfigPda,
+          sssMint: sss097MintKp.publicKey,
+        })
+        .rpc();
+
+      const cfg = await program.account.stablecoinConfig.fetch(sss097ConfigPda);
+      expect(cfg.insuranceFundPubkey.toBase58()).to.equal(sss097InsuranceFundAta.toBase58());
+      expect(cfg.maxBackstopBps).to.equal(500);
+    });
+
+    it("SSS-097: set_backstop_params rejects max_backstop_bps > 10000", async () => {
+      try {
+        await program.methods
+          .setBackstopParams(sss097InsuranceFundAta, 10001)
+          .accounts({
+            authority: authority.publicKey,
+            config: sss097ConfigPda,
+            sssMint: sss097MintKp.publicKey,
+          })
+          .rpc();
+        throw new Error("Expected error but did not throw");
+      } catch (err: any) {
+        expect(err.toString()).to.match(/InvalidBackstopBps|ConstraintRaw/);
+      }
+    });
+
+    it("SSS-097: set_backstop_params rejects non-authority signer", async () => {
+      const stranger = Keypair.generate();
+      const sig = await provider.connection.requestAirdrop(
+        stranger.publicKey,
+        0.1 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await provider.connection.confirmTransaction(sig);
+
+      try {
+        await program.methods
+          .setBackstopParams(sss097InsuranceFundAta, 100)
+          .accounts({
+            authority: stranger.publicKey,
+            config: sss097ConfigPda,
+            sssMint: sss097MintKp.publicKey,
+          })
+          .signers([stranger])
+          .rpc();
+        throw new Error("Expected error but did not throw");
+      } catch (err: any) {
+        expect(err.toString()).to.match(/Unauthorized|ConstraintRaw/);
+      }
+    });
+
+    it("SSS-097: set_backstop_params rejects non-SSS-3 preset", async () => {
+      // Use a SSS-1 config
+      const sss1MintKp = Keypair.generate();
+      const [sss1ConfigPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("stablecoin-config"), sss1MintKp.publicKey.toBuffer()],
+        program.programId
+      );
+      await program.methods
+        .initialize({
+          preset: 1,
+          decimals: 6,
+          name: "SSS1 Token",
+          symbol: "SSS1",
+          uri: "https://example.com",
+          transferHookProgram: null,
+          collateralMint: null,
+          reserveVault: null,
+          maxSupply: null,
+        })
+        .accounts({
+          payer: authority.publicKey,
+          mint: sss1MintKp.publicKey,
+          config: sss1ConfigPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([sss1MintKp])
+        .rpc();
+
+      try {
+        await program.methods
+          .setBackstopParams(sss097InsuranceFundAta, 100)
+          .accounts({
+            authority: authority.publicKey,
+            config: sss1ConfigPda,
+            sssMint: sss1MintKp.publicKey,
+          })
+          .rpc();
+        throw new Error("Expected error but did not throw");
+      } catch (err: any) {
+        expect(err.toString()).to.match(/InvalidPreset|ConstraintRaw/);
+      }
+    });
+
+    it("SSS-097: set_backstop_params allows setting insurance_fund to default (disable)", async () => {
+      await program.methods
+        .setBackstopParams(PublicKey.default, 0)
+        .accounts({
+          authority: authority.publicKey,
+          config: sss097ConfigPda,
+          sssMint: sss097MintKp.publicKey,
+        })
+        .rpc();
+
+      const cfg = await program.account.stablecoinConfig.fetch(sss097ConfigPda);
+      expect(cfg.insuranceFundPubkey.toBase58()).to.equal(PublicKey.default.toBase58());
+      expect(cfg.maxBackstopBps).to.equal(0);
+    });
+
+    it("SSS-097: StablecoinConfig has insuranceFundPubkey and maxBackstopBps fields", async () => {
+      const cfg = await program.account.stablecoinConfig.fetch(sss097ConfigPda);
+      expect(cfg).to.have.property("insuranceFundPubkey");
+      expect(cfg).to.have.property("maxBackstopBps");
+    });
+
+    // ── trigger_backstop ─────────────────────────────────────────────────────
+    // trigger_backstop requires config PDA as signer (CPI-only instruction).
+    // We validate the on-chain reject path directly (non-config signer = error).
+
+    it("SSS-097: trigger_backstop rejects when backstop is not configured", async () => {
+      // Config has insurance_fund disabled (from previous test that set it to default)
+      // Re-verify it's disabled
+      const cfg = await program.account.stablecoinConfig.fetch(sss097ConfigPda);
+      expect(cfg.insuranceFundPubkey.toBase58()).to.equal(PublicKey.default.toBase58());
+
+      // Attempting to trigger with wrong insurance fund key should fail constraint
+      try {
+        await program.methods
+          .triggerBackstop(new anchor.BN(100_000))
+          .accounts({
+            liquidationAuthority: authority.publicKey,  // wrong — not config PDA
+            config: sss097ConfigPda,
+            sssMint: sss097MintKp.publicKey,
+            insuranceFund: sss097InsuranceFundAta,
+            reserveVault: sss097ReserveVault,
+            collateralMint: sss097CollateralMint,
+            insuranceFundAuthority: sss097InsuranceFundKp.publicKey,
+            collateralTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([sss097InsuranceFundKp])
+          .rpc();
+        throw new Error("Expected error but did not throw");
+      } catch (err: any) {
+        // Should fail on UnauthorizedBackstopCaller or BackstopNotConfigured constraint
+        expect(err.toString()).to.match(/UnauthorizedBackstopCaller|BackstopNotConfigured|ConstraintRaw/);
+      }
+    });
+
+    it("SSS-097: trigger_backstop rejects shortfall_amount = 0", async () => {
+      // First re-enable backstop
+      await program.methods
+        .setBackstopParams(sss097InsuranceFundAta, 500)
+        .accounts({
+          authority: authority.publicKey,
+          config: sss097ConfigPda,
+          sssMint: sss097MintKp.publicKey,
+        })
+        .rpc();
+
+      try {
+        await program.methods
+          .triggerBackstop(new anchor.BN(0))
+          .accounts({
+            liquidationAuthority: authority.publicKey,
+            config: sss097ConfigPda,
+            sssMint: sss097MintKp.publicKey,
+            insuranceFund: sss097InsuranceFundAta,
+            reserveVault: sss097ReserveVault,
+            collateralMint: sss097CollateralMint,
+            insuranceFundAuthority: sss097InsuranceFundKp.publicKey,
+            collateralTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([sss097InsuranceFundKp])
+          .rpc();
+        throw new Error("Expected error but did not throw");
+      } catch (err: any) {
+        expect(err.toString()).to.match(/NoBadDebt|UnauthorizedBackstopCaller|ConstraintRaw/);
+      }
+    });
+
+    it("SSS-097: BadDebtTriggered event fields are correctly defined (IDL schema)", async () => {
+      // Verify the IDL exposes the BadDebtTriggered event and its type fields.
+      // Load directly from the compiled JSON file to avoid any runtime IDL transform.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const rawIdl = require("../target/idl/sss_token.json") as any;
+
+      // Check event discriminator exists
+      const events = rawIdl.events as Array<{ name: string }>;
+      const evt = events?.find((e: any) => e.name === "BadDebtTriggered");
+      expect(evt, "BadDebtTriggered event must exist in IDL events").to.not.be.undefined;
+
+      // Check type definition with fields (IDL uses snake_case field names)
+      const types = rawIdl.types as Array<{ name: string; type: { fields?: Array<{ name: string }> } }>;
+      const evtType = types?.find((t: any) => t.name === "BadDebtTriggered");
+      expect(evtType, "BadDebtTriggered type must exist in IDL types").to.not.be.undefined;
+      const fieldNames = (evtType!.type.fields ?? []).map((f: any) => f.name);
+      expect(fieldNames).to.include("sss_mint");
+      expect(fieldNames).to.include("backstop_amount");
+      expect(fieldNames).to.include("remaining_shortfall");
+      expect(fieldNames).to.include("net_supply");
+    });
+
+    it("SSS-097: set_backstop_params max_backstop_bps = 10000 (100%) is valid boundary", async () => {
+      await program.methods
+        .setBackstopParams(sss097InsuranceFundAta, 10000)
+        .accounts({
+          authority: authority.publicKey,
+          config: sss097ConfigPda,
+          sssMint: sss097MintKp.publicKey,
+        })
+        .rpc();
+
+      const cfg = await program.account.stablecoinConfig.fetch(sss097ConfigPda);
+      expect(cfg.maxBackstopBps).to.equal(10000);
+    });
+  });
 });

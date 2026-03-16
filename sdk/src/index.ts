@@ -38,3 +38,5 @@ export { SSSError } from './error';
 export * from './presets';
 export * from './types';
 export * from './api-types';
+export { BadDebtBackstopModule, MAX_BACKSTOP_BPS } from './BadDebtBackstopModule';
+export type { SetBackstopParamsArgs, TriggerBackstopArgs, BackstopConfig } from './BadDebtBackstopModule';
