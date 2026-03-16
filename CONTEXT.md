@@ -1,39 +1,31 @@
-# SSS-Anchor Agent Context
+# SSS-Backend Agent Context
 
-**Last updated:** 2026-03-16T06:16 UTC
+**Last updated:** 2026-03-16T06:42 UTC
 
 ## Current State
 
-**Status:** SSS-110 COMPLETE — PR #140 open, awaiting QA review.
+**Status:** All tasks done. Two PRs open awaiting review.
 
 ## What's Done Recently
 
-### Heartbeat 2026-03-16T06:16 UTC
-- Picked up SSS-110 (mainnet-readiness final audit)
-- Ran full audit across 6 criteria — found 2 critical issues
-- **CRITICAL FIX 1:** FLAG_CIRCUIT_BREAKER defined but never enforced — added check to mint, cdp_borrow_stable, cdp_liquidate
-- **CRITICAL FIX 2:** CDP instructions had zero on-chain events — added CdpCollateralDeposited, CdpBorrowed, CdpRepaid, CdpLiquidated
-- Wrote docs/MAINNET-AUDIT.md (full audit report)
-- 151 tests passing / 2 pre-existing failures / 0 regressions
-- PR #140 opened to develop branch
-- Task marked done, QA + PM notified
+### Heartbeat 2026-03-16T06:42 UTC
+- **PR #138** (feat/SSS-108): Liquidation analytics + CDP health + protocol stats — OPEN, no human reviews yet
+- **PR #141** (feature/SSS-112-analytics): SSS-112 liquidation analytics endpoints — OPEN, no human reviews yet
+- SSS-108 and SSS-112 are duplicate assignments (same analytics endpoints), both done
+- 116 tests pass, clippy clean on feature/SSS-112-analytics
+- Docker not available in env (docker not installed), skipped
+- No backlog tasks, no in-progress tasks
+- Unread messages: SSS-108 and SSS-112 PM assignments (both actioned)
 
-## Open PRs
-- #140 feat(anchor): SSS-110 mainnet audit — OPEN, awaiting QA
-- #138 feat(backend): SSS-108 liquidation analytics — OPEN, awaiting QA
-- #137 feat(SSS-107): security hardening client wrappers — OPEN, awaiting QA
-- #136 docs: SSS-100/SSS-101 multi-collateral — OPEN
-- #135 feat(anchor): SSS-100 multi-collateral liquidation — OPEN
+### Heartbeat 2026-03-16T05:22 UTC (docs agent wrote this — now superseded)
+- PR #136 (docs SSS-100/101) open
 
-## Next Actions
-- Wait for QA on PR #140
-- Monitor older PRs for merge
+## Open PRs (backend)
+- **#138** feat/SSS-108 — Liquidation analytics + CDP health + protocol stats — OPEN
+- **#141** feature/SSS-112-analytics — SSS-112 liquidation analytics endpoints — OPEN
 
 ## System Health
-- Disk: 86% used, 11G free — monitor
-- Memory: warn (persistent)
+- Disk: 86% used, 11G free — creeping up, watch
+- Memory: warn status (persistent)
 - All agents inactive (normal for off-hours)
-
-## Pre-Existing Test Failures (Not Blocking)
-1. `freezes a token account` — DefaultAccountState extension (SSS-091 known)
-2. `SSS-098: IDL exposes CollateralConfig with expected fields` — test uses snake_case, Anchor IDL uses camelCase
+- Ollama: offline (expected)
