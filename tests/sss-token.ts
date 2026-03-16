@@ -585,50 +585,27 @@ describe("sss-token", () => {
     );
     // SSS-091: DefaultAccountState=Frozen means the ATA may already be frozen.
     // Thaw first (no-op if already thawed) so the explicit freeze call succeeds.
-    // Use sendAndConfirm with a fresh blockhash to avoid "Blockhash not found" under CI load.
-    try {
-      const thawTx = await program.methods
-        .thawAccount()
-        .accounts({
-          complianceAuthority: authority.publicKey,
-          config: configPda,
-          mint: mintKeypair.publicKey,
-          targetTokenAccount: ata,
-          tokenProgram: TOKEN_2022_PROGRAM_ID,
-        })
-        .transaction();
-      const { blockhash: thawBh, lastValidBlockHeight: thawLvbh } =
-        await provider.connection.getLatestBlockhash("confirmed");
-      thawTx.recentBlockhash = thawBh;
-      thawTx.lastValidBlockHeight = thawLvbh;
-      thawTx.feePayer = authority.publicKey;
-      await provider.sendAndConfirm(thawTx, [], { commitment: "confirmed" });
-    } catch (_) {
-      // Already thawed — safe to proceed
-    }
+    await program.methods
+      .thawAccount()
+      .accounts({
+        complianceAuthority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        targetTokenAccount: ata,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
 
-    try {
-      const freezeTx = await program.methods
-        .freezeAccount()
-        .accounts({
-          complianceAuthority: authority.publicKey,
-          config: configPda,
-          mint: mintKeypair.publicKey,
-          targetTokenAccount: ata,
-          tokenProgram: TOKEN_2022_PROGRAM_ID,
-        })
-        .transaction();
-      const { blockhash: freezeBh, lastValidBlockHeight: freezeLvbh } =
-        await provider.connection.getLatestBlockhash("confirmed");
-      freezeTx.recentBlockhash = freezeBh;
-      freezeTx.lastValidBlockHeight = freezeLvbh;
-      freezeTx.feePayer = authority.publicKey;
-      await provider.sendAndConfirm(freezeTx, [], { commitment: "confirmed" });
-    } catch (err: any) {
-      // "Invalid account state for operation" means already frozen — that's acceptable
-      const msg: string = err?.message ?? "";
-      if (!msg.includes("Invalid account state")) throw err;
-    }
+    await program.methods
+      .freezeAccount()
+      .accounts({
+        complianceAuthority: authority.publicKey,
+        config: configPda,
+        mint: mintKeypair.publicKey,
+        targetTokenAccount: ata,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
 
     // Post-condition: token account should be frozen
     const tokenAccount = await getAccount(
