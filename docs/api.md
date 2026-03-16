@@ -680,6 +680,125 @@ curl -H "X-Api-Key: sss_<48-char hex>" \
 
 ---
 
+## Analytics
+
+### GET /api/analytics/liquidations
+
+Returns aggregated liquidation statistics derived from on-chain `cdp_liquidate` events.
+
+**Query Parameters**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `from` | ISO 8601 datetime | No | Start of time window (inclusive) |
+| `to` | ISO 8601 datetime | No | End of time window (inclusive) |
+| `collateral_mint` | string | No | Filter to a specific collateral mint address |
+
+**Response 200**
+
+```json
+{
+  "success": true,
+  "data": {
+    "count": 42,
+    "total_collateral_seized": "8500000000",
+    "total_debt_covered": "6200000000",
+    "by_collateral_mint": {
+      "So11111111111111111111111111111111111111112": {
+        "count": 30,
+        "total_collateral_seized": "6000000000",
+        "total_debt_covered": "4400000000"
+      },
+      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+        "count": 12,
+        "total_collateral_seized": "2500000000",
+        "total_debt_covered": "1800000000"
+      }
+    }
+  },
+  "error": null
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `count` | number | Total liquidation events in window |
+| `total_collateral_seized` | string (u64) | Sum of collateral seized, in base units |
+| `total_debt_covered` | string (u64) | Sum of debt repaid by liquidators, in base units |
+| `by_collateral_mint` | object | Per-collateral breakdown |
+
+---
+
+### GET /api/analytics/cdp-health
+
+Returns a histogram of CDP health ratios across all active positions. Useful for monitoring protocol-wide collateralization levels.
+
+**Query Parameters**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `buckets` | integer | No | Number of histogram buckets (default: 10, max: 50) |
+
+**Response 200**
+
+```json
+{
+  "success": true,
+  "data": {
+    "buckets": [
+      { "min": 1.0, "max": 1.1, "count": 5 },
+      { "min": 1.1, "max": 1.2, "count": 12 },
+      { "min": 1.2, "max": 1.5, "count": 48 },
+      { "min": 1.5, "max": 2.0, "count": 103 },
+      { "min": 2.0, "max": null, "count": 212 }
+    ],
+    "total_positions": 380,
+    "at_risk_count": 5
+  },
+  "error": null
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `buckets` | array | Health ratio histogram; `max: null` means unbounded upper end |
+| `total_positions` | number | Total active CDP positions included |
+| `at_risk_count` | number | Positions with health ratio < 1.1 (near liquidation threshold) |
+
+---
+
+### GET /api/analytics/protocol-stats
+
+Returns high-level protocol metrics: total value locked, debt outstanding, backstop balance, and PSM balance. Derived from on-chain event log.
+
+**Response 200**
+
+```json
+{
+  "success": true,
+  "data": {
+    "tvl_usd": "12450000.00",
+    "debt_outstanding": "8500000000",
+    "backstop_balance": "500000000",
+    "psm_balance": "1200000000",
+    "snapshot_slot": "312456789",
+    "snapshot_time": "2026-03-16T06:00:00Z"
+  },
+  "error": null
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tvl_usd` | string (decimal) | Total collateral value locked, in USD |
+| `debt_outstanding` | string (u64) | Sum of all active CDP debt in base units |
+| `backstop_balance` | string (u64) | Current backstop fund balance in base units |
+| `psm_balance` | string (u64) | Current PSM reserve balance in base units |
+| `snapshot_slot` | string (u64) | Solana slot of the most recent event included |
+| `snapshot_time` | ISO 8601 | Wall-clock time of the most recent event included |
+
+---
+
 ## Error Responses
 
 All errors follow the standard envelope with `success: false`:

@@ -130,9 +130,6 @@ pub struct StablecoinConfig {
     /// expressed in basis points (e.g. 500 = 5% of net supply).
     /// 0 = unlimited (draw full shortfall up to insurance fund balance).
     pub max_backstop_bps: u16,
-    /// SSS-106: Auditor ElGamal pubkey for confidential transfers.
-    /// All-zero if FLAG_CONFIDENTIAL_TRANSFERS is not enabled.
-    pub auditor_elgamal_pubkey: [u8; 32],
     pub bump: u8,
 }
 

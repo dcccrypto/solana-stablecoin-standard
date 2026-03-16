@@ -5,6 +5,7 @@ use anchor_spl::token_interface::{
 };
 
 use crate::error::SssError;
+use crate::events::CdpRepaid;
 use crate::state::{CdpPosition, CollateralVault, StablecoinConfig};
 
 /// Repay SSS-3 stablecoin debt and release collateral proportionally.
@@ -165,11 +166,20 @@ pub fn cdp_repay_stable_handler(ctx: Context<CdpRepayStable>, amount: u64) -> Re
     let config = &mut ctx.accounts.config;
     config.total_burned = config.total_burned.checked_add(amount).unwrap();
 
+    emit!(CdpRepaid {
+        sss_mint: ctx.accounts.sss_mint.key(),
+        user: ctx.accounts.user.key(),
+        collateral_mint: ctx.accounts.collateral_mint.key(),
+        amount_repaid: amount,
+        collateral_released: collateral_to_release,
+        remaining_debt: ctx.accounts.cdp_position.debt_amount,
+    });
+
     msg!(
         "CDP: repaid {} SSS. Released {} collateral. Remaining debt: {}",
         amount,
         collateral_to_release,
-        position.debt_amount,
+        ctx.accounts.cdp_position.debt_amount,
     );
     Ok(())
 }

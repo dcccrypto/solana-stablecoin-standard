@@ -105,3 +105,72 @@ pub struct MintVelocityUpdated {
     pub max_mint_per_epoch: u64,
     pub authority: Pubkey,
 }
+
+// ─── SSS-110: CDP on-chain events ────────────────────────────────────────────
+
+/// Emitted when collateral is deposited into a CDP vault.
+#[event]
+pub struct CdpCollateralDeposited {
+    pub sss_mint: Pubkey,
+    pub user: Pubkey,
+    pub collateral_mint: Pubkey,
+    pub amount: u64,
+    pub vault_total: u64,
+}
+
+/// Emitted when SSS tokens are borrowed against collateral.
+#[event]
+pub struct CdpBorrowed {
+    pub sss_mint: Pubkey,
+    pub user: Pubkey,
+    pub collateral_mint: Pubkey,
+    pub amount_borrowed: u64,
+    pub total_debt: u64,
+}
+
+/// Emitted when SSS tokens are repaid and collateral is released.
+#[event]
+pub struct CdpRepaid {
+    pub sss_mint: Pubkey,
+    pub user: Pubkey,
+    pub collateral_mint: Pubkey,
+    pub amount_repaid: u64,
+    pub collateral_released: u64,
+    pub remaining_debt: u64,
+}
+
+/// Emitted when a CDP position is liquidated (SSS-110 circuit breaker compatible).
+#[event]
+pub struct CdpLiquidated {
+    pub sss_mint: Pubkey,
+    pub owner: Pubkey,
+    pub liquidator: Pubkey,
+    pub collateral_mint: Pubkey,
+    pub debt_burned: u64,
+    pub collateral_seized: u64,
+    /// Collateral ratio at time of liquidation (in basis points).
+    pub ratio_bps: u64,
+}
+
+/// SSS-100: Emitted on every CDP liquidation (full and partial) with multi-collateral details.
+#[event]
+pub struct CollateralLiquidated {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// The specific collateral mint seized.
+    pub collateral_mint: Pubkey,
+    /// The CDP owner whose position was (partially) liquidated.
+    pub cdp_owner: Pubkey,
+    /// The liquidator who initiated the liquidation.
+    pub liquidator: Pubkey,
+    /// Amount of SSS debt burned.
+    pub debt_burned: u64,
+    /// Amount of collateral transferred to the liquidator.
+    pub collateral_seized: u64,
+    /// Collateral ratio before liquidation (basis points).
+    pub ratio_before_bps: u64,
+    /// Whether this was a partial liquidation (true) or full (false).
+    pub partial: bool,
+    /// Liquidation bonus applied in basis points (from CollateralConfig or global default).
+    pub bonus_bps: u16,
+}

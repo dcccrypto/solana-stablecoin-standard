@@ -22,6 +22,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use auth::require_api_key;
 use db::Database;
 use routes::{
+    analytics::{get_cdp_health, get_liquidation_analytics, get_protocol_stats},
     apikeys::{create_api_key, delete_api_key, list_api_keys},
     cdp::{get_cdp_position, get_collateral_types, post_cdp_simulate},
     circuit_breaker::set_circuit_breaker,
@@ -39,6 +40,7 @@ use routes::{
     reserves::get_reserves_proof,
     supply::supply,
     webhooks::{delete_webhook, list_webhooks, register_webhook},
+    ws_events::ws_events_handler,
 };
 use state::AppState;
 
@@ -99,6 +101,9 @@ async fn main() {
         .route("/api/events", get(events))
         .route("/api/chain-events", get(chain_events))
         .route("/api/liquidations", get(get_liquidations))
+        .route("/api/analytics/liquidations", get(get_liquidation_analytics))
+        .route("/api/analytics/cdp-health", get(get_cdp_health))
+        .route("/api/analytics/protocol-stats", get(get_protocol_stats))
         .route("/api/reserves/proof", get(get_reserves_proof))
         .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
         .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
@@ -115,6 +120,7 @@ async fn main() {
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
         .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+        .route("/api/ws/events", get(ws_events_handler))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
@@ -175,6 +181,9 @@ mod tests {
             .route("/api/events", get(events))
             .route("/api/chain-events", get(chain_events))
             .route("/api/liquidations", get(get_liquidations))
+            .route("/api/analytics/liquidations", get(get_liquidation_analytics))
+            .route("/api/analytics/cdp-health", get(get_cdp_health))
+            .route("/api/analytics/protocol-stats", get(get_protocol_stats))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/blacklist/:id", delete(remove_blacklist))
             .route("/api/compliance/audit", get(get_audit))
@@ -652,6 +661,9 @@ mod qa_tests {
             .route("/api/events", get(events))
             .route("/api/chain-events", get(chain_events))
             .route("/api/liquidations", get(get_liquidations))
+            .route("/api/analytics/liquidations", get(get_liquidation_analytics))
+            .route("/api/analytics/cdp-health", get(get_cdp_health))
+            .route("/api/analytics/protocol-stats", get(get_protocol_stats))
             .route("/api/compliance/blacklist", get(get_blacklist).post(add_blacklist))
             .route("/api/compliance/audit", get(get_audit))
             .route("/api/compliance/rule", post(add_compliance_rule))
@@ -1515,5 +1527,162 @@ mod qa_tests {
         assert_eq!(even, 4); // 0,2,4,6
         let odd = db.count_liquidations(None, Some("MintOdd")).unwrap();
         assert_eq!(odd, 3); // 1,3,5
+    }
+
+    // ─── SSS-108: Analytics endpoint integration tests ────────────────────────
+
+    async fn analytics_get_json(app: Router<()>, uri: &str, key: &str) -> (StatusCode, serde_json::Value) {
+        use tower::ServiceExt;
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(uri)
+                    .header("X-Api-Key", key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+        (status, json)
+    }
+
+    fn build_analytics_app() -> (axum::Router, String) {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("analytics-test").unwrap();
+        let test_key = key_entry.key.clone();
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/analytics/liquidations", get(get_liquidation_analytics))
+            .route("/api/analytics/cdp-health", get(get_cdp_health))
+            .route("/api/analytics/protocol-stats", get(get_protocol_stats))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+        (app, test_key)
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_empty_db() {
+        let (app, key) = build_analytics_app();
+        let (status, json) = analytics_get_json(app, "/api/analytics/liquidations", &key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["count"], 0);
+        assert_eq!(json["data"]["window"], "24h");
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_with_data() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("test").unwrap();
+        let test_key = key_entry.key.clone();
+        // Insert 3 liquidations.
+        for i in 0..3u64 {
+            db.insert_liquidation(
+                &format!("CDP_{i}"),
+                "MintA",
+                (i as i64 + 1) * 1000,
+                (i as i64 + 1) * 800,
+                "Liq",
+                None,
+                None,
+            ).unwrap();
+        }
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/analytics/liquidations", get(get_liquidation_analytics))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+        let (status, json) = analytics_get_json(app, "/api/analytics/liquidations?window=24h", &test_key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["data"]["count"], 3);
+        // 1000+2000+3000 = 6000
+        assert_eq!(json["data"]["total_collateral_seized"], 6000);
+        // avg = 6000/3 = 2000
+        assert_eq!(json["data"]["avg_collateral_seized"], 2000);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_window_7d() {
+        let (app, key) = build_analytics_app();
+        let (status, json) = analytics_get_json(app, "/api/analytics/liquidations?window=7d", &key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["data"]["window"], "7d");
+    }
+
+    #[tokio::test]
+    async fn test_analytics_liquidations_window_30d() {
+        let (app, key) = build_analytics_app();
+        let (status, json) = analytics_get_json(app, "/api/analytics/liquidations?window=30d", &key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["data"]["window"], "30d");
+    }
+
+    #[tokio::test]
+    async fn test_analytics_cdp_health_empty_db() {
+        let (app, key) = build_analytics_app();
+        let (status, json) = analytics_get_json(app, "/api/analytics/cdp-health", &key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["total"], 0);
+        assert_eq!(json["data"]["healthy"], 0);
+        assert_eq!(json["data"]["at_risk"], 0);
+        assert_eq!(json["data"]["liquidatable"], 0);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_cdp_health_with_events() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key("test").unwrap();
+        let test_key = key_entry.key.clone();
+        // Healthy CDP: 5000 collateral, 1000 debt → hf=5.0
+        db.insert_event_log("cdp_deposit", "CDP_A",
+            serde_json::json!({"amount": 5000}), None, None).unwrap();
+        db.insert_event_log("cdp_borrow", "CDP_A",
+            serde_json::json!({"amount": 1000}), None, None).unwrap();
+        // At-risk CDP: 1500 collateral, 1000 debt → hf=1.5
+        db.insert_event_log("cdp_deposit", "CDP_B",
+            serde_json::json!({"amount": 1500}), None, None).unwrap();
+        db.insert_event_log("cdp_borrow", "CDP_B",
+            serde_json::json!({"amount": 1000}), None, None).unwrap();
+        // Liquidatable CDP: 800 collateral, 1000 debt → hf=0.8
+        db.insert_event_log("cdp_deposit", "CDP_C",
+            serde_json::json!({"amount": 800}), None, None).unwrap();
+        db.insert_event_log("cdp_borrow", "CDP_C",
+            serde_json::json!({"amount": 1000}), None, None).unwrap();
+
+        let state = AppState::new(db);
+        let app = Router::new()
+            .route("/api/analytics/cdp-health", get(get_cdp_health))
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+        let (status, json) = analytics_get_json(app, "/api/analytics/cdp-health", &test_key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["data"]["total"], 3);
+        assert_eq!(json["data"]["healthy"], 1);
+        assert_eq!(json["data"]["at_risk"], 1);
+        assert_eq!(json["data"]["liquidatable"], 1);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_protocol_stats_empty_db() {
+        let (app, key) = build_analytics_app();
+        let (status, json) = analytics_get_json(app, "/api/analytics/protocol-stats", &key).await;
+        assert_eq!(status, 200);
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["total_collateral_locked_native"], 0);
+        assert_eq!(json["data"]["total_debt_native"], 0);
+        assert_eq!(json["data"]["backstop_fund_debt_repaid"], 0);
+        assert_eq!(json["data"]["active_collateral_types"], 0);
+    }
+
+    #[tokio::test]
+    async fn test_analytics_requires_auth() {
+        let (app, _) = build_analytics_app();
+        let (status, _) = analytics_get_json(app, "/api/analytics/liquidations", "bad-key").await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 }

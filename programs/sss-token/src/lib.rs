@@ -116,10 +116,23 @@ pub mod sss_token {
     /// CDP: Liquidate an undercollateralised position (ratio < 120%).
     /// Callable by anyone; liquidator burns full debt and receives all collateral.
     /// Liquidate an undercollateralised CDP position.
-    /// `min_collateral_amount`: minimum collateral tokens the liquidator expects to receive
-    /// (slippage protection). Pass 0 to disable (backward compatible).
-    pub fn cdp_liquidate(ctx: Context<CdpLiquidate>, min_collateral_amount: u64) -> Result<()> {
-        instructions::cdp_liquidate::cdp_liquidate_handler(ctx, min_collateral_amount)
+    /// SSS-100: Extended with partial liquidation and per-collateral config support.
+    /// `params.min_collateral_amount`: slippage protection (0 = disabled, backward compatible).
+    /// `params.partial_repay_amount`: if > 0, only burn this much debt and seize proportional
+    /// collateral+bonus, restoring the CDP to healthy ratio.  0 = full liquidation.
+    pub fn cdp_liquidate(ctx: Context<CdpLiquidate>, params: instructions::cdp_liquidate::CdpLiquidateParams) -> Result<()> {
+        instructions::cdp_liquidate::cdp_liquidate_handler(ctx, params)
+    }
+
+    /// SSS-100: Multi-collateral liquidation engine with partial liquidation support.
+    /// `debt_to_repay`: SSS tokens to burn (0 = full liquidation).
+    /// `min_collateral_amount`: slippage guard — minimum collateral tokens to receive (0 = disabled).
+    pub fn cdp_liquidate_v2(
+        ctx: Context<CdpLiquidateV2>,
+        debt_to_repay: u64,
+        min_collateral_amount: u64,
+    ) -> Result<()> {
+        instructions::cdp_liquidate_v2::cdp_liquidate_v2_handler(ctx, debt_to_repay, min_collateral_amount)
     }
 
     /// SSS-092: Accrue and burn stability fees on a CDP position.

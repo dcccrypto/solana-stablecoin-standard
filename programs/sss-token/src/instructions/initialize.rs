@@ -77,14 +77,19 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     // SSS-106: Validate and store confidential transfer config if FLAG is set.
     let ct_enabled = params.feature_flags.unwrap_or(0) & FLAG_CONFIDENTIAL_TRANSFERS != 0;
     if ct_enabled {
+        // Blocker #1: validate auditor ElGamal key is present and non-zero
         require!(params.auditor_elgamal_pubkey.is_some(), SssError::MissingAuditorKey);
         let auditor_key = params.auditor_elgamal_pubkey.unwrap();
-        if let Some(ct_config) = &mut ctx.accounts.ct_config {
-            ct_config.mint = ctx.accounts.mint.key();
-            ct_config.auditor_elgamal_pubkey = auditor_key;
-            ct_config.auto_approve_new_accounts = true;
-            ct_config.bump = ctx.bumps.ct_config.ok_or(SssError::ConfidentialTransferNotEnabled)?;
-        }
+        require!(auditor_key != [0u8; 32], SssError::InvalidElGamalKey);
+        // Blocker #4: ct_config MUST be supplied when FLAG_CONFIDENTIAL_TRANSFERS is set
+        let ct_config = ctx.accounts.ct_config.as_mut().ok_or(SssError::ConfidentialTransferNotEnabled)?;
+        ct_config.mint = ctx.accounts.mint.key();
+        ct_config.auditor_elgamal_pubkey = auditor_key;
+        ct_config.auto_approve_new_accounts = true;
+        ct_config.bump = ctx.bumps.ct_config.ok_or(SssError::ConfidentialTransferNotEnabled)?;
+    } else {
+        // Blocker #4: ct_config MUST be omitted when FLAG_CONFIDENTIAL_TRANSFERS is NOT set
+        require!(ctx.accounts.ct_config.is_none(), SssError::UnexpectedCtConfig);
     }
 
     // Validate token_program is TOKEN-2022
@@ -172,13 +177,8 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.stability_fee_bps = 0;
     // SSS-093: PSM redemption fee starts at 0 (disabled by default)
     config.redemption_fee_bps = 0;
-    // SSS-106: confidential transfers
+    // SSS-106: confidential transfers — auditor key stored in ConfidentialTransferConfig PDA only
     config.feature_flags = params.feature_flags.unwrap_or(0);
-    config.auditor_elgamal_pubkey = if ct_enabled {
-        params.auditor_elgamal_pubkey.unwrap()
-    } else {
-        [0u8; 32]
-    };
     config.bump = ctx.bumps.config;
 
     msg!(

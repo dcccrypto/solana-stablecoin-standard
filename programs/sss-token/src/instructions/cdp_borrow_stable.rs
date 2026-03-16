@@ -3,7 +3,8 @@ use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInte
 use pyth_sdk_solana::state::SolanaPriceAccount;
 
 use crate::error::SssError;
-use crate::state::{CdpPosition, CollateralVault, StablecoinConfig};
+use crate::events::CdpBorrowed;
+use crate::state::{CdpPosition, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
 
 /// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
 /// Overridden by `StablecoinConfig.max_oracle_age_secs` when non-zero.
@@ -76,6 +77,21 @@ pub struct CdpBorrowStable<'info> {
 
 pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
+    // SSS-110: Circuit breaker — halt CDP borrows when FLAG_CIRCUIT_BREAKER is set.
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+        SssError::CircuitBreakerActive
+    );
+
+    // SSS-085 Fix 1: Validate Pyth feed Pubkey — reject unknown/spoofed price feeds.
+    // If expected_pyth_feed is set (non-default), the provided account must match exactly.
+    let expected_feed = ctx.accounts.config.expected_pyth_feed;
+    if expected_feed != Pubkey::default() {
+        require!(
+            ctx.accounts.pyth_price_feed.key() == expected_feed,
+            SssError::UnexpectedPriceFeed
+        );
+    }
 
     // SSS-085 Fix 1: Validate Pyth feed Pubkey — reject unknown/spoofed price feeds.
     // If expected_pyth_feed is set (non-default), the provided account must match exactly.
@@ -209,10 +225,18 @@ pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> 
     let config = &mut ctx.accounts.config;
     config.total_minted = config.total_minted.checked_add(amount).unwrap();
 
+    emit!(CdpBorrowed {
+        sss_mint: ctx.accounts.sss_mint.key(),
+        user: ctx.accounts.user.key(),
+        collateral_mint: ctx.accounts.collateral_mint.key(),
+        amount_borrowed: amount,
+        total_debt: ctx.accounts.cdp_position.debt_amount,
+    });
+
     msg!(
         "CDP: borrowed {} SSS. Total debt: {}. Max allowed: {}",
         amount,
-        position.debt_amount,
+        ctx.accounts.cdp_position.debt_amount,
         max_borrow_sss,
     );
     Ok(())

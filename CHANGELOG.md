@@ -15,6 +15,181 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ---
 
+## [0.4.0] — 2026-03-16 (Sprint: Mainnet Readiness + Liquidation Analytics)
+
+This release marks **mainnet readiness** for the Solana Stablecoin Standard. A full security audit sprint, multi-collateral liquidation system, real-time event streaming, and protocol analytics were completed and merged.
+
+### SSS-112 — Liquidation Analytics Endpoints [PR #144]
+
+- `GET /api/analytics/liquidations` — paginated liquidation history with wallet/date-range/collateral-mint filters
+- `GET /api/analytics/cdp-health` — CDP health distribution across safe/warning/critical/at-risk tiers
+- `GET /api/analytics/protocol-stats` — aggregate TVL, total CDPs, liquidation volume, collateral breakdown
+- Full reference documented in `docs/api.md` §Analytics
+
+### SSS-110 — Mainnet-Readiness Final Audit [PR #140]
+
+- Comprehensive review of all Anchor program instructions for parameter validation, overflow safety, and permission gating
+- Added missing bound checks and authority validations across `cdp_open`, `cdp_repay`, `set_backstop_params`, and `set_oracle_params`
+- Confirmed 124 tests passing, clippy clean, zero unsafe blocks
+
+### SSS-109 — Mainnet Launch Checklist + Incident Response Runbook [PR #139]
+
+- `docs/MAINNET-CHECKLIST.md` — pre-launch checklist covering program verification, multisig setup, oracle configuration, rate-limit tuning, and go/no-go criteria
+- `docs/INCIDENT-RESPONSE.md` — runbook for P0/P1/P2 incidents: circuit breaker procedures, oracle failures, liquidation cascades, depeg events, and post-mortem template
+
+### SSS-108 — Backend Liquidation Analytics + CDP Health + Protocol Stats [PR #138]
+
+- First implementation of analytics endpoints (subsequently superseded/cleaned up in SSS-112/PR #144)
+- `liquidation_events` table with indexed wallet, collateral_mint, and timestamp columns
+- Background task polling `cdp_liquidate` on-chain events into the DB
+
+### SSS-107 — Security Hardening SDK Wrappers [PR #137]
+
+- `SlippageGuard` — enforces max-slippage on collateral swaps; throws `SlippageExceeded` if price impact exceeds configured threshold
+- `PythFeedValidator` — validates Pyth price feeds: staleness checks, confidence interval, exponent normalization
+- `TimelockHelper` — client-side helper for proposing, viewing, and executing timelock operations against `AdminTimelockModule`
+- `DaoDeduplicationGuard` — prevents duplicate DAO proposals from the same keypair within a configurable window
+
+### SSS-106 — Deployment Guide [PR #143]
+
+- `docs/DEPLOYMENT-GUIDE.md` — end-to-end deployment guide covering: devnet → mainnet migration, program upgrade authority management, multisig configuration, oracle feed wiring, backend environment setup, and smoke-test checklist
+
+### SSS-105 — WebSocket Real-Time Event Stream [PR #131]
+
+- `ws://host/ws/events` endpoint — streams `LiquidationEvent`, `CDPOpenedEvent`, `CDPRepaidEvent`, and `StabilityFeeAccruedEvent` as JSON
+- Backed by `event_log` table (SSS-095); events fan-out to all connected subscribers
+- `docs/chain-events.md` updated with WebSocket section and message schema
+
+### SSS-104 — Complete API Reference [PR #130]
+
+- `docs/api.md` — full REST reference for all backend endpoints: health, auth, CDPs, collateral config, chain events, analytics, WebSocket
+- Includes request/response schemas, example curl commands, error codes, and pagination patterns
+
+### SSS-103 — Integration Test Suite [PR #133]
+
+- `tests/integration/` — comprehensive integration tests for SSS-090 through SSS-099 features
+- Covers oracle safety, DefaultAccountState=Frozen, stability fee, PSM velocity, chain-event indexing, bad-debt backstop, CollateralConfig PDA, and oracle params SDK
+
+### SSS-102 — Liquidation History API [PR #129]
+
+- `GET /api/liquidations` — paginated liquidation history endpoint with wallet and date-range filters
+- Seeded from on-chain `cdp_liquidate` events indexed by the backend event listener
+
+### SSS-101 — MultiCollateralLiquidationModule SDK [PR #128]
+
+- `MultiCollateralLiquidationModule` — TypeScript SDK module for multi-collateral CDP liquidation
+  - `calcLiquidationAmount(cdpAddress)` — calculates repay amount + collateral reward for any collateral type
+  - `fetchLiquidatableCDPs(options)` — returns all CDPs below minimum collateral ratio
+  - `liquidate(cdpAddress, repayAmount)` — executes `cdp_liquidate_v2` via Anchor
+  - 28 unit tests; exported from `sdk/src/index.ts`
+
+### SSS-100 — Multi-Collateral Liquidation + Partial Liquidation + BadDebtBackstop SDK [PR #135, #124, #143]
+
+- Anchor: `cdp_liquidate_v2` instruction supporting arbitrary collateral mints, partial liquidation (configurable close factor), and liquidation bonus per collateral type
+- SDK: `BadDebtBackstopModule` — insurance fund management (deposit, withdraw, trigger backstop)
+- `CollateralLiquidated` event added to IDL and SDK types
+
+### SSS-098 — CollateralConfig PDA + Backend API [PR #125]
+
+- On-chain `CollateralConfig` PDA per collateral mint: stores `liquidation_threshold`, `liquidation_bonus`, `max_ltv`, `oracle_feed`, `is_active`
+- `GET /api/collateral-config/:mint` and `GET /api/collateral-configs` backend routes
+- SDK: `CollateralConfigModule.fetchCollateralConfig(mint)` and `listCollateralConfigs()`
+
+### SSS-097 — Bad-Debt Backstop [PR #123]
+
+- Anchor: `set_backstop_params` and `trigger_backstop` instructions — protocol-owned insurance fund that absorbs residual bad debt when liquidation proceeds are insufficient
+- Backstop parameters: `backstop_threshold`, `backstop_mint`, `max_backstop_fill_bps`
+
+### SSS-096 — StabilityFeeModule SDK [PR #117]
+
+- `StabilityFeeModule` TypeScript client: `fetchStabilityFeeRate()`, `previewAccruedFee(cdpAddress)`, `collectFee(cdpAddress)`
+- Wraps `collect_stability_fee` Anchor instruction
+
+### SSS-095 — Chain Event Indexing + API [PR #110, #115]
+
+- `event_log` SQLite table: indexes all on-chain events by type, slot, signature, and timestamp
+- `GET /api/chain-events` — queryable event log with type/date filters and cursor-based pagination
+- `docs/chain-events.md` — event types reference including `stability_fee_accrual` and indexer architecture
+
+### SSS-094 — OracleParamsModule SDK [PR #122]
+
+- `OracleParamsModule.fetchOracleParams(stablecoinAddress)` — retrieves current oracle configuration from on-chain `OracleParams` PDA
+- `validateOracleFeed(feedAddress, options)` — checks staleness, confidence interval, and exponent
+- 27 unit tests
+
+### SSS-093 — PSM Fee + Per-Minter Velocity Limit [PR #116]
+
+- Anchor: `set_psm_params` instruction adds `psm_fee_bps` and per-minter velocity cap (`velocity_limit`, `velocity_window_seconds`)
+- `docs/psm-velocity.md` — PSM fee and velocity limit reference
+
+### SSS-092 — Stability Fee [PR #114]
+
+- Anchor: `set_stability_fee` and `collect_stability_fee` instructions — continuous stability fee accrual on outstanding CDP debt (annual rate in BPS, accrued per-second)
+- `docs/stability-fee.md` — stability fee mechanics and admin reference
+
+### SSS-091 — DefaultAccountState=Frozen [PR #109]
+
+- Token-2022 mint initialized with `DefaultAccountState=Frozen` extension — all new ATAs are frozen until explicitly thawed by the compliance authority
+- Test suite updated to thaw ATAs in `beforeAll` hooks
+
+### SSS-090 — Oracle Staleness + Confidence Checks [PR #113]
+
+- Oracle safety guards added to `cdp_open`, `cdp_repay`, `cdp_liquidate`, `cdp_liquidate_v2`: reject feeds older than `max_oracle_age_slots`, reject feeds with confidence interval exceeding `max_confidence_bps` of price
+- Configurable per-stablecoin via `OracleParams` PDA
+
+### SSS-087 — AdminTimelockModule Docs + CDP Security [PR #105]
+
+- `docs/on-chain-sdk-admin-timelock.md` — full SDK reference for `AdminTimelockModule` (propose, execute, cancel, fetchPendingOps)
+- Updated `docs/on-chain-sdk-cdp.md` with security-hardening notes from SSS-085/086
+
+### SSS-086 — AdminTimelockModule SDK [PR #107, #104]
+
+- `AdminTimelockModule` TypeScript client wrapping the on-chain timelock: `proposeAdminOp`, `executeAdminOp`, `cancelAdminOp`, `fetchPendingOps`
+
+### SSS-085 — P0 Security Fixes [PR #103]
+
+- **5 CRITICAL findings addressed:**
+  1. Missing authority check on `update_minter` — now requires `admin` signer
+  2. `set_backstop_params` missing signer validation — added `admin` constraint
+  3. Integer overflow in stability fee accrual — switched to checked arithmetic (`checked_mul`, `checked_div`)
+  4. Oracle feed address not validated against stored config — added feed pubkey equality check
+  5. CDP repay could repay more than outstanding debt — added `min(repay_amount, outstanding_debt)` cap
+
+### SSS-084 — Security Audit Gaps Analysis [PR #102]
+
+- `docs/MAINNET-AUDIT.md` — attack surface analysis: reentrancy vectors, oracle manipulation, flash loan risk, authority escalation paths, and recommended mitigations
+
+### SSS-083 — Documentation & Standards Gaps Analysis [PR #101]
+
+- `docs/GAPS-ANALYSIS-DOCS.md` → merged into `docs/SUBMISSION.md` — comparison vs Uniswap v3, Aave v3, MakerDAO, and OpenZeppelin standards; identified 14 documentation gaps
+
+### SSS-082 — Backend Infrastructure Gaps Analysis [PR #100]
+
+- Identified production readiness gaps: missing rate limiting on analytics routes, no request signing, WebSocket reconnect logic, missing OpenTelemetry traces — all addressed in subsequent sprints
+
+### SSS-081 — SDK/DX Gaps Analysis [PR #99]
+
+- Benchmarked SDK developer experience vs Solana Pay, Metaplex, and Jupiter SDKs; gaps addressed in SSS-086/094/096/101/107
+
+### SSS-080 — Anchor Program Gaps Analysis [PR #106]
+
+- `docs/GAPS-ANALYSIS-ANCHOR.md` — on-chain program comparison vs USDC (SPL), DAI (MakerDAO), crvUSD, Frax, and USDe; identified missing partial liquidation, velocity limits, backstop fund, stability fees — all subsequently implemented
+
+### SSS-072 — YieldCollateralModule SDK [PR #98]
+
+- `YieldCollateralModule` — `FLAG_YIELD_COLLATERAL` (bit 3) on-chain flag + SDK: `setYieldCollateral`, `fetchYieldCollateralAccounts`, `harvestYield`
+- 28 unit tests; exported from `sdk/src/index.ts`
+
+### CI Fixes [2026-03-16]
+
+- Thaw ATAs before mint in transfer-hook `beforeAll` (fixes frozen-account CI flake) [PR #126]
+- `sendAndConfirm` with fresh blockhash retry in freeze-token-account test (fixes intermittent CI timeout) [PR #142]
+- Fixed missing `ADMIN_OP_NONE` + `DEFAULT_ADMIN_TIMELOCK_DELAY` imports in `initialize.rs` [PR #120]
+- Fixed SSS-091/098 integration tests: `thaw_account` before circuit-breaker assertions, camelCase IDL field names [PR #134]
+- Backported 3 missing SSS-085 security fields to main [PR #112]
+
+---
+
 ## [0.2.0] — 2026-03-14
 
 ### SSS-017 — ComplianceModule Anchor Wiring [PR #39]
