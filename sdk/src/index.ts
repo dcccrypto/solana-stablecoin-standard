@@ -50,3 +50,23 @@ export type {
 } from './BadDebtBackstopModule';
 export { CollateralConfigModule, COLLATERAL_CONFIG_SEED } from './CollateralConfigModule';
 export type { CollateralConfigAccount, RegisterCollateralParams, UpdateCollateralConfigParams } from './CollateralConfigModule';
+export {
+  SlippageGuard,
+  PythFeedValidator,
+  TimelockHelper,
+  DaoDeduplicationGuard,
+  DEFAULT_SLIPPAGE_BUFFER_BPS,
+  MIN_SLIPPAGE_BPS,
+  MAX_SLIPPAGE_BPS,
+  SLOT_MS,
+} from './SecurityHardeningModule';
+export type {
+  PythPriceSnapshot,
+  SlippageResult,
+  SlippageGuardOptions,
+  FeedValidationResult,
+  StablecoinConfigFeedInfo,
+  TimelockState,
+  TimelockReadinessResult,
+  DeduplicationResult,
+} from './SecurityHardeningModule';
