@@ -5310,6 +5310,19 @@
       ]
     },
     {
+      "name": "ConfidentialTransferConfig",
+      "discriminator": [
+        212,
+        76,
+        180,
+        128,
+        60,
+        248,
+        58,
+        199
+      ]
+    },
+    {
       "name": "DaoCommitteeConfig",
       "discriminator": [
         17,
@@ -6011,13 +6024,13 @@
     },
     {
       "code": 6069,
-      "name": "PartialLiquidationInsufficientRepay",
-      "msg": "partial_repay_amount would not restore CDP to healthy ratio — increase repay amount"
+      "name": "ConfidentialTransferNotEnabled",
+      "msg": "Confidential transfer not enabled for this mint"
     },
     {
       "code": 6070,
-      "name": "InvalidAmount",
-      "msg": "invalid amount: partial_repay_amount exceeds total debt"
+      "name": "MissingAuditorKey",
+      "msg": "Auditor ElGamal pubkey required for confidential transfers"
     }
   ],
   "types": [
@@ -6608,6 +6621,55 @@
       }
     },
     {
+      "name": "ConfidentialTransferConfig",
+      "docs": [
+        "Confidential transfer config PDA — one per mint when FLAG_CONFIDENTIAL_TRANSFERS is set.",
+        "Seeds: [b\"ct-config\", mint]",
+        "",
+        "Stores the issuer's auditor ElGamal pubkey for confidential transfers.",
+        "The auditor can decrypt all transfer amounts; external observers cannot.",
+        "This is the foundation for Token-2022 ConfidentialTransferMint extension integration.",
+        "The actual ConfidentialTransferMint extension wiring is a follow-up (SSS-107)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "docs": [
+              "The SSS mint this config belongs to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "auditor_elgamal_pubkey",
+            "docs": [
+              "The issuer's ElGamal public key used to audit (decrypt) all transfer amounts.",
+              "Must be a valid ElGamal pubkey on the Ristretto255 curve (32 bytes)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "auto_approve_new_accounts",
+            "docs": [
+              "When true, new token accounts are automatically approved for confidential transfers.",
+              "When false, the authority must manually approve each account."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "DaoCommitteeConfig",
       "docs": [
         "DAO Committee Config PDA — tracks committee members and proposal counter.",
@@ -6756,64 +6818,6 @@
                 ]
               }
             }
-          }
-        ]
-      }
-    },
-    {
-      "name": "InterfaceVersion",
-      "docs": [
-        "Interface version PDA — external callers check this before invoking SSS via CPI.",
-        "Seeds: [\"interface-version\", sss_mint]",
-        "",
-        "Callers should read this PDA and verify:",
-        "- `version` matches their expected version (breaking changes bump version)",
-        "- `active` is true (protocol not deprecated)",
-        "",
-        "Breaking interface changes require a new program address per Solana convention,",
-        "but the version field gives callers a cheap on-chain safety check."
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "mint",
-            "docs": [
-              "The SSS mint this interface applies to"
-            ],
-            "type": "pubkey"
-          },
-          {
-            "name": "version",
-            "docs": [
-              "Current interface version (1 = initial CPI composability standard)"
-            ],
-            "type": "u8"
-          },
-          {
-            "name": "active",
-            "docs": [
-              "Whether this interface is active; false = deprecated / use new program"
-            ],
-            "type": "bool"
-          },
-          {
-            "name": "namespace",
-            "docs": [
-              "Interface namespace used for discriminator derivation",
-              "sha256(\"sss_mint_interface:mint\")[..8] => mint discriminator",
-              "sha256(\"sss_mint_interface:burn\")[..8] => burn discriminator"
-            ],
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
-          },
-          {
-            "name": "bump",
-            "type": "u8"
           }
         ]
       }
@@ -7438,6 +7442,19 @@
               "0 = unlimited (draw full shortfall up to insurance fund balance)."
             ],
             "type": "u16"
+          },
+          {
+            "name": "auditor_elgamal_pubkey",
+            "docs": [
+              "SSS-106: Auditor ElGamal pubkey for confidential transfers.",
+              "All-zero if FLAG_CONFIDENTIAL_TRANSFERS is not enabled."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           },
           {
             "name": "bump",
