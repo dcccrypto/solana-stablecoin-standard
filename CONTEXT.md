@@ -1,32 +1,41 @@
-# sss-backend CONTEXT
+# SSS-Docs Agent Context
 
-_Last updated: 2026-03-16T04:06 UTC_
+**Last updated:** 2026-03-16T05:22 UTC
 
 ## Current State
-- SSS-105 WebSocket endpoint complete, PR #131 open → develop
-- Backend: 98/98 tests passing
-- No new tasks in backlog or in-progress
 
-## SSS-105 Implementation (complete)
-- `AppState.ws_tx`: `broadcast::Sender<serde_json::Value>` capacity 256
-- Indexer publishes events to broadcast channel after `insert_event_log`
-- `GET /api/ws/events?type=liquidation|cdp|circuit-breaker`
-- Filter aliases: liquidation→cdp_liquidate, cdp→{cdp_deposit,cdp_borrow,cdp_liquidate}, circuit-breaker→circuit_breaker_toggle
-- Welcome message on connect; Lag notification to slow clients
-- 11 new unit tests in routes/ws_events.rs
+**Status:** PR #136 open, awaiting review/merge. No new tasks or messages.
 
-## Previous Completed Work
-- SSS-102: Liquidation history API (PR #129, merged)
-- SSS-095: event indexing (chain-events endpoint + indexer)
-- SSS-098: CollateralConfig PDA + API endpoints
+## What's Done Recently
+
+### Heartbeat 2026-03-16T05:22 UTC
+- No new commits since last CONTEXT update (latest: 9c5403f)
+- PR #136 (docs: SSS-100/SSS-101 — multi-collateral liquidation & MultiCollateralLiquidationModule) open, CodeRabbit ✅, no human reviews yet
+- No backlog tasks, no in-progress tasks, no unread messages
+- Health: disk 85% / 12G free, memory warn (persistent), all agents inactive
+
+### Heartbeat 2026-03-16T05:03 UTC
+- Wrote + pushed docs for SSS-100/SSS-101: multi-collateral liquidation + MultiCollateralLiquidationModule
+- Opened PR #136 covering commit 8f46649
+- PR #135 (anchor feat SSS-100) also open
+
+### Heartbeat 2026-03-16T02:25 UTC
+- Detected SSS-100 commit: BadDebtBackstopModule extended methods + docs/on-chain-sdk-backstop.md merged
+- Updated docs/ARCHITECTURE.md SDK section: added all 13 modules
+- Committed + pushed to develop (0e14eb8)
+
+### Prior completed work
+- SSS-099: Updated upstream PR #123 with Gaps Sprint Results
+- SSS-097 bad-debt backstop docs + SDK
+- SSS-095 chain event indexer docs
+- SSS-094 OracleParamsModule SDK docs
+- SSS-092/SSS-093 stability-fee.md + psm-velocity.md
+- SSS-090 oracle safety docs
 
 ## Open PRs
-- PR #131: SSS-105 WebSocket endpoint (awaiting review)
+- #136 docs: SSS-100/SSS-101 multi-collateral liquidation — OPEN, CodeRabbit ✅
 
-## Blocking Issues
-- SSS-078: Devnet deployment requires manual browser wallet auth — must be Khubair
-
-## Latest Code
-- feature/SSS-105-websocket-events: 98/98 tests passing
-- GET /api/ws/events live
-- GET /api/chain-events, GET /api/liquidations fully operational
+## System Health
+- Disk: 85% used, 12G free — creeping up, monitor
+- Memory: warn status (persistent)
+- All agents inactive (normal for off-hours)
