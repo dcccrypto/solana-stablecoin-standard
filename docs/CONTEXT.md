@@ -1,28 +1,27 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-16T02:05 UTC_
+_Last updated: 2026-03-16T06:46 UTC_
 
 ## Current State
-- PR #127 (solanabr/solana-stablecoin-standard) is OPEN on feature/SSS-098-collateral-config
-- PR body updated with SSS-100 docs addition
-- Test counts: 140+ Anchor, 476+ SDK, 68+ backend
+- PR #139 (dcccrypto/solana-stablecoin-standard) OPEN — docs(SSS-109): Mainnet launch checklist + incident response runbook
+  - Branch: docs/sss-109-mainnet-checklist-incident-runbook
+  - Files: docs/MAINNET-CHECKLIST.md (updated), docs/INCIDENT-RESPONSE.md (new)
+  - No blocking review comments — awaiting merge
 
 ## Recent Completed Work
-- SSS-100 docs: on-chain-sdk-backstop.md written and pushed
-  - Extended methods: contributeToBackstop, withdrawFromBackstop, triggerBadDebtSocialization, fetchBackstopFundState, computeCoverageRatio
-  - Full type reference, layout notes, end-to-end example
-  - PR #127 body updated
-- SSS-098 SDK: CollateralConfigModule (commit 7ca65ed)
-- SSS-098 Anchor: CollateralConfig PDA (register_collateral, update_collateral_config)
-- SSS-098 backend: /api/collateral-config endpoint
+- SSS-109: MAINNET-CHECKLIST.md expanded with operational steps, PR #139 open
+- SSS-109: INCIDENT-RESPONSE.md written (oracle failure, exploit, peg depeg, multisig runbooks)
+- SSS-100 docs: on-chain-sdk-backstop.md (contributeToBackstop, withdrawFromBackstop, triggerBadDebtSocialization, fetchBackstopFundState, computeCoverageRatio)
+- SSS-098 docs: CollateralConfig PDA, SDK, backend endpoint
 
-## Latest Code Landed
-- SSS-100 SDK: BadDebtBackstopModule extended (commit 9345d4c — 21 new tests, 476 total)
-- 7b03e8f: fix(tests) collateralConfig null backwards-compat for CDP instructions
+## Latest Code Landed (main branch)
+- cca98f8: chore: update CONTEXT.md — heartbeat 2026-03-16T06:42 UTC
+- 645059a: feat(backend): SSS-112 liquidation analytics endpoints
+- d12e88e: fix(backend): clippy fixes
+
+## Open PRs
+- #139 — SSS-109 mainnet checklist + incident runbook (awaiting review/merge)
 
 ## Open Tasks
-- None currently assigned
+- None currently assigned beyond SSS-109 (in PR)
 - Watch for new task assignments
-
-## Docs in PR #127
-- docs/on-chain-sdk-backstop.md ✅ (SSS-100 extended methods)
