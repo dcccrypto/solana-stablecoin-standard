@@ -12,6 +12,15 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 - `docs/SSS-1.md` — minimal preset specification
 - `docs/SSS-2.md` — compliant preset specification
 - `docs/SSS-3.md` — trustless collateral-backed preset reference design
+- **SSS-112 — Liquidation Analytics Endpoints [PR #144 merged 2026-03-16]**
+  - `GET /api/analytics/liquidations` — query liquidation history with filters (wallet, date range, collateral mint, pagination)
+  - `GET /api/analytics/cdp-health` — CDP health distribution across risk tiers (safe/warning/critical)
+  - `GET /api/analytics/protocol-stats` — aggregate protocol metrics (TVL, total CDPs, liquidation volume, collateral breakdown)
+  - Full reference documented in `docs/api.md` §Analytics
+- **CI fixes [2026-03-16]**
+  - Added missing `rent: SYSVAR_RENT_PUBKEY` to 6 `initialize()` calls in integration tests (fixes INT-090/092/093/097/098)
+  - Added `CollateralLiquidated` event to `idl/sss_token.json` and `sdk/src/idl/sss_token.json` (event was emitted by `cdp_liquidate`/`cdp_liquidate_v2` but missing from IDL)
+  - Fixed missing `export {` keyword for `MultiCollateralLiquidationModule` in `sdk/src/index.ts` (resolved TS1109/TS1434 compile errors)
 
 ---
 
