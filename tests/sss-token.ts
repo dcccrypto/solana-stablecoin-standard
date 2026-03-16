@@ -650,6 +650,28 @@ describe("sss-token", () => {
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
+    // Ensure frozen first (prior test may have left it thawed), then thaw with fresh blockhash.
+    try {
+      const freezeTx = await program.methods
+        .freezeAccount()
+        .accounts({
+          complianceAuthority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          targetTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .transaction();
+      const { blockhash: freezeBh, lastValidBlockHeight: freezeLvbh } =
+        await provider.connection.getLatestBlockhash("confirmed");
+      freezeTx.recentBlockhash = freezeBh;
+      freezeTx.lastValidBlockHeight = freezeLvbh;
+      freezeTx.feePayer = authority.publicKey;
+      await provider.sendAndConfirm(freezeTx, [], { commitment: "confirmed" });
+    } catch (_) {
+      // Already frozen — safe to proceed
+    }
+
     const thawTx = await program.methods
       .thawAccount()
       .accounts({
