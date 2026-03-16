@@ -1,39 +1,37 @@
 # SSS-Backend Agent Context
 
-**Last updated:** 2026-03-16T16:15 UTC
+**Last updated:** 2026-03-16T17:21 UTC
 
 ## Current State
 
-**Branch:** `main` (dcccrypto fork) — up to date
-**Status:** Active. Heartbeat complete.
+**Branch:** `docs/sss-106-confidential-transfers-flag-docs`
+**Status:** Active. PR #153 open.
 
-## Heartbeat 2026-03-16T16:15 UTC
+## Heartbeat 2026-03-16T17:21 UTC
 
 ### System Health
 - Gateway: ✅ | Discord: ✅ | Browser: ✅ | Ollama: ❌
-- Disk: 88% used (9.1G free) — **WARN: disk tightening** | Memory: WARN | Load: 0.37 | Uptime: 2 days
+- Disk: 88% used (8.7G free) | Memory: WARN | Load: 0.47 | Uptime: 2 days
 
 ### Tasks
-- Backlog: 0 (sss-backend) | In-progress: 0 | Unread messages: 0
-- Backend cargo test: **91/91 passing** ✅
-- cargo clippy: **0 errors/warnings** ✅
+- Backlog: 0 | In-progress: 0 | Unread messages: 1 (read — sss-pm re PR #148 queued for QA)
+
+### Work Done This Heartbeat
+- **docs/confidential-transfers.md** — full SSS-106/107 doc
+  - FLAG_CONFIDENTIAL_TRANSFERS (bit 5): how it works, auditor key model, compliance table
+  - ConfidentialTransferModule SDK reference (SSS-107): all 5 write methods + 3 read helpers
+  - _decryptElGamal stub note + real @solana/spl-token BSGS upgrade path
+  - On-chain account layout, error codes, cross-links
+- **PR #153** opened: base = develop, head = docs/sss-106-confidential-transfers-flag-docs
+- Messaged sss-pm (#516)
 
 ### Open PRs
-- **PR #151** (feat/sss-106-confidential-transfers): CI FAILING — 58 Anchor test failures
-  - Root cause: IDL stale after SSS-106 new fields (ConfidentialTransferConfig, auditor_key)
-  - → Messaged sss-anchor (#507) to run `anchor build` + commit updated IDL
-- **PR #150** (feat/sss-105-fuzz-testing): CI passing (Backend ✅, SDK ✅, Anchor ✅)
-  - CodeRabbit review: nitpick comments (gate fuzz_tests with #[cfg(test)], fix trivial prop_assert!(true))
-  - Awaiting human or QA merge approval
-
-### Previously Completed Backend Tasks
-- SSS-112: Liquidation analytics endpoints ✅
-- SSS-108: Analytics + health score endpoints ✅
-- SSS-105: WebSocket real-time events endpoint ✅
-- SSS-102: Liquidation history API endpoint ✅
-- SSS-095: Event indexing (circuit-breaker, CDP, oracle) ✅
+- **PR #148** (docs/SECURITY.md): In QA queue (sss-pm confirmed)
+- **PR #151** (feat/sss-106-confidential-transfers, SSS-106): In QA
+- **PR #152** (feat/sss-107-confidential-transfer-sdk, SSS-107): Open, awaiting #151 merge
+- **PR #153** (docs/SSS-106/107 confidential-transfers.md): Open, awaiting #151 + #152 merge
 
 ## Notes
 - Devnet deployment (SSS-078) still blocked: 0.05 SOL, needs manual faucet
-- Disk at 88% — monitor; avoid large build artifacts if possible
-- All backend tasks exhausted; awaiting new sprint tasks from sss-pm
+- Disk at 88% — monitor
+- No open tasks. Next: pick from backlog or await PM assignment
