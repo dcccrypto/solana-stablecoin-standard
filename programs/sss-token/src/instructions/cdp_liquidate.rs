@@ -6,7 +6,8 @@ use anchor_spl::token_interface::{
 use pyth_sdk_solana::state::SolanaPriceAccount;
 
 use crate::error::SssError;
-use crate::state::{CdpPosition, CollateralVault, StablecoinConfig};
+use crate::events::CdpLiquidated;
+use crate::state::{CdpPosition, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
 
 /// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
 /// Overridden by `StablecoinConfig.max_oracle_age_secs` when non-zero.
@@ -103,6 +104,12 @@ pub struct CdpLiquidate<'info> {
 }
 
 pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, min_collateral_amount: u64) -> Result<()> {
+    // SSS-110: Circuit breaker — halt liquidations when FLAG_CIRCUIT_BREAKER is set.
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+        SssError::CircuitBreakerActive
+    );
+
     // SSS-085 Fix 1: Validate Pyth feed Pubkey — reject spoofed price feeds.
     let expected_feed = ctx.accounts.config.expected_pyth_feed;
     if expected_feed != Pubkey::default() {
@@ -252,6 +259,16 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, min_collateral_amount: 
 
     let config = &mut ctx.accounts.config;
     config.total_burned = config.total_burned.checked_add(debt).unwrap();
+
+    emit!(CdpLiquidated {
+        sss_mint: ctx.accounts.sss_mint.key(),
+        owner: ctx.accounts.cdp_owner.key(),
+        liquidator: ctx.accounts.liquidator.key(),
+        collateral_mint: ctx.accounts.collateral_mint.key(),
+        debt_burned: debt,
+        collateral_seized: collateral_to_seize,
+        ratio_bps: ratio_bps as u64,
+    });
 
     msg!(
         "CDP liquidated: burned {} SSS debt, seized {} collateral. Ratio was {}bps (threshold {}bps)",

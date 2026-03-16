@@ -3,7 +3,7 @@ use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::{MinterInfo, StablecoinConfig};
+use crate::state::{MinterInfo, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
 
 // Solana clock is available via Clock::get() in Anchor instructions.
 
@@ -42,6 +42,11 @@ pub struct MintTokens<'info> {
 pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
     require!(!ctx.accounts.config.paused, SssError::MintPaused);
+    // SSS-110: Circuit breaker — halt all minting when FLAG_CIRCUIT_BREAKER is set.
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+        SssError::CircuitBreakerActive
+    );
 
     // SSS-093: Per-minter epoch velocity limit check.
     {
