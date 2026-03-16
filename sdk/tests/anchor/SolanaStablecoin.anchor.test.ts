@@ -80,6 +80,9 @@ describe("SSS-017: SolanaStablecoin SDK ↔ Anchor localnet", () => {
     );
     payerAta = ataInfo.address;
 
+    // SSS-091: DefaultAccountState=Frozen — thaw payerAta before mintTo.
+    await stablecoin.thaw({ mint: stablecoin.mint, targetTokenAccount: payerAta });
+
     const sig = await stablecoin.mintTo({
       mint: stablecoin.mint,
       amount: 1_000_000n,

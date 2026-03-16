@@ -30,6 +30,7 @@ import {
   getOrCreateAssociatedTokenAccount,
   mintTo as splMintTo,
   createMint,
+  thawAccount,
 } from "@solana/spl-token";
 import { expect } from "chai";
 
@@ -800,6 +801,21 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
         );
         await provider.sendAndConfirm(createAtaTx);
       } catch (_) { /* may already exist */ }
+
+      // SSS-091: DefaultAccountState=Frozen — thaw minterSssAta so the
+      // velocity-cap error fires instead of an account-resolution error.
+      try {
+        await thawAccount(
+          provider.connection,
+          authority, // payer
+          minterSssAta,
+          mintKp.publicKey,
+          authority.publicKey, // freeze authority
+          [],
+          { commitment: "confirmed" },
+          TOKEN_2022_PROGRAM_ID
+        );
+      } catch (_) { /* already thawed */ }
 
       try {
         await program.methods
