@@ -28,29 +28,11 @@ use anchor_spl::token_interface::{
 use pyth_sdk_solana::state::SolanaPriceAccount;
 
 use crate::error::SssError;
+use crate::events::CollateralLiquidated;
 use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig};
 
 /// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
 const DEFAULT_MAX_PRICE_AGE_SECS: u64 = 60;
-
-// ---------------------------------------------------------------------------
-// Event
-// ---------------------------------------------------------------------------
-
-/// Emitted on every successful cdp_liquidate_v2 call.
-#[event]
-pub struct CollateralLiquidated {
-    /// The collateral mint that was seized.
-    pub collateral_mint: Pubkey,
-    /// The CDP owner whose position was (partially) liquidated.
-    pub cdp_owner: Pubkey,
-    /// SSS debt tokens burned by the liquidator.
-    pub debt_repaid: u64,
-    /// Collateral tokens transferred to the liquidator.
-    pub collateral_seized: u64,
-    /// True if this was a partial liquidation (position still open).
-    pub partial: bool,
-}
 
 // ---------------------------------------------------------------------------
 // Accounts
@@ -399,11 +381,15 @@ pub fn cdp_liquidate_v2_handler(
 
     // ── 11. Emit CollateralLiquidated event ───────────────────────────────
     emit!(CollateralLiquidated {
+        mint: sss_mint_key,
         collateral_mint: collateral_mint_key,
         cdp_owner: owner_key,
-        debt_repaid: actual_debt_repaid,
+        liquidator: ctx.accounts.liquidator.key(),
+        debt_burned: actual_debt_repaid,
         collateral_seized: collateral_to_seize,
+        ratio_before_bps: ratio_bps as u64,
         partial: is_partial,
+        bonus_bps: liquidation_bonus_bps,
     });
 
     msg!(

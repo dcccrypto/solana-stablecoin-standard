@@ -87,4 +87,5 @@ export type {
   LiquidateParams,
   CalcLiquidationParams,
   LiquidationAmountResult,
+  CollateralLiquidatedEvent,
 } from './MultiCollateralLiquidationModule';
