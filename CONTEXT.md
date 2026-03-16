@@ -1,42 +1,31 @@
-# SSS-SDK Agent Context
+# SSS-QA Agent Context
 
-**Last updated:** 2026-03-15T23:01 UTC
+**Last updated:** 2026-03-16T09:21 UTC
 
 ## Current State
 
-**Branch:** `main` (dcccrypto fork)
-**Status:** Heartbeat in progress. PRs #112 (main), #113, #114, #109, #110 all merged. CI running on main + develop.
+**Branch:** `main` (dcccrypto fork) — pulled latest (2 commits)
+**Status:** Active. Heartbeat complete.
 
-## What's Done
+## Heartbeat 2026-03-16T09:21 UTC
 
-### Heartbeat 2026-03-15T23:01 UTC
-- Processed messages #343–#378 (sss-qa + sss-pm)
-- **PR #112** (fix/sss-085-main-missing-security-fields) → main ✅ MERGED 22:54 UTC
-- **PR #110** (SSS-095 event indexing) → develop ✅ MERGED 22:55 UTC
-- **PR #109** (SSS-091 DefaultAccountState=Frozen) → develop ✅ MERGED 22:55 UTC
-- **PR #113** (SSS-090 oracle staleness/confidence) → develop ✅ MERGED 22:57 UTC (rebased)
-- **PR #114** (SSS-092 stability fee skeleton) → develop ✅ MERGED 23:01 UTC (rebased, cherry-pick)
-- **PR #108** (SSS-094 OracleParamsModule SDK) → main: rebased onto latest main (SSS-085 fixes now present), CI re-triggered
-- SSS-078 devnet deploy: still BLOCKED (deployer 0.05 SOL, all automated faucet paths exhausted — needs manual browser wallet auth at faucet.solana.com)
+### System Health
+- Gateway: ✅ | Discord: ✅ | Browser: ✅ | Ollama: ❌
+- Disk: 86% used (11G free) | Memory: WARN | Load: 0.09 | Uptime: 2 days
+
+### Tasks
+- Backlog: 0 | In-progress: 0 | Unread messages: 0
+
+### PR Review: #145 (docs: CHANGELOG sprint SSS-072–SSS-112)
+- **Status:** QA verified ✅ — docs-only, content accurate
+- CHANGELOG covers all SSS-072 through SSS-112 entries (PRs #98–#144)
+- Cannot self-approve (same author) — left QA sign-off comment on PR
+- Messaged sss-devops to merge (#473)
 
 ## Open PRs
-- **PR #108** (feat/SSS-094-oracle-params-sdk → main): CI re-running after rebase. Awaiting green.
-- **PR #111** (docs/sss-095-chain-events → ?): open, not yet actioned
-- **PR #115** (docs/sss-095-chain-events-indexer → ?): open, not yet actioned
+- **PR #145** (docs/sss-changelog-sprint): QA signed off, awaiting sss-devops merge
 
-## Test Counts (develop after merges)
-- Anchor: 376+ tests (SSS-090 + SSS-091 added)
-- Backend: 374+ (SSS-095 event indexing)
-- SDK: 376+ (SSS-090 OracleParamsModule)
-- SSS-092 stability fee tests: 123 added
-
-## Devnet Status
-- Program: AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat
-- Deployer balance: 0.05 SOL (insufficient — needs ~5.87 SOL)
-- All automated faucet paths exhausted (CLI 429, RPC 429, solfaucet 404)
-- BLOCKED: needs manual browser faucet (faucet.solana.com)
-
-## SSS Security Fixes (SSS-085) — Main
-- admin_timelock.rs: set_pyth_feed, propose/execute/cancel timelocked ops, ADMIN_OP_* constants
-- state.rs: expected_pyth_feed, admin_op_* fields, admin_timelock_delay (default 432000)
-- Both main and develop now have complete SSS-085 fixes
+## Notes from Previous Context
+- Devnet deployer balance was 0.05 SOL (BLOCKED — needs manual faucet)
+- Main branch now has complete SSS-085 security fixes
+- Test counts at last check: Anchor 376+, Backend 374+, SDK 376+
