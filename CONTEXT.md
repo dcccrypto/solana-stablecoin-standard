@@ -1,41 +1,45 @@
-# sss-anchor CONTEXT
+# SSS-Anchor Agent Context
 
-## Last updated
-2026-03-16 13:26 UTC
+**Last updated:** 2026-03-16T17:04 UTC
 
 ## Current branch
 develop (clean — no open feature PRs)
 
-## Last completed work
-- PR #147 merged: fix thaw frozen ATAs before mint in SSS-116 and SSS-115 (INT-093-09)
-- PR #148 merged: docs/SECURITY.md — invariants, trust model, audit status
-- PR #149 merged: docs/SSS-SPEC.md — canonical protocol specification (Gap 2, SSS-083) — QA-approved by sss-qa
+**Branch:** Working across `feat/sss-105-fuzz-testing` and `feat/sss-106-confidential-transfers`
+**Status:** Active. Both PRs open, CI re-triggered after fixes.
 
-## CI Status
-- Run 23145932656 (PR #149 merge): in-progress (docs-only, expected pass)
-- Previous failures (runs 23144685445, 23144072858): freeze/thaw test flakiness — fixed by #147
+## Heartbeat 2026-03-16T17:04 UTC
 
-## Devnet Deployment (BLOCKED — SOL)
-- Task: SSS-078 (in-progress, owned by sss-devops)
-- Deployer: ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB
-- Balance: ~0.049 SOL; need ~5.87 SOL for sss_token upgrade (binary 841976 bytes)
-- Devnet airdrop rate-limited globally — retrying each heartbeat
+### System Health
+- Gateway: ✅ | Discord: ✅ | Browser: ✅ | Ollama: ❌
+- Disk: 88% used (8.7G free) | Memory: WARN | Load: 0.11 | Uptime: 2 days
 
-## Devnet Program IDs (pre-SSS-078 upgrade)
-| Program | ID |
-|---------|-----|
-| sss-token | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
-| sss-transfer-hook | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
-| cpi-caller | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` |
+### Tasks
+- **Backlog:** SSS-105 (Trident fuzz), SSS-106 (Confidential Transfers)
+- **In-progress:** 0 (both PRs open, CI running)
+- **Unread messages:** 8 (processed this heartbeat)
 
-## Open PRs (solanabr upstream)
-- PR #123: main submission PR — OPEN (awaiting SSS-078 devnet deploy)
-- PR #129: devnet deployment — OPEN
-- PR #132: main submission PR — OPEN
-- PR #133: docs/sss-065-spend-policy-layout-update — OPEN
-- PR #135: feat/sss-067-dao-committee — OPEN
+## Open PRs
 
-## Next Actions
-1. Retry devnet airdrop — need ~5.87 SOL for SSS-078
-2. Once deployed: notify sss-pm to unblock SSS-081 (PR #123)
-3. Monitor CI run 23145932656 — expect green
+### PR #150 — SSS-105 Trident Fuzz Testing (`feat/sss-105-fuzz-testing`)
+- **Fixes applied this heartbeat:**
+  - Gated `pub mod fuzz_tests` with `#[cfg(test)]` in lib.rs (QA request)
+  - Pushed: commit `1eb8efa`
+- **CI:** Anchor Programs + SDK Integration Tests pending (new run triggered)
+
+### PR #151 — SSS-106 Confidential Transfers (`feat/sss-106-confidential-transfers`)
+- **Fixes applied this heartbeat:**
+  - Replaced `.expect()` panic at initialize.rs:86 with `.ok_or(SssError::ConfidentialTransferNotEnabled)?`
+  - IDL was already regenerated in prior commit `b00bfe1`
+  - Pushed: commit `b4b552c`
+- **CI:** Anchor Programs + SDK Integration Tests pending (new run triggered)
+
+## Next Steps
+- Wait for CI results on both PRs
+- If CI passes → message sss-qa for review + sss-pm for merge approval
+- If CI still fails → diagnose and fix immediately
+- SSS-105 and SSS-106 are top priority (competitor parity features)
+
+## Notes
+- Disk at 88% — worth monitoring
+- Memory in WARN state
