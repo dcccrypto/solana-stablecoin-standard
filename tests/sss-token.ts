@@ -1627,6 +1627,7 @@ describe("sss-token", () => {
           vaultTokenAccount: vaultTokenAccount,
           userCollateralAccount: userCollateralAta,
           yieldCollateralConfig: program.programId, // FLAG_YIELD_COLLATERAL not set — pass program_id as None placeholder
+          collateralConfig: null, // no per-collateral config (backwards compat)
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -1654,6 +1655,7 @@ describe("sss-token", () => {
           vaultTokenAccount: vaultTokenAccount,
           userCollateralAccount: userCollateralAta,
           yieldCollateralConfig: program.programId,
+          collateralConfig: null, // no per-collateral config (backwards compat)
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -1679,6 +1681,7 @@ describe("sss-token", () => {
             vaultTokenAccount: vaultTokenAccount,
             userCollateralAccount: userCollateralAta,
             yieldCollateralConfig: program.programId,
+            collateralConfig: null, // no per-collateral config (backwards compat)
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -1770,6 +1773,7 @@ describe("sss-token", () => {
             vaultTokenAccount: vaultTokenAccount,
             userCollateralAccount: userCollateralAta,
             yieldCollateralConfig: program.programId,
+            collateralConfig: null, // no per-collateral config (backwards compat)
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -1876,6 +1880,7 @@ describe("sss-token", () => {
           vaultTokenAccount: vault2TokenAccount,
           userCollateralAccount: userCollateral2Ata.address,
           yieldCollateralConfig: program.programId,
+          collateralConfig: null, // no per-collateral config (backwards compat)
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -2670,6 +2675,7 @@ describe("sss-token", () => {
             config: ycConfigPda,
             mint: ycSssMintKeypair.publicKey,
             yieldCollateralConfig: ycPda,
+            collateralConfig: null, // no per-collateral config (backwards compat)
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -2701,6 +2707,7 @@ describe("sss-token", () => {
             config: configPda,
             mint: mintKeypair.publicKey,
             yieldCollateralConfig: sss1YcPda,
+            collateralConfig: null, // no per-collateral config (backwards compat)
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -2725,6 +2732,7 @@ describe("sss-token", () => {
           config: ycConfigPda,
           mint: ycSssMintKeypair.publicKey,
           yieldCollateralConfig: ycPda,
+          collateralConfig: null, // no per-collateral config (backwards compat)
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -2754,6 +2762,7 @@ describe("sss-token", () => {
             config: ycConfigPda,
             mint: ycSssMintKeypair.publicKey,
             yieldCollateralConfig: ycPda,
+            collateralConfig: null, // no per-collateral config (backwards compat)
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -2776,6 +2785,7 @@ describe("sss-token", () => {
           config: ycConfigPda,
           mint: ycSssMintKeypair.publicKey,
           yieldCollateralConfig: ycPda,
+          collateralConfig: null, // no per-collateral config (backwards compat)
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .rpc();
@@ -2796,6 +2806,7 @@ describe("sss-token", () => {
             config: ycConfigPda,
             mint: ycSssMintKeypair.publicKey,
             yieldCollateralConfig: ycPda,
+            collateralConfig: null, // no per-collateral config (backwards compat)
             tokenProgram: TOKEN_PROGRAM_ID,
           })
           .rpc();
@@ -2821,6 +2832,7 @@ describe("sss-token", () => {
             config: ycConfigPda,
             mint: ycSssMintKeypair.publicKey,
             yieldCollateralConfig: ycPda,
+            collateralConfig: null, // no per-collateral config (backwards compat)
             tokenProgram: TOKEN_PROGRAM_ID,
           })
           .signers([stranger])
@@ -2904,6 +2916,7 @@ describe("sss-token", () => {
             vaultTokenAccount: rogueVaultAta,
             userCollateralAccount: rogueUserAta,
             yieldCollateralConfig: ycPda, // pass the real config PDA — rogue not whitelisted
+            collateralConfig: null, // no per-collateral config (backwards compat)
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -2934,6 +2947,7 @@ describe("sss-token", () => {
           vaultTokenAccount: vaultStSolTokenAccount,
           userCollateralAccount: userStSolAta,
           yieldCollateralConfig: ycPda, // whitelisted config
+          collateralConfig: null, // no per-collateral config (backwards compat)
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -4098,6 +4112,7 @@ describe("sss-token", () => {
           vaultTokenAccount: sec085VaultTokenAccount,
           userCollateralAccount: sec085UserCollateralAta,
           yieldCollateralConfig: program.programId,
+          collateralConfig: null, // no per-collateral config (backwards compat)
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -4693,6 +4708,7 @@ describe("sss-token", () => {
           vaultTokenAccount: sss090VaultTokenAccount,
           userCollateralAccount: sss090UserCollateralAta,
           yieldCollateralConfig: null,
+          collateralConfig: null, // no per-collateral config (backwards compat)
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -5900,8 +5916,13 @@ describe("sss-token", () => {
     it("SSS-098: register_collateral instruction exists in IDL", async () => {
       const rawIdl = program.idl as any;
       const ixs = rawIdl.instructions as Array<{ name: string }>;
-      const reg = ixs?.find((i: any) => i.name === "register_collateral");
-      const upd = ixs?.find((i: any) => i.name === "update_collateral_config");
+      // Anchor v0.30+ emits camelCase names in IDL; support both conventions
+      const reg = ixs?.find(
+        (i: any) => i.name === "register_collateral" || i.name === "registerCollateral"
+      );
+      const upd = ixs?.find(
+        (i: any) => i.name === "update_collateral_config" || i.name === "updateCollateralConfig"
+      );
       expect(reg, "register_collateral must be in IDL").to.not.be.undefined;
       expect(upd, "update_collateral_config must be in IDL").to.not.be.undefined;
     });
