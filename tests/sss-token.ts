@@ -61,6 +61,7 @@ describe("sss-token", () => {
         payer: authority.publicKey,
         mint: mintKeypair.publicKey,
         config: configPda,
+        ctConfig: null,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -102,6 +103,7 @@ describe("sss-token", () => {
           payer: authority.publicKey,
           mint: badMint.publicKey,
           config: badConfig,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -141,6 +143,7 @@ describe("sss-token", () => {
         payer: authority.publicKey,
         mint: cappedMint.publicKey,
         config: cappedConfig,
+        ctConfig: null,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -176,6 +179,7 @@ describe("sss-token", () => {
         payer: authority.publicKey,
         mint: capMint.publicKey,
         config: capConfig,
+        ctConfig: null,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -1631,6 +1635,7 @@ describe("sss-token", () => {
           payer: authority.publicKey,
           mint: cdpSssMintKeypair.publicKey,
           config: cdpConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -2716,6 +2721,7 @@ describe("sss-token", () => {
           payer: authority.publicKey,
           mint: ycSssMintKeypair.publicKey,
           config: ycConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -3114,6 +3120,7 @@ describe("sss-token", () => {
           authority: authority.publicKey,
           mint: zkSssMintKeypair.publicKey,
           config: zkConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -3138,6 +3145,7 @@ describe("sss-token", () => {
           authority: authority.publicKey,
           mint: zkSss1MintKeypair.publicKey,
           config: zkSss1ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -3291,6 +3299,7 @@ describe("sss-token", () => {
           authority: authority.publicKey,
           mint: noFlagMintKeypair.publicKey,
           config: noFlagConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -3644,6 +3653,7 @@ describe("sss-token", () => {
             authority: authority.publicKey,
             mint: enfMintKeypair.publicKey,
             config: enfConfigPda,
+            ctConfig: null,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -3870,6 +3880,7 @@ describe("sss-token", () => {
             mint: shortTtlMintKp.publicKey,
             config: shortConfigPda,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+            ctConfig: null,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -4142,6 +4153,7 @@ describe("sss-token", () => {
           payer: authority.publicKey,
           mint: sec085MintKp.publicKey,
           config: sec085ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -4459,6 +4471,7 @@ describe("sss-token", () => {
             payer: authority.publicKey,
             mint: daoTestMintKp.publicKey,
             config: daoTestConfigPda,
+            ctConfig: null,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -4616,6 +4629,7 @@ describe("sss-token", () => {
           payer: authority.publicKey,
           mint: sss091MintKp.publicKey,
           config: sss091ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -4746,6 +4760,7 @@ describe("sss-token", () => {
           payer: authority.publicKey,
           mint: sss090MintKp.publicKey,
           config: sss090ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5065,6 +5080,7 @@ describe("sss-token", () => {
           payer: authority.publicKey,
           mint: sss092MintKp.publicKey,
           config: sss092ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5213,6 +5229,7 @@ describe("sss-token", () => {
           payer: authority.publicKey,
           mint: sss097MintKp.publicKey,
           config: sss097ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5327,6 +5344,7 @@ describe("sss-token", () => {
           payer: authority.publicKey,
           mint: sss1MintKp.publicKey,
           config: sss1ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5534,6 +5552,7 @@ describe("sss-token", () => {
           payer: authority.publicKey,
           mint: sss098MintKp.publicKey,
           config: sss098ConfigPda,
+          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -6029,4 +6048,154 @@ describe("sss-token", () => {
       expect(upd, "update_collateral_config must be in IDL").to.not.be.undefined;
     });
   });
+  // ── SSS-106: FLAG_CONFIDENTIAL_TRANSFERS (bit 5) ────────────────────────
+
+  describe("SSS-106: FLAG_CONFIDENTIAL_TRANSFERS (bit 5)", () => {
+    let sss106MintKeypair: Keypair;
+    let sss106ConfigPda: PublicKey;
+    let sss106CtConfigPda: PublicKey;
+    const FLAG_CONFIDENTIAL_TRANSFERS = 1 << 5; // 32
+
+    before(async () => {
+      sss106MintKeypair = Keypair.generate();
+      [sss106ConfigPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("stablecoin-config"), sss106MintKeypair.publicKey.toBuffer()],
+        program.programId
+      );
+      [sss106CtConfigPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("ct-config"), sss106MintKeypair.publicKey.toBuffer()],
+        program.programId
+      );
+    });
+
+    it("SSS-106: initialize with FLAG_CONFIDENTIAL_TRANSFERS stores auditor key in ConfidentialTransferConfig PDA", async () => {
+      const auditorKey = new Array(32).fill(0x42); // mock ElGamal pubkey
+      await program.methods
+        .initialize({
+          preset: 1,
+          decimals: 6,
+          name: "CT USD",
+          symbol: "CTUSD",
+          uri: "https://example.com/ct.json",
+          transferHookProgram: null,
+          collateralMint: null,
+          reserveVault: null,
+          maxSupply: null,
+          featureFlags: new anchor.BN(FLAG_CONFIDENTIAL_TRANSFERS),
+          auditorElgamalPubkey: auditorKey,
+        })
+        .accounts({
+          payer: authority.publicKey,
+          mint: sss106MintKeypair.publicKey,
+          config: sss106ConfigPda,
+          ctConfig: sss106CtConfigPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([sss106MintKeypair])
+        .rpc();
+
+      const config = await program.account.stablecoinConfig.fetch(sss106ConfigPda);
+      expect(
+        BigInt(config.featureFlags.toString()) & BigInt(FLAG_CONFIDENTIAL_TRANSFERS)
+      ).to.not.equal(BigInt(0), "FLAG_CONFIDENTIAL_TRANSFERS must be set");
+
+      const ctConfig = await program.account.confidentialTransferConfig.fetch(sss106CtConfigPda);
+      expect(ctConfig.mint.toBase58()).to.equal(sss106MintKeypair.publicKey.toBase58());
+      expect(ctConfig.autoApproveNewAccounts).to.equal(true);
+      const storedKey = Array.from(ctConfig.auditorElgamalPubkey as Uint8Array);
+      expect(storedKey).to.deep.equal(auditorKey, "auditor ElGamal key must match");
+    });
+
+    it("SSS-106: initialize WITHOUT FLAG_CONFIDENTIAL_TRANSFERS sets auditor key to zero", async () => {
+      const plainMint = Keypair.generate();
+      const [plainConfig] = PublicKey.findProgramAddressSync(
+        [Buffer.from("stablecoin-config"), plainMint.publicKey.toBuffer()],
+        program.programId
+      );
+      await program.methods
+        .initialize({
+          preset: 1,
+          decimals: 6,
+          name: "Plain USD",
+          symbol: "PUSD",
+          uri: "https://example.com/plain.json",
+          transferHookProgram: null,
+          collateralMint: null,
+          reserveVault: null,
+          maxSupply: null,
+          featureFlags: null,
+          auditorElgamalPubkey: null,
+        })
+        .accounts({
+          payer: authority.publicKey,
+          mint: plainMint.publicKey,
+          config: plainConfig,
+          ctConfig: null,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([plainMint])
+        .rpc();
+
+      const config = await program.account.stablecoinConfig.fetch(plainConfig);
+      expect(config.featureFlags.toNumber()).to.equal(0);
+      const zeroKey = Array(32).fill(0);
+      expect(Array.from(config.auditorElgamalPubkey as Uint8Array)).to.deep.equal(zeroKey);
+    });
+
+    it("SSS-106: initialize with FLAG_CONFIDENTIAL_TRANSFERS but no auditor key fails", async () => {
+      const badMint = Keypair.generate();
+      const [badConfig] = PublicKey.findProgramAddressSync(
+        [Buffer.from("stablecoin-config"), badMint.publicKey.toBuffer()],
+        program.programId
+      );
+      const [badCtConfig] = PublicKey.findProgramAddressSync(
+        [Buffer.from("ct-config"), badMint.publicKey.toBuffer()],
+        program.programId
+      );
+      try {
+        await program.methods
+          .initialize({
+            preset: 1,
+            decimals: 6,
+            name: "Bad CT",
+            symbol: "BCT",
+            uri: "https://example.com/bad.json",
+            transferHookProgram: null,
+            collateralMint: null,
+            reserveVault: null,
+            maxSupply: null,
+            featureFlags: new anchor.BN(FLAG_CONFIDENTIAL_TRANSFERS),
+            auditorElgamalPubkey: null,
+          })
+          .accounts({
+            payer: authority.publicKey,
+            mint: badMint.publicKey,
+            config: badConfig,
+            ctConfig: badCtConfig,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          })
+          .signers([badMint])
+          .rpc();
+        expect.fail("Should have thrown MissingAuditorKey");
+      } catch (e: any) {
+        expect(e.toString()).to.include("MissingAuditorKey");
+      }
+    });
+
+    it("SSS-106: IDL includes ConfidentialTransferConfig account type", () => {
+      const rawIdl = program.idl as any;
+      const accounts = rawIdl.accounts as Array<{ name: string }>;
+      const acc = accounts?.find(
+        (a: any) => a.name === "ConfidentialTransferConfig" || a.name === "confidentialTransferConfig"
+      );
+      expect(acc, "ConfidentialTransferConfig must be in IDL").to.not.be.undefined;
+    });
+  });
+
 });
