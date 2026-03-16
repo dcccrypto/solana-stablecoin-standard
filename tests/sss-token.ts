@@ -572,9 +572,15 @@ describe("sss-token", () => {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
     // SSS-091: DefaultAccountState=Frozen means the ATA may already be frozen.
-    // Thaw first (no-op if already thawed) so the explicit freeze call succeeds.
-    // Use try-catch: if the account is already thawed, thawAccount throws InvalidAccountState.
-    try {
+    // Check current state first; only thaw if actually frozen so we start from a
+    // known-thawed state before issuing the explicit freeze.
+    const preState = await getAccount(
+      provider.connection,
+      ata,
+      "confirmed",
+      TOKEN_2022_PROGRAM_ID
+    );
+    if (preState.isFrozen) {
       await program.methods
         .thawAccount()
         .accounts({
@@ -584,9 +590,7 @@ describe("sss-token", () => {
           targetTokenAccount: ata,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
-        .rpc();
-    } catch (_) {
-      // Already thawed — safe to proceed
+        .rpc({ commitment: "confirmed" });
     }
 
     await program.methods
@@ -618,7 +622,29 @@ describe("sss-token", () => {
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    const thawTx = await program.methods
+    // Ensure the account is frozen before attempting to thaw (the prior freeze test
+    // may have left it thawed if it ran into a state issue, or DefaultAccountState
+    // may have changed).
+    const preState = await getAccount(
+      provider.connection,
+      ata,
+      "confirmed",
+      TOKEN_2022_PROGRAM_ID
+    );
+    if (!preState.isFrozen) {
+      await program.methods
+        .freezeAccount()
+        .accounts({
+          complianceAuthority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          targetTokenAccount: ata,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc({ commitment: "confirmed" });
+    }
+
+    await program.methods
       .thawAccount()
       .accounts({
         complianceAuthority: authority.publicKey,
@@ -627,13 +653,7 @@ describe("sss-token", () => {
         targetTokenAccount: ata,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
-      .transaction();
-    const { blockhash: thawBh, lastValidBlockHeight: thawLvbh } =
-      await provider.connection.getLatestBlockhash("confirmed");
-    thawTx.recentBlockhash = thawBh;
-    thawTx.lastValidBlockHeight = thawLvbh;
-    thawTx.feePayer = authority.publicKey;
-    await provider.sendAndConfirm(thawTx, [], { commitment: "confirmed" });
+      .rpc({ commitment: "confirmed" });
 
     // Post-condition: token account should no longer be frozen
     const tokenAccount = await getAccount(
