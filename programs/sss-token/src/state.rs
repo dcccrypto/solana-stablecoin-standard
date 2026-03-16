@@ -115,6 +115,13 @@ pub struct StablecoinConfig {
     /// Deducted from collateral released on `redeem`.  Fee stays in vault.
     /// 0 = no fee (default).  Set via `set_psm_fee` (authority-only).
     pub redemption_fee_bps: u16,
+    /// SSS-097: Insurance fund vault — token account that holds backstop reserves.
+    /// Pubkey::default() = backstop disabled.  Set via `set_backstop_params` (authority-only).
+    pub insurance_fund_pubkey: Pubkey,
+    /// SSS-097: Maximum backstop draw as a fraction of total outstanding debt,
+    /// expressed in basis points (e.g. 500 = 5% of net supply).
+    /// 0 = unlimited (draw full shortfall up to insurance fund balance).
+    pub max_backstop_bps: u16,
     pub bump: u8,
 }
 
