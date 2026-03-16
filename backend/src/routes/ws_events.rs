@@ -98,7 +98,7 @@ fn event_matches(event: &serde_json::Value, filter: &Option<Vec<&'static str>>) 
                 .get("event_type")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            types.iter().any(|t| *t == et)
+            types.contains(&et)
         }
     }
 }
@@ -129,7 +129,7 @@ async fn handle_socket(
         "message": "Connected to SSS event stream",
     });
     if sender
-        .send(Message::Text(welcome.to_string().into()))
+        .send(Message::Text(welcome.to_string()))
         .await
         .is_err()
     {
@@ -145,7 +145,7 @@ async fn handle_socket(
                     Ok(event) => {
                         if event_matches(&event, &filter) {
                             let msg = event.to_string();
-                            if sender.send(Message::Text(msg.into())).await.is_err() {
+                            if sender.send(Message::Text(msg)).await.is_err() {
                                 debug!("ws_events: client disconnected");
                                 break;
                             }
@@ -158,7 +158,7 @@ async fn handle_socket(
                             "type": "lag",
                             "missed": n,
                         });
-                        if sender.send(Message::Text(lag_msg.to_string().into())).await.is_err() {
+                        if sender.send(Message::Text(lag_msg.to_string())).await.is_err() {
                             break;
                         }
                     }
