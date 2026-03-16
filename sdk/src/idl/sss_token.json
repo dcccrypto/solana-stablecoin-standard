@@ -4,10 +4,10 @@
     "name": "sss_token",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "Solana Stablecoin Standard \u2014 SSS-1 (Minimal) and SSS-2 (Compliant) presets"
+    "description": "Solana Stablecoin Standard — SSS-1 (Minimal) and SSS-2 (Compliant) presets"
   },
   "docs": [
-    "Solana Stablecoin Standard \u2014 SSS-1 (Minimal) + SSS-2 (Compliant) + SSS-3 (Reserve-Backed)",
+    "Solana Stablecoin Standard — SSS-1 (Minimal) + SSS-2 (Compliant) + SSS-3 (Reserve-Backed)",
     "",
     "SSS-1: Token-2022 mint with freeze authority + metadata",
     "SSS-2: SSS-1 + permanent delegate + transfer hook + blacklist enforcement",
@@ -536,7 +536,7 @@
         {
           "name": "cdp_position",
           "docs": [
-            "CDP position \u2014 tracks total outstanding debt for this user"
+            "CDP position — tracks total outstanding debt for this user"
           ],
           "writable": true,
           "pda": {
@@ -655,7 +655,7 @@
         {
           "name": "sss_mint",
           "docs": [
-            "The SSS stablecoin mint \u2014 identifies the config"
+            "The SSS stablecoin mint — identifies the config"
           ]
         },
         {
@@ -667,7 +667,7 @@
         {
           "name": "collateral_vault",
           "docs": [
-            "Per-user collateral vault PDA \u2014 tracks how much of this collateral type the user has"
+            "Per-user collateral vault PDA — tracks how much of this collateral type the user has"
           ],
           "writable": true,
           "pda": {
@@ -768,8 +768,10 @@
         "CDP: Liquidate an undercollateralised position (ratio < 120%).",
         "Callable by anyone; liquidator burns full debt and receives all collateral.",
         "Liquidate an undercollateralised CDP position.",
-        "`min_collateral_amount`: minimum collateral tokens the liquidator expects to receive",
-        "(slippage protection). Pass 0 to disable (backward compatible)."
+        "SSS-100: Extended with partial liquidation and per-collateral config support.",
+        "`params.min_collateral_amount`: slippage protection (0 = disabled, backward compatible).",
+        "`params.partial_repay_amount`: if > 0, only burn this much debt and seize proportional",
+        "collateral+bonus, restoring the CDP to healthy ratio.  0 = full liquidation."
       ],
       "discriminator": [
         231,
@@ -785,7 +787,7 @@
         {
           "name": "liquidator",
           "docs": [
-            "The liquidator \u2014 anyone who calls this and holds enough SSS"
+            "The liquidator — anyone who calls this and holds enough SSS"
           ],
           "signer": true
         },
@@ -940,9 +942,301 @@
         {
           "name": "liquidator_collateral_account",
           "docs": [
-            "Liquidator's collateral token account \u2014 receives seized collateral at discount"
+            "Liquidator's collateral token account — receives seized collateral at discount"
           ],
           "writable": true
+        },
+        {
+          "name": "pyth_price_feed"
+        },
+        {
+          "name": "collateral_config",
+          "docs": [
+            "SSS-100: Optional per-collateral configuration PDA.",
+            "When provided, overrides the global liquidation threshold and bonus.",
+            "Seeds: [b\"collateral-config\", sss_mint, collateral_mint]"
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sss_token_program",
+          "docs": [
+            "Token program for SSS-3 (Token-2022)"
+          ]
+        },
+        {
+          "name": "collateral_token_program",
+          "docs": [
+            "Token program for collateral"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "CdpLiquidateParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "cdp_liquidate_v2",
+      "docs": [
+        "SSS-100: Multi-collateral liquidation engine with partial liquidation support.",
+        "`debt_to_repay`: SSS tokens to burn (0 = full liquidation).",
+        "`min_collateral_amount`: slippage guard — minimum collateral tokens to receive (0 = disabled)."
+      ],
+      "discriminator": [
+        78,
+        108,
+        50,
+        108,
+        18,
+        192,
+        135,
+        183
+      ],
+      "accounts": [
+        {
+          "name": "liquidator",
+          "docs": [
+            "The liquidator — anyone who calls this and holds enough SSS"
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sss_mint",
+          "docs": [
+            "SSS-3 stablecoin mint"
+          ],
+          "writable": true
+        },
+        {
+          "name": "liquidator_sss_account",
+          "docs": [
+            "Liquidator's SSS token account (source, will be burned)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "cdp_position",
+          "docs": [
+            "CDP position of the user being liquidated"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  100,
+                  112,
+                  45,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              },
+              {
+                "kind": "account",
+                "path": "cdp_owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "cdp_owner"
+        },
+        {
+          "name": "collateral_vault",
+          "docs": [
+            "The collateral vault being seized"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  100,
+                  112,
+                  45,
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              },
+              {
+                "kind": "account",
+                "path": "cdp_owner"
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_mint",
+          "docs": [
+            "The collateral token mint"
+          ]
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "Vault token account (holds collateral, owned by collateral_vault PDA)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "liquidator_collateral_account",
+          "docs": [
+            "Liquidator's collateral token account — receives seized collateral"
+          ],
+          "writable": true
+        },
+        {
+          "name": "collateral_config",
+          "docs": [
+            "SSS-098: CollateralConfig PDA for per-collateral liquidation params.",
+            "Provides per-collateral liquidation_threshold_bps and liquidation_bonus_bps.",
+            "Seeds: [b\"collateral-config\", sss_mint, collateral_mint]"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
         },
         {
           "name": "pyth_price_feed"
@@ -961,6 +1255,10 @@
         }
       ],
       "args": [
+        {
+          "name": "debt_to_repay",
+          "type": "u64"
+        },
         {
           "name": "min_collateral_amount",
           "type": "u64"
@@ -1415,7 +1713,7 @@
         {
           "name": "debtor",
           "docs": [
-            "The CDP position owner (must sign \u2014 they authorise the burn from their account)"
+            "The CDP position owner (must sign — they authorise the burn from their account)"
           ],
           "writable": true,
           "signer": true
@@ -1497,7 +1795,7 @@
         {
           "name": "debtor_sss_account",
           "docs": [
-            "Debtor's SSS token account \u2014 fees are burned from here"
+            "Debtor's SSS token account — fees are burned from here"
           ],
           "writable": true
         },
@@ -1605,7 +1903,7 @@
         {
           "name": "interface_version",
           "docs": [
-            "InterfaceVersion PDA \u2014 validated before execution."
+            "InterfaceVersion PDA — validated before execution."
           ],
           "pda": {
             "seeds": [
@@ -1658,7 +1956,7 @@
       "docs": [
         "Standardized CPI mint entrypoint.",
         "External programs should call this instead of `mint` for forward-compatible integration.",
-        "`required_version` must match the on-chain InterfaceVersion \u2014 guards against silent breaks."
+        "`required_version` must match the on-chain InterfaceVersion — guards against silent breaks."
       ],
       "discriminator": [
         142,
@@ -1674,7 +1972,7 @@
         {
           "name": "minter",
           "docs": [
-            "The minter (signer) \u2014 must be a registered minter for this stablecoin."
+            "The minter (signer) — must be a registered minter for this stablecoin."
           ],
           "signer": true
         },
@@ -1755,7 +2053,7 @@
         {
           "name": "interface_version",
           "docs": [
-            "InterfaceVersion PDA \u2014 caller-supplied; validated against expected seeds."
+            "InterfaceVersion PDA — caller-supplied; validated against expected seeds."
           ],
           "pda": {
             "seeds": [
@@ -1879,7 +2177,7 @@
         {
           "name": "reserve_vault",
           "docs": [
-            "The reserve vault \u2014 holds collateral on behalf of the stablecoin config PDA"
+            "The reserve vault — holds collateral on behalf of the stablecoin config PDA"
           ],
           "writable": true
         },
@@ -2166,7 +2464,7 @@
       "docs": [
         "Initialize the DAO committee for a stablecoin config.",
         "",
-        "Registers `members` (1\u201310 pubkeys) as committee voters and sets the",
+        "Registers `members` (1–10 pubkeys) as committee voters and sets the",
         "`quorum` threshold.  Atomically enables FLAG_DAO_COMMITTEE.",
         "Authority only; can only be called once per config (PDA is `init`)."
       ],
@@ -2636,7 +2934,7 @@
         {
           "name": "mint",
           "docs": [
-            "The new Token-2022 mint \u2014 created manually so we can initialize",
+            "The new Token-2022 mint — created manually so we can initialize",
             "DefaultAccountState=Frozen *before* InitializeMint (SSS-091).",
             "Must be a fresh keypair (no existing data)."
           ],
@@ -3211,7 +3509,7 @@
         {
           "name": "reserve_vault",
           "docs": [
-            "Reserve vault \u2014 releases collateral to redeemer (PDA-controlled)"
+            "Reserve vault — releases collateral to redeemer (PDA-controlled)"
           ],
           "writable": true
         },
@@ -3267,7 +3565,7 @@
         {
           "name": "config",
           "docs": [
-            "SSS stablecoin config \u2014 must be SSS-3 and signer must be authority."
+            "SSS stablecoin config — must be SSS-3 and signer must be authority."
           ],
           "pda": {
             "seeds": [
@@ -3303,7 +3601,7 @@
         {
           "name": "sss_mint",
           "docs": [
-            "The SSS-3 stablecoin mint \u2014 identifies the config."
+            "The SSS-3 stablecoin mint — identifies the config."
           ]
         },
         {
@@ -3315,7 +3613,7 @@
         {
           "name": "collateral_config",
           "docs": [
-            "CollateralConfig PDA \u2014 created here.",
+            "CollateralConfig PDA — created here.",
             "Seeds: [b\"collateral-config\", sss_mint, collateral_mint]"
           ],
           "writable": true,
@@ -4291,7 +4589,7 @@
         {
           "name": "liquidation_authority",
           "docs": [
-            "Must be the config PDA \u2014 enforces that only the liquidation handler (which",
+            "Must be the config PDA — enforces that only the liquidation handler (which",
             "holds a mutable borrow of config) can invoke trigger_backstop via CPI."
           ],
           "signer": true
@@ -4336,14 +4634,14 @@
         {
           "name": "insurance_fund",
           "docs": [
-            "Insurance fund token account \u2014 source of backstop collateral."
+            "Insurance fund token account — source of backstop collateral."
           ],
           "writable": true
         },
         {
           "name": "reserve_vault",
           "docs": [
-            "Reserve vault \u2014 destination for backstop collateral (same vault used by CDP)."
+            "Reserve vault — destination for backstop collateral (same vault used by CDP)."
           ],
           "writable": true
         },
@@ -4356,7 +4654,7 @@
         {
           "name": "insurance_fund_authority",
           "docs": [
-            "Insurance fund authority \u2014 must sign to allow transfer from insurance fund."
+            "Insurance fund authority — must sign to allow transfer from insurance fund."
           ],
           "signer": true
         },
@@ -4457,7 +4755,7 @@
         {
           "name": "config",
           "docs": [
-            "SSS stablecoin config \u2014 authority check."
+            "SSS stablecoin config — authority check."
           ],
           "pda": {
             "seeds": [
@@ -5183,6 +5481,58 @@
       ]
     },
     {
+      "name": "CdpBorrowed",
+      "discriminator": [
+        41,
+        24,
+        11,
+        48,
+        121,
+        41,
+        124,
+        53
+      ]
+    },
+    {
+      "name": "CdpCollateralDeposited",
+      "discriminator": [
+        170,
+        228,
+        169,
+        208,
+        92,
+        197,
+        207,
+        104
+      ]
+    },
+    {
+      "name": "CdpLiquidated",
+      "discriminator": [
+        111,
+        142,
+        209,
+        184,
+        62,
+        30,
+        209,
+        162
+      ]
+    },
+    {
+      "name": "CdpRepaid",
+      "discriminator": [
+        113,
+        116,
+        78,
+        151,
+        197,
+        142,
+        191,
+        164
+      ]
+    },
+    {
       "name": "CollateralDeposited",
       "discriminator": [
         244,
@@ -5397,12 +5747,12 @@
     {
       "code": 6016,
       "name": "CollateralRatioTooLow",
-      "msg": "Collateral ratio too low \u2014 minimum 150% required"
+      "msg": "Collateral ratio too low — minimum 150% required"
     },
     {
       "code": 6017,
       "name": "CdpNotLiquidatable",
-      "msg": "CDP is healthy \u2014 cannot be liquidated (ratio >= 120%)"
+      "msg": "CDP is healthy — cannot be liquidated (ratio >= 120%)"
     },
     {
       "code": 6018,
@@ -5427,7 +5777,7 @@
     {
       "code": 6022,
       "name": "InvalidPrice",
-      "msg": "Price is zero or negative \u2014 cannot compute ratio"
+      "msg": "Price is zero or negative — cannot compute ratio"
     },
     {
       "code": 6023,
@@ -5437,17 +5787,17 @@
     {
       "code": 6024,
       "name": "InterfaceNotInitialized",
-      "msg": "InterfaceVersion PDA not initialized \u2014 call init_interface_version first"
+      "msg": "InterfaceVersion PDA not initialized — call init_interface_version first"
     },
     {
       "code": 6025,
       "name": "InterfaceVersionMismatch",
-      "msg": "InterfaceVersion mismatch \u2014 caller pinned to an incompatible version"
+      "msg": "InterfaceVersion mismatch — caller pinned to an incompatible version"
     },
     {
       "code": 6026,
       "name": "InterfaceDeprecated",
-      "msg": "This SSS interface has been deprecated \u2014 use the updated program"
+      "msg": "This SSS interface has been deprecated — use the updated program"
     },
     {
       "code": 6027,
@@ -5542,12 +5892,12 @@
     {
       "code": 6045,
       "name": "VerificationExpired",
-      "msg": "ZK verification record has expired \u2014 submit a fresh proof"
+      "msg": "ZK verification record has expired — submit a fresh proof"
     },
     {
       "code": 6046,
       "name": "VerificationRecordNotExpired",
-      "msg": "ZK verification record has not expired yet \u2014 cannot close"
+      "msg": "ZK verification record has not expired yet — cannot close"
     },
     {
       "code": 6047,
@@ -5572,12 +5922,12 @@
     {
       "code": 6051,
       "name": "OracleConfidenceTooWide",
-      "msg": "Pyth price confidence interval is too wide \u2014 price uncertainty exceeds max_oracle_conf_bps"
+      "msg": "Pyth price confidence interval is too wide — price uncertainty exceeds max_oracle_conf_bps"
     },
     {
       "code": 6052,
       "name": "TimelockNotMature",
-      "msg": "Admin timelock: operation not yet mature \u2014 wait until the required slot"
+      "msg": "Admin timelock: operation not yet mature — wait until the required slot"
     },
     {
       "code": 6053,
@@ -5607,27 +5957,27 @@
     {
       "code": 6058,
       "name": "MintVelocityExceeded",
-      "msg": "Minter epoch velocity limit exceeded \u2014 too much minted in this epoch"
+      "msg": "Minter epoch velocity limit exceeded — too much minted in this epoch"
     },
     {
       "code": 6059,
       "name": "InvalidPsmFee",
-      "msg": "PSM redemption fee too high \u2014 max 1000 bps (10%)"
+      "msg": "PSM redemption fee too high — max 1000 bps (10%)"
     },
     {
       "code": 6060,
       "name": "BackstopNotConfigured",
-      "msg": "Bad debt backstop is not configured \u2014 set insurance_fund_pubkey first"
+      "msg": "Bad debt backstop is not configured — set insurance_fund_pubkey first"
     },
     {
       "code": 6061,
       "name": "NoBadDebt",
-      "msg": "No bad debt detected \u2014 collateral covers outstanding debt"
+      "msg": "No bad debt detected — collateral covers outstanding debt"
     },
     {
       "code": 6062,
       "name": "InsuranceFundEmpty",
-      "msg": "Insurance fund balance is zero \u2014 cannot backstop"
+      "msg": "Insurance fund balance is zero — cannot backstop"
     },
     {
       "code": 6063,
@@ -5637,7 +5987,7 @@
     {
       "code": 6064,
       "name": "UnauthorizedBackstopCaller",
-      "msg": "Caller is not the liquidation handler \u2014 only cdp_liquidate may trigger backstop"
+      "msg": "Caller is not the liquidation handler — only cdp_liquidate may trigger backstop"
     },
     {
       "code": 6065,
@@ -5658,6 +6008,16 @@
       "code": 6068,
       "name": "InvalidLiquidationBonus",
       "msg": "liquidation_bonus_bps cannot exceed 5000 (50%)"
+    },
+    {
+      "code": 6069,
+      "name": "PartialLiquidationInsufficientRepay",
+      "msg": "partial_repay_amount would not restore CDP to healthy ratio — increase repay amount"
+    },
+    {
+      "code": 6070,
+      "name": "InvalidAmount",
+      "msg": "invalid amount: partial_repay_amount exceeds total debt"
     }
   ],
   "types": [
@@ -5773,9 +6133,138 @@
       }
     },
     {
+      "name": "CdpBorrowed",
+      "docs": [
+        "Emitted when SSS tokens are borrowed against collateral."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "collateral_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount_borrowed",
+            "type": "u64"
+          },
+          {
+            "name": "total_debt",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CdpCollateralDeposited",
+      "docs": [
+        "Emitted when collateral is deposited into a CDP vault."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "collateral_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "vault_total",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CdpLiquidateParams",
+      "docs": [
+        "Params for the `cdp_liquidate` instruction.",
+        "",
+        "- `min_collateral_amount`: slippage protection — reverts if less collateral",
+        "would be received.  Pass 0 for no protection (backward-compatible).",
+        "- `partial_repay_amount`: when > 0, only this many debt tokens are burned and",
+        "just enough collateral to cover them (plus bonus) is seized.  When 0 the",
+        "entire debt is burned (full liquidation)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "min_collateral_amount",
+            "type": "u64"
+          },
+          {
+            "name": "partial_repay_amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CdpLiquidated",
+      "docs": [
+        "Emitted when a CDP position is liquidated (SSS-110 circuit breaker compatible)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "liquidator",
+            "type": "pubkey"
+          },
+          {
+            "name": "collateral_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "debt_burned",
+            "type": "u64"
+          },
+          {
+            "name": "collateral_seized",
+            "type": "u64"
+          },
+          {
+            "name": "ratio_bps",
+            "docs": [
+              "Collateral ratio at time of liquidation (in basis points)."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "CdpPosition",
       "docs": [
-        "CDP position PDA \u2014 one per user, single-collateral per position (SSS-054 fix).",
+        "CDP position PDA — one per user, single-collateral per position (SSS-054 fix).",
         "Seeds: [\"cdp-position\", sss_mint, user]"
       ],
       "type": {
@@ -5836,6 +6325,41 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CdpRepaid",
+      "docs": [
+        "Emitted when SSS tokens are repaid and collateral is released."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "collateral_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount_repaid",
+            "type": "u64"
+          },
+          {
+            "name": "collateral_released",
+            "type": "u64"
+          },
+          {
+            "name": "remaining_debt",
+            "type": "u64"
           }
         ]
       }
@@ -6042,7 +6566,7 @@
     {
       "name": "CollateralVault",
       "docs": [
-        "Collateral vault PDA \u2014 one per (user, collateral_mint).",
+        "Collateral vault PDA — one per (user, collateral_mint).",
         "Seeds: [\"cdp-collateral-vault\", user, collateral_mint]"
       ],
       "type": {
@@ -6086,7 +6610,7 @@
     {
       "name": "DaoCommitteeConfig",
       "docs": [
-        "DAO Committee Config PDA \u2014 tracks committee members and proposal counter.",
+        "DAO Committee Config PDA — tracks committee members and proposal counter.",
         "",
         "Seeds: [b\"dao-committee\", config]",
         "Initialized by `init_dao_committee`; managed by authority."
@@ -6113,7 +6637,7 @@
           {
             "name": "quorum",
             "docs": [
-              "Minimum YES votes required to pass a proposal (must be \u2264 members.len())."
+              "Minimum YES votes required to pass a proposal (must be ≤ members.len())."
             ],
             "type": "u8"
           },
@@ -6297,7 +6821,7 @@
     {
       "name": "InterfaceVersion",
       "docs": [
-        "Interface version PDA \u2014 external callers check this before invoking SSS via CPI.",
+        "Interface version PDA — external callers check this before invoking SSS via CPI.",
         "Seeds: [\"interface-version\", sss_mint]",
         "",
         "Callers should read this PDA and verify:",
@@ -6398,7 +6922,7 @@
     {
       "name": "MinterInfo",
       "docs": [
-        "Per-minter configuration \u2014 minters are PDAs keyed by [config, minter_pubkey]."
+        "Per-minter configuration — minters are PDAs keyed by [config, minter_pubkey]."
       ],
       "type": {
         "kind": "struct",
@@ -6617,7 +7141,7 @@
     {
       "name": "PsmSwapEvent",
       "docs": [
-        "SSS-093: Emitted on every PSM redeem (deposit_collateral\u2192mint is fee-free)."
+        "SSS-093: Emitted on every PSM redeem (deposit_collateral→mint is fee-free)."
       ],
       "type": {
         "kind": "struct",
@@ -6858,7 +7382,7 @@
           {
             "name": "admin_timelock_delay",
             "docs": [
-              "SSS-085: Minimum slot delay for admin timelock (default 2 epochs \u2248 432 000 slots).",
+              "SSS-085: Minimum slot delay for admin timelock (default 2 epochs ≈ 432 000 slots).",
               "Can be set at init or by authority via `set_timelock_delay`."
             ],
             "type": "u64"
@@ -6901,7 +7425,7 @@
           {
             "name": "insurance_fund_pubkey",
             "docs": [
-              "SSS-097: Insurance fund vault \u2014 token account that holds backstop reserves.",
+              "SSS-097: Insurance fund vault — token account that holds backstop reserves.",
               "Pubkey::default() = backstop disabled.  Set via `set_backstop_params` (authority-only)."
             ],
             "type": "pubkey"
@@ -7055,7 +7579,7 @@
     {
       "name": "VerificationRecord",
       "docs": [
-        "Per-user ZK verification record PDA \u2014 one per (mint, user).",
+        "Per-user ZK verification record PDA — one per (mint, user).",
         "Seeds: [b\"zk-verification\", sss_mint, user]",
         "",
         "Created or refreshed by `submit_zk_proof`.  The transfer hook checks this",
@@ -7100,12 +7624,12 @@
     {
       "name": "YieldCollateralConfig",
       "docs": [
-        "Yield-collateral config PDA \u2014 one per stablecoin mint.",
+        "Yield-collateral config PDA — one per stablecoin mint.",
         "Seeds: [b\"yield-collateral\", sss_mint]",
         "",
         "Stores a whitelist of SPL token mints that may be used as yield-bearing",
         "collateral in CDP deposits when FLAG_YIELD_COLLATERAL is enabled.",
-        "Maximum 8 whitelisted mints \u2014 covers all practical yield-token variants",
+        "Maximum 8 whitelisted mints — covers all practical yield-token variants",
         "(stSOL, mSOL, jitoSOL, bSOL, etc.) without unbounded Vec heap."
       ],
       "type": {
@@ -7137,7 +7661,7 @@
     {
       "name": "ZkComplianceConfig",
       "docs": [
-        "ZK-compliance config PDA \u2014 one per stablecoin mint.",
+        "ZK-compliance config PDA — one per stablecoin mint.",
         "Seeds: [b\"zk-compliance-config\", sss_mint]",
         "",
         "Stores protocol-wide settings for ZK proof verification.",
