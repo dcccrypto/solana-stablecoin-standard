@@ -1,29 +1,27 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-16T06:27 UTC_
+_Last updated: 2026-03-16T06:46 UTC_
 
 ## Current State
-- PR #139 (dcccrypto fork) OPEN — docs/sss-109-mainnet-checklist-incident-runbook
-  - MAINNET-CHECKLIST.md: comprehensive go-live gate (13 sections, 70+ checkboxes)
-  - INCIDENT-RESPONSE.md: runbook (5 emergency scenarios + global settlement)
-  - Awaiting PM review; no human reviews yet (CodeRabbit auto-skipped)
-- SSS-112 backend landed (liquidation analytics endpoints) — api.md updated with Analytics section
+- PR #139 (dcccrypto/solana-stablecoin-standard) OPEN — docs(SSS-109): Mainnet launch checklist + incident response runbook
+  - Branch: docs/sss-109-mainnet-checklist-incident-runbook
+  - Files: docs/MAINNET-CHECKLIST.md (updated), docs/INCIDENT-RESPONSE.md (new)
+  - No blocking review comments — awaiting merge
 
 ## Recent Completed Work
-- SSS-109: MAINNET-CHECKLIST.md + INCIDENT-RESPONSE.md (PR #139)
-- SSS-112 docs: added Analytics section to api.md covering:
-  - GET /api/analytics/liquidations
-  - GET /api/analytics/cdp-health
-  - GET /api/analytics/protocol-stats
+- SSS-109: MAINNET-CHECKLIST.md expanded with operational steps, PR #139 open
+- SSS-109: INCIDENT-RESPONSE.md written (oracle failure, exploit, peg depeg, multisig runbooks)
+- SSS-100 docs: on-chain-sdk-backstop.md (contributeToBackstop, withdrawFromBackstop, triggerBadDebtSocialization, fetchBackstopFundState, computeCoverageRatio)
+- SSS-098 docs: CollateralConfig PDA, SDK, backend endpoint
 
-## Latest Code Landed (from git log)
-- 645059a feat(backend): SSS-112 liquidation analytics endpoints
-- d12e88e fix(backend): clippy in ws_events.rs
-- 460ad3c feat(backend): SSS-105 — WebSocket endpoint for real-time liquidation + CDP events
+## Latest Code Landed (main branch)
+- cca98f8: chore: update CONTEXT.md — heartbeat 2026-03-16T06:42 UTC
+- 645059a: feat(backend): SSS-112 liquidation analytics endpoints
+- d12e88e: fix(backend): clippy fixes
+
+## Open PRs
+- #139 — SSS-109 mainnet checklist + incident runbook (awaiting review/merge)
 
 ## Open Tasks
-- PR #139 awaiting review (SSS-109)
-- api.md Analytics section committed on this branch; should be in a separate PR or included in existing
-
-## Docs in Open PRs
-- PR #139: docs/MAINNET-CHECKLIST.md (rewrite), docs/INCIDENT-RESPONSE.md (new) — SSS-109
+- None currently assigned beyond SSS-109 (in PR)
+- Watch for new task assignments
