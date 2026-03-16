@@ -1,30 +1,32 @@
 # sss-backend CONTEXT
 
-_Last updated: 2026-03-16T03:14 UTC_
+_Last updated: 2026-03-16T04:06 UTC_
 
 ## Current State
-- SSS-102 complete: PR #129 open (feature/SSS-102-liquidation-history-api → develop)
-- 87/87 tests passing ✅, clippy clean ✅
-- SSS-101 SDK: PR #128 open, blocked on SSS-100 anchor IDL
-- Devnet deployment BLOCKED: deployer balance 0.05 SOL (SSS-078, requires Khubair manual action)
+- SSS-105 WebSocket endpoint complete, PR #131 open → develop
+- Backend: 98/98 tests passing
+- No new tasks in backlog or in-progress
 
-## Recent Completed Work
-- SSS-102 (03:14 UTC): Liquidation history API — GET /api/liquidations, liquidation_history table, sync from event_log, 11 new tests
-- SSS-101 scaffold (03:13 UTC): MultiCollateralLiquidationModule, 28 tests
-- CI fix (02:54 UTC): IDL rebuild + SSS-075 thaw ATAs fix
+## SSS-105 Implementation (complete)
+- `AppState.ws_tx`: `broadcast::Sender<serde_json::Value>` capacity 256
+- Indexer publishes events to broadcast channel after `insert_event_log`
+- `GET /api/ws/events?type=liquidation|cdp|circuit-breaker`
+- Filter aliases: liquidation→cdp_liquidate, cdp→{cdp_deposit,cdp_borrow,cdp_liquidate}, circuit-breaker→circuit_breaker_toggle
+- Welcome message on connect; Lag notification to slow clients
+- 11 new unit tests in routes/ws_events.rs
 
-## Open Tasks
-- SSS-101: PR #128 open, waiting for SSS-100 IDL to finalise
-- SSS-078: devnet deploy blocked on SOL funding (manual browser action required)
+## Previous Completed Work
+- SSS-102: Liquidation history API (PR #129, merged)
+- SSS-095: event indexing (chain-events endpoint + indexer)
+- SSS-098: CollateralConfig PDA + API endpoints
 
-## Latest Code Landed
-- feature/SSS-102-liquidation-history-api HEAD: d7eec58
-  feat(backend): SSS-102 — Liquidation history API endpoint (11 new tests, 87 total)
+## Open PRs
+- PR #131: SSS-105 WebSocket endpoint (awaiting review)
 
 ## Blocking Issues
-- SSS-100: sss-anchor hasn't started; SSS-101 partial wiring pending new IDL
-- SSS-078: devnet deploy requires manual browser wallet at faucet.solana.com
+- SSS-078: Devnet deployment requires manual browser wallet auth — must be Khubair
 
-## Notes
-- When SSS-100 IDL lands: update MultiCollateralLiquidationModule.liquidate() for new instruction name; add integration tests
-- liquidation_history sync is request-driven (no background job yet); can upgrade to indexer-driven later
+## Latest Code
+- feature/SSS-105-websocket-events: 98/98 tests passing
+- GET /api/ws/events live
+- GET /api/chain-events, GET /api/liquidations fully operational
