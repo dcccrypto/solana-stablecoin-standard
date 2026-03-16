@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, MintEvent, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, LiquidationHistoryEntry, MintEvent, WebhookEntry};
 
 pub struct Database {
     pub conn: Mutex<Connection>,
@@ -89,6 +89,20 @@ impl Database {
                 PRIMARY KEY (sss_mint, collateral_mint)
             );
             CREATE INDEX IF NOT EXISTS idx_collateral_config_sss_mint ON collateral_config(sss_mint);
+            CREATE TABLE IF NOT EXISTS liquidation_history (
+                id TEXT PRIMARY KEY,
+                cdp_address TEXT NOT NULL,
+                collateral_mint TEXT NOT NULL,
+                collateral_seized INTEGER NOT NULL,
+                debt_repaid INTEGER NOT NULL,
+                liquidator TEXT NOT NULL,
+                slot INTEGER,
+                tx_sig TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_liq_history_cdp ON liquidation_history(cdp_address);
+            CREATE INDEX IF NOT EXISTS idx_liq_history_collateral ON liquidation_history(collateral_mint);
+            CREATE INDEX IF NOT EXISTS idx_liq_history_created ON liquidation_history(created_at DESC);
         ")?;
         Ok(())
     }
@@ -695,5 +709,226 @@ impl Database {
         )?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    // ─── SSS-102: Liquidation history ─────────────────────────────────────────
+
+    /// Insert a new liquidation event into `liquidation_history`.
+    ///
+    /// Called by the indexer when it detects a `CollateralLiquidated` / `cdp_liquidate`
+    /// event in `event_log` that hasn't yet been materialised here.
+    #[allow(clippy::too_many_arguments)]
+    #[allow(dead_code)]
+    pub fn insert_liquidation(
+        &self,
+        cdp_address: &str,
+        collateral_mint: &str,
+        collateral_seized: i64,
+        debt_repaid: i64,
+        liquidator: &str,
+        slot: Option<i64>,
+        tx_sig: Option<&str>,
+    ) -> Result<LiquidationHistoryEntry, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let created_at = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO liquidation_history \
+             (id, cdp_address, collateral_mint, collateral_seized, debt_repaid, liquidator, slot, tx_sig, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                id,
+                cdp_address,
+                collateral_mint,
+                collateral_seized,
+                debt_repaid,
+                liquidator,
+                slot,
+                tx_sig,
+                created_at,
+            ],
+        )?;
+        Ok(LiquidationHistoryEntry {
+            id,
+            cdp_address: cdp_address.to_string(),
+            collateral_mint: collateral_mint.to_string(),
+            collateral_seized,
+            debt_repaid,
+            liquidator: liquidator.to_string(),
+            slot,
+            tx_sig: tx_sig.map(str::to_string),
+            created_at,
+        })
+    }
+
+    /// Query `liquidation_history` with optional filters and pagination.
+    pub fn list_liquidations(
+        &self,
+        cdp_address: Option<&str>,
+        collateral_mint: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<LiquidationHistoryEntry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = String::from(
+            "SELECT id, cdp_address, collateral_mint, collateral_seized, debt_repaid, \
+             liquidator, slot, tx_sig, created_at \
+             FROM liquidation_history WHERE 1=1",
+        );
+        let mut binds: Vec<String> = Vec::new();
+
+        if let Some(cdp) = cdp_address {
+            binds.push(cdp.to_string());
+            sql.push_str(&format!(" AND cdp_address = ?{}", binds.len()));
+        }
+        if let Some(cm) = collateral_mint {
+            binds.push(cm.to_string());
+            sql.push_str(&format!(" AND collateral_mint = ?{}", binds.len()));
+        }
+        sql.push_str(" ORDER BY created_at DESC");
+        binds.push(limit.to_string());
+        sql.push_str(&format!(" LIMIT ?{}", binds.len()));
+        binds.push(offset.to_string());
+        sql.push_str(&format!(" OFFSET ?{}", binds.len()));
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(binds.iter()),
+            |row| {
+                Ok(LiquidationHistoryEntry {
+                    id: row.get(0)?,
+                    cdp_address: row.get(1)?,
+                    collateral_mint: row.get(2)?,
+                    collateral_seized: row.get(3)?,
+                    debt_repaid: row.get(4)?,
+                    liquidator: row.get(5)?,
+                    slot: row.get(6)?,
+                    tx_sig: row.get(7)?,
+                    created_at: row.get(8)?,
+                })
+            },
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    /// Count total `liquidation_history` rows matching optional filters (for pagination metadata).
+    pub fn count_liquidations(
+        &self,
+        cdp_address: Option<&str>,
+        collateral_mint: Option<&str>,
+    ) -> Result<u64, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = String::from(
+            "SELECT COUNT(*) FROM liquidation_history WHERE 1=1",
+        );
+        let mut binds: Vec<String> = Vec::new();
+
+        if let Some(cdp) = cdp_address {
+            binds.push(cdp.to_string());
+            sql.push_str(&format!(" AND cdp_address = ?{}", binds.len()));
+        }
+        if let Some(cm) = collateral_mint {
+            binds.push(cm.to_string());
+            sql.push_str(&format!(" AND collateral_mint = ?{}", binds.len()));
+        }
+
+        let count: i64 = conn.query_row(
+            &sql,
+            rusqlite::params_from_iter(binds.iter()),
+            |row| row.get(0),
+        )?;
+        Ok(count as u64)
+    }
+
+    /// Sync `liquidation_history` from `event_log`: pulls all `cdp_liquidate`
+    /// events that aren't yet in `liquidation_history` (matched by tx_sig + cdp_address)
+    /// and inserts them.  Called on startup and periodically by the indexer.
+    ///
+    /// Expected event_log `data` JSON shape (best-effort parse):
+    /// ```json
+    /// {
+    ///   "cdp_address": "...",
+    ///   "collateral_mint": "...",
+    ///   "collateral_seized": 1000,
+    ///   "debt_repaid": 500,
+    ///   "liquidator": "..."
+    /// }
+    /// ```
+    pub fn sync_liquidations_from_event_log(&self) -> Result<usize, AppError> {
+        // Fetch all cdp_liquidate events not yet in liquidation_history.
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let rows: Vec<(String, String, Option<i64>, Option<String>)> = {
+            let mut stmt = conn.prepare(
+                "SELECT el.data, el.address, el.slot, el.tx_signature \
+                 FROM event_log el \
+                 WHERE el.event_type = 'cdp_liquidate' \
+                 AND NOT EXISTS ( \
+                     SELECT 1 FROM liquidation_history lh \
+                     WHERE lh.tx_sig = el.tx_signature \
+                       AND lh.cdp_address = el.address \
+                 )",
+            )?;
+            let iter = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })?;
+            iter.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| AppError::Internal(e.to_string()))?
+        };
+
+        let mut inserted = 0usize;
+        let now = Utc::now().to_rfc3339();
+
+        for (data_json, address, slot, tx_sig) in rows {
+            // Parse best-effort; skip rows we can't decode.
+            let v: serde_json::Value = match serde_json::from_str(&data_json) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let cdp_address = v.get("cdp_address")
+                .and_then(|x| x.as_str())
+                .unwrap_or(&address)
+                .to_string();
+            let collateral_mint = match v.get("collateral_mint").and_then(|x| x.as_str()) {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+            let collateral_seized = v.get("collateral_seized")
+                .and_then(|x| x.as_i64())
+                .unwrap_or(0);
+            let debt_repaid = v.get("debt_repaid")
+                .and_then(|x| x.as_i64())
+                .unwrap_or(0);
+            let liquidator = v.get("liquidator")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            let id = Uuid::new_v4().to_string();
+            conn.execute(
+                "INSERT OR IGNORE INTO liquidation_history \
+                 (id, cdp_address, collateral_mint, collateral_seized, debt_repaid, liquidator, slot, tx_sig, created_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    id,
+                    cdp_address,
+                    collateral_mint,
+                    collateral_seized,
+                    debt_repaid,
+                    liquidator,
+                    slot,
+                    tx_sig,
+                    now,
+                ],
+            )?;
+            inserted += 1;
+        }
+        Ok(inserted)
     }
 }
