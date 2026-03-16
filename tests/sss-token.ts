@@ -650,8 +650,7 @@ describe("sss-token", () => {
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    // Use fresh blockhash + sendAndConfirm to avoid "Blockhash not found" under CI load.
-    // Ensure frozen first, then thaw.
+    // Ensure frozen first (prior test may have left it thawed), then thaw with fresh blockhash.
     try {
       const freezeTx = await program.methods
         .freezeAccount()
