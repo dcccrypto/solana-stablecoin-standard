@@ -1,146 +1,318 @@
-# SSS Mainnet Readiness Checklist
+# SSS Mainnet Launch Checklist
 
-**Audit Date:** 2026-03-15  
-**Auditor:** sss-anchor agent  
-**Task:** SSS-030 — Mainnet readiness audit: program security + upgrade authority  
-**Branch:** `audit/sss-030-mainnet-readiness`  
-**Programs audited:**
-- `sss_token` — `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat`
-- `sss_transfer_hook` — `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp`
+_Task: SSS-109 | Author: sss-docs | Date: 2026-03-16_  
+_Reference: GAPS-ANALYSIS-ANCHOR.md, devnet-deploy.md, audit/sss-030-mainnet-readiness_
+
+> **This is the canonical go-live gate.** Every item below must be ✅ before deploying to Mainnet-Beta with real TVL. Items marked ⚠️ are required but carry known caveats. Items marked 🔲 are unchecked.
 
 ---
 
-## 1. Upgrade Authority ✅ / ⚠️
+## 0. Prerequisites
 
-| Item | Status | Notes |
-|------|--------|-------|
-| Upgrade authority is not frozen (programs are upgradeable) | ⚠️ **ACTION REQUIRED** | For mainnet, upgrade authority should be transferred to a multisig (e.g. Squads) or the program should be frozen (immutable). Currently uses deployer keypair by default. |
-| Recommendation | — | Transfer upgrade authority to a 3-of-5 Squads multisig before mainnet. If a frozen/immutable deployment is desired, run `solana program set-upgrade-authority --final <PROGRAM_ID>`. |
+| Item | Owner | Status |
+|------|-------|--------|
+| Independent security audit complete (OtterSec / Sec3 / Neodyme) | DAO / Team | 🔲 |
+| Bug bounty program live (Immunefi or equivalent) | Team | 🔲 |
+| Squads v4 multisig created (3-of-5 or higher) | Team | 🔲 |
+| Multisig signers confirmed, keys secured offline | Signers | 🔲 |
+| Emergency contact list compiled (all signers reachable 24/7) | Team | 🔲 |
+| Devnet full smoke test passing (`npm run smoke:devnet`) | QA | 🔲 |
 
-**Steps to transfer to multisig:**
+---
+
+## 1. Program Build & Deployment
+
+### 1.1 Build Verification
+
 ```bash
-# Create multisig via Squads v4 UI or CLI, then:
-solana program set-upgrade-authority <PROGRAM_ID> \
-  --new-upgrade-authority <MULTISIG_PUBKEY> \
-  --keypair ~/.config/solana/id.json
-```
-
----
-
-## 2. Hardcoded Devnet / Localnet Addresses ✅
-
-| Item | Status | Notes |
-|------|--------|-------|
-| `Anchor.toml` `[programs.devnet]` section | ⚠️ **ACTION REQUIRED** | No `[programs.mainnet]` section — must be added before deploying to mainnet. Program IDs may differ from devnet after mainnet deploy. |
-| `[provider]` cluster | ⚠️ **ACTION REQUIRED** | Currently set to `"Localnet"`. Must be updated to `"Mainnet"` for mainnet deployment. |
-| Hardcoded addresses in Rust source | ✅ **PASS** | No hardcoded devnet/localhost addresses found in `programs/` Rust source. |
-| `declare_id!` macro (both programs) | ⚠️ **VERIFY** | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` and `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` are devnet deploy addresses. After mainnet deploy these will differ; `declare_id!` must be updated and program re-built. |
-
-**Required `Anchor.toml` update:**
-```toml
-[programs.mainnet]
-sss_token = "<MAINNET_PROGRAM_ID>"
-sss_transfer_hook = "<MAINNET_TRANSFER_HOOK_ID>"
-
-[provider]
-cluster = "Mainnet"
-```
-
----
-
-## 3. Admin / Governance Access Control ✅
-
-| Item | Status | Notes |
-|------|--------|-------|
-| `initialize` sets `authority = payer` | ✅ **PASS** | Deployer becomes authority; can be transferred to multisig via `update_roles`. |
-| `update_roles` (authority transfer) | ✅ **PASS** | Two-step pattern: `update_roles` proposes, `accept_authority` confirms. No single-sig takeover possible. |
-| Compliance authority transfer | ✅ **PASS** | Same two-step pattern via `accept_compliance_authority`. |
-| Minter registration | ✅ **PASS** | Gated by `authority` signer check in `update_minter` / `revoke_minter`. |
-| Pause / Unpause | ✅ **PASS** | Gated by `authority`. |
-| Freeze / Thaw | ✅ **PASS** | Gated by `compliance_authority`. |
-| Reserve vault / collateral mint set at init | ✅ **PASS** | Immutable post-init — no setter instruction; prevents vault swapping attacks. |
-| Blacklist management (transfer hook) | ✅ **PASS** | Gated by `blacklist_state.authority`. Initialized to `authority` at hook init time. |
-| PDA seeds validated | ✅ **PASS** | All accounts use `seeds = [SEED, mint.key()]` with `bump` stored/verified. |
-
-**⚠️ Recommendation:** Before mainnet, call `update_roles` to transfer authority to a multisig wallet. The deployer keypair should **not** remain as sole authority on mainnet.
-
----
-
-## 4. TODO / FIXME Scan ✅
-
-Scanned all files in `programs/` with:
-```
-grep -rn "TODO|FIXME|HACK|devnet|localhost|127.0.0.1" programs/ --include="*.rs"
-```
-
-**Result:** No `TODO`, `FIXME`, or `HACK` comments found in program source. No hardcoded devnet/localhost strings in Rust. ✅
-
----
-
-## 5. Program Buffer Size ⚠️
-
-| Item | Status | Notes |
-|------|--------|-------|
-| `sss_token` buffer size verified | ⚠️ **ACTION REQUIRED** | Buffer must be sized for the actual compiled `.so`. Run `anchor build` on mainnet config; check with `solana program show <PROGRAM_ID>`. Allocate at least 2× current binary size to allow future upgrades. |
-| `sss_transfer_hook` buffer size | ⚠️ **ACTION REQUIRED** | Same as above. |
-
-**Verify with:**
-```bash
+# Clean build from fresh checkout
+git clean -fdx
 anchor build
+
+# Verify binary sizes
 ls -lh target/deploy/*.so
-# Then deploy with enough lamports:
-solana program deploy --buffer-size <BYTES> target/deploy/sss_token.so
+# sss_token.so      expected ~300–600 KB
+# sss_transfer_hook.so  expected ~100–300 KB
+
+# Reproduce hash — compare with team-published checksums
+sha256sum target/deploy/sss_token.so
+sha256sum target/deploy/sss_transfer_hook.so
 ```
 
----
+| Item | Status |
+|------|--------|
+| Build reproducible from clean checkout | 🔲 |
+| Binary checksums match team-published hashes | 🔲 |
+| No `TODO`, `FIXME`, `HACK` in `programs/` source | ✅ (SSS-030 scan clean) |
+| `[programs.mainnet]` section added to `Anchor.toml` | 🔲 |
+| `[provider] cluster = "Mainnet"` set in `Anchor.toml` | 🔲 |
 
-## 6. Security Observations
+### 1.2 Deploy to Mainnet-Beta
 
-### 6a. BlacklistState — Unbounded Vec (Medium Risk ⚠️)
+```bash
+# Switch CLI to mainnet
+solana config set --url mainnet-beta
 
-**File:** `programs/transfer-hook/src/lib.rs`  
-**Issue:** `BlacklistState.blacklisted` is a `Vec<Pubkey>` with `INIT_SPACE` sized for 100 entries. If more than 100 addresses are blacklisted, the account will not have enough allocated space and `blacklist_add` will panic/error on realloc.  
-**Recommendation:** Either cap at 100 with an explicit error, use a `realloc` constraint in the `ManageBlacklist` context, or migrate to a per-address PDA bitmap for unbounded scaling.
+# Fund deployer wallet (need ~10 SOL for buffers)
+solana balance
 
-### 6b. `total_collateral` Desync Risk (Low Risk ⚠️)
+# Deploy — DO NOT use --upgrade-authority with deployer key;
+# deploy to a buffer first, then upgrade via multisig
+anchor deploy --provider.cluster mainnet-beta
 
-**File:** `programs/sss-token/src/instructions/deposit_collateral.rs`  
-**Issue:** `config.total_collateral` is incremented in the `deposit_collateral` handler but does not cross-check the actual vault balance via a CPI read. If collateral is withdrawn from the vault externally (not via the redeem instruction), the on-chain accounting will diverge from actual vault holdings.  
-**Recommendation:** For mainnet, the reserve vault authority should be the config PDA (no external withdrawal possible) and this should be enforced in the `Initialize` handler. Document clearly that reserve vault withdrawals only go through `redeem`.
+# Record program IDs immediately
+solana program show <PROGRAM_ID>
+```
 
-### 6c. Mint Authority is Config PDA (Positive ✅)
-
-The Token-2022 mint authority and freeze authority are set to the config PDA (not the deployer keypair) at initialization time. This means only the program logic (via CPI with PDA signer seeds) can mint or freeze — the deployer key cannot directly mint tokens on mainnet. This is a strong security property.
-
-### 6d. No Reentrancy Risk ✅
-
-Anchor handles reentrancy via borrow-checking on account references. No obvious reentrancy vectors found.
-
----
-
-## 7. Pre-Mainnet Checklist (Action Items)
-
-- [ ] **Transfer program upgrade authority** to a 3-of-5 Squads multisig (or freeze if immutable deployment is desired)
-- [ ] **Transfer `authority` and `compliance_authority`** for all deployed stablecoin configs to the multisig via `update_roles` + `accept_authority`
-- [ ] **Add `[programs.mainnet]` section** to `Anchor.toml` with post-deploy mainnet program IDs
-- [ ] **Update `declare_id!`** in both programs to the mainnet-deployed addresses and rebuild
-- [ ] **Verify program buffer sizes** are sufficient for deployed `.so` binaries
-- [ ] **Blacklist cap fix**: cap `blacklist_add` at 100 entries with an explicit error, or implement realloc/PDA-per-address approach before production use of SSS-2
-- [ ] **Audit reserve vault ownership**: ensure reserve vault's token account authority is the config PDA for SSS-3 deployments
-- [ ] **Run `anchor test` on mainnet-simulated cluster** after address updates
-- [ ] **Perform a security audit** by an independent third party (e.g. OtterSec, Sec3, Neodyme) before significant TVL
+| Item | Status |
+|------|--------|
+| `sss_token` deployed to mainnet | 🔲 |
+| `sss_transfer_hook` deployed to mainnet | 🔲 |
+| Mainnet program IDs recorded in `deploy/mainnet-latest.json` | 🔲 |
+| `declare_id!` updated to mainnet IDs and programs rebuilt | 🔲 |
+| Buffer sizes ≥ 2× current binary (room for future upgrades) | 🔲 |
 
 ---
 
-## Summary
+## 2. Upgrade Authority → Squads Multisig
 
-| Category | Status |
-|----------|--------|
-| Upgrade authority | ⚠️ Needs multisig before mainnet |
-| Devnet addresses in source | ⚠️ `Anchor.toml` cluster + `[programs.mainnet]` section needed |
-| Access control | ✅ Solid two-step authority pattern |
-| TODO/FIXME scan | ✅ None found |
-| Program buffer size | ⚠️ Verify after mainnet build |
-| Blacklist scalability | ⚠️ 100-address hard cap needs fix |
-| Collateral accounting | ⚠️ Low risk; document vault ownership constraint |
-| Overall | ⚠️ **NOT YET MAINNET READY** — action items above must be resolved |
+> **Critical.** If the deployer keypair remains upgrade authority, a single key compromise gives an attacker full program control.
+
+```bash
+# Transfer sss_token upgrade authority to multisig
+solana program set-upgrade-authority <SSS_TOKEN_MAINNET_ID> \
+  --new-upgrade-authority <SQUADS_MULTISIG_PUBKEY> \
+  --keypair ~/.config/solana/deployer.json
+
+# Transfer sss_transfer_hook upgrade authority
+solana program set-upgrade-authority <TRANSFER_HOOK_MAINNET_ID> \
+  --new-upgrade-authority <SQUADS_MULTISIG_PUBKEY> \
+  --keypair ~/.config/solana/deployer.json
+
+# Verify — output must show multisig as upgrade authority
+solana program show <SSS_TOKEN_MAINNET_ID>
+solana program show <TRANSFER_HOOK_MAINNET_ID>
+```
+
+| Item | Status |
+|------|--------|
+| `sss_token` upgrade authority → Squads multisig | 🔲 |
+| `sss_transfer_hook` upgrade authority → Squads multisig | 🔲 |
+| Deployer keypair upgrade authority revoked | 🔲 |
+| `solana program show` confirms multisig on both programs | 🔲 |
+
+---
+
+## 3. Admin Authority Transfer
+
+> Transfer on-chain `authority` and `compliance_authority` from deployer to multisig via the two-step pattern.
+
+```typescript
+// Step 1 — Propose transfer (call as current authority)
+await stablecoin.updateRoles({ pendingAuthority: squadsPubkey });
+
+// Step 2 — Accept (call as multisig via Squads proposal)
+await stablecoin.acceptAuthority();
+
+// Repeat for compliance authority
+await stablecoin.updateRoles({ pendingComplianceAuthority: complianceMultisig });
+await stablecoin.acceptComplianceAuthority();
+```
+
+| Item | Status |
+|------|--------|
+| `authority` transferred to Squads multisig | 🔲 |
+| `compliance_authority` transferred to compliance multisig | 🔲 |
+| Deployer wallet retains no on-chain authority | 🔲 |
+| All authority transfers verified on-chain via `getConfig()` | 🔲 |
+
+---
+
+## 4. Pyth Oracle Validation
+
+> SSS-3 CDPs depend on Pyth price feeds. Stale or wide-confidence feeds must be rejected.
+
+### 4.1 Feed Validation Pre-Launch
+
+```bash
+# Verify Pyth feed IDs for each collateral asset
+# SOL/USD:  0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d
+# USDC/USD: 0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a
+
+# Check feed is publishing on mainnet (use Pyth Explorer)
+# https://pyth.network/price-feeds
+
+# Test staleness window
+# StablecoinConfig.max_oracle_staleness_secs should be ≤ 60s for mainnet
+```
+
+| Item | Status |
+|------|--------|
+| Pyth feed IDs verified for each supported collateral | 🔲 |
+| Feeds confirmed publishing on Pyth mainnet | 🔲 |
+| `max_oracle_staleness_secs` set (≤ 60s recommended) | 🔲 |
+| `max_oracle_conf_bps` set (≤ 100 = 1% recommended) | 🔲 |
+| `get_price_no_older_than` staleness check active in program | 🔲 |
+| Confidence interval check active in program | 🔲 |
+| Manual test: stale feed → `OracleStalePriceFeed` error returned | 🔲 |
+| Manual test: wide conf interval → `OracleConfidenceTooWide` error | 🔲 |
+
+### 4.2 Pyth Feed Monitoring Setup
+
+| Item | Status |
+|------|--------|
+| Alert configured: Pyth feed stale > 30s → PagerDuty / Discord | 🔲 |
+| Alert configured: Pyth confidence spike > 2% | 🔲 |
+| Fallback oracle plan documented (Switchboard / Chainlink) | 🔲 |
+
+---
+
+## 5. Circuit Breaker Tuning
+
+> The `pause` / `unpause` authority is the primary circuit breaker. Parameters must be set conservatively at launch.
+
+### 5.1 CDP Borrow Parameters
+
+| Parameter | Recommended Mainnet Value | Rationale | Status |
+|-----------|--------------------------|-----------|--------|
+| `min_collateral_ratio_bps` | 15000 (150%) | Conservative for launch | 🔲 |
+| `liquidation_threshold_bps` | 12000 (120%) | 30% buffer above minimum | 🔲 |
+| `liquidation_bonus_bps` | 500–1000 (5–10%) | 5% min; raise to 10% if liquidation bots insufficient | 🔲 |
+| `debt_ceiling` (per config) | Start low (e.g. $1M) | Scale up as protocol proves stability | 🔲 |
+| `max_oracle_staleness_secs` | 60 | See Section 4 | 🔲 |
+| `max_oracle_conf_bps` | 100 | See Section 4 | 🔲 |
+
+### 5.2 Pause Triggers (Document Before Launch)
+
+Define clear criteria for the multisig to call `pause()` immediately:
+
+- [ ] Oracle price deviation > 10% in a single slot
+- [ ] Pyth feed stale > 60 seconds
+- [ ] Unexpected mint/burn volume spike > 5× hourly average
+- [ ] Any on-chain exploit alert from security monitoring
+- [ ] Cluster-level Solana incident (validator outage, fork)
+
+| Item | Status |
+|------|--------|
+| Pause criteria documented and shared with all multisig signers | 🔲 |
+| Pause response drill completed (all signers can pause within 5 min) | 🔲 |
+| Unpause requires DAO proposal or 4-of-5 multisig approval | 🔲 |
+
+---
+
+## 6. Backstop Fund Seeding
+
+> A surplus/backstop vault absorbs bad debt when CDP liquidations are unprofitable. See GAP-003.
+
+| Item | Status |
+|------|--------|
+| `SurplusVault` PDA initialized on mainnet | 🔲 |
+| Initial backstop seed deposited (recommend ≥ 1% of target TVL) | 🔲 |
+| Stability fee routing to `SurplusVault` active and tested | 🔲 |
+| Backstop balance monitoring alert configured (< 0.5% TVL → alert) | 🔲 |
+| Bad debt write-off threshold documented (> $X → governance proposal) | 🔲 |
+
+---
+
+## 7. DAO / Governance Setup
+
+| Item | Status |
+|------|--------|
+| DAO program deployed (SPL Governance or equivalent) | 🔲 |
+| Governance token (if applicable) minted and distributed | 🔲 |
+| Treasury multisig configured as DAO treasury | 🔲 |
+| Quorum and threshold parameters set and announced | 🔲 |
+| First governance proposal: ratify mainnet parameters | 🔲 |
+| Timelock on all privileged instructions (min 24h recommended) | 🔲 |
+| Emergency bypass procedure (multisig can act within timelock if exploit) | 🔲 |
+| DAO docs published (`GOVERNANCE.md` or equivalent) | 🔲 |
+
+---
+
+## 8. ZK Verifier Whitelisting
+
+> SSS-2 compliance hooks use ZK proofs. Only whitelisted verifier programs should be trusted.
+
+| Item | Status |
+|------|--------|
+| Verifier program IDs audited | 🔲 |
+| Only audited verifier IDs whitelisted in `BlacklistState` / transfer hook config | 🔲 |
+| No test/mock verifier IDs present on mainnet config | 🔲 |
+| Verifier program upgrade authority also transferred to multisig | 🔲 |
+| ZK proof format version pinned (breaking change policy documented) | 🔲 |
+| End-to-end ZK compliance flow tested on mainnet with real proof | 🔲 |
+
+---
+
+## 9. Blacklist / Compliance Sanity Checks
+
+| Item | Status |
+|------|--------|
+| Initial blacklist populated with OFAC-sanctioned addresses (if required) | 🔲 |
+| Blacklist cap (100 entries) acknowledged; scaling plan documented | 🔲 |
+| `compliance_authority` is a compliance-team multisig (not same as protocol authority) | 🔲 |
+| Transfer hook verified active on SSS-2 mint | 🔲 |
+
+---
+
+## 10. Reserve Vault Ownership (SSS-3)
+
+| Item | Status |
+|------|--------|
+| Reserve vault token account authority = config PDA (not deployer) | 🔲 |
+| Verified: no external withdrawal possible outside `redeem` instruction | 🔲 |
+| Collateral mint is the expected stablecoin (USDC mainnet address: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`) | 🔲 |
+| `total_collateral` accounting tested against actual vault balance | 🔲 |
+
+---
+
+## 11. Monitoring & Alerting
+
+| Item | Status |
+|------|--------|
+| On-chain event indexer live (WebSocket `/events` endpoint) | 🔲 |
+| Dashboard: total supply, CDPs open, collateral ratio distribution | 🔲 |
+| Alert: any CDP below 130% CR | 🔲 |
+| Alert: total supply change > 5% in 1 hour | 🔲 |
+| Alert: reserve vault balance diverges from `total_collateral` by > 0.1% | 🔲 |
+| Alert: program upgrade authority change detected | 🔲 |
+| PagerDuty / on-call rotation configured for P0 alerts | 🔲 |
+
+---
+
+## 12. Incident Response
+
+- See **[INCIDENT-RESPONSE.md](./INCIDENT-RESPONSE.md)** for the full runbook.
+- All multisig signers must read the runbook before launch.
+- Response drills must be completed for: oracle failure, circuit breaker trigger, admin key compromise.
+
+---
+
+## 13. Final Pre-Launch Sign-Off
+
+| Signer | Role | Signature | Date |
+|--------|------|-----------|------|
+| | Lead Engineer | | |
+| | Security Lead | | |
+| | DAO / Governance | | |
+| | Compliance Officer | | |
+
+> **Launch is blocked until all 🔲 items are resolved or explicitly waived with written justification.**
+
+---
+
+## Appendix A — Known Gaps at Launch (Accepted Risk)
+
+These items from GAPS-ANALYSIS-ANCHOR.md are **not** blocking launch if debt ceiling is set low, but must be resolved before scaling TVL:
+
+| Gap | Risk | TVL Threshold to Fix |
+|-----|------|---------------------|
+| GAP-001: No TWAP smoothing | Flash-crash oracle manipulation | $5M TVL |
+| GAP-002: No stability fee accrual | Zero protocol revenue | $1M TVL |
+| GAP-003: No surplus buffer on-chain | Bad debt with no coverage | $1M TVL |
+| GAP-005: Full liquidation only (no partial) | Borrower UX, liquidation efficiency | $5M TVL |
+| Blacklist 100-entry cap | Compliance scaling | When > 80 addresses blacklisted |
+
+---
+
+_Last updated: 2026-03-16 by sss-docs_

@@ -1,28 +1,29 @@
 # sss-docs CONTEXT
 
-_Last updated: 2026-03-16T02:05 UTC_
+_Last updated: 2026-03-16T06:27 UTC_
 
 ## Current State
-- PR #127 (solanabr/solana-stablecoin-standard) is OPEN on feature/SSS-098-collateral-config
-- PR body updated with SSS-100 docs addition
-- Test counts: 140+ Anchor, 476+ SDK, 68+ backend
+- PR #139 (dcccrypto fork) OPEN — docs/sss-109-mainnet-checklist-incident-runbook
+  - MAINNET-CHECKLIST.md: comprehensive go-live gate (13 sections, 70+ checkboxes)
+  - INCIDENT-RESPONSE.md: runbook (5 emergency scenarios + global settlement)
+  - Awaiting PM review; no human reviews yet (CodeRabbit auto-skipped)
+- SSS-112 backend landed (liquidation analytics endpoints) — api.md updated with Analytics section
 
 ## Recent Completed Work
-- SSS-100 docs: on-chain-sdk-backstop.md written and pushed
-  - Extended methods: contributeToBackstop, withdrawFromBackstop, triggerBadDebtSocialization, fetchBackstopFundState, computeCoverageRatio
-  - Full type reference, layout notes, end-to-end example
-  - PR #127 body updated
-- SSS-098 SDK: CollateralConfigModule (commit 7ca65ed)
-- SSS-098 Anchor: CollateralConfig PDA (register_collateral, update_collateral_config)
-- SSS-098 backend: /api/collateral-config endpoint
+- SSS-109: MAINNET-CHECKLIST.md + INCIDENT-RESPONSE.md (PR #139)
+- SSS-112 docs: added Analytics section to api.md covering:
+  - GET /api/analytics/liquidations
+  - GET /api/analytics/cdp-health
+  - GET /api/analytics/protocol-stats
 
-## Latest Code Landed
-- SSS-100 SDK: BadDebtBackstopModule extended (commit 9345d4c — 21 new tests, 476 total)
-- 7b03e8f: fix(tests) collateralConfig null backwards-compat for CDP instructions
+## Latest Code Landed (from git log)
+- 645059a feat(backend): SSS-112 liquidation analytics endpoints
+- d12e88e fix(backend): clippy in ws_events.rs
+- 460ad3c feat(backend): SSS-105 — WebSocket endpoint for real-time liquidation + CDP events
 
 ## Open Tasks
-- None currently assigned
-- Watch for new task assignments
+- PR #139 awaiting review (SSS-109)
+- api.md Analytics section committed on this branch; should be in a separate PR or included in existing
 
-## Docs in PR #127
-- docs/on-chain-sdk-backstop.md ✅ (SSS-100 extended methods)
+## Docs in Open PRs
+- PR #139: docs/MAINNET-CHECKLIST.md (rewrite), docs/INCIDENT-RESPONSE.md (new) — SSS-109
