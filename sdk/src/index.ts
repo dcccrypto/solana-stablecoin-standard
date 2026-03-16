@@ -50,3 +50,13 @@ export type {
 } from './BadDebtBackstopModule';
 export { CollateralConfigModule, COLLATERAL_CONFIG_SEED } from './CollateralConfigModule';
 export type { CollateralConfigAccount, RegisterCollateralParams, UpdateCollateralConfigParams } from './CollateralConfigModule';
+export { ConfidentialTransferModule, FLAG_CONFIDENTIAL_TRANSFERS, CT_CONFIG_SEED } from './ConfidentialTransferModule';
+export type {
+  EnableConfidentialTransfersParams,
+  DepositConfidentialParams,
+  WithdrawConfidentialParams,
+  ApplyPendingBalanceParams,
+  AuditTransferParams,
+  AuditTransferResult,
+  ConfidentialTransferConfigAccount,
+} from './ConfidentialTransferModule';
