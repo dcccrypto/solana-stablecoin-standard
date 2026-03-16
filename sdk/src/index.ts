@@ -90,3 +90,10 @@ export type {
   LiquidationAmountResult,
   CollateralLiquidatedEvent,
 } from './MultiCollateralLiquidationModule';
+export { ConfidentialTransferModule, FLAG_CONFIDENTIAL_TRANSFERS, CT_CONFIG_SEED } from './ConfidentialTransferModule';
+export type {
+  EnableConfidentialTransfersParams,
+  DepositConfidentialParams,
+  WithdrawConfidentialParams,
+  ConfidentialTransferConfigAccount,
+} from './ConfidentialTransferModule';
