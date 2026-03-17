@@ -100,3 +100,43 @@ export type {
   AuditTransferResult,
   ConfidentialTransferConfigAccount,
 } from './ConfidentialTransferModule';
+
+// ─── SSS-111: PBS + APC SDK modules ──────────────────────────────────────────
+export {
+  ProbabilisticModule,
+  VaultStatus,
+  FLAG_PROBABILISTIC_MONEY,
+  PBS_VAULT_SEED,
+  PBS_CONFIG_SEED,
+  derivePbsConfigPda,
+  derivePbsVaultPda,
+} from './ProbabilisticModule';
+export type {
+  ProbabilisticVault,
+  CommitProbabilisticParams,
+  CommitResult,
+  ProveAndResolveParams,
+  PartialResolveParams,
+  ExpireAndRefundParams,
+} from './ProbabilisticModule';
+
+export {
+  AgentPaymentChannelModule,
+  ChannelStatus,
+  DisputePolicy,
+  ApcProofType,
+  APC_CHANNEL_SEED,
+  APC_CONFIG_SEED,
+  deriveApcConfigPda,
+  deriveChannelPda,
+} from './AgentPaymentChannelModule';
+export type {
+  PaymentChannel,
+  OpenChannelParams,
+  OpenChannelResult,
+  SubmitWorkProofParams,
+  ProposeSettleParams,
+  CountersignSettleParams,
+  DisputeParams,
+  ForceCloseParams,
+} from './AgentPaymentChannelModule';
