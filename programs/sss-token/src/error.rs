@@ -172,4 +172,15 @@ pub enum SssError {
     VaultNotExpired,
     #[msg("Expiry slot must be in the future")]
     InvalidExpirySlot,
+    // SSS-110: Agent Payment Channel
+    #[msg("Channel is already closed (settled or force-closed)")]
+    ChannelAlreadyClosed,
+    #[msg("Settle amount exceeds channel deposit")]
+    InvalidSettleAmount,
+    #[msg("A settlement has already been proposed for this channel")]
+    SettlementAlreadyProposed,
+    #[msg("Counter-sign amount does not match proposed settlement amount")]
+    SettlementNotMatching,
+    #[msg("Channel timeout has not elapsed yet")]
+    ChannelNotExpired,
 }

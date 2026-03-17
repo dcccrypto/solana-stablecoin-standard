@@ -454,4 +454,51 @@ pub mod sss_token {
     pub fn expire_and_refund(ctx: Context<ExpireAndRefund>) -> Result<()> {
         instructions::pbs::expire_and_refund_handler(ctx)
     }
+
+    // ─── SSS-110: Agent Payment Channel ───────────────────────────────────────
+
+    pub fn open_channel(
+        ctx: Context<OpenChannel>,
+        params: instructions::apc::OpenChannelParams,
+    ) -> Result<()> {
+        instructions::apc::open_channel_handler(ctx, params)
+    }
+
+    pub fn submit_work_proof(
+        ctx: Context<SubmitWorkProof>,
+        channel_id: u64,
+        task_hash: [u8; 32],
+        output_hash: [u8; 32],
+        proof_type: u8,
+    ) -> Result<()> {
+        instructions::apc::submit_work_proof_handler(ctx, channel_id, task_hash, output_hash, proof_type)
+    }
+
+    pub fn propose_settle(
+        ctx: Context<ProposeSettle>,
+        channel_id: u64,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::apc::propose_settle_handler(ctx, channel_id, amount)
+    }
+
+    pub fn countersign_settle(
+        ctx: Context<CountersignSettle>,
+        channel_id: u64,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::apc::countersign_settle_handler(ctx, channel_id, amount)
+    }
+
+    pub fn dispute(
+        ctx: Context<Dispute>,
+        channel_id: u64,
+        evidence_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::apc::dispute_handler(ctx, channel_id, evidence_hash)
+    }
+
+    pub fn force_close(ctx: Context<ForceClose>, channel_id: u64) -> Result<()> {
+        instructions::apc::force_close_handler(ctx, channel_id)
+    }
 }

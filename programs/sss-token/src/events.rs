@@ -213,3 +213,54 @@ pub struct ProbabilisticCommitmentResolved {
     pub partial: bool,
 }
 
+
+// ─── SSS-110: Agent Payment Channel events ────────────────────────────────────
+
+/// Emitted when a new agent payment channel is opened.
+#[event]
+pub struct ChannelOpened {
+    pub channel_id: u64,
+    pub initiator: Pubkey,
+    pub counterparty: Pubkey,
+    pub stable_mint: Pubkey,
+    pub initiator_deposit: u64,
+    pub dispute_policy: u8,
+    pub timeout_slots: u64,
+}
+
+/// Emitted when a work proof is submitted to a channel.
+#[event]
+pub struct WorkProofSubmitted {
+    pub channel_id: u64,
+    pub initiator: Pubkey,
+    pub task_hash: [u8; 32],
+    pub output_hash: [u8; 32],
+    pub proof_type: u8,
+}
+
+/// Emitted when a channel is mutually settled.
+#[event]
+pub struct ChannelSettled {
+    pub channel_id: u64,
+    pub initiator: Pubkey,
+    pub counterparty: Pubkey,
+    pub amount_to_counterparty: u64,
+    pub amount_to_initiator: u64,
+}
+
+/// Emitted when a channel is placed in dispute.
+#[event]
+pub struct ChannelDisputed {
+    pub channel_id: u64,
+    pub initiator: Pubkey,
+    pub counterparty: Pubkey,
+    pub evidence_hash: [u8; 32],
+}
+
+/// Emitted when a channel is force-closed by the initiator after timeout.
+#[event]
+pub struct ChannelForceClosed {
+    pub channel_id: u64,
+    pub initiator: Pubkey,
+    pub amount_returned: u64,
+}
