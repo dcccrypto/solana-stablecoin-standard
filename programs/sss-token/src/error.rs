@@ -161,4 +161,15 @@ pub enum SssError {
     InvalidAmount,
     #[msg("Insufficient repayment amount for partial liquidation")]
     PartialLiquidationInsufficientRepay,
+    // SSS-109: Probabilistic Balance Standard
+    #[msg("Feature flag not enabled on this config")]
+    FeatureNotEnabled,
+    #[msg("Proof hash does not match the committed condition hash")]
+    ProofHashMismatch,
+    #[msg("Vault is already in a terminal state (Resolved or Expired)")]
+    VaultAlreadyTerminal,
+    #[msg("Vault has not yet expired (current slot < expiry_slot)")]
+    VaultNotExpired,
+    #[msg("Expiry slot must be in the future")]
+    InvalidExpirySlot,
 }
