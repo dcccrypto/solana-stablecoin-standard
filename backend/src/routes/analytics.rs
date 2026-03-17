@@ -240,6 +240,7 @@ mod tests {
         assert!(json.contains("\"window\":\"24h\""));
         assert!(json.contains("\"count\":3"));
         assert!(json.contains("\"avg_collateral_seized\":3000"));
+        assert!(json.contains("\"total_debt_covered\":7500"));
     }
 
     #[test]
@@ -253,6 +254,7 @@ mod tests {
             total: 14,
         };
         assert_eq!(r.total, r.healthy + r.at_risk + r.liquidatable);
+        assert_eq!(r.total_cdps, r.total);
     }
 
     #[test]
@@ -270,6 +272,7 @@ mod tests {
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("\"total_collateral_locked_native\":500000"));
         assert!(json.contains("\"active_collateral_types\":2"));
+        assert!(json.contains("\"total_tvl\":500000"));
     }
 
     #[test]
