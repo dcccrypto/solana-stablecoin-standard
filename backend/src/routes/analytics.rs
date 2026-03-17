@@ -160,7 +160,14 @@ pub async fn get_liquidation_analytics(
     Ok(Json(ApiResponse::ok(data)))
 }
 
-/// `GET /api/analytics/cdp-health`
+/// Query params for `GET /api/analytics/cdp-health`.
+#[derive(Debug, Deserialize, Default)]
+pub struct CdpHealthQuery {
+    /// Number of histogram buckets (default 10, min 1, max 50).
+    pub buckets: Option<usize>,
+}
+
+/// `GET /api/analytics/cdp-health[?buckets=N]`
 ///
 /// Returns a distribution of CDP health ratios derived from
 /// `cdp_deposit` and `cdp_borrow` events in `event_log`.
@@ -169,8 +176,10 @@ pub async fn get_liquidation_analytics(
 /// maintain a live CDP state table; positions are inferred from events.
 pub async fn get_cdp_health(
     State(state): State<AppState>,
+    Query(params): Query<CdpHealthQuery>,
 ) -> Result<Json<ApiResponse<CdpHealthResponse>>, AppError> {
-    let dist = state.db.cdp_health_distribution()?;
+    let bucket_count = params.buckets.unwrap_or(10);
+    let dist = state.db.cdp_health_distribution(bucket_count)?;
     Ok(Json(ApiResponse::ok(dist)))
 }
 
