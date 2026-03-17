@@ -31,20 +31,24 @@ let payerAta: PublicKey;
 describe("SSS-017: SolanaStablecoin SDK ↔ Anchor localnet", () => {
   beforeAll(async () => {
     ({ provider, payer } = await startValidator());
-  }, 90_000);
 
-  afterAll(async () => {
-    await stopValidator();
-  });
-
-  it("create() initializes a new SSS-1 stablecoin on-chain", async () => {
+    // Create the stablecoin in beforeAll so all subsequent tests have a valid
+    // instance. Doing this inside an it() block left `stablecoin` undefined
+    // for all later tests when create() threw.
     stablecoin = await SolanaStablecoin.create(provider, {
       preset: "SSS-1",
       name: "Test USD",
       symbol: "TUSD",
       decimals: 6,
     });
+  }, 120_000);
 
+  afterAll(async () => {
+    await stopValidator();
+  });
+
+  it("create() initializes a new SSS-1 stablecoin on-chain", async () => {
+    expect(stablecoin).toBeDefined();
     expect(stablecoin.mint).toBeDefined();
     expect(stablecoin.mint.toBase58().length).toBeGreaterThanOrEqual(43);
     expect(stablecoin.configPda).toBeDefined();
