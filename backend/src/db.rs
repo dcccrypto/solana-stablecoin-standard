@@ -1086,6 +1086,7 @@ impl Database {
 // ─── Analytics result types ───────────────────────────────────────────────────
 
 /// Raw stats returned by `Db::liquidation_analytics`.
+#[allow(dead_code)]
 pub struct LiquidationAnalyticsStats {
     pub count: u64,
     pub total_collateral_seized: i64,
@@ -1094,6 +1095,7 @@ pub struct LiquidationAnalyticsStats {
 }
 
 /// Raw CDP health bucket counts.
+#[allow(dead_code)]
 pub struct CdpHealthDistribution {
     pub healthy: u64,
     pub at_risk: u64,
@@ -1101,6 +1103,7 @@ pub struct CdpHealthDistribution {
 }
 
 /// Raw protocol stats.
+#[allow(dead_code)]
 pub struct ProtocolStats {
     pub total_collateral_locked_native: i64,
     pub total_debt_native: i64,

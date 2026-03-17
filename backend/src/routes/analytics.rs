@@ -66,6 +66,7 @@ use crate::{error::AppError, models::ApiResponse, state::AppState};
 /// Window options for liquidation analytics.
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
+#[allow(dead_code)]
 pub enum Window {
     #[default]
     #[serde(rename = "24h")]
@@ -78,6 +79,7 @@ pub enum Window {
 
 impl Window {
     /// Returns the window label string and the number of hours in the window.
+    #[allow(dead_code)]
     pub fn label_and_hours(&self) -> (&'static str, i64) {
         match self {
             Window::H24 => ("24h", 24),
