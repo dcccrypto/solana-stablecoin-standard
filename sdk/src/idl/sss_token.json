@@ -6031,6 +6031,16 @@
       "code": 6070,
       "name": "MissingAuditorKey",
       "msg": "Auditor ElGamal pubkey required for confidential transfers"
+    },
+    {
+      "code": 6071,
+      "name": "InvalidAmount",
+      "msg": "Invalid amount"
+    },
+    {
+      "code": 6072,
+      "name": "PartialLiquidationInsufficientRepay",
+      "msg": "Insufficient repayment amount for partial liquidation"
     }
   ],
   "types": [
@@ -6818,6 +6828,64 @@
                 ]
               }
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "InterfaceVersion",
+      "docs": [
+        "Interface version PDA — external callers check this before invoking SSS via CPI.",
+        "Seeds: [\"interface-version\", sss_mint]",
+        "",
+        "Callers should read this PDA and verify:",
+        "- `version` matches their expected version (breaking changes bump version)",
+        "- `active` is true (protocol not deprecated)",
+        "",
+        "Breaking interface changes require a new program address per Solana convention,",
+        "but the version field gives callers a cheap on-chain safety check."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "docs": [
+              "The SSS mint this interface applies to"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "version",
+            "docs": [
+              "Current interface version (1 = initial CPI composability standard)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "active",
+            "docs": [
+              "Whether this interface is active; false = deprecated / use new program"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "namespace",
+            "docs": [
+              "Interface namespace used for discriminator derivation",
+              "sha256(\"sss_mint_interface:mint\")[..8] => mint discriminator",
+              "sha256(\"sss_mint_interface:burn\")[..8] => burn discriminator"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }

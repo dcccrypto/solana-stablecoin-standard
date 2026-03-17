@@ -5,6 +5,7 @@ use chrono::Utc;
 
 use crate::error::AppError;
 use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, LiquidationHistoryEntry, MintEvent, WebhookEntry};
+use crate::routes::analytics::{CdpHealthResponse, HealthBucket};
 
 pub struct Database {
     pub conn: Mutex<Connection>,
@@ -1008,36 +1009,6 @@ impl Database {
         })
     }
 
-    /// Liquidation analytics over the last `hours` hours.
-    #[allow(dead_code)]
-    pub fn liquidation_analytics(&self, hours: i64) -> Result<LiquidationAnalyticsStats, AppError> {
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        // SQLite datetime arithmetic: created_at is stored as RFC-3339 string.
-        let row: (i64, i64, i64) = conn.query_row(
-            "SELECT COUNT(*), \
-                    COALESCE(SUM(collateral_seized), 0), \
-                    COALESCE(SUM(debt_repaid), 0) \
-             FROM liquidation_history \
-             WHERE created_at >= datetime('now', ?1)",
-            rusqlite::params![format!("-{} hours", hours)],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )?;
-        let count = row.0 as u64;
-        let total_collateral_seized = row.1;
-        let total_debt_repaid = row.2;
-        let avg_collateral_seized = if count > 0 {
-            total_collateral_seized / count as i64
-        } else {
-            0
-        };
-        Ok(LiquidationAnalyticsStats {
-            count,
-            total_collateral_seized,
-            total_debt_repaid,
-            avg_collateral_seized,
-        })
-    }
-
     /// CDP health distribution derived from event_log cdp_deposit / cdp_borrow events.
     ///
     /// For each CDP address we compute:
@@ -1046,12 +1017,10 @@ impl Database {
     ///
     /// Health factor = net_collateral / net_debt  (unitless; >1 = healthy relative to 1:1 peg).
     /// Thresholds (conservative, no live price feed here):
-    ///   healthy      : health_factor >= 2.0  (collateral >= 2× debt)
-    ///   at_risk      : 1.0 <= health_factor < 2.0
+    ///   healthy      : health_factor >= 1.5
+    ///   at_risk      : 1.0 <= health_factor < 1.5
     ///   liquidatable : health_factor < 1.0  (or net_debt == 0 counts as healthy)
-    pub fn cdp_health_distribution(&self, bucket_count: usize) -> Result<crate::routes::analytics::CdpHealthResponse, AppError> {
-        use crate::routes::analytics::{CdpHealthResponse, HealthBucket};
-        let bucket_count = bucket_count.clamp(1, 50);
+    pub fn cdp_health_distribution(&self, bucket_count: Option<usize>) -> Result<CdpHealthResponse, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
 
         // Build per-CDP collateral and debt maps from event_log.
@@ -1152,6 +1121,7 @@ impl Database {
         }
 
         let total_cdps = ratios.len() as i64;
+        let bucket_count: usize = bucket_count.unwrap_or(10).max(1);
         let max_ratio: f64 = 5.0;
         let bucket_width = max_ratio / bucket_count as f64;
 
@@ -1175,12 +1145,12 @@ impl Database {
             buckets[idx].count += 1;
         }
 
-        // Flat health counts (qa_tests schema): ratio > 1.5 = healthy, [1.0, 1.5] = at_risk, <1.0 = liquidatable
+        // Flat health counts (qa_tests schema): ratio >= 1.5 = healthy, [1.0, 1.5) = at_risk, <1.0 = liquidatable
         let mut healthy: i64 = 0;
         let mut at_risk: i64 = 0;
         let mut liquidatable: i64 = 0;
         for ratio in &ratios {
-            if *ratio > 1.5 {
+            if *ratio >= 1.5 {
                 healthy += 1;
             } else if *ratio >= 1.0 {
                 at_risk += 1;
@@ -1214,51 +1184,42 @@ impl Database {
             conn.query_row(sql, [], |row| row.get(0)).unwrap_or(0)
         };
 
-        // total_debt_outstanding — sum of mint events minus burn events
-        // Sources: event_log (StablecoinMinted/StablecoinBurned + legacy names)
-        //          AND mint_events/burn_events tables (from record_mint/record_burn)
+        // total_debt_outstanding — net minted stablecoin supply.
+        // Sources: dedicated mint_events/burn_events tables (primary) +
+        //          event_log with StablecoinMinted/StablecoinBurned event types.
         let total_debt_outstanding: i64 = {
-            let minted_event_log: i64 = conn
-                .query_row(
-                    "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('Minted','mint','TokensMinted','StablecoinMinted')",
-                    [],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
             let minted_table: i64 = conn
-                .query_row(
-                    "SELECT COALESCE(SUM(amount), 0) FROM mint_events",
-                    [],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
-            let burned_event_log: i64 = conn
-                .query_row(
-                    "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('Burned','burn','TokensBurned','StablecoinBurned')",
-                    [],
-                    |row| row.get(0),
-                )
+                .query_row("SELECT COALESCE(SUM(amount), 0) FROM mint_events", [], |row| row.get(0))
                 .unwrap_or(0);
             let burned_table: i64 = conn
+                .query_row("SELECT COALESCE(SUM(amount), 0) FROM burn_events", [], |row| row.get(0))
+                .unwrap_or(0);
+            let minted_log: i64 = conn
                 .query_row(
-                    "SELECT COALESCE(SUM(amount), 0) FROM burn_events",
+                    "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
+                     FROM event_log WHERE event_type IN ('StablecoinMinted','mint')",
                     [],
                     |row| row.get(0),
                 )
                 .unwrap_or(0);
-            let minted = minted_event_log + minted_table;
-            let burned = burned_event_log + burned_table;
-            minted.saturating_sub(burned).max(0)
+            let burned_log: i64 = conn
+                .query_row(
+                    "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
+                     FROM event_log WHERE event_type IN ('StablecoinBurned','burn')",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            ((minted_table + minted_log) - (burned_table + burned_log)).max(0)
         };
 
-        // backstop_balance — net backstop deposits minus withdrawals
+        // backstop_balance — current backstop pool balance.
+        // Supports: BackstopDeposit/BackstopWithdraw (net) and BackstopFunded events.
         let backstop_balance: i64 = {
             let deposits: i64 = conn
                 .query_row(
                     "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('BackstopDeposit','backstop_deposit')",
+                     FROM event_log WHERE event_type IN ('BackstopDeposit','BackstopFunded','backstop_fund')",
                     [],
                     |row| row.get(0),
                 )
@@ -1266,20 +1227,20 @@ impl Database {
             let withdrawals: i64 = conn
                 .query_row(
                     "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('BackstopWithdraw','backstop_withdraw')",
+                     FROM event_log WHERE event_type IN ('BackstopWithdraw')",
                     [],
                     |row| row.get(0),
                 )
                 .unwrap_or(0);
-            deposits.saturating_sub(withdrawals).max(0)
+            (deposits - withdrawals).max(0)
         };
 
-        // psm_balance — net PSM deposits minus redemptions
+        // psm_balance — PSM pool balance (net deposits minus redemptions).
         let psm_balance: i64 = {
             let deposits: i64 = conn
                 .query_row(
                     "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('PsmDeposit','psm_deposit')",
+                     FROM event_log WHERE event_type IN ('PsmDeposit','PsmSwap','psm_swap')",
                     [],
                     |row| row.get(0),
                 )
@@ -1287,12 +1248,12 @@ impl Database {
             let redeems: i64 = conn
                 .query_row(
                     "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('PsmRedeem','psm_redeem')",
+                     FROM event_log WHERE event_type IN ('PsmRedeem')",
                     [],
                     |row| row.get(0),
                 )
                 .unwrap_or(0);
-            deposits.saturating_sub(redeems).max(0)
+            (deposits - redeems).max(0)
         };
 
         // backstop_fund_debt_repaid — from BackstopDebtRepaid events
@@ -1327,7 +1288,6 @@ impl Database {
     }
 }
 
-// ─── Analytics result types ───────────────────────────────────────────────────
 
 /// Raw stats returned by `Db::liquidation_analytics`.
 #[allow(dead_code)]

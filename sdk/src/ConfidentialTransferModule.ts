@@ -432,12 +432,9 @@ export class ConfidentialTransferModule {
       throw new Error('ConfidentialTransferConfig PDA not found — FLAG_CONFIDENTIAL_TRANSFERS may not be set');
     }
 
-    // Client-side ElGamal decryption via baby-step giant-step DLOG.
-    // In production this would use @solana/spl-token's confidential transfer
-    // crypto utilities. Here we implement the scalar extraction step:
-    const amount = this._decryptElGamal(auditorElGamalSecretKey, encryptedAmount);
-
-    return { amount, mint };
+    // auditTransfer requires real ElGamal decryption which is not yet implemented.
+    // See TODO(SSS-107): implement with @solana/spl-token ElGamalSecretKey.decrypt()
+    throw new Error('auditTransfer is not production-ready');
   }
 
   // ─── Reads ─────────────────────────────────────────────────────────────────
@@ -510,6 +507,13 @@ export class ConfidentialTransferModule {
     const MINT_OFFSET = DISCRIMINATOR;           // 8
     const AUDITOR_KEY_OFFSET = MINT_OFFSET + 32; // 40
     const AUTO_APPROVE_OFFSET = AUDITOR_KEY_OFFSET + 32; // 72
+    const MIN_SIZE = AUTO_APPROVE_OFFSET + 2;    // 74
+
+    if (data.length < MIN_SIZE) {
+      throw new Error(
+        `ConfidentialTransferConfig data too short: expected ${MIN_SIZE}, got ${data.length}`
+      );
+    }
 
     const mintFromData = new PublicKey(data.slice(MINT_OFFSET, MINT_OFFSET + 32));
     const auditorElGamalPubkey = new Uint8Array(
@@ -521,14 +525,9 @@ export class ConfidentialTransferModule {
   }
 
   /**
-   * Client-side ElGamal decryption stub.
+   * Client-side ElGamal decryption.
    *
-   * In production, this uses @solana/spl-token's `decryptWithElGamal` helper
-   * which implements baby-step giant-step DLOG on the Ristretto255 group.
-   * The stub here validates inputs and returns a deterministic test value so
-   * unit tests can assert the round-trip without requiring curve arithmetic.
-   *
-   * Real integration must replace this with:
+   * Real integration must replace this stub with:
    * ```ts
    * import { ElGamalSecretKey, ElGamalCiphertext } from '@solana/spl-token';
    * const sk = ElGamalSecretKey.fromBytes(secretKey);
@@ -536,21 +535,18 @@ export class ConfidentialTransferModule {
    * return BigInt(sk.decrypt(ct));
    * ```
    *
+   * Until `@solana/spl-token` exposes a stable ElGamal decryption API, this
+   * method throws rather than returning fabricated data that callers might
+   * mistake for a real decrypted amount.
+   *
    * @internal
    */
-  private _decryptElGamal(secretKey: Uint8Array, ciphertext: Uint8Array): bigint {
-    // Derive a deterministic scalar from secretKey bytes (XOR fold)
-    // and XOR with the ciphertext low 8 bytes to produce a decrypted value.
-    // This is NOT real ElGamal — it is a placeholder for the crypto layer.
-    let scalar = 0n;
-    for (let i = 0; i < 32; i++) {
-      scalar = (scalar << 8n) ^ BigInt(secretKey[i]);
-    }
-    let ctLow = 0n;
-    for (let i = 0; i < 8; i++) {
-      ctLow = (ctLow << 8n) ^ BigInt(ciphertext[i]);
-    }
-    return ctLow ^ (scalar & 0xFFFF_FFFF_FFFFFFFFn);
+  // TODO(SSS-107): Implement with `@solana/spl-token` ElGamal decryption once the API is stable.
+  private _decryptElGamal(_secretKey: Uint8Array, _ciphertext: Uint8Array): bigint {
+    throw new Error(
+      '_decryptElGamal: real ElGamal decryption is not yet implemented. ' +
+      'Replace this stub with @solana/spl-token ElGamalSecretKey.decrypt() before calling auditTransfer() in production.'
+    );
   }
 
   /**
@@ -572,7 +568,10 @@ export class ConfidentialTransferModule {
     if (this._program) return this._program;
     const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
     const idl = await import('./idl/sss_token.json');
-    this._program = new AnchorProgram(idl as any, this.provider) as any;
+    // Override the IDL's hardcoded address with the constructor-supplied programId
+    // (same pattern as ZkComplianceModule) so PDA derivation is consistent.
+    const idlWithAddress = { ...(idl as any), address: this.programId.toBase58() };
+    this._program = new AnchorProgram(idlWithAddress, this.provider) as any;
     return this._program;
   }
 }

@@ -107,7 +107,7 @@ pub struct CdpHealthResponse {
     pub total_cdps: i64,
     /// Total CDPs analysed.
     pub total: i64,
-    /// CDPs with health ratio >= 1.5 (healthy).
+    /// CDPs with health ratio > 1.5 (healthy).
     pub healthy: i64,
     /// CDPs with health ratio in [1.0, 1.5) (at risk).
     pub at_risk: i64,
@@ -148,26 +148,26 @@ pub struct ProtocolStatsResponse {
 /// specified time window, sourced from `liquidation_history`.
 pub async fn get_liquidation_analytics(
     State(state): State<AppState>,
-    Query(query): Query<LiquidationAnalyticsQuery>,
+    Query(q): Query<LiquidationAnalyticsQuery>,
 ) -> Result<Json<ApiResponse<LiquidationAnalyticsResponse>>, AppError> {
-    let window_label = query.window.clone().unwrap_or_else(|| "24h".to_string());
+    let window_label = q.window.clone().unwrap_or_else(|| "24h".to_string());
     let data = state.db.analytics_liquidations(
-        query.from.as_deref(),
-        query.to.as_deref(),
-        query.collateral_mint.as_deref(),
+        q.from.as_deref(),
+        q.to.as_deref(),
+        q.collateral_mint.as_deref(),
         &window_label,
     )?;
     Ok(Json(ApiResponse::ok(data)))
 }
 
-/// Query params for `GET /api/analytics/cdp-health`.
-#[derive(Debug, Deserialize, Default)]
+/// Query parameters for `GET /api/analytics/cdp-health`.
+#[derive(Debug, serde::Deserialize)]
 pub struct CdpHealthQuery {
-    /// Number of histogram buckets (default 10, min 1, max 50).
+    /// Number of histogram buckets (default: 10).
     pub buckets: Option<usize>,
 }
 
-/// `GET /api/analytics/cdp-health[?buckets=N]`
+/// `GET /api/analytics/cdp-health?buckets=<n>`
 ///
 /// Returns a distribution of CDP health ratios derived from
 /// `cdp_deposit` and `cdp_borrow` events in `event_log`.
@@ -176,10 +176,9 @@ pub struct CdpHealthQuery {
 /// maintain a live CDP state table; positions are inferred from events.
 pub async fn get_cdp_health(
     State(state): State<AppState>,
-    Query(params): Query<CdpHealthQuery>,
+    Query(q): Query<CdpHealthQuery>,
 ) -> Result<Json<ApiResponse<CdpHealthResponse>>, AppError> {
-    let bucket_count = params.buckets.unwrap_or(10);
-    let dist = state.db.cdp_health_distribution(bucket_count)?;
+    let dist = state.db.cdp_health_distribution(q.buckets)?;
     Ok(Json(ApiResponse::ok(dist)))
 }
 
@@ -263,8 +262,8 @@ mod tests {
         let r = ProtocolStatsResponse {
             total_tvl: 500_000,
             total_debt_outstanding: 300_000,
-            backstop_balance: 42_000,
-            psm_balance: 10_000,
+            backstop_balance: 0,
+            psm_balance: 0,
             total_collateral_locked_native: 500_000,
             total_debt_native: 300_000,
             backstop_fund_debt_repaid: 42_000,
