@@ -21,14 +21,14 @@ pub struct RedeemCtx<'info> {
         constraint = config.preset == 3 @ SssError::InvalidPreset,
         constraint = !config.paused @ SssError::MintPaused,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     /// The SSS stablecoin mint
     #[account(
         mut,
         constraint = sss_mint.key() == config.mint,
     )]
-    pub sss_mint: InterfaceAccount<'info, Mint>,
+    pub sss_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// Redeemer's SSS stablecoin token account (will be burned from)
     #[account(
@@ -36,13 +36,13 @@ pub struct RedeemCtx<'info> {
         constraint = redeemer_sss_account.owner == redeemer.key(),
         constraint = redeemer_sss_account.mint == sss_mint.key(),
     )]
-    pub redeemer_sss_account: InterfaceAccount<'info, TokenAccount>,
+    pub redeemer_sss_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// The collateral token mint (e.g. USDC)
     #[account(
         constraint = collateral_mint.key() == config.collateral_mint @ SssError::InvalidCollateralMint,
     )]
-    pub collateral_mint: InterfaceAccount<'info, Mint>,
+    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// Reserve vault — releases collateral to redeemer (PDA-controlled)
     #[account(
@@ -50,7 +50,7 @@ pub struct RedeemCtx<'info> {
         constraint = reserve_vault.key() == config.reserve_vault @ SssError::InvalidVault,
         constraint = reserve_vault.mint == collateral_mint.key(),
     )]
-    pub reserve_vault: InterfaceAccount<'info, TokenAccount>,
+    pub reserve_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// Redeemer's collateral token account (receives collateral)
     #[account(
@@ -58,7 +58,7 @@ pub struct RedeemCtx<'info> {
         constraint = redeemer_collateral.owner == redeemer.key(),
         constraint = redeemer_collateral.mint == collateral_mint.key(),
     )]
-    pub redeemer_collateral: InterfaceAccount<'info, TokenAccount>,
+    pub redeemer_collateral: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// Token program for the SSS stablecoin (Token-2022)
     pub sss_token_program: Interface<'info, TokenInterface>,

@@ -24,17 +24,17 @@ pub struct CdpBorrowStable<'info> {
         constraint = config.preset == 3 @ SssError::InvalidPreset,
         constraint = !config.paused @ SssError::MintPaused,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     /// The SSS-3 stablecoin mint (Token-2022, authority = config PDA)
     #[account(
         mut,
         constraint = sss_mint.key() == config.mint,
     )]
-    pub sss_mint: InterfaceAccount<'info, Mint>,
+    pub sss_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// The collateral token mint for the vault being borrowed against
-    pub collateral_mint: InterfaceAccount<'info, Mint>,
+    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// User's collateral vault for this specific collateral type
     #[account(
@@ -48,7 +48,7 @@ pub struct CdpBorrowStable<'info> {
         constraint = collateral_vault.owner == user.key(),
         constraint = collateral_vault.collateral_mint == collateral_mint.key(),
     )]
-    pub collateral_vault: Account<'info, CollateralVault>,
+    pub collateral_vault: Box<Account<'info, CollateralVault>>,
 
     /// CDP position — tracks total outstanding debt for this user
     #[account(
@@ -58,7 +58,7 @@ pub struct CdpBorrowStable<'info> {
         seeds = [CdpPosition::SEED, sss_mint.key().as_ref(), user.key().as_ref()],
         bump,
     )]
-    pub cdp_position: Account<'info, CdpPosition>,
+    pub cdp_position: Box<Account<'info, CdpPosition>>,
 
     /// User's SSS token account to receive minted stablecoins
     #[account(
@@ -75,6 +75,7 @@ pub struct CdpBorrowStable<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[inline(never)]
 pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
     // SSS-110: Circuit breaker — halt CDP borrows when FLAG_CIRCUIT_BREAKER is set.
