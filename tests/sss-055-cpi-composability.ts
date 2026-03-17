@@ -82,6 +82,8 @@ describe("SSS-055: CPI Composability Standard (Direction 3)", () => {
         collateralMint: null,
         reserveVault: null,
         maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
       })
       .accounts({
         payer: authority.publicKey,

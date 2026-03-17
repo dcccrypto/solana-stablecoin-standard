@@ -164,6 +164,9 @@ export class SolanaStablecoin {
       maxSupply: config.maxSupply !== undefined && config.maxSupply > 0n
         ? new BN(config.maxSupply.toString())
         : null,
+      // SSS-106: confidential transfer feature flags (null = disabled)
+      featureFlags: null,
+      auditorElgamalPubkey: null,
     };
 
     await program.methods

@@ -157,4 +157,13 @@ pub enum SssError {
     PartialLiquidationInsufficientRepay,
     #[msg("invalid amount: partial_repay_amount exceeds total debt")]
     InvalidAmount,
+    // SSS-106: Confidential Transfers
+    #[msg("Confidential transfer not enabled for this mint")]
+    ConfidentialTransferNotEnabled,
+    #[msg("Auditor ElGamal pubkey required for confidential transfers")]
+    MissingAuditorKey,
+    #[msg("Auditor ElGamal pubkey must be non-zero (all-zero key is invalid)")]
+    InvalidElGamalKey,
+    #[msg("ct_config account must be omitted when FLAG_CONFIDENTIAL_TRANSFERS is not set")]
+    UnexpectedCtConfig,
 }
