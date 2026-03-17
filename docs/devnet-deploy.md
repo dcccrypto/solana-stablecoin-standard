@@ -95,9 +95,12 @@ The smoke test:
 2. Initializes an SSS-1 stablecoin (`Smoke USD / SUSD`)
 3. Registers a minter PDA (required before `mintTo()`)
 4. Creates the recipient ATA explicitly to avoid signer-cast issues with `AnchorProvider`
-5. Mints 1,000 SUSD to the recipient wallet
-6. Reads on-chain supply and asserts it equals 1,000 SUSD
-7. Prints Solana Explorer links for all transactions
+5. **Thaws the recipient ATA** — required because SSS-091 sets `DefaultAccountState=Frozen`; all new ATAs are frozen until explicitly thawed by the compliance authority
+6. Mints 1,000 SUSD to the recipient wallet
+7. Reads on-chain supply and asserts it equals 1,000 SUSD
+8. Prints Solana Explorer links for all transactions
+
+> **SSS-091 note:** The `DefaultAccountState=Frozen` extension means every newly created ATA is frozen by default. You must call `stablecoin.thaw({ mint, targetTokenAccount })` before minting to any account. Minting to a frozen account will fail with `AccountFrozen`.
 
 ### Expected output
 
