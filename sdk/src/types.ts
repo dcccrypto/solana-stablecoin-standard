@@ -22,6 +22,10 @@ export interface SssConfig {
   reserveVault?: PublicKey;
   /** Maximum token supply (undefined / 0n = unlimited) */
   maxSupply?: bigint;
+  /** Initial feature flags bitmask (see FLAG_* constants). Optional — defaults to 0. */
+  featureFlags?: bigint;
+  /** Auditor ElGamal pubkey (32 bytes) — required when FLAG_CONFIDENTIAL_TRANSFERS is set. */
+  auditorElGamalPubkey?: Uint8Array;
 }
 
 export interface MintParams {

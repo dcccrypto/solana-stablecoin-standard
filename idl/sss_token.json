@@ -6031,6 +6031,16 @@
       "code": 6070,
       "name": "MissingAuditorKey",
       "msg": "Auditor ElGamal pubkey required for confidential transfers"
+    },
+    {
+      "code": 6071,
+      "name": "InvalidAmount",
+      "msg": "Invalid amount"
+    },
+    {
+      "code": 6072,
+      "name": "PartialLiquidationInsufficientRepay",
+      "msg": "Insufficient repayment amount for partial liquidation"
     }
   ],
   "types": [

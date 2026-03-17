@@ -23,6 +23,7 @@ import {
   type AuditTransferParams,
   type ConfidentialTransferConfigAccount,
 } from './ConfidentialTransferModule';
+import { FLAG_CIRCUIT_BREAKER_V2 } from './CircuitBreakerModule';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -141,9 +142,9 @@ describe('FLAG_CONFIDENTIAL_TRANSFERS constant', () => {
     expect(FLAG_CONFIDENTIAL_TRANSFERS & (1n << 5n)).toBe(FLAG_CONFIDENTIAL_TRANSFERS);
   });
 
-  it('does not overlap with FLAG_CIRCUIT_BREAKER (bit 7)', () => {
-    const FLAG_CIRCUIT_BREAKER = 1n << 7n;
-    expect(FLAG_CONFIDENTIAL_TRANSFERS & FLAG_CIRCUIT_BREAKER).toBe(0n);
+  it('does not overlap with FLAG_CIRCUIT_BREAKER_V2 (bit 0)', () => {
+    // FLAG_CIRCUIT_BREAKER_V2 lives at bit 0 (0x01); FLAG_CONFIDENTIAL_TRANSFERS must not share it.
+    expect(FLAG_CONFIDENTIAL_TRANSFERS & FLAG_CIRCUIT_BREAKER_V2).toBe(0n);
   });
 });
 
@@ -299,6 +300,10 @@ describe('withdrawConfidential', () => {
     await expect(ct.withdrawConfidential({ mint, amount: 0n })).rejects.toThrow('amount must be > 0');
   });
 
+  it('throws if amount is negative', async () => {
+    await expect(ct.withdrawConfidential({ mint, amount: -1n })).rejects.toThrow('amount must be > 0');
+  });
+
   it('resolves successfully for a valid amount', async () => {
     const calls: { method: string; args: any[] }[] = [];
     const { Program } = await import('@coral-xyz/anchor') as any;
@@ -358,39 +363,18 @@ describe('auditTransfer', () => {
     ).rejects.toThrow('ConfidentialTransferConfig PDA not found');
   });
 
-  it('returns AuditTransferResult with correct mint and bigint amount', async () => {
+  it('throws (not implemented) when inputs are valid but decryption is unimplemented', async () => {
+    // _decryptElGamal throws rather than returning bogus synthetic data.
+    // Real decryption requires @solana/spl-token ElGamal crypto — see TODO(SSS-107).
     const auditorKey = makeAuditorKey(0x42);
     mockGetAccountInfo.mockResolvedValue({ data: buildConfigBuffer(mint, auditorKey, false) });
 
-    const result = await ct.auditTransfer({
-      mint,
-      auditorElGamalSecretKey: auditorKey,
-      encryptedAmount: makeEncryptedAmount(0xab),
-    });
-
-    expect(result.mint.toBase58()).toBe(mint.toBase58());
-    expect(typeof result.amount).toBe('bigint');
-  });
-
-  it('is deterministic for the same inputs', async () => {
-    const auditorKey = makeAuditorKey(0x13);
-    const encAmt = makeEncryptedAmount(0x37);
-    mockGetAccountInfo.mockResolvedValue({ data: buildConfigBuffer(mint, auditorKey, false) });
-
-    const r1 = await ct.auditTransfer({ mint, auditorElGamalSecretKey: auditorKey, encryptedAmount: encAmt });
-    const r2 = await ct.auditTransfer({ mint, auditorElGamalSecretKey: auditorKey, encryptedAmount: encAmt });
-    expect(r1.amount).toBe(r2.amount);
-  });
-
-  it('produces different results for different secret keys', async () => {
-    const auditorKey1 = makeAuditorKey(0x01);
-    const auditorKey2 = makeAuditorKey(0x02);
-    const encAmt = makeEncryptedAmount(0x55);
-    mockGetAccountInfo.mockResolvedValue({ data: buildConfigBuffer(mint, auditorKey1, false) });
-
-    const r1 = await ct.auditTransfer({ mint, auditorElGamalSecretKey: auditorKey1, encryptedAmount: encAmt });
-    const r2 = await ct.auditTransfer({ mint, auditorElGamalSecretKey: auditorKey2, encryptedAmount: encAmt });
-    // XOR-fold of different keys must produce different scalars
-    expect(r1.amount).not.toBe(r2.amount);
+    await expect(
+      ct.auditTransfer({
+        mint,
+        auditorElGamalSecretKey: auditorKey,
+        encryptedAmount: makeEncryptedAmount(0xab),
+      })
+    ).rejects.toThrow('_decryptElGamal: real ElGamal decryption is not yet implemented');
   });
 });
