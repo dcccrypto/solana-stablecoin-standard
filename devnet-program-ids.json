@@ -5,9 +5,16 @@
     "sss_transfer_hook": "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp"
   },
   "deployer": "ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB",
-  "deployed_at": "2026-03-14T20:58:00Z",
+  "deployed_at": "2026-03-17T21:20:00Z",
   "last_deployed_slots": {
-    "sss_token": 448340719,
-    "sss_transfer_hook": 448340772
+    "sss_token": "2026-03-17",
+    "sss_transfer_hook": "2026-03-17"
+  },
+  "smoke_test": {
+    "status": "PASSED",
+    "tx_init": "37qWvDPti7j9Zy3pX1V5Bsv4gSv6j7GdNfSmP82fKLXSQfaft9dDSbvWYy45hFcW2jyjyRLpRG44XjKjUuyQZjPu",
+    "tx_thaw": "5T25bUrHf3pJSwm77iu1XKV3JrAEkTWs4nbuuXgfLxSGt4okShctMM6eSQ7MZ9E2FDeL57ffb21oRQjnNdwJsT25",
+    "tx_mint": "5MF8byw9CzzrK2G7yADUKBoqWPV5xYTwhis1vrfGxUefQqjaWgGwPD9bdM2KS7ZHTgezqDrQ2B3ucjNzboB8ec5u",
+    "ran_at": "2026-03-17T21:20:00Z"
   }
 }

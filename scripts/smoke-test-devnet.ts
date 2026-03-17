@@ -163,6 +163,19 @@ async function main(): Promise<void> {
 
   await sleep(2000);
 
+  // ── Thaw recipient ATA (SSS-091: DefaultAccountState=Frozen) ────────────
+  // All new ATAs start frozen; compliance authority must thaw before minting.
+
+  console.log('');
+  console.log('🔓  Thawing recipient ATA (SSS-091: DefaultAccountState=Frozen)...');
+  const thawSig = await stablecoin.thaw({
+    mint: stablecoin.mint,
+    targetTokenAccount: recipientAta,
+  });
+  console.log(`    ✅  ${explorerLink(thawSig)}`);
+
+  await sleep(2000);
+
   // ── Mint 1,000 tokens ───────────────────────────────────────────────────
 
   const rawAmount = MINT_AMOUNT * 10n ** BigInt(DECIMALS);
