@@ -168,7 +168,7 @@ export class SolanaStablecoin {
       featureFlags: config.featureFlags !== undefined
         ? new BN(config.featureFlags.toString())
         : null,
-      auditorElGamalPubkey: config.auditorElGamalPubkey
+      auditorElgamalPubkey: config.auditorElGamalPubkey
         ? Array.from(config.auditorElGamalPubkey)
         : null,
     };
