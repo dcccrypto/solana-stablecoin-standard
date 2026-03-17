@@ -42,6 +42,11 @@ describe("SSS-055: CPI Composability Standard (Direction 3)", () => {
   let recipientAta: PublicKey;
 
   before(async () => {
+    // Wait for localnet validator to produce a fresh blockhash before any txs.
+    // CI flake: "Blockhash not found" when the first tx fires before the validator
+    // is fully synced. getLatestBlockhash("finalized") blocks until one exists.
+    await provider.connection.getLatestBlockhash("finalized");
+
     // Derive PDAs
     [configPda, configBump] = PublicKey.findProgramAddressSync(
       [Buffer.from("stablecoin-config"), mintKeypair.publicKey.toBuffer()],
@@ -95,7 +100,7 @@ describe("SSS-055: CPI Composability Standard (Direction 3)", () => {
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       })
       .signers([mintKeypair])
-      .rpc({ commitment: "confirmed" });
+      .rpc({ commitment: "confirmed", skipPreflight: true });
 
     // Register authority as a minter (unlimited cap)
     await program.methods
