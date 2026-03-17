@@ -30,24 +30,27 @@ async function sendWithRetry(
   provider: anchor.AnchorProvider,
   buildTx: () => Promise<anchor.web3.Transaction>,
   signers: anchor.web3.Signer[] = [],
-  attempts = 3
+  attempts = 5
 ): Promise<void> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     const tx = await buildTx();
     const { blockhash, lastValidBlockHeight } =
-      await provider.connection.getLatestBlockhash("confirmed");
+      await provider.connection.getLatestBlockhash("finalized");
     tx.recentBlockhash = blockhash;
     tx.lastValidBlockHeight = lastValidBlockHeight;
     tx.feePayer = provider.wallet.publicKey;
     try {
-      await provider.sendAndConfirm(tx, signers, { commitment: "confirmed" });
+      await provider.sendAndConfirm(tx, signers, {
+        commitment: "confirmed",
+        skipPreflight: true,
+      });
       return;
     } catch (err: any) {
       const msg: string = err?.message ?? "";
       if (msg.includes("Blockhash not found") || msg.includes("BlockhashNotFound")) {
         lastErr = err;
-        await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+        await new Promise((r) => setTimeout(r, 800 * (i + 1)));
         continue;
       }
       throw err;

@@ -212,11 +212,13 @@ export class SolanaStablecoin {
   async mintTo(params: MintParams): Promise<TransactionSignature> {
     const connection = this.provider.connection;
     const minter = this.provider.wallet.publicKey;
+    // provider.wallet is an Anchor Wallet; spl-token needs the raw Keypair (.payer)
+    const feePayer = (this.provider.wallet as any).payer ?? this.provider.wallet;
 
     // Ensure recipient has a Token-2022 ATA
     const recipientAta = await getOrCreateAssociatedTokenAccount(
       connection,
-      this.provider.wallet as any,
+      feePayer,
       params.mint,
       params.recipient,
       false,
@@ -271,9 +273,11 @@ export class SolanaStablecoin {
    * Uses the Token-2022 freeze authority (held by the compliance authority).
    */
   async freeze(params: FreezeParams): Promise<TransactionSignature> {
+    // provider.wallet is an Anchor Wallet; spl-token needs the raw Keypair (.payer)
+    const signer = (this.provider.wallet as any).payer ?? this.provider.wallet;
     return freezeAccount(
       this.provider.connection,
-      this.provider.wallet as any,
+      signer,
       params.targetTokenAccount,
       params.mint,
       this.provider.wallet.publicKey,
@@ -287,9 +291,11 @@ export class SolanaStablecoin {
    * Thaw a frozen token account.
    */
   async thaw(params: FreezeParams): Promise<TransactionSignature> {
+    // provider.wallet is an Anchor Wallet; spl-token needs the raw Keypair (.payer)
+    const signer = (this.provider.wallet as any).payer ?? this.provider.wallet;
     return thawAccount(
       this.provider.connection,
-      this.provider.wallet as any,
+      signer,
       params.targetTokenAccount,
       params.mint,
       this.provider.wallet.publicKey,
