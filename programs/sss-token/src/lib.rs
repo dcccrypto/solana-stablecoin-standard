@@ -418,4 +418,40 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::collateral_config::update_collateral_config_handler(ctx, params)
     }
+
+    // ─── SSS-109: Probabilistic Balance Standard ──────────────────────────────
+
+    /// Lock stablecoin tokens in a ProbabilisticVault PDA conditioned on
+    /// a hash-based proof.  Requires FLAG_PROBABILISTIC_MONEY on the config.
+    pub fn commit_probabilistic(
+        ctx: Context<CommitProbabilistic>,
+        params: instructions::pbs::CommitProbabilisticParams,
+    ) -> Result<()> {
+        instructions::pbs::commit_probabilistic_handler(ctx, params)
+    }
+
+    /// Release the full committed amount to the claimant by supplying the
+    /// matching proof hash.  Marks vault as Resolved.
+    pub fn prove_and_resolve(
+        ctx: Context<ProveAndResolve>,
+        proof_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::pbs::prove_and_resolve_handler(ctx, proof_hash)
+    }
+
+    /// Release `amount` tokens to the claimant and return the remainder to
+    /// the issuer immediately.  Marks vault as PartiallyResolved.
+    pub fn partial_resolve(
+        ctx: Context<PartialResolve>,
+        amount: u64,
+        proof_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::pbs::partial_resolve_handler(ctx, amount, proof_hash)
+    }
+
+    /// Permissionless: refund committed tokens to the issuer once
+    /// `current_slot >= expiry_slot`.  Marks vault as Expired.
+    pub fn expire_and_refund(ctx: Context<ExpireAndRefund>) -> Result<()> {
+        instructions::pbs::expire_and_refund_handler(ctx)
+    }
 }

@@ -174,3 +174,42 @@ pub struct CollateralLiquidated {
     /// Liquidation bonus applied in basis points (from CollateralConfig or global default).
     pub bonus_bps: u16,
 }
+
+// ─── SSS-109: Probabilistic Balance Standard events ───────────────────────────
+
+/// Emitted when a new probabilistic commitment is created (funds locked in escrow).
+#[event]
+pub struct ProbabilisticCommitmentCreated {
+    /// StablecoinConfig PDA this commitment belongs to.
+    pub config: Pubkey,
+    /// Unique commitment id (caller-provided, scoped to config).
+    pub commitment_id: u64,
+    /// Account that locked the funds.
+    pub issuer: Pubkey,
+    /// Account authorised to claim on proof.
+    pub claimant: Pubkey,
+    /// SSS stablecoin mint.
+    pub stable_mint: Pubkey,
+    /// Total tokens committed.
+    pub committed_amount: u64,
+    /// Condition hash the proof must match.
+    pub condition_hash: [u8; 32],
+    /// Slot after which issuer may claim a refund.
+    pub expiry_slot: u64,
+}
+
+/// Emitted on every resolution (full or partial) of a probabilistic commitment.
+#[event]
+pub struct ProbabilisticCommitmentResolved {
+    /// StablecoinConfig PDA.
+    pub config: Pubkey,
+    /// Commitment id being resolved.
+    pub commitment_id: u64,
+    /// Claimant who received the tokens.
+    pub claimant: Pubkey,
+    /// Amount released to claimant in this resolution.
+    pub amount_released: u64,
+    /// True if this was a partial resolution (remainder returned to issuer).
+    pub partial: bool,
+}
+
