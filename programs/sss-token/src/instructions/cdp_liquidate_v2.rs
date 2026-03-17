@@ -49,14 +49,14 @@ pub struct CdpLiquidateV2<'info> {
         bump = config.bump,
         constraint = config.preset == 3 @ SssError::InvalidPreset,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     /// SSS-3 stablecoin mint
     #[account(
         mut,
         constraint = sss_mint.key() == config.mint,
     )]
-    pub sss_mint: InterfaceAccount<'info, Mint>,
+    pub sss_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// Liquidator's SSS token account (source, will be burned)
     #[account(
@@ -64,7 +64,7 @@ pub struct CdpLiquidateV2<'info> {
         constraint = liquidator_sss_account.mint == sss_mint.key(),
         constraint = liquidator_sss_account.owner == liquidator.key(),
     )]
-    pub liquidator_sss_account: InterfaceAccount<'info, TokenAccount>,
+    pub liquidator_sss_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CDP position of the user being liquidated
     #[account(
@@ -76,7 +76,7 @@ pub struct CdpLiquidateV2<'info> {
         // Enforce the vault being seized matches the position's locked collateral
         constraint = cdp_position.collateral_mint == collateral_mint.key() @ SssError::WrongCollateralMint,
     )]
-    pub cdp_position: Account<'info, CdpPosition>,
+    pub cdp_position: Box<Account<'info, CdpPosition>>,
 
     /// CHECK: CDP owner being liquidated — used as PDA seed; no authority check needed
     pub cdp_owner: AccountInfo<'info>,
@@ -94,10 +94,10 @@ pub struct CdpLiquidateV2<'info> {
         constraint = collateral_vault.owner == cdp_owner.key(),
         constraint = collateral_vault.collateral_mint == collateral_mint.key(),
     )]
-    pub collateral_vault: Account<'info, CollateralVault>,
+    pub collateral_vault: Box<Account<'info, CollateralVault>>,
 
     /// The collateral token mint
-    pub collateral_mint: InterfaceAccount<'info, Mint>,
+    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// Vault token account (holds collateral, owned by collateral_vault PDA)
     #[account(
@@ -105,7 +105,7 @@ pub struct CdpLiquidateV2<'info> {
         constraint = vault_token_account.key() == collateral_vault.vault_token_account,
         constraint = vault_token_account.mint == collateral_mint.key(),
     )]
-    pub vault_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub vault_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// Liquidator's collateral token account — receives seized collateral
     #[account(
@@ -113,7 +113,7 @@ pub struct CdpLiquidateV2<'info> {
         constraint = liquidator_collateral_account.mint == collateral_mint.key(),
         constraint = liquidator_collateral_account.owner == liquidator.key(),
     )]
-    pub liquidator_collateral_account: InterfaceAccount<'info, TokenAccount>,
+    pub liquidator_collateral_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// SSS-098: CollateralConfig PDA for per-collateral liquidation params.
     /// Provides per-collateral liquidation_threshold_bps and liquidation_bonus_bps.
@@ -128,7 +128,7 @@ pub struct CdpLiquidateV2<'info> {
         constraint = collateral_config.sss_mint == sss_mint.key() @ SssError::InvalidCollateralMint,
         constraint = collateral_config.collateral_mint == collateral_mint.key() @ SssError::WrongCollateralMint,
     )]
-    pub collateral_config: Account<'info, CollateralConfig>,
+    pub collateral_config: Box<Account<'info, CollateralConfig>>,
 
     /// CHECK: Pyth price feed account — validated in handler
     pub pyth_price_feed: AccountInfo<'info>,
@@ -152,6 +152,7 @@ pub struct CdpLiquidateV2<'info> {
 ///     healthy after the seize).
 /// - `min_collateral_amount`: slippage guard — minimum collateral tokens to
 ///   receive.  0 = no guard (backward-compatible with SSS-085 callers).
+#[inline(never)]
 pub fn cdp_liquidate_v2_handler(
     ctx: Context<CdpLiquidateV2>,
     debt_to_repay: u64,

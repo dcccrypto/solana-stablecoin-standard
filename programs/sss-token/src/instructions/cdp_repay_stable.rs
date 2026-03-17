@@ -20,14 +20,14 @@ pub struct CdpRepayStable<'info> {
         bump = config.bump,
         constraint = config.preset == 3 @ SssError::InvalidPreset,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     /// The SSS-3 stablecoin mint
     #[account(
         mut,
         constraint = sss_mint.key() == config.mint,
     )]
-    pub sss_mint: InterfaceAccount<'info, Mint>,
+    pub sss_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// User's SSS token account (source, will be burned)
     #[account(
@@ -35,7 +35,7 @@ pub struct CdpRepayStable<'info> {
         constraint = user_sss_account.mint == sss_mint.key(),
         constraint = user_sss_account.owner == user.key(),
     )]
-    pub user_sss_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_sss_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// The CDP position for this user
     #[account(
@@ -45,7 +45,7 @@ pub struct CdpRepayStable<'info> {
         constraint = cdp_position.owner == user.key(),
         constraint = cdp_position.sss_mint == sss_mint.key(),
     )]
-    pub cdp_position: Account<'info, CdpPosition>,
+    pub cdp_position: Box<Account<'info, CdpPosition>>,
 
     /// The collateral vault for this user and collateral type
     #[account(
@@ -60,10 +60,10 @@ pub struct CdpRepayStable<'info> {
         constraint = collateral_vault.owner == user.key(),
         constraint = collateral_vault.collateral_mint == collateral_mint.key(),
     )]
-    pub collateral_vault: Account<'info, CollateralVault>,
+    pub collateral_vault: Box<Account<'info, CollateralVault>>,
 
     /// The collateral token mint
-    pub collateral_mint: InterfaceAccount<'info, Mint>,
+    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// The vault token account holding collateral (owned by collateral_vault PDA)
     #[account(
@@ -71,7 +71,7 @@ pub struct CdpRepayStable<'info> {
         constraint = vault_token_account.key() == collateral_vault.vault_token_account,
         constraint = vault_token_account.mint == collateral_mint.key(),
     )]
-    pub vault_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub vault_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// User's collateral token account to receive released collateral
     #[account(
@@ -79,7 +79,7 @@ pub struct CdpRepayStable<'info> {
         constraint = user_collateral_account.mint == collateral_mint.key(),
         constraint = user_collateral_account.owner == user.key(),
     )]
-    pub user_collateral_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_collateral_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// Token program for SSS-3 (Token-2022)
     pub sss_token_program: Interface<'info, TokenInterface>,
@@ -88,6 +88,7 @@ pub struct CdpRepayStable<'info> {
     pub collateral_token_program: Interface<'info, TokenInterface>,
 }
 
+#[inline(never)]
 pub fn cdp_repay_stable_handler(ctx: Context<CdpRepayStable>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
 
