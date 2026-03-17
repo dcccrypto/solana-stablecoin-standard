@@ -12,8 +12,6 @@ import {
 import {
   TOKEN_2022_PROGRAM_ID,
   getOrCreateAssociatedTokenAccount,
-  freezeAccount,
-  thawAccount,
 } from '@solana/spl-token';
 
 import {
@@ -270,39 +268,42 @@ export class SolanaStablecoin {
 
   /**
    * Freeze a token account (compliance action).
-   * Uses the Token-2022 freeze authority (held by the compliance authority).
+   * Routes through the Anchor program's freeze instruction so the config PDA
+   * can sign as freeze authority (it is a program-owned PDA, not a keypair).
    */
   async freeze(params: FreezeParams): Promise<TransactionSignature> {
-    // provider.wallet is an Anchor Wallet; spl-token needs the raw Keypair (.payer)
-    const signer = (this.provider.wallet as any).payer ?? this.provider.wallet;
-    return freezeAccount(
-      this.provider.connection,
-      signer,
-      params.targetTokenAccount,
-      params.mint,
-      this.provider.wallet.publicKey,
-      [],
-      { commitment: 'confirmed' },
-      TOKEN_2022_PROGRAM_ID
-    );
+    const program = await this._loadProgram();
+    const [configPda] = SolanaStablecoin.getConfigPda(params.mint, this.programId);
+    return program.methods
+      .freezeAccount()
+      .accounts({
+        complianceAuthority: this.provider.wallet.publicKey,
+        config: configPda,
+        mint: params.mint,
+        targetTokenAccount: params.targetTokenAccount,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: 'confirmed' });
   }
 
   /**
    * Thaw a frozen token account.
+   * Routes through the Anchor program's thaw instruction so the config PDA
+   * can sign as freeze authority (it is a program-owned PDA, not a keypair).
    */
   async thaw(params: FreezeParams): Promise<TransactionSignature> {
-    // provider.wallet is an Anchor Wallet; spl-token needs the raw Keypair (.payer)
-    const signer = (this.provider.wallet as any).payer ?? this.provider.wallet;
-    return thawAccount(
-      this.provider.connection,
-      signer,
-      params.targetTokenAccount,
-      params.mint,
-      this.provider.wallet.publicKey,
-      [],
-      { commitment: 'confirmed' },
-      TOKEN_2022_PROGRAM_ID
-    );
+    const program = await this._loadProgram();
+    const [configPda] = SolanaStablecoin.getConfigPda(params.mint, this.programId);
+    return program.methods
+      .thawAccount()
+      .accounts({
+        complianceAuthority: this.provider.wallet.publicKey,
+        config: configPda,
+        mint: params.mint,
+        targetTokenAccount: params.targetTokenAccount,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: 'confirmed' });
   }
 
   /**
