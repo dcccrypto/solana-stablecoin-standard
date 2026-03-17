@@ -101,8 +101,10 @@ describe("SSS-017: SolanaStablecoin SDK ↔ Anchor localnet", () => {
   }, 30_000);
 
   it("burnFrom() burns 200_000 tokens from the payer's own ATA", async () => {
-    // SSS-091: Mint uses DefaultAccountState=Frozen — thaw payerAta before burn.
-    // The config PDA holds the freeze authority; compliance authority is the payer.
+    // SSS-091: Account stays thawed after mintTo. Re-freeze before burn to simulate
+    // compliance-gated transfer (DefaultAccountState=Frozen means accounts must be
+    // explicitly thawed for each operation window).
+    await stablecoin.freeze({ mint: stablecoin.mint, targetTokenAccount: payerAta });
     await stablecoin.thaw({ mint: stablecoin.mint, targetTokenAccount: payerAta });
 
     // On-chain constraint: source_token_account.owner == minter.key()
@@ -136,3 +138,4 @@ describe("SSS-017: SolanaStablecoin SDK ↔ Anchor localnet", () => {
     expect(sig.length).toBeGreaterThan(40);
   }, 30_000);
 });
+
