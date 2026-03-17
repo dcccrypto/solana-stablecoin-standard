@@ -363,9 +363,9 @@ describe('auditTransfer', () => {
     ).rejects.toThrow('ConfidentialTransferConfig PDA not found');
   });
 
-  it('throws (not implemented) when inputs are valid but decryption is unimplemented', async () => {
-    // _decryptElGamal throws rather than returning bogus synthetic data.
-    // Real decryption requires @solana/spl-token ElGamal crypto — see TODO(SSS-107).
+  it('throws (not production-ready) when inputs are valid', async () => {
+    // auditTransfer is not production-ready — real ElGamal decryption requires
+    // @solana/spl-token ElGamalSecretKey.decrypt(). See TODO(SSS-107).
     const auditorKey = makeAuditorKey(0x42);
     mockGetAccountInfo.mockResolvedValue({ data: buildConfigBuffer(mint, auditorKey, false) });
 
@@ -375,6 +375,6 @@ describe('auditTransfer', () => {
         auditorElGamalSecretKey: auditorKey,
         encryptedAmount: makeEncryptedAmount(0xab),
       })
-    ).rejects.toThrow('_decryptElGamal: real ElGamal decryption is not yet implemented');
+    ).rejects.toThrow('auditTransfer is not production-ready');
   });
 });

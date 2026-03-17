@@ -432,12 +432,9 @@ export class ConfidentialTransferModule {
       throw new Error('ConfidentialTransferConfig PDA not found — FLAG_CONFIDENTIAL_TRANSFERS may not be set');
     }
 
-    // Client-side ElGamal decryption via baby-step giant-step DLOG.
-    // In production this would use @solana/spl-token's confidential transfer
-    // crypto utilities. Here we implement the scalar extraction step:
-    const amount = this._decryptElGamal(auditorElGamalSecretKey, encryptedAmount);
-
-    return { amount, mint };
+    // auditTransfer requires real ElGamal decryption which is not yet implemented.
+    // See TODO(SSS-107): implement with @solana/spl-token ElGamalSecretKey.decrypt()
+    throw new Error('auditTransfer is not production-ready');
   }
 
   // ─── Reads ─────────────────────────────────────────────────────────────────
