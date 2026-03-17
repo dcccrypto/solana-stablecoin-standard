@@ -1017,8 +1017,8 @@ impl Database {
     ///
     /// Health factor = net_collateral / net_debt  (unitless; >1 = healthy relative to 1:1 peg).
     /// Thresholds (conservative, no live price feed here):
-    ///   healthy      : health_factor > 1.5
-    ///   at_risk      : 1.0 <= health_factor <= 1.5
+    ///   healthy      : health_factor >= 1.5
+    ///   at_risk      : 1.0 <= health_factor < 1.5
     ///   liquidatable : health_factor < 1.0  (or net_debt == 0 counts as healthy)
     pub fn cdp_health_distribution(&self, bucket_count: Option<usize>) -> Result<CdpHealthResponse, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
@@ -1145,12 +1145,12 @@ impl Database {
             buckets[idx].count += 1;
         }
 
-        // Flat health counts (qa_tests schema): ratio > 1.5 = healthy, [1.0, 1.5] = at_risk, <1.0 = liquidatable
+        // Flat health counts (qa_tests schema): ratio >= 1.5 = healthy, [1.0, 1.5) = at_risk, <1.0 = liquidatable
         let mut healthy: i64 = 0;
         let mut at_risk: i64 = 0;
         let mut liquidatable: i64 = 0;
         for ratio in &ratios {
-            if *ratio > 1.5 {
+            if *ratio >= 1.5 {
                 healthy += 1;
             } else if *ratio >= 1.0 {
                 at_risk += 1;
