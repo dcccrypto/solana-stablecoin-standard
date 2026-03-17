@@ -224,29 +224,38 @@ mod tests {
             window: "24h".to_string(),
             count: 3,
             total_collateral_seized: 9000,
-            total_debt_repaid: 7500,
+            total_debt_covered: 7500,
             avg_collateral_seized: 3000,
+            by_collateral_mint: vec![],
         };
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("\"window\":\"24h\""));
         assert!(json.contains("\"count\":3"));
         assert!(json.contains("\"avg_collateral_seized\":3000"));
+        assert!(json.contains("\"total_debt_covered\":7500"));
     }
 
     #[test]
     fn cdp_health_response_total_is_sum() {
         let r = CdpHealthResponse {
+            buckets: vec![],
+            total_cdps: 14,
             healthy: 10,
             at_risk: 3,
             liquidatable: 1,
             total: 14,
         };
         assert_eq!(r.total, r.healthy + r.at_risk + r.liquidatable);
+        assert_eq!(r.total_cdps, r.total);
     }
 
     #[test]
     fn protocol_stats_response_serialises() {
         let r = ProtocolStatsResponse {
+            total_tvl: 500_000,
+            total_debt_outstanding: 300_000,
+            backstop_balance: 42_000,
+            psm_balance: 10_000,
             total_collateral_locked_native: 500_000,
             total_debt_native: 300_000,
             backstop_fund_debt_repaid: 42_000,
@@ -255,6 +264,7 @@ mod tests {
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("\"total_collateral_locked_native\":500000"));
         assert!(json.contains("\"active_collateral_types\":2"));
+        assert!(json.contains("\"total_tvl\":500000"));
     }
 
     #[test]
