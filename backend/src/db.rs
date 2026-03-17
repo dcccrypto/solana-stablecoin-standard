@@ -935,6 +935,7 @@ impl Database {
     // ─── SSS-108: Analytics queries ───────────────────────────────────────────
 
     /// Liquidation analytics over the last `hours` hours.
+    #[allow(dead_code)]
     pub fn liquidation_analytics(&self, hours: i64) -> Result<LiquidationAnalyticsStats, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         // SQLite datetime arithmetic: created_at is stored as RFC-3339 string.
