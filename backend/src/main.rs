@@ -1643,9 +1643,9 @@ mod qa_tests {
             serde_json::json!({"amount": 5000}), None, None).unwrap();
         db.insert_event_log("cdp_borrow", "CDP_A",
             serde_json::json!({"amount": 1000}), None, None).unwrap();
-        // At-risk CDP: 1500 collateral, 1000 debt → hf=1.5
+        // At-risk CDP: 1400 collateral, 1000 debt → hf=1.4 (< 1.5 threshold, so at_risk)
         db.insert_event_log("cdp_deposit", "CDP_B",
-            serde_json::json!({"amount": 1500}), None, None).unwrap();
+            serde_json::json!({"amount": 1400}), None, None).unwrap();
         db.insert_event_log("cdp_borrow", "CDP_B",
             serde_json::json!({"amount": 1000}), None, None).unwrap();
         // Liquidatable CDP: 800 collateral, 1000 debt → hf=0.8
