@@ -1,0 +1,58 @@
+Solana Stablecoin Standard (SSS)
+Copyright 2026 Khubair (github.com/dcccrypto)
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full license text.
+
+---
+
+ATTRIBUTION REQUIREMENT
+
+This software is the original work of Khubair (github.com/dcccrypto).
+
+Any redistribution, fork, or Derivative Work of this software must:
+
+1. Retain this NOTICE file in full.
+2. Include the following attribution in any documentation, README, or
+   "about" section associated with the Derivative Work:
+
+     "Based on the Solana Stablecoin Standard (SSS)
+      by Khubair — https://github.com/dcccrypto/solana-stablecoin-standard"
+
+3. Not use the names "Solana Stablecoin Standard", "SSS-1", "SSS-2",
+   "SSS-3", or "SSS Certified" to imply endorsement or official compliance
+   certification without written permission from the original author.
+
+---
+
+COMMERCIAL USE
+
+This software is free for open-source and non-commercial use under the
+Apache License 2.0.
+
+For commercial deployments — including but not limited to production
+stablecoin issuance, institutional custody, or paid financial products
+built on this standard — a commercial license is available.
+
+Contact: github.com/dcccrypto
+
+A commercial license grants additional rights including:
+- Use of the "SSS Certified" mark
+- Priority support and audit assistance
+- Removal of the attribution requirement for proprietary products
+
+---
+
+PATENT GRANT
+
+As required by the Apache License 2.0, all Contributors grant a
+perpetual, worldwide, royalty-free patent license covering their
+Contributions. See Section 3 of the LICENSE file.
+
+---
+
+CONTRIBUTIONS
+
+By submitting a Pull Request or Contribution to this repository, you
+agree that your Contribution is submitted under the Apache License 2.0
+and that you have the right to make such a Contribution.
