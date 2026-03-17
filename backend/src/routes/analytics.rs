@@ -148,11 +148,11 @@ pub async fn get_liquidation_analytics(
     State(state): State<AppState>,
     Query(query): Query<LiquidationAnalyticsQuery>,
 ) -> Result<Json<ApiResponse<LiquidationAnalyticsResponse>>, AppError> {
-    let window_label = q.window.clone().unwrap_or_else(|| "24h".to_string());
+    let window_label = query.window.clone().unwrap_or_else(|| "24h".to_string());
     let data = state.db.analytics_liquidations(
-        q.from.as_deref(),
-        q.to.as_deref(),
-        q.collateral_mint.as_deref(),
+        query.from.as_deref(),
+        query.to.as_deref(),
+        query.collateral_mint.as_deref(),
         &window_label,
     )?;
     Ok(Json(ApiResponse::ok(data)))
