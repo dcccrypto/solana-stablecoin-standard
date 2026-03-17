@@ -265,12 +265,13 @@ export class SolanaStablecoin {
 
   /**
    * Freeze a token account (compliance action).
-   * Routes through the Anchor program's freeze instruction so the config PDA
-   * can sign as freeze authority (it is a program-owned PDA, not a keypair).
+   * Calls the on-chain `freeze_account` instruction — the program does CPI
+   * with the config PDA as the freeze authority signer.
+   * Caller (provider.wallet) must be the compliance authority.
    */
   async freeze(params: FreezeParams): Promise<TransactionSignature> {
-    const program = await this._loadProgram();
     const [configPda] = SolanaStablecoin.getConfigPda(params.mint, this.programId);
+    const program = await this._loadProgram();
     return program.methods
       .freezeAccount()
       .accounts({
@@ -285,12 +286,13 @@ export class SolanaStablecoin {
 
   /**
    * Thaw a frozen token account.
-   * Routes through the Anchor program's thaw instruction so the config PDA
-   * can sign as freeze authority (it is a program-owned PDA, not a keypair).
+   * Calls the on-chain `thaw_account` instruction — the program does CPI
+   * with the config PDA as the freeze authority signer.
+   * Caller (provider.wallet) must be the compliance authority.
    */
   async thaw(params: FreezeParams): Promise<TransactionSignature> {
-    const program = await this._loadProgram();
     const [configPda] = SolanaStablecoin.getConfigPda(params.mint, this.programId);
+    const program = await this._loadProgram();
     return program.methods
       .thawAccount()
       .accounts({
