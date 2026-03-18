@@ -39,6 +39,9 @@ pub const FLAG_CONFIDENTIAL_TRANSFERS: u64 = 1 << 5;
 /// SSS-109: Probabilistic Balance Standard — enables commit_probabilistic and
 /// related PBS instructions for conditional "pay on proof" transfers.
 pub const FLAG_PROBABILISTIC_MONEY: u64 = 1 << 6;
+/// SSS-110: Agent Payment Channel — enables open_channel and related APC instructions
+/// for trustless agent-to-agent payment channels with work proof and dispute resolution.
+pub const FLAG_AGENT_PAYMENT_CHANNEL: u64 = 1 << 7;
 
 
 // ---------------------------------------------------------------------------
