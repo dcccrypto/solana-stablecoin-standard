@@ -79,20 +79,46 @@ Roles can be updated via `update_roles` (called by `authority`). Rotation takes 
 
 ## 4. Audit Status
 
-> **Current status: Unaudited (pre-mainnet)**
+> **Current status: Internal audits complete (pre-mainnet) — third-party audit pending**
 
-SSS has not undergone a formal third-party security audit as of 2026-03-16. The protocol is in active development and has not been deployed to mainnet.
+SSS has completed two internal security audits as of 2026-03-22. No third-party audit has been conducted. The protocol is deployed on devnet only.
 
-| Component | Audit status | Notes |
-|-----------|-------------|-------|
-| `sss-token` (Anchor program) | ❌ Unaudited | Devnet only |
-| `sss-transfer-hook` (Anchor program) | ❌ Unaudited | Devnet only |
-| TypeScript SDK (`sdk/`) | ❌ Unaudited | — |
-| REST backend | ❌ Unaudited | — |
+| Component | Audit status | Report | Key findings |
+|-----------|-------------|--------|-------------|
+| `sss-token` (Anchor program) | ⚠️ Internal audit (SSS-113) | [SECURITY-AUDIT-SSS-113.md](./SECURITY-AUDIT-SSS-113.md) | 1 CRITICAL, 5 HIGH — all fixed |
+| `sss-transfer-hook` (Anchor program) | ❌ Unaudited | — | In scope for next audit |
+| TypeScript SDK (`sdk/`) | ⚠️ Internal audit (SSS-114) | [SECURITY-AUDIT-SSS-114.md](./SECURITY-AUDIT-SSS-114.md) | 2 HIGH — both fixed |
+| REST backend | ⚠️ Internal audit (SSS-114) | [SECURITY-AUDIT-SSS-114.md](./SECURITY-AUDIT-SSS-114.md) | 1 HIGH (SSRF) — fixed |
 
-**Before mainnet deployment**, a full audit of at minimum the `sss-token` and `sss-transfer-hook` programs is required. Recommended audit scope:
+### SSS-113 Summary — Anchor Program (2026-03-22)
 
-1. All `sss-token` instructions — access control, arithmetic overflow, PDA derivation correctness
+Critical and high findings, all remediated in commit `98ea268`:
+
+| ID | Severity | Instruction | Finding | Fix |
+|----|----------|-------------|---------|-----|
+| CRIT-01 | 🔴 CRITICAL | `update_roles` | Direct authority transfer bypasses timelock | `update_roles` now blocks transfer when `admin_timelock_delay > 0`; callers must use propose/execute timelocked op |
+| HIGH-01 | 🟠 HIGH | `burn` | Missing `FLAG_CIRCUIT_BREAKER` check | Added circuit-breaker gate to `burn.rs` |
+| HIGH-02 | 🟠 HIGH | `cpi_mint`, `cpi_burn` | CPI mint/burn paths bypassed circuit breaker + velocity limits | Added circuit breaker + per-minter epoch velocity to CPI paths |
+| HIGH-03 | 🟠 HIGH | `trigger_backstop` | Unreachable instruction (required config PDA to be signer) | Changed to authority-only; backstop now callable |
+| HIGH-04 | 🟠 HIGH | `cdp_deposit_collateral` | Missing cross-stablecoin collateral mint validation | `yield_collateral_config.sss_mint` validated against current mint |
+| HIGH-05 | 🟠 HIGH | `cdp_borrow_stable`, `cdp_liquidate` | Debt calculations excluded accrued fees | All debt calculations now use `effective_debt = debt_amount + accrued_fees`; liquidation clears fees atomically |
+
+See [SECURITY-AUDIT-SSS-113.md](./SECURITY-AUDIT-SSS-113.md) for medium, low, and info findings.
+
+### SSS-114 Summary — SDK + Backend (2026-03-22)
+
+High findings, all remediated in commit `2f18117`:
+
+| ID | Severity | Component | Finding | Fix |
+|----|----------|-----------|---------|-----|
+| H-001 | 🟠 HIGH | SDK | IDL staleness — PBS + APC instructions missing from bundled IDL | IDL regenerated via `anchor build`; all 10 PBS/APC instructions now present |
+| H-002 | 🟠 HIGH | Backend | SSRF — webhook URL accepted without host/scheme validation | Webhook endpoint now rejects non-http(s) schemes and RFC-1918/loopback targets |
+
+See [SECURITY-AUDIT-SSS-114.md](./SECURITY-AUDIT-SSS-114.md) for medium, low, and info findings.
+
+**Before mainnet deployment**, a third-party audit of at minimum the `sss-token` and `sss-transfer-hook` programs is required. Recommended audit scope:
+
+1. All `sss-token` instructions — verify SSS-113 fixes hold; PBS/APC instruction access control; arithmetic overflow
 2. `sss-transfer-hook` — blacklist state integrity, hook registration, CPI re-entrancy
 3. `AdminTimelockModule` — timing logic, cancellation controls
 4. SDK — transaction construction, signer handling, error propagation
@@ -101,7 +127,7 @@ SSS has not undergone a formal third-party security audit as of 2026-03-16. The 
 
 ## 5. Known Limitations and Non-Guarantees
 
-- **No formal verification.** The programs have not been formally verified (TLA+, Coq, Isabelle/HOL). The test suite provides coverage but not formal correctness proofs.
+- **Formal verification (Kani).** 35 Kani proof harnesses verify critical invariants. 17 previously tautological/vacuous proofs were rewritten to proper inductive form in SSS-117. See [formal-verification.md](./formal-verification.md).
 - **Oracle trust (SSS-3).** CDP collateral valuations depend on an external price oracle. Oracle manipulation or stale prices can affect liquidation thresholds. The oracle source and update frequency should be audited independently.
 - **Permanent delegate power.** The permanent delegate extension (SSS-2, SSS-3) gives `compliance_authority` broad token movement power. This is a regulatory feature, not a bug, but it is a trust concentration point.
 - **Backend is off-chain.** The REST backend enforces no invariants. All security-critical enforcement is on-chain. Do not rely on backend validation as a security boundary.
