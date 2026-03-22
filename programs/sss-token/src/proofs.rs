@@ -78,10 +78,15 @@ mod proofs {
         kani::assume(supply > 0);
         if let Some(numerator) = collateral.checked_mul(10_000u128) {
             let ratio = numerator / supply;
-            assert!(ratio == numerator / supply);
+            // Non-vacuity: both over- and under-collateralised cases reachable
+            kani::cover!(collateral >= supply); // over-collateralised
+            kani::cover!(collateral < supply);  // under-collateralised
+            // Meaningful assertion: at parity, ratio == 10_000
             if collateral == supply {
                 assert!(ratio == 10_000);
             }
+            // ratio is bounded: can never exceed collateral * 10_000 / 1 (supply >= 1)
+            assert!(ratio <= collateral.saturating_mul(10_000u128));
         }
     }
 
