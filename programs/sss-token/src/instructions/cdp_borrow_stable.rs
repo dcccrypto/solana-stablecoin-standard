@@ -161,9 +161,12 @@ pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> 
         .ok_or(error!(SssError::CollateralRatioTooLow))?
         / 1_000_000u128;
 
-    // Check new total debt won't exceed max
+    // SSS-113 HIGH-05: Use effective debt (principal + accrued fees) for ratio check.
+    // Without accrued_fees, borrowers could over-borrow once fees pushed them past the limit.
     let existing_debt = ctx.accounts.cdp_position.debt_amount as u128;
-    let new_total_debt = existing_debt.checked_add(amount as u128).unwrap();
+    let accrued_fees = ctx.accounts.cdp_position.accrued_fees as u128;
+    let effective_existing_debt = existing_debt.checked_add(accrued_fees).unwrap();
+    let new_total_debt = effective_existing_debt.checked_add(amount as u128).unwrap();
 
     require!(
         new_total_debt <= max_borrow_sss,

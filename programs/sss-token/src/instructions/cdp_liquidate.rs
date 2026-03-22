@@ -208,11 +208,14 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         / 10u128.pow(collateral_decimals);
 
     // 3. Compute current collateral ratio and check liquidatability
+    // SSS-113 HIGH-05: Use effective debt (principal + accrued fees) for ratio and liquidation.
     let debt = ctx.accounts.cdp_position.debt_amount;
-    require!(debt > 0, SssError::InsufficientDebt);
+    let accrued_fees = ctx.accounts.cdp_position.accrued_fees;
+    let effective_debt = debt.checked_add(accrued_fees).unwrap_or(debt);
+    require!(effective_debt > 0, SssError::InsufficientDebt);
 
     let sss_decimals = ctx.accounts.sss_mint.decimals as u32;
-    let debt_usd_e6: u128 = (debt as u128)
+    let debt_usd_e6: u128 = (effective_debt as u128)
         .checked_mul(1_000_000u128)
         .unwrap()
         / 10u128.pow(sss_decimals);
@@ -241,15 +244,16 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
 
     // 4. Determine debt to burn and collateral to seize.
     //
-    // Full liquidation: burn all debt, seize all collateral.
+    // Full liquidation: burn all debt (principal + fees), seize all collateral.
     // Partial liquidation: burn `partial_repay_amount`, seize exactly
     //   enough collateral (at market price + bonus) to cover that debt.
     //   After the partial liquidation the ratio must be >= healthy (120% == 12000 bps).
-    let is_partial = partial_repay_amount > 0 && partial_repay_amount < debt;
+    // SSS-113 HIGH-05: Use effective_debt (includes accrued fees) as the total debt basis.
+    let is_partial = partial_repay_amount > 0 && partial_repay_amount < effective_debt;
 
     let (debt_to_burn, collateral_to_seize) = if is_partial {
         let repay = partial_repay_amount;
-        require!(repay <= debt, SssError::InvalidAmount);
+        require!(repay <= effective_debt, SssError::InvalidAmount);
 
         // Collateral equivalent to the repaid debt, scaled by bonus
         // collateral_for_repay = repay_usd_e6 * 10^coll_decimals / (price * 10^(6 - expo_abs)) * (10000 + bonus) / 10000
@@ -275,7 +279,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
 
         // Verify the remaining position would be healthy (>= 12000 bps = 120%).
         // If remaining_debt == 0 treat as full liquidation path.
-        let remaining_debt = debt.saturating_sub(repay);
+        let remaining_debt = effective_debt.saturating_sub(repay);
         if remaining_debt > 0 {
             let remaining_collateral = deposited.saturating_sub(coll_to_seize);
             let remaining_coll_value: u128 = (remaining_collateral as u128)
@@ -305,8 +309,8 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
 
         (repay, coll_to_seize)
     } else {
-        // Full liquidation: burn all debt, seize all collateral
-        (debt, deposited)
+        // Full liquidation: burn all effective debt (principal + fees), seize all collateral
+        (effective_debt, deposited)
     };
 
     // SSS-085 Fix 5: Slippage protection
@@ -361,8 +365,14 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
     )?;
 
     // 7. Update state
+    // SSS-113 HIGH-05: Deduct fees first from accrued_fees, remainder from debt_amount.
     let position = &mut ctx.accounts.cdp_position;
-    position.debt_amount = position.debt_amount.saturating_sub(debt_to_burn);
+    if debt_to_burn >= accrued_fees {
+        position.accrued_fees = 0;
+        position.debt_amount = position.debt_amount.saturating_sub(debt_to_burn - accrued_fees);
+    } else {
+        position.accrued_fees = position.accrued_fees.saturating_sub(debt_to_burn);
+    }
 
     let vault = &mut ctx.accounts.collateral_vault;
     vault.deposited_amount = vault.deposited_amount.saturating_sub(collateral_to_seize);
@@ -388,7 +398,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         owner: ctx.accounts.cdp_owner.key(),
         liquidator: ctx.accounts.liquidator.key(),
         collateral_mint: ctx.accounts.collateral_mint.key(),
-        debt_burned: debt,
+        debt_burned: debt_to_burn,
         collateral_seized: collateral_to_seize,
         ratio_bps: ratio_bps as u64,
     });

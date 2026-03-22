@@ -26,6 +26,14 @@ pub struct UpdateRoles<'info> {
 pub fn handler(ctx: Context<UpdateRoles>, params: UpdateRolesParams) -> Result<()> {
     let config = &mut ctx.accounts.config;
     if let Some(proposed) = params.new_authority {
+        // SSS-113 CRIT-01: When an admin timelock delay is configured (> 0), authority
+        // transfers MUST go through propose_timelocked_op / execute_timelocked_op to
+        // prevent a compromised key from instantly hijacking the protocol.
+        // Compliance authority transfers are exempt (no timelock variant exists for that role).
+        require!(
+            config.admin_timelock_delay == 0,
+            SssError::UseTimelockForAuthorityTransfer
+        );
         config.pending_authority = proposed;
         emit!(AuthorityProposed {
             mint: config.mint,

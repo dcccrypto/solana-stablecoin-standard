@@ -101,6 +101,14 @@ pub fn cdp_deposit_collateral_handler(
             .as_ref()
             .ok_or(SssError::YieldCollateralNotEnabled)?;
 
+        // SSS-113 HIGH-04: Validate that the provided YieldCollateralConfig PDA belongs
+        // to THIS stablecoin.  Without this check, an attacker could supply a different
+        // stablecoin's YieldCollateralConfig to bypass the whitelist restriction.
+        require!(
+            yc_config.sss_mint == ctx.accounts.sss_mint.key(),
+            SssError::InvalidCollateralMint
+        );
+
         require!(
             yc_config
                 .whitelisted_mints

@@ -218,11 +218,14 @@ pub fn cdp_liquidate_v2_handler(
         / 10u128.pow(collateral_decimals);
 
     // ── 4. Current collateral ratio check ────────────────────────────────
+    // SSS-113 HIGH-05: Use effective debt (principal + accrued fees) for all ratio math.
     let total_debt = ctx.accounts.cdp_position.debt_amount;
-    require!(total_debt > 0, SssError::InsufficientDebt);
+    let accrued_fees = ctx.accounts.cdp_position.accrued_fees;
+    let effective_total_debt = total_debt.checked_add(accrued_fees).unwrap_or(total_debt);
+    require!(effective_total_debt > 0, SssError::InsufficientDebt);
 
     let sss_decimals = ctx.accounts.sss_mint.decimals as u32;
-    let debt_usd_e6: u128 = (total_debt as u128)
+    let debt_usd_e6: u128 = (effective_total_debt as u128)
         .checked_mul(1_000_000u128)
         .unwrap()
         / 10u128.pow(sss_decimals);
@@ -238,14 +241,15 @@ pub fn cdp_liquidate_v2_handler(
     );
 
     // ── 5. Determine debt to burn and collateral to seize ────────────────
-    // debt_to_repay = 0 → full liquidation
-    let actual_debt_repaid = if debt_to_repay == 0 || debt_to_repay >= total_debt {
-        total_debt
+    // SSS-113 HIGH-05: Use effective_total_debt as the full-liquidation amount.
+    // debt_to_repay = 0 → full liquidation (burn principal + fees)
+    let actual_debt_repaid = if debt_to_repay == 0 || debt_to_repay >= effective_total_debt {
+        effective_total_debt
     } else {
         debt_to_repay
     };
 
-    let is_partial = actual_debt_repaid < total_debt;
+    let is_partial = actual_debt_repaid < effective_total_debt;
 
     // Collateral to seize (in collateral token native units):
     //   seize = debt_USD * (1 + bonus_bps/10000) / collateral_price
@@ -290,7 +294,7 @@ pub fn cdp_liquidate_v2_handler(
     // to prevent over-liquidation.
     if is_partial {
         let remaining_collateral = deposited.saturating_sub(collateral_to_seize);
-        let remaining_debt = total_debt.saturating_sub(actual_debt_repaid);
+        let remaining_debt = effective_total_debt.saturating_sub(actual_debt_repaid);
 
         if remaining_debt > 0 {
             let remaining_collateral_usd_e6: u128 = (remaining_collateral as u128)
@@ -371,8 +375,14 @@ pub fn cdp_liquidate_v2_handler(
     )?;
 
     // ── 10. Update state ──────────────────────────────────────────────────
+    // SSS-113 HIGH-05: Deduct fees first from accrued_fees, remainder from debt_amount.
     let position = &mut ctx.accounts.cdp_position;
-    position.debt_amount = total_debt.saturating_sub(actual_debt_repaid);
+    if actual_debt_repaid >= accrued_fees {
+        position.accrued_fees = 0;
+        position.debt_amount = total_debt.saturating_sub(actual_debt_repaid - accrued_fees);
+    } else {
+        position.accrued_fees = accrued_fees.saturating_sub(actual_debt_repaid);
+    }
 
     let vault = &mut ctx.accounts.collateral_vault;
     vault.deposited_amount = deposited.saturating_sub(collateral_to_seize);
