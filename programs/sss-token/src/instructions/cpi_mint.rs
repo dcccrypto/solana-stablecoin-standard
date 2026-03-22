@@ -17,7 +17,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::{InterfaceVersion, MinterInfo, StablecoinConfig};
+use crate::state::{InterfaceVersion, MinterInfo, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
 
 #[derive(Accounts)]
 pub struct CpiMint<'info> {
@@ -73,6 +73,30 @@ pub fn cpi_mint_handler(ctx: Context<CpiMint>, amount: u64, required_version: u8
     // ── Standard mint logic (identical to mint::handler) ─────────────────────
     require!(amount > 0, SssError::ZeroAmount);
     require!(!ctx.accounts.config.paused, SssError::MintPaused);
+    // SSS-113 HIGH-02: Circuit breaker — halt all minting when FLAG_CIRCUIT_BREAKER is set.
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+        SssError::CircuitBreakerActive
+    );
+
+    // SSS-113 HIGH-02: Per-minter epoch velocity limit — same guard as in mint::handler.
+    // Without this, the CPI entrypoint bypasses the rate-limit added in SSS-093.
+    {
+        let clock = Clock::get()?;
+        let current_epoch = clock.epoch;
+        let minter_info = &mut ctx.accounts.minter_info;
+        if minter_info.last_epoch_reset == 0 || current_epoch != minter_info.last_epoch_reset {
+            minter_info.minted_this_epoch = 0;
+            minter_info.last_epoch_reset = current_epoch;
+        }
+        if minter_info.max_mint_per_epoch > 0 {
+            require!(
+                minter_info.minted_this_epoch.checked_add(amount).unwrap()
+                    <= minter_info.max_mint_per_epoch,
+                SssError::MintVelocityExceeded
+            );
+        }
+    }
 
     let minter_info = &mut ctx.accounts.minter_info;
     if minter_info.cap > 0 {
@@ -114,6 +138,8 @@ pub fn cpi_mint_handler(ctx: Context<CpiMint>, amount: u64, required_version: u8
     let config = &mut ctx.accounts.config;
     config.total_minted = config.total_minted.checked_add(amount).unwrap();
     minter_info.minted = minter_info.minted.checked_add(amount).unwrap();
+    // SSS-113 HIGH-02: Track epoch velocity (mirrors mint::handler).
+    minter_info.minted_this_epoch = minter_info.minted_this_epoch.checked_add(amount).unwrap();
 
     msg!(
         "cpi_mint: {} tokens to {} (interface v{})",

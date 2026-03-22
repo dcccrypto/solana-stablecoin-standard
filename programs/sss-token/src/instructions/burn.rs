@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{burn, Burn, Mint, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::{MinterInfo, StablecoinConfig};
+use crate::state::{MinterInfo, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
 
 #[derive(Accounts)]
 pub struct BurnTokens<'info> {
@@ -42,6 +42,12 @@ pub struct BurnTokens<'info> {
 pub fn handler(ctx: Context<BurnTokens>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
     require!(!ctx.accounts.config.paused, SssError::MintPaused);
+    // SSS-113 HIGH-01: Circuit breaker — halt all burns when FLAG_CIRCUIT_BREAKER is set.
+    // Consistent with mint and cdp_borrow_stable which already check this flag.
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+        SssError::CircuitBreakerActive
+    );
 
     burn(
         CpiContext::new(

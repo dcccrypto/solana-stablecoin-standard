@@ -183,4 +183,9 @@ pub enum SssError {
     SettlementNotMatching,
     #[msg("Channel timeout has not elapsed yet")]
     ChannelNotExpired,
+    // SSS-113: Security audit fixes
+    #[msg("Authority transfer must use the admin timelock path when a timelock delay is configured")]
+    UseTimelockForAuthorityTransfer,
+    #[msg("Caller is not authorized to trigger the backstop (authority only)")]
+    UnauthorizedBackstopTrigger,
 }

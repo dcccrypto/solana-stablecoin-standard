@@ -11,7 +11,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{burn, Burn, Mint, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::{InterfaceVersion, MinterInfo, StablecoinConfig};
+use crate::state::{InterfaceVersion, MinterInfo, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
 
 #[derive(Accounts)]
 pub struct CpiBurn<'info> {
@@ -67,6 +67,11 @@ pub fn cpi_burn_handler(ctx: Context<CpiBurn>, amount: u64, required_version: u8
     // ── Standard burn logic ───────────────────────────────────────────────────
     require!(amount > 0, SssError::ZeroAmount);
     require!(!ctx.accounts.config.paused, SssError::MintPaused);
+    // SSS-113 HIGH-02: Circuit breaker — halt all burns when FLAG_CIRCUIT_BREAKER is set.
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+        SssError::CircuitBreakerActive
+    );
 
     burn(
         CpiContext::new(

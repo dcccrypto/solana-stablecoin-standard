@@ -61,34 +61,32 @@ pub fn set_backstop_params_handler(
 
 // ─── trigger_backstop ────────────────────────────────────────────────────────
 
-/// Called by the liquidation handler after a liquidation leaves collateral < debt.
-/// Draws up to `max_backstop_bps` of outstanding debt from the insurance fund
-/// to cover the shortfall.  Emits `BadDebtTriggered`.
+/// Called by the stablecoin authority (or keeper) after a liquidation leaves collateral < debt.
+/// Draws up to `max_backstop_bps` of outstanding debt from the insurance fund to cover the
+/// shortfall.  Emits `BadDebtTriggered`.
 ///
-/// Access control: only the CDP liquidation PDA (`cdp_liquidate` signer) may call
-/// this.  In practice this means the instruction must be invoked *by the caller of
-/// `cdp_liquidate`* in the same transaction, with the config PDA as the signer
-/// authority.  We enforce this by requiring `liquidation_authority` == `config` key,
-/// which only the on-chain `cdp_liquidate` handler can supply.
+/// SSS-113 HIGH-03 Fix: The original design required the config PDA to be a signer (only
+/// achievable from within a CPI), but no instruction ever invoked this via CPI, making
+/// the backstop unreachable.  Changed to authority-controlled: the stablecoin authority
+/// verifies the shortfall off-chain (e.g., by inspecting post-liquidation CDP state) and
+/// calls this instruction manually to inject insurance funds.
 ///
-/// Note: we accept `shortfall_amount` as an instruction argument (computed by the
-/// caller from post-liquidation state) to avoid re-running the oracle here.  The
-/// instruction independently verifies that bad debt is plausible (net_supply > 0,
-/// backstop configured) but does NOT re-validate the oracle price — that validation
-/// already occurred inside `cdp_liquidate`.
+/// The `shortfall_amount` argument is accepted from the caller; the instruction validates
+/// that the backstop is configured and the insurance fund has balance, but does not
+/// re-run the oracle.
 #[derive(Accounts)]
 pub struct TriggerBackstop<'info> {
-    /// Must be the config PDA — enforces that only the liquidation handler (which
-    /// holds a mutable borrow of config) can invoke trigger_backstop via CPI.
-    pub liquidation_authority: Signer<'info>,
+    /// SSS-113: Must be the stablecoin authority (previously required config PDA signer
+    /// which was unreachable).  Authority verifies bad debt and triggers backstop manually.
+    pub authority: Signer<'info>,
 
     #[account(
         mut,
         seeds = [StablecoinConfig::SEED, sss_mint.key().as_ref()],
         bump = config.bump,
         constraint = config.preset == 3 @ SssError::InvalidPreset,
-        // Only the config PDA itself is authorised to trigger the backstop.
-        constraint = liquidation_authority.key() == config.key() @ SssError::UnauthorizedBackstopCaller,
+        // SSS-113: Only the registered authority may trigger the backstop.
+        constraint = authority.key() == config.authority @ SssError::UnauthorizedBackstopCaller,
     )]
     pub config: Box<Account<'info, StablecoinConfig>>,
 
