@@ -282,6 +282,13 @@ export class ProbabilisticModule {
 
     if (amount.lten(0)) throw new Error('amount must be > 0');
     if (conditionHash.length !== 32) throw new Error('conditionHash must be 32 bytes');
+    // SSS-114 M-002: guard against obviously invalid expirySlot values.
+    // The on-chain program enforces expiry_slot > clock.slot, but catching it
+    // here gives a clear SDK error instead of an opaque program revert.
+    // TIP: fetch the current slot first:
+    //   const slot = await provider.connection.getSlot();
+    //   expirySlot = new BN(slot + 1000);
+    if (expirySlot.lten(0)) throw new Error('expirySlot must be a positive slot number (must be > current on-chain slot)');
 
     const [configPda] = derivePbsConfigPda(mint, this.programId);
     const [vaultPda] = derivePbsVaultPda(configPda, commitmentId, this.programId);

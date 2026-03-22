@@ -329,6 +329,12 @@ export class AgentPaymentChannelModule {
       tokenProgram = TOKEN_2022_PROGRAM_ID,
     } = params;
 
+    // SSS-114 M-001: reject zero-address counterparty — a channel with a
+    // zero pubkey counterparty can never be settled cooperatively.
+    if (counterparty.equals(PublicKey.default)) {
+      throw new Error('counterparty must be a non-zero public key');
+    }
+
     const [configPda] = deriveApcConfigPda(mint, this.programId);
     const [channelPda] = deriveChannelPda(configPda, channelId, this.programId);
     const opener = this.provider.wallet.publicKey;
