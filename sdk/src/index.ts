@@ -2,6 +2,9 @@ export { SolanaStablecoin, SSS_TOKEN_PROGRAM_ID, SSS_TRANSFER_HOOK_PROGRAM_ID } 
 export { ComplianceModule } from './ComplianceModule';
 export { ProofOfReserves } from './ProofOfReserves';
 export type { ReservesProof, MerkleProof, ProofType } from './ProofOfReserves';
+// ─── SSS-124: Reserve Composition ───────────────────────────────────────────
+export { ReserveCompositionModule } from './ReserveCompositionModule';
+export type { ReserveCompositionData } from './ReserveCompositionModule';
 export { FeatureFlagsModule, FLAG_CIRCUIT_BREAKER } from './FeatureFlagsModule';
 export type { FeatureFlagParams } from './FeatureFlagsModule';
 export { CircuitBreakerModule, FLAG_CIRCUIT_BREAKER_V2 } from './CircuitBreakerModule';
