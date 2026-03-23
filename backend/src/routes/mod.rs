@@ -17,3 +17,5 @@ pub mod reserves;
 pub mod supply;
 pub mod webhooks;
 pub mod ws_events;
+pub mod alerts;
+pub mod metrics;

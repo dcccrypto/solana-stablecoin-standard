@@ -3,6 +3,7 @@ mod db;
 mod error;
 mod indexer;
 mod models;
+mod monitor;
 mod rate_limit;
 mod routes;
 mod state;
@@ -22,6 +23,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use auth::require_api_key;
 use db::Database;
 use routes::{
+    alerts::{get_alerts, post_alert},
     analytics::{get_cdp_health, get_liquidation_analytics, get_protocol_stats},
     apikeys::{create_api_key, delete_api_key, list_api_keys},
     cdp::{get_cdp_position, get_collateral_types, post_cdp_simulate},
@@ -35,6 +37,7 @@ use routes::{
     events::events,
     health::health,
     liquidations::get_liquidations,
+    metrics::get_metrics,
     mint::mint,
     burn::burn,
     reserves::get_reserves_proof,
@@ -120,8 +123,11 @@ async fn main() {
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
         .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+        .route("/api/alerts", get(get_alerts).post(post_alert))
         .route("/api/ws/events", get(ws_events_handler))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+        // Prometheus metrics — unauthenticated scrape endpoint
+        .route("/api/metrics", get(get_metrics))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state.clone());
@@ -142,6 +148,9 @@ async fn main() {
     // Spawn the on-chain event indexer (SSS-095).
     // Reads SOLANA_RPC_URL env var (default: devnet).
     indexer::spawn_indexer(state.clone());
+
+    // Spawn the invariant monitoring bot (SSS-139).
+    monitor::spawn_monitor(state.clone());
 
     axum::serve(listener, app)
         .await
@@ -199,6 +208,7 @@ mod tests {
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
             .route("/api/admin/keys/:id", delete(delete_api_key))
+            .route("/api/alerts", get(get_alerts).post(post_alert))
             .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
             .layer(cors)
             .with_state(state);
@@ -678,6 +688,7 @@ mod qa_tests {
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
             .route("/api/admin/keys/:id", delete(delete_api_key))
+            .route("/api/alerts", get(get_alerts).post(post_alert))
             .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
             .with_state(state);
         (app, test_key)

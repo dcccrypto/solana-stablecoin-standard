@@ -295,3 +295,39 @@ pub struct LiquidationsQuery {
     /// Row offset for pagination (default: 0).
     pub offset: Option<u32>,
 }
+
+/// SSS-139: EventLogEntry with `data` parsed as serde_json::Value (for monitor module).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedEventLogEntry {
+    pub id: String,
+    pub event_type: String,
+    pub address: String,
+    /// Parsed JSON data (event-specific fields).
+    pub data: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot: Option<i64>,
+    pub created_at: String,
+}
+
+/// SSS-139: POST /api/alerts request body.
+#[derive(Debug, Deserialize)]
+pub struct PostAlertRequest {
+    /// Invariant or alert name.
+    pub invariant: String,
+    /// Human-readable detail message.
+    pub detail: String,
+    /// Severity: "info" | "warning" | "critical"
+    pub severity: Option<String>,
+}
+
+/// SSS-139: Alert record returned from GET /api/alerts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlertRecord {
+    pub id: String,
+    pub invariant: String,
+    pub detail: String,
+    pub severity: String,
+    pub created_at: String,
+}
