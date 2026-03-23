@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+PR_MESSAGE.md
+.vite/
+
+# Anchor / Solana
+.anchor/test-ledger/
+.anchor/program-logs/
+target/
+*.so
+test-ledger/
+
+# Keypair files
+wallet.json
+phantom.json
+
+# CLI local config
+cli/config.toml
+cli/sss-token.config.toml
+

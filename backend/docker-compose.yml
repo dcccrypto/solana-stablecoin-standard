@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  sss-backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>{if(!r.ok)throw 1})"]
+      interval: 15s
+      timeout: 5s
+      retries: 3

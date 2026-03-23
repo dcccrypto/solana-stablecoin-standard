@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Override wallet adapter button to blend with our design */
+.wallet-adapter-button {
+  font-family: "Inter", sans-serif !important;
+  border-radius: 0.5rem !important;
+  height: 2.5rem !important;
+  font-size: 0.875rem !important;
+}
+
+/* Smooth transitions on cards */
+.card {
+  @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md;
+}
+
+/* Input styling */
+input[type="text"],
+input[type="number"] {
+  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
+    placeholder-slate-400 outline-none transition-colors
+    focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20;
+}
+
+select {
+  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
+    outline-none transition-colors
+    focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20;
+}

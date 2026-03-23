@@ -1,0 +1,44 @@
+{
+  "name": "sss-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend services for the Solana Stablecoin Standard - mint/burn lifecycle, compliance, event listener, and webhook notifications.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "ts-mocha -p ./tsconfig.test.json -t 30000 'tests/**/*.test.ts'",
+    "lint": "eslint \"src/**/*.ts\""
+  },
+  "dependencies": {
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.95.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "helmet": "^8.0.0",
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.0.0",
+    "sss-token-sdk": "file:../sdk",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.0",
+    "@types/cors": "^2.8.0",
+    "@types/express": "^5.0.0",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^6.0.0",
+    "@types/uuid": "^10.0.0",
+    "chai": "^4.3.0",
+    "mocha": "^10.0.0",
+    "supertest": "^7.0.0",
+    "ts-mocha": "^10.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

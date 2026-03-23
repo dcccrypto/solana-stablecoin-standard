@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: "20"
+  SOLANA_VERSION: "1.18.26"
+  ANCHOR_VERSION: "0.32.1"
+
+jobs:
+  # ── SDK ────────────────────────────────────────────────────────
+  sdk:
+    name: SDK — build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: sdk/package-lock.json
+      - run: npm ci
+        working-directory: sdk
+      - run: npm run build
+        working-directory: sdk
+      - run: npm test --if-present
+        working-directory: sdk
+
+  # ── CLI ────────────────────────────────────────────────────────
+  cli:
+    name: CLI — build & test
+    needs: sdk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+        working-directory: sdk
+      - run: npm run build
+        working-directory: sdk
+      - run: npm ci
+        working-directory: cli
+      - run: npm run build
+        working-directory: cli
+      - run: npm test --if-present
+        working-directory: cli
+
+  # ── Backend ────────────────────────────────────────────────────
+  backend:
+    name: Backend — build & test
+    needs: sdk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+        working-directory: sdk
+      - run: npm run build
+        working-directory: sdk
+      - run: npm ci
+        working-directory: backend
+      - run: npx tsc --noEmit
+        working-directory: backend
+      - run: npm test --if-present
+        working-directory: backend
+
+  # ── Anchor programs — build + test ─────────────────────────────
+  anchor-blacklist:
+    name: Blacklist Hook — build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: coral-xyz/setup-anchor@v3
+        with:
+          anchor-version: ${{ env.ANCHOR_VERSION }}
+          solana-cli-version: ${{ env.SOLANA_VERSION }}
+      - run: anchor build
+        working-directory: transfer_hooks/blacklist
+      - run: anchor test --skip-build
+        working-directory: transfer_hooks/blacklist
+
+  anchor-sss-core:
+    name: SSS-Core — build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: coral-xyz/setup-anchor@v3
+        with:
+          anchor-version: ${{ env.ANCHOR_VERSION }}
+          solana-cli-version: ${{ env.SOLANA_VERSION }}
+      - run: anchor build
+        working-directory: programs/sss-core
+      - run: anchor test --skip-build
+        working-directory: programs/sss-core
+
+  # ── LiteSVM fuzz / integration tests ──────────────────────────
+  litesvm:
+    name: LiteSVM — fuzz & integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: coral-xyz/setup-anchor@v3
+        with:
+          anchor-version: ${{ env.ANCHOR_VERSION }}
+          solana-cli-version: ${{ env.SOLANA_VERSION }}
+      - name: Build sss-core .so
+        run: anchor build
+        working-directory: programs/sss-core
+      - name: Build blacklist_hook .so
+        run: anchor build
+        working-directory: transfer_hooks/blacklist
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tests-litesvm
+      - run: cargo test --release -- --nocapture
+        working-directory: tests-litesvm
+
+  # ── Demo ───────────────────────────────────────────────────────
+  demo:
+    name: Demo — build
+    needs: sdk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+        working-directory: demo
+      - run: npm run build
+        working-directory: demo

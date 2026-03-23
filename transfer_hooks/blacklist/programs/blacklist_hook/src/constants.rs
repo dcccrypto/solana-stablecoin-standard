@@ -1,0 +1,5 @@
+pub use sss_common::{
+    HOOK_CONFIG_SEED as CONFIG_SEED,
+    BLACKLIST_SEED,
+    EXTRA_ACCOUNT_METAS_SEED,
+};
