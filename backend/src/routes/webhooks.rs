@@ -121,7 +121,11 @@ pub async fn register_webhook(
     // SSS-114 H-002: reject SSRF-prone URLs before storing.
     validate_webhook_url(&req.url)?;
 
-    let entry = state.db.register_webhook(&req.url, &req.events)?;
+    let entry = state.db.register_webhook(
+        &req.url,
+        &req.events,
+        req.secret_key.as_deref(),
+    )?;
     info!(url = %req.url, events = ?req.events, "Webhook registered");
 
     Ok(Json(ApiResponse::ok(entry)))

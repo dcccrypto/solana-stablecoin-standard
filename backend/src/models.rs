@@ -84,6 +84,11 @@ pub struct AuditEntry {
 pub struct WebhookRequest {
     pub url: String,
     pub events: Vec<String>,
+    /// Optional HMAC-SHA256 secret for signing deliveries.
+    /// If provided, each webhook POST will include an
+    /// `X-SSS-Signature: sha256=<hex>` header.
+    #[serde(default)]
+    pub secret_key: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -91,6 +96,9 @@ pub struct WebhookEntry {
     pub id: String,
     pub url: String,
     pub events: Vec<String>,
+    /// Stored secret key (hashed before storage; returned as-is on registration only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret_key: Option<String>,
     pub created_at: String,
 }
 

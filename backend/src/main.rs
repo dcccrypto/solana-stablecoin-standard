@@ -2,6 +2,7 @@ mod auth;
 mod db;
 mod error;
 mod indexer;
+mod indexer_schema;
 mod models;
 mod rate_limit;
 mod routes;
@@ -116,6 +117,7 @@ async fn main() {
         .route("/api/cpi/interface", get(get_cpi_interface))
         .route("/api/confidential/transfer", post(initiate_confidential_transfer))
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
+        .route("/api/webhooks/register", post(register_webhook))
         .route("/api/webhooks/:id", delete(delete_webhook))
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
@@ -366,7 +368,7 @@ mod tests {
         let db = std::sync::Arc::new(db);
 
         let events = vec!["mint".to_string(), "burn".to_string()];
-        let entry = db.register_webhook("https://example.com/webhook", &events).unwrap();
+        let entry = db.register_webhook("https://example.com/webhook", &events, None).unwrap();
 
         let list = db.list_webhooks().unwrap();
         assert_eq!(list.len(), 1);

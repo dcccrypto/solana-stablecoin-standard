@@ -57,6 +57,7 @@ impl Database {
                 id TEXT PRIMARY KEY,
                 url TEXT NOT NULL,
                 events TEXT NOT NULL,
+                secret_key TEXT,
                 created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS api_keys (
@@ -401,20 +402,21 @@ impl Database {
         Ok(entries)
     }
 
-    pub fn register_webhook(&self, url: &str, events: &[String]) -> Result<WebhookEntry, AppError> {
+    pub fn register_webhook(&self, url: &str, events: &[String], secret_key: Option<&str>) -> Result<WebhookEntry, AppError> {
         let id = Uuid::new_v4().to_string();
         let created_at = Utc::now().to_rfc3339();
         let events_json = serde_json::to_string(events)
             .map_err(|e| AppError::Internal(e.to_string()))?;
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         conn.execute(
-            "INSERT INTO webhooks (id, url, events, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![id, url, events_json, created_at],
+            "INSERT INTO webhooks (id, url, events, secret_key, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, url, events_json, secret_key, created_at],
         )?;
         Ok(WebhookEntry {
             id,
             url: url.to_string(),
             events: events.to_vec(),
+            secret_key: secret_key.map(|s| s.to_string()),
             created_at,
         })
     }
@@ -422,17 +424,23 @@ impl Database {
     pub fn list_webhooks(&self) -> Result<Vec<WebhookEntry>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let mut stmt = conn.prepare(
-            "SELECT id, url, events, created_at FROM webhooks ORDER BY created_at DESC",
+            "SELECT id, url, events, secret_key, created_at FROM webhooks ORDER BY created_at DESC",
         )?;
         let entries = stmt.query_map([], |row| {
             let events_str: String = row.get(2)?;
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, events_str, row.get::<_, String>(3)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                events_str,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, String>(4)?,
+            ))
         })?.collect::<Result<Vec<_>, _>>()?;
 
-        entries.into_iter().map(|(id, url, events_str, created_at)| {
+        entries.into_iter().map(|(id, url, events_str, secret_key, created_at)| {
             let events: Vec<String> = serde_json::from_str(&events_str)
                 .unwrap_or_default();
-            Ok(WebhookEntry { id, url, events, created_at })
+            Ok(WebhookEntry { id, url, events, secret_key, created_at })
         }).collect()
     }
 

@@ -1,12 +1,15 @@
-//! Fire-and-forget webhook dispatch for mint/burn events.
+//! Fire-and-forget webhook dispatcher for SSS events.
 //!
-//! Uses the hyper HTTP client (already a transitive dependency) to avoid
-//! introducing additional TLS/OpenSSL build requirements.
+//! SSS-142: Extended to support HMAC-SHA256 signed deliveries.
+//! When a webhook has a `secret_key`, each POST includes:
+//!   `X-SSS-Signature: sha256=<hex>`
+//! Subscribers verify the signature against the raw JSON body.
 
 use serde_json::Value;
 use tracing::{info, warn};
 
 use crate::db::Database;
+use crate::indexer_schema::hmac_sha256_hex;
 
 /// Dispatch a webhook event to all registered listeners for the given event type.
 /// Each HTTP POST is spawned as a background tokio task; delivery failures are
@@ -26,13 +29,14 @@ pub fn dispatch(db: &Database, event_type: &str, payload: Value) {
         }
 
         let url = wh.url.clone();
+        let secret = wh.secret_key.clone();
         let body = serde_json::json!({
             "event": event_type,
             "data": payload,
         });
 
         tokio::spawn(async move {
-            if let Err(e) = post_json(&url, &body).await {
+            if let Err(e) = post_json(&url, &body, secret.as_deref()).await {
                 warn!(url = %url, error = %e, "Webhook delivery failed");
             } else {
                 info!(url = %url, "Webhook delivered");
@@ -41,7 +45,11 @@ pub fn dispatch(db: &Database, event_type: &str, payload: Value) {
     }
 }
 
-async fn post_json(url: &str, body: &Value) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn post_json(
+    url: &str,
+    body: &Value,
+    secret: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use hyper::body::Bytes;
     use hyper::{Method, Request};
     use hyper_util::client::legacy::Client;
@@ -49,12 +57,20 @@ async fn post_json(url: &str, body: &Value) -> Result<(), Box<dyn std::error::Er
     use http_body_util::Full;
 
     let json_bytes = serde_json::to_vec(body)?;
+    let json_str = std::str::from_utf8(&json_bytes)?;
 
-    let req = Request::builder()
+    let mut req_builder = Request::builder()
         .method(Method::POST)
         .uri(url)
-        .header("content-type", "application/json")
-        .body(Full::new(Bytes::from(json_bytes)))?;
+        .header("content-type", "application/json");
+
+    // SSS-142: Add HMAC signature header if secret is configured.
+    if let Some(sec) = secret {
+        let sig = hmac_sha256_hex(sec, json_str);
+        req_builder = req_builder.header("X-SSS-Signature", format!("sha256={}", sig));
+    }
+
+    let req = req_builder.body(Full::new(Bytes::from(json_bytes)))?;
 
     let client = Client::builder(TokioExecutor::new()).build_http::<Full<Bytes>>();
     let resp = client.request(req).await?;
