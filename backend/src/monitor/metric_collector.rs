@@ -51,15 +51,25 @@ pub fn render_prometheus_metrics() -> String {
     )
 }
 
-/// Collect and update all metrics from DB state.
-async fn collect_metrics(state: &AppState) {
+/// Point-in-time snapshot of all collected metrics.
+#[derive(Debug, Default, PartialEq)]
+pub struct MetricSnapshot {
+    pub supply_total: i64,
+    pub reserve_balance: i64,
+    pub active_cdps: i64,
+    pub peg_deviation_bps: i64,
+}
+
+/// Collect metrics from DB state and return as a snapshot (does NOT touch globals).
+pub async fn collect_metrics_snapshot(state: &AppState) -> MetricSnapshot {
+    let mut snap = MetricSnapshot::default();
+
     // sss_supply_total
     if let Ok((minted, burned)) = state.db.get_supply(None) {
-        let circulating = minted.saturating_sub(burned) as i64;
-        METRIC_SUPPLY_TOTAL.store(circulating, Ordering::Relaxed);
+        snap.supply_total = minted.saturating_sub(burned) as i64;
     }
 
-    // sss_reserve_ratio (derived from backstop events)
+    // sss_reserve_balance (derived from backstop events)
     if let Ok(events) = state.db.query_event_log(None, None, 10_000, 0) {
         let mut backstop: i64 = 0;
         for ev in &events {
@@ -77,10 +87,10 @@ async fn collect_metrics(state: &AppState) {
                 _ => {}
             }
         }
-        METRIC_RESERVE_BALANCE.store(backstop, Ordering::Relaxed);
+        snap.reserve_balance = backstop;
     }
 
-    // sss_active_cdps — count CDPs with net positive collateral (deposits > withdrawals)
+    // sss_active_cdps — count CDPs with net positive collateral
     if let Ok(events) = state.db.query_event_log(None, None, 10_000, 0) {
         let mut cdp_deposits: std::collections::HashMap<String, i64> =
             std::collections::HashMap::new();
@@ -99,21 +109,31 @@ async fn collect_metrics(state: &AppState) {
             }
         }
 
-        let active = cdp_deposits
+        snap.active_cdps = cdp_deposits
             .keys()
             .filter(|addr| !cdp_repaid.contains(*addr))
             .count() as i64;
-        METRIC_ACTIVE_CDPS.store(active, Ordering::Relaxed);
     }
 
     // sss_peg_deviation_bps — from latest oracle_price_update
     if let Ok(events) = state.db.query_event_log(Some("oracle_price_update"), None, 100, 0) {
         if let Some(latest) = events.iter().max_by_key(|e| e.slot.unwrap_or(0)) {
             if let Some(bps) = latest.data.get("peg_deviation_bps").and_then(|v| v.as_i64()) {
-                METRIC_PEG_DEVIATION_BPS.store(bps, Ordering::Relaxed);
+                snap.peg_deviation_bps = bps;
             }
         }
     }
+
+    snap
+}
+
+/// Collect metrics and apply them to the global atomics.
+async fn collect_metrics(state: &AppState) {
+    let snap = collect_metrics_snapshot(state).await;
+    METRIC_SUPPLY_TOTAL.store(snap.supply_total, Ordering::Relaxed);
+    METRIC_RESERVE_BALANCE.store(snap.reserve_balance, Ordering::Relaxed);
+    METRIC_ACTIVE_CDPS.store(snap.active_cdps, Ordering::Relaxed);
+    METRIC_PEG_DEVIATION_BPS.store(snap.peg_deviation_bps, Ordering::Relaxed);
 }
 
 /// Main metric collector loop.
@@ -136,50 +156,41 @@ mod tests {
         AppState::new(db)
     }
 
+    // Async metric tests use collect_metrics_snapshot() which returns a local struct
+    // and never touches shared statics — safe for parallel execution.
+
     #[tokio::test]
     async fn test_metrics_empty_db() {
-        // Reset statics before asserting empty-DB behaviour (other tests may have set them).
-        METRIC_SUPPLY_TOTAL.store(0, Ordering::Relaxed);
-        METRIC_RESERVE_BALANCE.store(0, Ordering::Relaxed);
-        METRIC_ACTIVE_CDPS.store(0, Ordering::Relaxed);
-        METRIC_PEG_DEVIATION_BPS.store(0, Ordering::Relaxed);
-
         let state = make_state();
-        collect_metrics(&state).await;
-        assert_eq!(METRIC_SUPPLY_TOTAL.load(Ordering::Relaxed), 0);
-        assert_eq!(METRIC_RESERVE_BALANCE.load(Ordering::Relaxed), 0);
-        assert_eq!(METRIC_ACTIVE_CDPS.load(Ordering::Relaxed), 0);
-        assert_eq!(METRIC_PEG_DEVIATION_BPS.load(Ordering::Relaxed), 0);
+        let snap = collect_metrics_snapshot(&state).await;
+        assert_eq!(snap.supply_total, 0);
+        assert_eq!(snap.reserve_balance, 0);
+        assert_eq!(snap.active_cdps, 0);
+        assert_eq!(snap.peg_deviation_bps, 0);
     }
 
     #[tokio::test]
     async fn test_metrics_supply_total() {
-        // Reset static before test to avoid contamination from parallel tests.
-        METRIC_SUPPLY_TOTAL.store(0, Ordering::Relaxed);
         let db = Database::new(":memory:").unwrap();
         db.record_mint("mint1", 5000, "addr1", None).unwrap();
         db.record_burn("mint1", 1000, "addr1", None).unwrap();
         let state = AppState::new(db);
-        collect_metrics(&state).await;
-        assert_eq!(METRIC_SUPPLY_TOTAL.load(Ordering::Relaxed), 4000);
+        let snap = collect_metrics_snapshot(&state).await;
+        assert_eq!(snap.supply_total, 4000);
     }
 
     #[tokio::test]
     async fn test_metrics_reserve_balance() {
-        // Reset static before test to avoid contamination from parallel tests.
-        METRIC_RESERVE_BALANCE.store(0, Ordering::Relaxed);
         let db = Database::new(":memory:").unwrap();
         db.insert_event_log("BackstopDeposit", "addr1", serde_json::json!({"amount": 3000}), None, Some(1)).unwrap();
         db.insert_event_log("BackstopWithdraw", "addr1", serde_json::json!({"amount": 500}), None, Some(2)).unwrap();
         let state = AppState::new(db);
-        collect_metrics(&state).await;
-        assert_eq!(METRIC_RESERVE_BALANCE.load(Ordering::Relaxed), 2500);
+        let snap = collect_metrics_snapshot(&state).await;
+        assert_eq!(snap.reserve_balance, 2500);
     }
 
     #[tokio::test]
     async fn test_metrics_active_cdps() {
-        // Reset static before test to avoid contamination from parallel tests.
-        METRIC_ACTIVE_CDPS.store(0, Ordering::Relaxed);
         let db = Database::new(":memory:").unwrap();
         db.insert_event_log("CDPOpened", "CDP_A", serde_json::json!({}), None, Some(1)).unwrap();
         db.insert_event_log("CDPOpened", "CDP_B", serde_json::json!({}), None, Some(2)).unwrap();
@@ -187,19 +198,17 @@ mod tests {
         // Liquidate C
         db.insert_event_log("CDPLiquidated", "CDP_C", serde_json::json!({}), None, Some(4)).unwrap();
         let state = AppState::new(db);
-        collect_metrics(&state).await;
-        assert_eq!(METRIC_ACTIVE_CDPS.load(Ordering::Relaxed), 2);
+        let snap = collect_metrics_snapshot(&state).await;
+        assert_eq!(snap.active_cdps, 2);
     }
 
     #[tokio::test]
     async fn test_metrics_peg_deviation() {
-        // Reset static before test to avoid contamination from parallel tests.
-        METRIC_PEG_DEVIATION_BPS.store(0, Ordering::Relaxed);
         let db = Database::new(":memory:").unwrap();
         db.insert_event_log("oracle_price_update", "oracle1", serde_json::json!({"peg_deviation_bps": 42}), None, Some(10)).unwrap();
         let state = AppState::new(db);
-        collect_metrics(&state).await;
-        assert_eq!(METRIC_PEG_DEVIATION_BPS.load(Ordering::Relaxed), 42);
+        let snap = collect_metrics_snapshot(&state).await;
+        assert_eq!(snap.peg_deviation_bps, 42);
     }
 
     #[test]
