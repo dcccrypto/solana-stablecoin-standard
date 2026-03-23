@@ -323,6 +323,7 @@ pub struct PostAlertRequest {
 }
 
 /// SSS-139: Alert record returned from GET /api/alerts.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertRecord {
     pub id: String,
