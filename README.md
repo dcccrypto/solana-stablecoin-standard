@@ -151,6 +151,11 @@ Endpoints:
 | [Formal Verification](docs/formal-verification.md) | Kani mathematical proofs — 7/7 invariants verified for all possible inputs |
 | [On-Chain SDK: PBS + APC](docs/on-chain-sdk-pbs-apc.md) | `ProbabilisticModule` (PBS vaults, commitProbabilistic, proveAndResolve) + `AgentPaymentChannelModule` (APC open/settle/dispute) |
 | [Proof Demo: Agent-to-Agent Task Payment](docs/PROOF-DEMO.md) | End-to-end runnable demo — two autonomous agents completing a verifiable task payment using APC + PBS on devnet (SSS-112) |
+| [Guardian Multisig Emergency Pause](docs/GUARDIAN-PAUSE.md) | Guardian multisig pause/unpause system — PDA layout, instruction reference, runbook, and security notes (SSS-121) |
+| [Program Upgrade Guide](docs/UPGRADE-GUIDE.md) | Versioned state migration runbook — `migrate_config` step-by-step, FAQ, and troubleshooting (SSS-122) |
+| [MiCA Compliance](docs/MICA-COMPLIANCE.md) | MiCA Article 36/45/46/47 compliance checklist and automated checks (SSS-126) |
+| [Formal Specification (TLA+)](docs/FORMAL-SPEC.md) | TLA+ model for the SSS protocol — invariants, liveness properties, and model-checker setup (SSS-140) |
+| [Event Schema & Indexer Guide](docs/EVENT-SCHEMA.md) | On-chain event schema reference and indexer integration guide (SSS-142) |
 
 ## Judging Criteria
 
