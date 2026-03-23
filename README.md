@@ -151,6 +151,7 @@ Endpoints:
 | [Formal Verification](docs/formal-verification.md) | Kani mathematical proofs — 7/7 invariants verified for all possible inputs |
 | [On-Chain SDK: PBS + APC](docs/on-chain-sdk-pbs-apc.md) | `ProbabilisticModule` (PBS vaults, commitProbabilistic, proveAndResolve) + `AgentPaymentChannelModule` (APC open/settle/dispute) |
 | [Proof Demo: Agent-to-Agent Task Payment](docs/PROOF-DEMO.md) | End-to-end runnable demo — two autonomous agents completing a verifiable task payment using APC + PBS on devnet (SSS-112) |
+| [Liquidity Seeding Guide](docs/LIQUIDITY-GUIDE.md) | Bootstrap AMM liquidity on Orca Whirlpools and Raydium CLMM — pool params, seeding workflow, health monitoring, rebalancing strategy (SSS-136) |
 
 ## Judging Criteria
 
