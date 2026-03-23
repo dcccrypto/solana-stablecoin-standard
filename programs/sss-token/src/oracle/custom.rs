@@ -18,7 +18,14 @@ use super::OraclePrice;
 /// Verifies:
 ///   - The account deserialises as a valid `CustomPriceFeed` (discriminator check).
 ///   - `feed.authority` matches `config.authority` (admin signature verification).
-pub fn get_price(oracle_feed_acct: &AccountInfo, config: &StablecoinConfig) -> Result<OraclePrice> {
+///   - `feed.last_update_unix_timestamp` is within `max_age_secs` of `current_unix_timestamp`
+///     (staleness check using `config.max_oracle_age_secs`; default 60 s).
+pub fn get_price(
+    oracle_feed_acct: &AccountInfo,
+    config: &StablecoinConfig,
+    max_age_secs: u64,
+    current_unix_timestamp: i64,
+) -> Result<OraclePrice> {
     // Deserialise and verify discriminator / program ownership
     let data = oracle_feed_acct
         .try_borrow_data()
@@ -29,6 +36,13 @@ pub fn get_price(oracle_feed_acct: &AccountInfo, config: &StablecoinConfig) -> R
 
     // Admin signature verification: the feed must be controlled by this config's authority
     require!(feed.authority == config.authority, SssError::UnexpectedPriceFeed);
+
+    // Staleness check: reject if price was never set (timestamp == 0) or is too old
+    let age = current_unix_timestamp.saturating_sub(feed.last_update_unix_timestamp);
+    require!(
+        feed.last_update_unix_timestamp > 0 && age >= 0 && age as u64 <= max_age_secs,
+        SssError::StalePriceFeed
+    );
 
     Ok(OraclePrice {
         price: feed.price,

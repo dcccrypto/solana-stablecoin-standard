@@ -105,6 +105,7 @@ pub fn init_custom_price_feed_handler(ctx: Context<InitCustomPriceFeed>) -> Resu
     feed.expo = -8; // Conventional default exponent (overrideable via update_custom_price)
     feed.conf = 0;
     feed.last_update_slot = 0;
+    feed.last_update_unix_timestamp = 0; // 0 = never updated; staleness check will reject until first update
     feed.bump = ctx.bumps.custom_price_feed;
     msg!(
         "SSS-119: CustomPriceFeed initialised for mint {}",
@@ -163,12 +164,14 @@ pub fn update_custom_price_handler(
     feed.expo = expo;
     feed.conf = conf;
     feed.last_update_slot = clock.slot;
+    feed.last_update_unix_timestamp = clock.unix_timestamp;
     msg!(
-        "SSS-119: CustomPriceFeed updated — price={} expo={} conf={} slot={}",
+        "SSS-119: CustomPriceFeed updated — price={} expo={} conf={} slot={} ts={}",
         price,
         expo,
         conf,
         clock.slot,
+        clock.unix_timestamp,
     );
     Ok(())
 }

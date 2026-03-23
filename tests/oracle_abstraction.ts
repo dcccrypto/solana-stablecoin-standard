@@ -980,4 +980,241 @@ describe("oracle-abstraction", () => {
     expect(feed.price.toNumber()).to.equal(3_000_000);
     expect(feed.conf.toNumber()).to.equal(0);
   });
+
+  // ---------------------------------------------------------------------------
+  // GROUP 7: Staleness check for Custom oracle (SSS-119 QA fix)
+  // ---------------------------------------------------------------------------
+
+  it("oracle-23: updateCustomPrice stores last_update_unix_timestamp", async () => {
+    const beforeTs = Math.floor(Date.now() / 1000);
+
+    await program.methods
+      .updateCustomPrice(new anchor.BN(1_000_000), -6, new anchor.BN(0))
+      .accounts({
+        authority: authority.publicKey,
+        config: configPda,
+        sssMint: mintKp.publicKey,
+        customPriceFeed: customPriceFeedPda,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    const afterTs = Math.floor(Date.now() / 1000) + 5; // small buffer for clock skew
+    const feed = await program.account.customPriceFeed.fetch(customPriceFeedPda);
+    const storedTs = feed.lastUpdateUnixTimestamp.toNumber();
+    expect(storedTs).to.be.greaterThan(0, "timestamp must be set after first update");
+    expect(storedTs).to.be.within(
+      beforeTs - 5,
+      afterTs,
+      "stored timestamp should be close to wall clock"
+    );
+  });
+
+  it("oracle-24: initCustomPriceFeed sets last_update_unix_timestamp=0 (never updated)", async () => {
+    // We need a fresh feed PDA on a new mint to verify the init value.
+    // Create a new SSS-3 config + custom price feed to inspect the initial state.
+    const freshMintKp = Keypair.generate();
+    const [freshConfigPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("stablecoin-config"), freshMintKp.publicKey.toBuffer()],
+      program.programId
+    );
+    const [freshFeedPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("custom-price-feed"), freshMintKp.publicKey.toBuffer()],
+      program.programId
+    );
+
+    // Need a reserve vault token account (placeholder pubkey is fine for this check)
+    const dummyVault = Keypair.generate().publicKey;
+
+    await program.methods
+      .initialize({
+        preset: 3,
+        decimals: 6,
+        name: "Fresh Oracle USD",
+        symbol: "FOUSD",
+        uri: "https://test.invalid/fresh",
+        transferHookProgram: null,
+        collateralMint,
+        reserveVault: dummyVault,
+        maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
+      })
+      .accounts({
+        payer: authority.publicKey,
+        mint: freshMintKp.publicKey,
+        config: freshConfigPda,
+        ctConfig: null,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([freshMintKp])
+      .rpc();
+
+    await program.methods
+      .initCustomPriceFeed()
+      .accounts({
+        authority: authority.publicKey,
+        config: freshConfigPda,
+        sssMint: freshMintKp.publicKey,
+        customPriceFeed: freshFeedPda,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    const feed = await program.account.customPriceFeed.fetch(freshFeedPda);
+    expect(feed.lastUpdateUnixTimestamp.toNumber()).to.equal(
+      0,
+      "freshly initialised feed must have timestamp=0 (never updated)"
+    );
+  });
+
+  it("oracle-25: cdpBorrowStable with fresh (never-updated) custom feed is rejected as StalePriceFeed", async () => {
+    // Use a new SSS-3 config with a fresh custom price feed (timestamp=0)
+    // to confirm the staleness gate blocks borrows until a price is published.
+    const staleMintKp = Keypair.generate();
+    const [staleConfigPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("stablecoin-config"), staleMintKp.publicKey.toBuffer()],
+      program.programId
+    );
+    const [staleFeedPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("custom-price-feed"), staleMintKp.publicKey.toBuffer()],
+      program.programId
+    );
+
+    // Create a vault token account for this config
+    const staleVaultKp = Keypair.generate();
+    await createTokenAccount(
+      provider.connection,
+      (authority as any).payer,
+      collateralMint,
+      staleConfigPda,
+      staleVaultKp,
+      undefined,
+      TOKEN_PROGRAM_ID
+    );
+    const staleVaultAccount = staleVaultKp.publicKey;
+
+    await program.methods
+      .initialize({
+        preset: 3,
+        decimals: 6,
+        name: "Stale Oracle USD",
+        symbol: "SOUSD",
+        uri: "https://test.invalid/stale",
+        transferHookProgram: null,
+        collateralMint,
+        reserveVault: staleVaultAccount,
+        maxSupply: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
+      })
+      .accounts({
+        payer: authority.publicKey,
+        mint: staleMintKp.publicKey,
+        config: staleConfigPda,
+        ctConfig: null,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([staleMintKp])
+      .rpc();
+
+    // Init custom feed (timestamp=0, price=0)
+    await program.methods
+      .initCustomPriceFeed()
+      .accounts({
+        authority: authority.publicKey,
+        config: staleConfigPda,
+        sssMint: staleMintKp.publicKey,
+        customPriceFeed: staleFeedPda,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Configure oracle_type=2 pointing at the fresh (never-updated) feed
+    await program.methods
+      .setOracleConfig(2, staleFeedPda)
+      .accounts({
+        authority: authority.publicKey,
+        config: staleConfigPda,
+        mint: staleMintKp.publicKey,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc();
+
+    // Get user SSS ATA for this new mint
+    const staleSssAtaInfo = await getOrCreateAssociatedTokenAccount(
+      provider.connection,
+      (authority as any).payer,
+      staleMintKp.publicKey,
+      authority.publicKey,
+      false,
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+
+    const [staleCollVaultPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("cdp-collateral-vault"),
+        staleMintKp.publicKey.toBuffer(),
+        authority.publicKey.toBuffer(),
+        collateralMint.toBuffer(),
+      ],
+      program.programId
+    );
+    const [staleCdpPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("cdp-position"),
+        staleMintKp.publicKey.toBuffer(),
+        authority.publicKey.toBuffer(),
+      ],
+      program.programId
+    );
+
+    // Deposit collateral first
+    await program.methods
+      .cdpDepositCollateral(new anchor.BN(1_000 * 10 ** 6))
+      .accounts({
+        user: authority.publicKey,
+        config: staleConfigPda,
+        sssMint: staleMintKp.publicKey,
+        collateralMint,
+        collateralVault: staleCollVaultPda,
+        vaultTokenAccount: staleVaultAccount,
+        userCollateralAccount: userCollateralAta,
+        yieldCollateralConfig: null,
+        collateralConfig: null,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Attempt CDP borrow — should fail with StalePriceFeed (timestamp=0, never updated)
+    try {
+      await program.methods
+        .cdpBorrowStable(new anchor.BN(10 * 10 ** 6))
+        .accounts({
+          user: authority.publicKey,
+          config: staleConfigPda,
+          sssMint: staleMintKp.publicKey,
+          collateralMint,
+          collateralVault: staleCollVaultPda,
+          cdpPosition: staleCdpPda,
+          userSssAccount: staleSssAtaInfo.address,
+          pythPriceFeed: staleFeedPda,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      expect.fail("should have rejected stale (never-updated) custom price feed");
+    } catch (e: any) {
+      expect(e.toString()).to.match(/StalePriceFeed|stale|0x1779/i);
+    }
+  });
 });

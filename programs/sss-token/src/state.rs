@@ -602,6 +602,9 @@ pub struct CustomPriceFeed {
     pub conf: u64,
     /// Slot at which the price was last updated (informational).
     pub last_update_slot: u64,
+    /// Unix timestamp (seconds) at which the price was last updated.
+    /// Used by the custom oracle adapter to enforce max_oracle_age_secs staleness check.
+    pub last_update_unix_timestamp: i64,
     pub bump: u8,
 }
 

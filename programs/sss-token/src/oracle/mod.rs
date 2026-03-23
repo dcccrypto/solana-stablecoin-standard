@@ -57,7 +57,7 @@ pub fn get_oracle_price(
     let price = match config.oracle_type {
         ORACLE_PYTH => pyth::get_price(oracle_feed_acct, max_age_secs, clock.unix_timestamp)?,
         ORACLE_SWITCHBOARD => switchboard::get_price(oracle_feed_acct)?,
-        ORACLE_CUSTOM => custom::get_price(oracle_feed_acct, config)?,
+        ORACLE_CUSTOM => custom::get_price(oracle_feed_acct, config, max_age_secs, clock.unix_timestamp)?,
         _ => return err!(SssError::InvalidPriceFeed),
     };
 
