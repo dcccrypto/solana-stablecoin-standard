@@ -611,3 +611,38 @@ pub struct CustomPriceFeed {
 impl CustomPriceFeed {
     pub const SEED: &'static [u8] = b"custom-price-feed";
 }
+
+// ---------------------------------------------------------------------------
+// SSS-120: AuthorityRotationRequest PDA
+// ---------------------------------------------------------------------------
+/// Stores an in-flight authority rotation proposal.
+/// Seeds: [b"authority-rotation", mint.key().as_ref()]
+///
+/// Lifecycle:
+///   propose_authority_rotation → AuthorityRotationRequest created
+///   accept_authority_rotation  → PDA closed (after 48-hr timelock)
+///   emergency_recover_authority→ PDA closed (after 7-day window)
+///   cancel_authority_rotation  → PDA closed immediately (current authority only)
+#[account]
+pub struct AuthorityRotationRequest {
+    /// The stablecoin mint this rotation belongs to.
+    pub config_mint: Pubkey,
+    /// The authority at proposal time — must still match config.authority at accept/emergency/cancel.
+    pub current_authority: Pubkey,
+    /// The new authority that must sign `accept_authority_rotation`.
+    pub new_authority: Pubkey,
+    /// Fallback authority: can claim after `EMERGENCY_RECOVERY_SLOTS` if acceptance never happens.
+    pub backup_authority: Pubkey,
+    /// Slot at which the proposal was made.
+    pub proposed_slot: u64,
+    /// Slots that must elapse before `accept_authority_rotation` is valid (≈48 hr).
+    pub timelock_slots: u64,
+    /// PDA bump.
+    pub bump: u8,
+}
+
+impl AuthorityRotationRequest {
+    pub const SEED: &'static [u8] = b"authority-rotation";
+    /// Discriminator(8) + 3×Pubkey(96) + 2×u64(16) + u8(1) + padding(7) = 128
+    pub const SPACE: usize = 96 + 16 + 1 + 7;
+}

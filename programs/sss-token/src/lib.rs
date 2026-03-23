@@ -535,4 +535,36 @@ pub mod sss_token {
     pub fn force_close(ctx: Context<ForceClose>, channel_id: u64) -> Result<()> {
         instructions::apc::force_close_handler(ctx, channel_id)
     }
+
+    // ─── SSS-120: Admin key rotation + recovery path ───────────────────────────
+
+    /// Propose an authority rotation with a 48-hour timelock and a backup recovery key.
+    /// Only the current authority may call this.
+    pub fn propose_authority_rotation(
+        ctx: Context<ProposeAuthorityRotation>,
+        new_authority: Pubkey,
+        backup_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::authority_rotation::propose_authority_rotation_handler(
+            ctx,
+            new_authority,
+            backup_authority,
+        )
+    }
+
+    /// Accept the pending rotation after the 48-hour timelock.
+    /// Must be signed by the rotation_request.new_authority.
+    pub fn accept_authority_rotation(ctx: Context<AcceptAuthorityRotation>) -> Result<()> {
+        instructions::authority_rotation::accept_authority_rotation_handler(ctx)
+    }
+
+    /// Emergency recovery: backup_authority claims authority after 7 days of non-acceptance.
+    pub fn emergency_recover_authority(ctx: Context<EmergencyRecoverAuthority>) -> Result<()> {
+        instructions::authority_rotation::emergency_recover_authority_handler(ctx)
+    }
+
+    /// Cancel an in-flight rotation proposal. Only the current authority may cancel.
+    pub fn cancel_authority_rotation(ctx: Context<CancelAuthorityRotation>) -> Result<()> {
+        instructions::authority_rotation::cancel_authority_rotation_handler(ctx)
+    }
 }
