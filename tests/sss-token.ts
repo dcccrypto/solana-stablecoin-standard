@@ -719,15 +719,36 @@ describe("sss-token", () => {
 
   // ---------- Update Roles ----------
 
-  it("updates authority (two-step: propose then accept)", async () => {
+  it("updates authority (SSS-113: authority transfer requires admin timelock)", async () => {
+    // SSS-113 CRIT-01: when admin_timelock_delay > 0, authority transfers must go
+    // through propose_timelocked_op / execute_timelocked_op.
+    // Direct updateRoles with newAuthority is rejected; proposeTimelockedOp works.
     const newAuthority = Keypair.generate();
 
-    // Step 1: Propose the authority transfer
+    // Verify: updateRoles with newAuthority is REJECTED (timelock required)
+    try {
+      await program.methods
+        .updateRoles({
+          newAuthority: newAuthority.publicKey,
+          newComplianceAuthority: null,
+        })
+        .accounts({
+          authority: authority.publicKey,
+          config: configPda,
+          mint: mintKeypair.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("Should have rejected — timelock required for authority transfer");
+    } catch (err: any) {
+      expect(err.error?.errorCode?.code || err.message).to.match(
+        /UseTimelockForAuthorityTransfer|timelock/i
+      );
+    }
+
+    // Verify: proposeTimelockedOp(ADMIN_OP_TRANSFER_AUTHORITY=1) works and stores pending op
     await program.methods
-      .updateRoles({
-        newAuthority: newAuthority.publicKey,
-        newComplianceAuthority: null,
-      })
+      .proposeTimelockedOp(1, new anchor.BN(0), newAuthority.publicKey)
       .accounts({
         authority: authority.publicKey,
         config: configPda,
@@ -736,77 +757,27 @@ describe("sss-token", () => {
       })
       .rpc();
 
-    // After proposal: authority unchanged, pendingAuthority set
-    const configAfterProposal = await program.account.stablecoinConfig.fetch(configPda);
-    expect(configAfterProposal.authority.toBase58()).to.equal(
-      authority.publicKey.toBase58()
-    );
-    expect(configAfterProposal.pendingAuthority.toBase58()).to.equal(
-      newAuthority.publicKey.toBase58()
-    );
+    const cfg = await program.account.stablecoinConfig.fetch(configPda);
+    expect(cfg.adminOpKind).to.equal(1); // ADMIN_OP_TRANSFER_AUTHORITY
+    expect(cfg.adminOpTarget.toBase58()).to.equal(newAuthority.publicKey.toBase58());
+    expect(cfg.adminOpMatureSlot.toNumber()).to.be.greaterThan(0);
+    // Authority is unchanged until execute runs after maturity
+    expect(cfg.authority.toBase58()).to.equal(authority.publicKey.toBase58());
 
-    // Fund newAuthority so it can pay for tx
-    const airdropSig = await provider.connection.requestAirdrop(
-      newAuthority.publicKey,
-      1_000_000_000
-    );
-    await provider.connection.confirmTransaction(airdropSig, "confirmed");
-
-    // Step 2: newAuthority accepts
+    // Cancel to restore clean state for subsequent tests
     await program.methods
-      .acceptAuthority()
+      .cancelTimelockedOp()
       .accounts({
-        pending: newAuthority.publicKey,
-        config: configPda,
-        mint: mintKeypair.publicKey,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .signers([newAuthority])
-      .rpc();
-
-    const configAfterAccept = await program.account.stablecoinConfig.fetch(configPda);
-    expect(configAfterAccept.authority.toBase58()).to.equal(
-      newAuthority.publicKey.toBase58()
-    );
-    expect(configAfterAccept.pendingAuthority.toBase58()).to.equal(
-      anchor.web3.PublicKey.default.toBase58()
-    );
-
-    // Transfer back for subsequent tests (two-step again)
-    await program.methods
-      .updateRoles({
-        newAuthority: authority.publicKey,
-        newComplianceAuthority: null,
-      })
-      .accounts({
-        authority: newAuthority.publicKey,
-        config: configPda,
-        mint: mintKeypair.publicKey,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .signers([newAuthority])
-      .rpc();
-
-    const airdropSig2 = await provider.connection.requestAirdrop(
-      authority.publicKey,
-      500_000_000
-    );
-    await provider.connection.confirmTransaction(airdropSig2, "confirmed");
-
-    await program.methods
-      .acceptAuthority()
-      .accounts({
-        pending: authority.publicKey,
+        authority: authority.publicKey,
         config: configPda,
         mint: mintKeypair.publicKey,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
 
-    const configRestored = await program.account.stablecoinConfig.fetch(configPda);
-    expect(configRestored.authority.toBase58()).to.equal(
-      authority.publicKey.toBase58()
-    );
+    const cfgAfterCancel = await program.account.stablecoinConfig.fetch(configPda);
+    expect(cfgAfterCancel.adminOpKind).to.equal(0); // ADMIN_OP_NONE
+    expect(cfgAfterCancel.authority.toBase58()).to.equal(authority.publicKey.toBase58());
   });
 
   // ---------- SSS-020: two-step compliance authority transfer ----------
@@ -899,100 +870,34 @@ describe("sss-token", () => {
 
   // ---------- SSS-020: reject wrong pending authority accepting ----------
 
-  it("rejects accept_authority from wrong signer", async () => {
-    const legitimate = Keypair.generate();
-    const impostor = Keypair.generate();
+  it("rejects updateRoles with newAuthority when timelock is configured (SSS-113)", async () => {
+    // SSS-113: direct authority transfer via updateRoles is blocked when timelock delay > 0.
+    // This test verifies the security guard is active.
+    const randomKey = Keypair.generate();
 
-    // Propose transfer to legitimate
-    await program.methods
-      .updateRoles({
-        newAuthority: legitimate.publicKey,
-        newComplianceAuthority: null,
-      })
-      .accounts({
-        authority: authority.publicKey,
-        config: configPda,
-        mint: mintKeypair.publicKey,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .rpc();
-
-    const impostorSig = await provider.connection.requestAirdrop(
-      impostor.publicKey,
-      1_000_000_000
-    );
-    await provider.connection.confirmTransaction(impostorSig, "confirmed");
-
-    // Impostor tries to accept — should fail
     try {
       await program.methods
-        .acceptAuthority()
+        .updateRoles({
+          newAuthority: randomKey.publicKey,
+          newComplianceAuthority: null,
+        })
         .accounts({
-          pending: impostor.publicKey,
+          authority: authority.publicKey,
           config: configPda,
           mint: mintKeypair.publicKey,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
         })
-        .signers([impostor])
         .rpc();
-      expect.fail("impostor should not be able to accept authority");
+      expect.fail("Should have rejected — timelock required");
     } catch (err: any) {
       expect(err.error?.errorCode?.code || err.message).to.match(
-        /Unauthorized|ConstraintRaw|constraint/i
+        /UseTimelockForAuthorityTransfer|timelock/i
       );
     }
 
-    // Clean up: legitimate accepts, then restores authority back
-    const legitSig = await provider.connection.requestAirdrop(
-      legitimate.publicKey,
-      1_000_000_000
-    );
-    await provider.connection.confirmTransaction(legitSig, "confirmed");
-
-    await program.methods
-      .acceptAuthority()
-      .accounts({
-        pending: legitimate.publicKey,
-        config: configPda,
-        mint: mintKeypair.publicKey,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .signers([legitimate])
-      .rpc();
-
-    // Restore to original authority
-    await program.methods
-      .updateRoles({
-        newAuthority: authority.publicKey,
-        newComplianceAuthority: null,
-      })
-      .accounts({
-        authority: legitimate.publicKey,
-        config: configPda,
-        mint: mintKeypair.publicKey,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .signers([legitimate])
-      .rpc();
-
-    const restoreAirdrop = await provider.connection.requestAirdrop(
-      authority.publicKey,
-      500_000_000
-    );
-    await provider.connection.confirmTransaction(restoreAirdrop, "confirmed");
-
-    await program.methods
-      .acceptAuthority()
-      .accounts({
-        pending: authority.publicKey,
-        config: configPda,
-        mint: mintKeypair.publicKey,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      })
-      .rpc();
-
-    const final = await program.account.stablecoinConfig.fetch(configPda);
-    expect(final.authority.toBase58()).to.equal(authority.publicKey.toBase58());
+    // Authority must remain unchanged
+    const cfg = await program.account.stablecoinConfig.fetch(configPda);
+    expect(cfg.authority.toBase58()).to.equal(authority.publicKey.toBase58());
   });
 
   // ---------- SSS-058: Feature Flags — Circuit Breaker ----------
