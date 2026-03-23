@@ -126,6 +126,7 @@ Endpoints:
 | Feature | Description |
 |---------|-------------|
 | [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | Cryptographic supply commitments — fetch, verify, and manually reproduce Merkle proofs |
+| [Reserve Reporting](docs/RESERVE-REPORTING.md) | On-chain reserve composition PDA (SSS-124): cash/T-bill/crypto/other breakdown in bps, SDK helpers |
 
 ## Documentation
 
