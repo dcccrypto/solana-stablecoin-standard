@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+#[cfg(not(test))]
 use std::net::IpAddr;
 use tracing::info;
 

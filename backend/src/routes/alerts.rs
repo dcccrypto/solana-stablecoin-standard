@@ -107,7 +107,7 @@ mod tests {
     use axum::{
         body::Body,
         http::{Method, Request, StatusCode},
-        routing::{get, post},
+        routing::get,
         Router,
     };
     use crate::db::Database;
