@@ -2,7 +2,7 @@
 
 > **Tool:** [Kani Rust Verifier](https://github.com/model-checking/kani)
 > **Source:** `programs/sss-token/src/proofs.rs`
-> **Status:** 35/35 proofs verified, 0 failures (SSS-108)
+> **Status:** 35/35 proofs verified, 0 failures — all 35 are properly inductive (SSS-108, SSS-117)
 
 ---
 
@@ -31,7 +31,7 @@ Every proof in `proofs.rs` is **inductive**:
 ```bash
 cd programs/sss-token
 
-# Run all 35 harnesses
+# Run all 35 harnesses (all are inductive — no tautological proofs remain as of SSS-117)
 cargo kani
 
 # Run a specific harness
@@ -40,6 +40,7 @@ cargo kani --harness proof_sss3_mint_solvency_inductive
 # Expected output:
 # VERIFICATION:- SUCCESSFUL
 # Complete - 35 successfully verified harnesses, 0 failures
+# All 35 are properly inductive — 17 tautological/vacuous proofs rewritten in SSS-117
 ```
 
 **Requirements:**
@@ -184,14 +185,28 @@ These proofs cover the core SSS-3 (Trustless Collateral-Backed) guarantee: colla
 
 ---
 
+## Proof Quality Audit — SSS-117 (2026-03-22)
+
+An internal audit of all 35 proofs (commit `c0a744b`) found 17 that were tautological, vacuous, or weak. All 17 were rewritten to proper inductive form. Categories fixed:
+
+| Category | Count | Example | Fix applied |
+|----------|-------|---------|-------------|
+| Tautological (`assert!(X)` inside `if X {}`) | 13 | `proof_net_supply_bounded_by_max` | Assert the **consequence**, not the guard |
+| Vacuous (`assert!` inside `if let Some` with no overflow assume) | 2 | `proof_total_minted_monotonic` | Added `kani::assume(total_minted <= u64::MAX - amount)` |
+| Weak (trivially true, not ratio improvement) | 2 | `proof_deposit_improves_reserve_ratio` | Assert ratio inequality using u128 arithmetic |
+
+Proofs that were already strong and untouched: `proof_sss3_mint_solvency_inductive`, `proof_sss3_redeem_preserves_solvency`, `proof_cdp_collateral_ratio_inductive`, `proof_dao_quorum_enforced`, `proof_dao_member_dedup`, `proof_authority_two_step_inductive`, `proof_authority_accept_clears_pending`, `proof_blacklist_pda_no_collision`, `proof_feature_flags_set_clear_inverse`, `proof_feature_flag_bit_isolation`, `proof_backstop_never_overdraws_fund`, and PBS/APC proofs.
+
 ## Adding New Proofs
 
 Per `CONTRIBUTING.md`: all new instructions must have corresponding Kani proofs in `proofs.rs`. A valid proof must:
 
 1. Use `kani::assume()` to state all preconditions (valid program states only)
-2. Use `assert!()` for real postconditions — not tautologies
+2. Use `assert!()` for real postconditions — **never assert X inside an `if X {}` block** (tautology)
 3. Be inductive: invariant holds before → proved it holds after
-4. Include a doc comment with **WHAT**, **WHY**, and **HOW** it is inductive
+4. Use `kani::any()` for all inputs — **never hardcode concrete values** (unit test, not proof)
+5. Use `kani::cover!(true)` in every conditional branch to prove non-vacuity
+6. Include a doc comment with **WHAT**, **WHY**, and **HOW** it is inductive
 
 ```rust
 /// WHAT: <what invariant is proved>
