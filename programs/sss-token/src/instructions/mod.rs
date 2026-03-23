@@ -1,4 +1,5 @@
 pub mod bad_debt_backstop;
+pub mod oracle_config;
 pub mod pbs;
 pub mod apc;
 pub mod accept_authority;
@@ -32,6 +33,7 @@ pub mod yield_collateral;
 pub mod zk_compliance;
 
 pub use bad_debt_backstop::*;
+pub use oracle_config::*;
 pub use pbs::*;
 pub use apc::*;
 pub use accept_authority::*;

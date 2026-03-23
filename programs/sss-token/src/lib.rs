@@ -4,6 +4,7 @@ pub mod error;
 pub mod events;
 pub mod fuzz_tests;
 pub mod instructions;
+pub mod oracle;
 pub mod proofs;
 pub mod state;
 
@@ -323,6 +324,39 @@ pub mod sss_token {
         max_conf_bps: u16,
     ) -> Result<()> {
         instructions::admin_timelock::set_oracle_params_handler(ctx, max_age_secs, max_conf_bps)
+    }
+
+    // ─── SSS-119: Oracle Abstraction Layer ───────────────────────────────────
+
+    /// SSS-119: Set the oracle type and feed address for CDP operations.
+    /// `oracle_type`: 0=Pyth (default), 1=Switchboard, 2=Custom.
+    /// `oracle_feed`: the feed account pubkey (Pubkey::default() = rely on expected_pyth_feed).
+    /// Authority-only.
+    pub fn set_oracle_config(
+        ctx: Context<SetOracleConfig>,
+        oracle_type: u8,
+        oracle_feed: Pubkey,
+    ) -> Result<()> {
+        instructions::oracle_config::set_oracle_config_handler(ctx, oracle_type, oracle_feed)
+    }
+
+    /// SSS-119: Initialise the CustomPriceFeed PDA for a stablecoin mint.
+    /// Must be called before using oracle_type=2 (Custom) in CDP operations.
+    /// Authority-only.
+    pub fn init_custom_price_feed(ctx: Context<InitCustomPriceFeed>) -> Result<()> {
+        instructions::oracle_config::init_custom_price_feed_handler(ctx)
+    }
+
+    /// SSS-119: Publish a new price to the CustomPriceFeed PDA.
+    /// `price`: raw price > 0.  `expo`: e.g. -8.  `conf`: confidence interval.
+    /// Authority-only — this transaction's authority signature is the admin verification.
+    pub fn update_custom_price(
+        ctx: Context<UpdateCustomPrice>,
+        price: i64,
+        expo: i32,
+        conf: u64,
+    ) -> Result<()> {
+        instructions::oracle_config::update_custom_price_handler(ctx, price, expo, conf)
     }
 
     /// SSS-092: Set the annual stability fee (in basis points) for CDP borrows.

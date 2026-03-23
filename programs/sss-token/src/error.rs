@@ -188,4 +188,9 @@ pub enum SssError {
     UseTimelockForAuthorityTransfer,
     #[msg("Caller is not authorized to trigger the backstop (authority only)")]
     UnauthorizedBackstopTrigger,
+    // SSS-119: Oracle abstraction layer
+    #[msg("Oracle adapter not configured — Switchboard V2 crate not yet integrated")]
+    OracleNotConfigured,
+    #[msg("oracle_type must be 0 (Pyth), 1 (Switchboard), or 2 (Custom)")]
+    InvalidOracleType,
 }
