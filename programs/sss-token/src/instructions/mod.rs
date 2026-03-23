@@ -1,6 +1,7 @@
 pub mod bad_debt_backstop;
 pub mod pbs;
 pub mod apc;
+pub mod proof_of_reserves;
 pub mod accept_authority;
 pub mod admin_timelock;
 pub mod burn;
@@ -34,6 +35,7 @@ pub mod zk_compliance;
 pub use bad_debt_backstop::*;
 pub use pbs::*;
 pub use apc::*;
+pub use proof_of_reserves::*;
 pub use accept_authority::*;
 pub use admin_timelock::*;
 pub use burn::*;

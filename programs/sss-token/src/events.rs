@@ -264,3 +264,56 @@ pub struct ChannelForceClosed {
     pub initiator: Pubkey,
     pub amount_returned: u64,
 }
+
+// ─── SSS-123: Proof of Reserves events ───────────────────────────────────────
+
+/// Emitted every time a reserve attestation is submitted or refreshed.
+#[event]
+pub struct ReserveAttestationSubmitted {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// The attestor that submitted the attestation (authority, Pyth, or custodian).
+    pub attestor: Pubkey,
+    /// Claimed on-chain reserve amount (in collateral token native units).
+    pub reserve_amount: u64,
+    /// 32-byte hash of the off-chain audit evidence or Pyth price feed id.
+    pub attestation_hash: [u8; 32],
+    /// Solana slot at submission.
+    pub slot: u64,
+    /// Previous reserve amount (for change tracking).
+    pub prev_reserve_amount: u64,
+}
+
+/// Emitted by `verify_reserve_ratio` with the current computed ratio.
+#[event]
+pub struct ReserveRatioEvent {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// Reserve amount used in computation.
+    pub reserve_amount: u64,
+    /// Net circulating supply at time of computation.
+    pub net_supply: u64,
+    /// Computed ratio: reserve_amount * 10_000 / net_supply (bps).
+    pub ratio_bps: u64,
+    /// Slot of the last submitted attestation.
+    pub last_attestation_slot: u64,
+    /// Attestor who last submitted the attestation.
+    pub attestor: Pubkey,
+}
+
+/// Emitted when the reserve ratio drops below `config.min_reserve_ratio_bps`.
+#[event]
+pub struct ReserveBreach {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// Current reserve amount.
+    pub reserve_amount: u64,
+    /// Current net circulating supply.
+    pub net_supply: u64,
+    /// Current ratio in basis points.
+    pub ratio_bps: u64,
+    /// Minimum ratio that triggered the breach check.
+    pub min_ratio_bps: u16,
+    /// Slot of the last attestation.
+    pub slot: u64,
+}

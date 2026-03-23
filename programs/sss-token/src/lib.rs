@@ -501,4 +501,47 @@ pub mod sss_token {
     pub fn force_close(ctx: Context<ForceClose>, channel_id: u64) -> Result<()> {
         instructions::apc::force_close_handler(ctx, channel_id)
     }
+
+    // ─── SSS-123: Proof of Reserves ───────────────────────────────────────────
+
+    /// Submit or refresh a reserve attestation.
+    ///
+    /// Stores `reserve_amount`, 32-byte `attestation_hash`, attestor pubkey,
+    /// and the current slot into the `ProofOfReserves` PDA.
+    /// Callable by: authority, Pyth publisher (expected_pyth_feed), or whitelisted custodian.
+    /// Emits `ReserveAttestationSubmitted`.
+    pub fn submit_reserve_attestation(
+        ctx: Context<SubmitReserveAttestation>,
+        reserve_amount: u64,
+        attestation_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::proof_of_reserves::submit_reserve_attestation_handler(
+            ctx,
+            reserve_amount,
+            attestation_hash,
+        )
+    }
+
+    /// Compute the current reserve ratio and emit `ReserveRatioEvent`.
+    /// If ratio drops below `config.min_reserve_ratio_bps`, also emits `ReserveBreach`.
+    /// Callable by anyone (permissionless) — intended for keepers and monitoring.
+    pub fn verify_reserve_ratio(ctx: Context<VerifyReserveRatio>) -> Result<()> {
+        instructions::proof_of_reserves::verify_reserve_ratio_handler(ctx)
+    }
+
+    /// Read the current reserve status and emit a log summary.
+    /// Returns: reserve_amount, net_supply, ratio_bps, last_attestation_slot, attestor.
+    /// Read-only; callable by anyone.
+    pub fn get_reserve_status(ctx: Context<GetReserveStatus>) -> Result<()> {
+        instructions::proof_of_reserves::get_reserve_status_handler(ctx)
+    }
+
+    /// Update the reserve attestor whitelist. Authority only.
+    /// Replaces the current whitelist with the provided `whitelist` (max 4 entries).
+    pub fn set_reserve_attestor_whitelist(
+        ctx: Context<SetReserveAttestorWhitelist>,
+        whitelist: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::proof_of_reserves::set_reserve_attestor_whitelist_handler(ctx, whitelist)
+    }
 }

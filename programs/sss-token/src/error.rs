@@ -188,4 +188,9 @@ pub enum SssError {
     UseTimelockForAuthorityTransfer,
     #[msg("Caller is not authorized to trigger the backstop (authority only)")]
     UnauthorizedBackstopTrigger,
+    // SSS-123: Proof of Reserves
+    #[msg("Reserve attestation not yet initialized — submit_reserve_attestation first")]
+    ReserveNotInitialized,
+    #[msg("Reserve attestor whitelist is full (max 4 entries)")]
+    ReserveAttestorWhitelistFull,
 }

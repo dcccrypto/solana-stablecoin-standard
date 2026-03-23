@@ -141,11 +141,19 @@ pub struct StablecoinConfig {
     /// SSS-106: Auditor ElGamal pubkey for confidential transfers.
     /// All-zero if FLAG_CONFIDENTIAL_TRANSFERS is not enabled.
     pub auditor_elgamal_pubkey: [u8; 32],
+    /// SSS-119: Minimum reserve ratio (basis points) for ReserveBreach event.
+    /// 0 = no minimum enforced.  e.g. 10_000 = 100% fully backed required.
+    pub min_reserve_ratio_bps: u16,
+    /// SSS-119: Whitelisted custodian pubkeys allowed to submit reserve attestations.
+    /// Up to MAX_RESERVE_ATTESTORS entries; unused slots are Pubkey::default().
+    pub reserve_attestor_whitelist: [Pubkey; StablecoinConfig::MAX_RESERVE_ATTESTORS],
     pub bump: u8,
 }
 
 impl StablecoinConfig {
     pub const SEED: &'static [u8] = b"stablecoin-config";
+    /// Maximum number of whitelisted reserve attestors (custodians / Pyth publishers).
+    pub const MAX_RESERVE_ATTESTORS: usize = 4;
 
     /// Net circulating supply (total_minted - total_burned)
     pub fn net_supply(&self) -> u64 {
@@ -569,4 +577,36 @@ pub struct ConfidentialTransferConfig {
 
 impl ConfidentialTransferConfig {
     pub const SEED: &'static [u8] = b"ct-config";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-123: Proof of Reserves — trustless on-chain PoR attestation
+// ---------------------------------------------------------------------------
+
+/// ProofOfReserves PDA — one per stablecoin mint.
+/// Seeds: [b"proof-of-reserves", sss_mint]
+///
+/// Stores the latest reserve attestation submitted by a whitelisted attestor
+/// (authority, Pyth publisher, or custodian pubkey).
+/// `verify_reserve_ratio` computes reserve_amount / net_supply and emits events.
+#[account]
+#[derive(InitSpace)]
+pub struct ProofOfReserves {
+    /// The SSS stablecoin mint this record belongs to.
+    pub sss_mint: Pubkey,
+    /// Last submitted reserve amount (in collateral token native units).
+    pub reserve_amount: u64,
+    /// 32-byte attestation hash (e.g. SHA-256 of off-chain audit report or Pyth price feed id).
+    pub attestation_hash: [u8; 32],
+    /// Pubkey of the entity that submitted the latest attestation.
+    pub attestor: Pubkey,
+    /// Solana slot at which the latest attestation was submitted.
+    pub last_attestation_slot: u64,
+    /// Last computed reserve ratio in basis points (set by verify_reserve_ratio).
+    pub last_verified_ratio_bps: u64,
+    pub bump: u8,
+}
+
+impl ProofOfReserves {
+    pub const SEED: &'static [u8] = b"proof-of-reserves";
 }
