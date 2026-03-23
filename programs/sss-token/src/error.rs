@@ -196,4 +196,15 @@ pub enum SssError {
     // SSS-124: Reserve Composition
     #[msg("Reserve composition basis points must sum to exactly 10000 (100%)")]
     InvalidCompositionBps,
+    // SSS-125: Redemption Guarantee
+    #[msg("Redemption amount would exceed the daily redemption limit")]
+    RedemptionDailyLimitExceeded,
+    #[msg("Redemption request has already been fulfilled")]
+    RedemptionAlreadyFulfilled,
+    #[msg("Redemption SLA was breached — use claim_expired_redemption")]
+    RedemptionSLABreached,
+    #[msg("Redemption request has not yet expired; SLA is still active")]
+    RedemptionNotExpired,
+    #[msg("Insurance fund is not configured on this stablecoin")]
+    InsuranceFundNotConfigured,
 }

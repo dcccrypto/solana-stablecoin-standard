@@ -561,4 +561,40 @@ pub mod sss_token {
     pub fn get_reserve_composition(ctx: Context<GetReserveComposition>) -> Result<()> {
         instructions::reserve_composition::get_reserve_composition_handler(ctx)
     }
+
+    // ─── SSS-125: Redemption Guarantee ───────────────────────────────────────
+
+    /// Register (or update) a reserve vault as the redemption pool source.
+    /// `max_daily_redemption`: maximum stable tokens redeemable in a 24h window (~216000 slots).
+    /// Authority only.
+    pub fn register_redemption_pool(
+        ctx: Context<RegisterRedemptionPool>,
+        max_daily_redemption: u64,
+    ) -> Result<()> {
+        instructions::redemption_guarantee::register_redemption_pool_handler(
+            ctx,
+            max_daily_redemption,
+        )
+    }
+
+    /// Initiate a redemption request. Transfers `amount` stable tokens to escrow
+    /// and creates a RedemptionRequest PDA with `expiry_slot = now + sla_slots`.
+    /// Callable by any token holder.
+    pub fn request_redemption(ctx: Context<RequestRedemption>, amount: u64) -> Result<()> {
+        instructions::redemption_guarantee::request_redemption_handler(ctx, amount)
+    }
+
+    /// Fulfill a pending redemption: stable tokens move to burn destination,
+    /// reserve tokens released to user at 1:1 par. Emits `RedemptionFulfilled`.
+    /// Must be called before `expiry_slot`.
+    pub fn fulfill_redemption(ctx: Context<FulfillRedemption>) -> Result<()> {
+        instructions::redemption_guarantee::fulfill_redemption_handler(ctx)
+    }
+
+    /// Claim an expired (SLA-breached) redemption: stable tokens returned to user,
+    /// penalty from insurance fund paid to user. Emits `RedemptionSLABreached`.
+    /// Must be called after `expiry_slot` by the requesting user.
+    pub fn claim_expired_redemption(ctx: Context<ClaimExpiredRedemption>) -> Result<()> {
+        instructions::redemption_guarantee::claim_expired_redemption_handler(ctx)
+    }
 }

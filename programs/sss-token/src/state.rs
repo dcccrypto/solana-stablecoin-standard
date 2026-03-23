@@ -653,3 +653,65 @@ impl ReserveComposition {
             == 10_000
     }
 }
+
+// ---------------------------------------------------------------------------
+// SSS-125: Redemption Guarantee — enforceable redemption SLA
+// ---------------------------------------------------------------------------
+
+/// RedemptionGuarantee PDA — one per stablecoin mint.
+/// Seeds: [b"redemption-guarantee", sss_mint]
+///
+/// Stores pool config: which reserve vault backs redemptions, the max daily
+/// limit, and the SLA window in slots.
+#[account]
+#[derive(InitSpace)]
+pub struct RedemptionGuarantee {
+    /// The SSS stablecoin mint this pool belongs to.
+    pub sss_mint: Pubkey,
+    /// The reserve vault pubkey (token account) used to pay out redemptions.
+    pub reserve_vault: Pubkey,
+    /// Maximum total stable tokens redeemable within a single day-window.
+    pub max_daily_redemption: u64,
+    /// Running total redeemed in the current day-window.
+    pub daily_redeemed: u64,
+    /// Slot at which the current day-window started.
+    pub day_start_slot: u64,
+    /// SLA in slots: user must be fulfilled within this many slots of request.
+    /// Default: 450 slots (~3 min). Breach triggers penalty from insurance fund.
+    pub sla_slots: u64,
+    /// Last slot at which pool params were updated.
+    pub last_updated_slot: u64,
+    pub bump: u8,
+}
+
+impl RedemptionGuarantee {
+    pub const SEED: &'static [u8] = b"redemption-guarantee";
+}
+
+/// RedemptionRequest PDA — one per (mint, user) at a time.
+/// Seeds: [b"redemption-request", sss_mint, user]
+///
+/// Created by `request_redemption`; closed when fulfilled or expired.
+#[account]
+#[derive(InitSpace)]
+pub struct RedemptionRequest {
+    /// The SSS stablecoin mint.
+    pub sss_mint: Pubkey,
+    /// The user who initiated the redemption.
+    pub user: Pubkey,
+    /// Amount of stable tokens to redeem (in token native units).
+    pub amount: u64,
+    /// Slot at which the request was made.
+    pub requested_slot: u64,
+    /// Slot by which the request must be fulfilled (requested_slot + sla_slots).
+    pub expiry_slot: u64,
+    /// True once `fulfill_redemption` succeeds.
+    pub fulfilled: bool,
+    /// True once `claim_expired_redemption` fires the SLA breach penalty.
+    pub sla_breached: bool,
+    pub bump: u8,
+}
+
+impl RedemptionRequest {
+    pub const SEED: &'static [u8] = b"redemption-request";
+}
