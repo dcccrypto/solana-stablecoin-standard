@@ -566,5 +566,42 @@ pub mod sss_token {
     /// Cancel an in-flight rotation proposal. Only the current authority may cancel.
     pub fn cancel_authority_rotation(ctx: Context<CancelAuthorityRotation>) -> Result<()> {
         instructions::authority_rotation::cancel_authority_rotation_handler(ctx)
+    // ── SSS-121: Guardian Multisig Emergency Pause ────────────────────────────
+
+    /// Initialise the guardian multisig for a stablecoin.
+    /// Registers 1–7 guardian pubkeys and a vote threshold.
+    /// Authority only; can only be called once.
+    pub fn init_guardian_config(
+        ctx: Context<InitGuardianConfig>,
+        guardians: Vec<Pubkey>,
+        threshold: u8,
+    ) -> Result<()> {
+        instructions::guardian::init_guardian_config_handler(ctx, guardians, threshold)
+    }
+
+    /// Any registered guardian proposes an emergency pause.
+    /// Creates a PauseProposal PDA.  If threshold == 1 the pause is immediate.
+    pub fn guardian_propose_pause(
+        ctx: Context<GuardianProposePause>,
+        reason: [u8; 32],
+    ) -> Result<()> {
+        instructions::guardian::guardian_propose_pause_handler(ctx, reason)
+    }
+
+    /// Cast a YES vote on an open pause proposal.
+    /// When votes >= threshold the mint is paused immediately.
+    pub fn guardian_vote_pause(
+        ctx: Context<GuardianVotePause>,
+        proposal_id: u64,
+    ) -> Result<()> {
+        instructions::guardian::guardian_vote_pause_handler(ctx, proposal_id)
+    }
+
+    /// Lift a guardian-imposed pause.
+    /// Authority can always lift.  Guardians may lift via full-quorum vote.
+    pub fn guardian_lift_pause(
+        ctx: Context<GuardianLiftPause>,
+    ) -> Result<()> {
+        instructions::guardian::guardian_lift_pause_handler(ctx)
     }
 }

@@ -1,4 +1,5 @@
 pub mod authority_rotation;
+pub mod guardian;
 pub mod bad_debt_backstop;
 pub mod oracle_config;
 pub mod pbs;
@@ -34,6 +35,7 @@ pub mod yield_collateral;
 pub mod zk_compliance;
 
 pub use authority_rotation::*;
+pub use guardian::*;
 pub use bad_debt_backstop::*;
 pub use oracle_config::*;
 pub use pbs::*;
