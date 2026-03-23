@@ -168,7 +168,6 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use axum::{
         body::Body,
         http::{Method, Request, StatusCode},
