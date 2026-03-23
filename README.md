@@ -126,6 +126,8 @@ Endpoints:
 | Feature | Description |
 |---------|-------------|
 | [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | On-chain PoR PDA (SSS-123): submit attestations, verify reserve ratio, breach events, Kani proofs |
+| [Reserve Composition](docs/RESERVE-REPORTING.md) | On-chain breakdown of backing asset types per mint (SSS-124): cash, T-bills, repo, other |
+| [Redemption Guarantee at Par](docs/REDEMPTION-GUARANTEE.md) | On-chain 1:1 redemption with SLA enforcement (SSS-125): ~3 min SLA, 10% penalty from insurance fund on breach |
 
 ## Documentation
 
