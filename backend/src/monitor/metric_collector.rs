@@ -154,6 +154,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_metrics_supply_total() {
+        // Reset static before test to avoid contamination from parallel tests.
+        METRIC_SUPPLY_TOTAL.store(0, Ordering::Relaxed);
         let db = Database::new(":memory:").unwrap();
         db.record_mint("mint1", 5000, "addr1", None).unwrap();
         db.record_burn("mint1", 1000, "addr1", None).unwrap();
@@ -164,6 +166,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_metrics_reserve_balance() {
+        // Reset static before test to avoid contamination from parallel tests.
+        METRIC_RESERVE_BALANCE.store(0, Ordering::Relaxed);
         let db = Database::new(":memory:").unwrap();
         db.insert_event_log("BackstopDeposit", "addr1", serde_json::json!({"amount": 3000}), None, Some(1)).unwrap();
         db.insert_event_log("BackstopWithdraw", "addr1", serde_json::json!({"amount": 500}), None, Some(2)).unwrap();
@@ -174,6 +178,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_metrics_active_cdps() {
+        // Reset static before test to avoid contamination from parallel tests.
+        METRIC_ACTIVE_CDPS.store(0, Ordering::Relaxed);
         let db = Database::new(":memory:").unwrap();
         db.insert_event_log("CDPOpened", "CDP_A", serde_json::json!({}), None, Some(1)).unwrap();
         db.insert_event_log("CDPOpened", "CDP_B", serde_json::json!({}), None, Some(2)).unwrap();
@@ -187,6 +193,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_metrics_peg_deviation() {
+        // Reset static before test to avoid contamination from parallel tests.
+        METRIC_PEG_DEVIATION_BPS.store(0, Ordering::Relaxed);
         let db = Database::new(":memory:").unwrap();
         db.insert_event_log("oracle_price_update", "oracle1", serde_json::json!({"peg_deviation_bps": 42}), None, Some(10)).unwrap();
         let state = AppState::new(db);
