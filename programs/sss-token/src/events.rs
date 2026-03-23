@@ -264,3 +264,32 @@ pub struct ChannelForceClosed {
     pub initiator: Pubkey,
     pub amount_returned: u64,
 }
+
+// SSS-121: Guardian Multisig Emergency Pause
+
+/// Emitted when a guardian opens a new pause proposal.
+#[event]
+pub struct GuardianPauseProposed {
+    pub mint: Pubkey,
+    pub proposer: Pubkey,
+    pub proposal_id: u64,
+    pub reason: [u8; 32],
+}
+
+/// Emitted when a guardian votes on an open pause proposal.
+#[event]
+pub struct GuardianPauseVoted {
+    pub mint: Pubkey,
+    pub guardian: Pubkey,
+    pub proposal_id: u64,
+    pub votes_so_far: u8,
+    pub threshold: u8,
+}
+
+/// Emitted when a guardian-imposed pause is lifted.
+#[event]
+pub struct GuardianPauseLifted {
+    pub mint: Pubkey,
+    pub lifted_by: Pubkey,
+    pub by_quorum: bool,
+}

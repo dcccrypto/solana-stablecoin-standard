@@ -1,3 +1,4 @@
+pub mod guardian;
 pub mod bad_debt_backstop;
 pub mod pbs;
 pub mod apc;
@@ -31,6 +32,7 @@ pub mod update_roles;
 pub mod yield_collateral;
 pub mod zk_compliance;
 
+pub use guardian::*;
 pub use bad_debt_backstop::*;
 pub use pbs::*;
 pub use apc::*;

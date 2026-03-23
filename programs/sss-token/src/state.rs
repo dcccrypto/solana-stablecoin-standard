@@ -570,3 +570,68 @@ pub struct ConfidentialTransferConfig {
 impl ConfidentialTransferConfig {
     pub const SEED: &'static [u8] = b"ct-config";
 }
+
+// ---------------------------------------------------------------------------
+// SSS-121: Guardian Multisig Emergency Pause
+// ---------------------------------------------------------------------------
+
+/// GuardianConfig PDA — one per stablecoin config.
+/// Seeds: [b"guardian-config", config_pubkey]
+///
+/// Stores up to 7 guardian pubkeys and a threshold.  Guardians may only
+/// pause or unpause the mint — they cannot mint, burn, or alter fees.
+#[account]
+#[derive(InitSpace)]
+pub struct GuardianConfig {
+    /// The StablecoinConfig this guardian set governs.
+    pub config: Pubkey,
+    /// Registered guardian pubkeys (1–7).
+    #[max_len(7)]
+    pub guardians: Vec<Pubkey>,
+    /// Minimum votes required to execute a pause proposal.
+    pub threshold: u8,
+    /// Auto-incrementing ID assigned to the next PauseProposal.
+    pub next_proposal_id: u64,
+    /// Votes accumulated for lifting the current pause via full-quorum path.
+    /// Reset to empty when the pause is lifted.
+    #[max_len(7)]
+    pub pending_lift_votes: Vec<Pubkey>,
+    pub bump: u8,
+}
+
+impl GuardianConfig {
+    pub const SEED: &'static [u8] = b"guardian-config";
+    pub const MAX_GUARDIANS: usize = 7;
+}
+
+/// PauseProposal PDA — one per proposal.
+/// Seeds: [b"pause-proposal", config_pubkey, proposal_id.to_le_bytes()]
+///
+/// Tracks YES votes on a pending emergency-pause proposal.
+/// Once `votes.len() >= threshold` the proposal is auto-executed and
+/// `executed` is set to `true`.
+#[account]
+#[derive(InitSpace)]
+pub struct PauseProposal {
+    /// The StablecoinConfig this proposal targets.
+    pub config: Pubkey,
+    /// Sequential ID matching the `GuardianConfig.next_proposal_id` at creation.
+    pub proposal_id: u64,
+    /// Guardian who opened the proposal (already counted as 1 vote).
+    pub proposer: Pubkey,
+    /// Freeform reason bytes (e.g. incident hash or ASCII string).
+    pub reason: [u8; 32],
+    /// Guardians who have voted YES (no duplicates).
+    #[max_len(7)]
+    pub votes: Vec<Pubkey>,
+    /// Voting threshold copied from GuardianConfig at proposal creation.
+    pub threshold: u8,
+    /// True when the threshold was reached and the pause was applied.
+    pub executed: bool,
+    pub bump: u8,
+}
+
+impl PauseProposal {
+    pub const SEED: &'static [u8] = b"pause-proposal";
+    pub const MAX_VOTES: usize = 7;
+}

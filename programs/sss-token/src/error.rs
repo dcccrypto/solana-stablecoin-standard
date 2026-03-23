@@ -188,4 +188,15 @@ pub enum SssError {
     UseTimelockForAuthorityTransfer,
     #[msg("Caller is not authorized to trigger the backstop (authority only)")]
     UnauthorizedBackstopTrigger,
+    // SSS-121: Guardian Multisig Emergency Pause
+    #[msg("Caller is not a registered guardian")]
+    NotAGuardian,
+    #[msg("Guardian list cannot be empty")]
+    GuardianListEmpty,
+    #[msg("Guardian list is full (max 7)")]
+    GuardianListFull,
+    #[msg("Guardian threshold must be ≥1 and ≤ guardians.len()")]
+    InvalidGuardianThreshold,
+    #[msg("Duplicate guardian pubkey in list")]
+    DuplicateGuardian,
 }
