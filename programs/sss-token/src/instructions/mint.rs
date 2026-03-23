@@ -40,6 +40,11 @@ pub struct MintTokens<'info> {
 }
 
 pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
+    // SSS-122: version guard — reject pre-migration configs
+    require!(
+        ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
+        SssError::ConfigVersionTooOld
+    );
     require!(amount > 0, SssError::ZeroAmount);
     require!(!ctx.accounts.config.paused, SssError::MintPaused);
     // SSS-110: Circuit breaker — halt all minting when FLAG_CIRCUIT_BREAKER is set.

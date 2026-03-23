@@ -188,6 +188,10 @@ pub enum SssError {
     UseTimelockForAuthorityTransfer,
     #[msg("Caller is not authorized to trigger the backstop (authority only)")]
     UnauthorizedBackstopTrigger,
+    // SSS-122: Program upgrade path
+    #[msg("Config state version is below the minimum supported version; call migrate_config first")]
+    ConfigVersionTooOld,
+
     // SSS-121: Guardian Multisig Emergency Pause
     #[msg("Caller is not a registered guardian")]
     NotAGuardian,

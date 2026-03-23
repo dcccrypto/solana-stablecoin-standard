@@ -141,6 +141,10 @@ pub struct StablecoinConfig {
     /// SSS-106: Auditor ElGamal pubkey for confidential transfers.
     /// All-zero if FLAG_CONFIDENTIAL_TRANSFERS is not enabled.
     pub auditor_elgamal_pubkey: [u8; 32],
+    /// SSS-122: Program state layout version. 0 = pre-SSS-122 (uninitialized);
+    /// 1 = current. Handlers reject configs with version < MIN_SUPPORTED_VERSION
+    /// except migrate_config which upgrades v0→current.
+    pub version: u8,
     pub bump: u8,
 }
 

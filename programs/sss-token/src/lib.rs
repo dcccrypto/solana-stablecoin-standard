@@ -540,4 +540,16 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::guardian::guardian_lift_pause_handler(ctx)
     }
+
+    // -----------------------------------------------------------------------
+    // SSS-122: Program upgrade path — versioned state migration
+    // -----------------------------------------------------------------------
+
+    /// Migrate a StablecoinConfig from version 0 (pre-SSS-122) to the current
+    /// version.  Token-2022 mint accounts, CDPs, vaults, and ATAs are untouched.
+    /// Idempotent: calling on an already-current config is a no-op.
+    /// Only the config authority may trigger migration.
+    pub fn migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
+        instructions::upgrade::migrate_config_handler(ctx)
+    }
 }
