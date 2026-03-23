@@ -151,6 +151,8 @@ Endpoints:
 | [Formal Verification](docs/formal-verification.md) | Kani mathematical proofs — 7/7 invariants verified for all possible inputs |
 | [On-Chain SDK: PBS + APC](docs/on-chain-sdk-pbs-apc.md) | `ProbabilisticModule` (PBS vaults, commitProbabilistic, proveAndResolve) + `AgentPaymentChannelModule` (APC open/settle/dispute) |
 | [Proof Demo: Agent-to-Agent Task Payment](docs/PROOF-DEMO.md) | End-to-end runnable demo — two autonomous agents completing a verifiable task payment using APC + PBS on devnet (SSS-112) |
+| [Event Schema v1](docs/EVENT-SCHEMA.md) | Canonical on-chain event schema — 13 event types, discriminators, envelope format, HMAC signing (SSS-142) |
+| [Indexer Integration Guide](docs/INDEXER-GUIDE.md) | Helius, Shyft, Triton, and custom indexer setup — webhook registration, signature verification, TypeScript examples (SSS-142) |
 
 ## Judging Criteria
 
