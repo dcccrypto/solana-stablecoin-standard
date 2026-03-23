@@ -21,6 +21,7 @@ test-ledger/
 !devnet-program-ids.json
 !idl/*.json
 !sdk/src/idl/*.json
+!monitoring/*.json
 
 # Secrets
 *.pem
