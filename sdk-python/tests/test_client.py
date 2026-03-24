@@ -254,9 +254,17 @@ def test_feature_flags_combination():
     assert combined & FeatureFlags.ZK_COMPLIANCE
     assert combined & FeatureFlags.BRIDGE_ENABLED
     assert not (combined & FeatureFlags.DAO_COMMITTEE)
-    assert int(FeatureFlags.BRIDGE_ENABLED) == 1 << 13
-    assert int(FeatureFlags.POR_HALT_ON_BREACH) == 1 << 14
+    assert int(FeatureFlags.BRIDGE_ENABLED) == 1 << 17
+    assert int(FeatureFlags.POR_HALT_ON_BREACH) == 1 << 16
     assert int(FeatureFlags.CONFIDENTIAL_TRANSFERS) == 1 << 5
+    # New constants (bits 9–15)
+    assert int(FeatureFlags.SANCTIONS_ORACLE) == 1 << 9
+    assert int(FeatureFlags.ZK_CREDENTIALS) == 1 << 10
+    assert int(FeatureFlags.PID_FEE_CONTROL) == 1 << 11
+    assert int(FeatureFlags.GRAD_LIQUIDATION_BONUS) == 1 << 12
+    assert int(FeatureFlags.PSM_DYNAMIC_FEES) == 1 << 13
+    assert int(FeatureFlags.WALLET_RATE_LIMITS) == 1 << 14
+    assert int(FeatureFlags.SQUADS_AUTHORITY) == 1 << 15
 
 
 # -- 19. PDA find_stablecoin_config ----------------------------------------------
