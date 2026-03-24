@@ -133,6 +133,8 @@ Endpoints:
 | [ZK Credentials](docs/ZK-CREDENTIALS.md) | Selective-disclosure ZK compliance proofs (SSS-129): CredentialRegistry + CredentialRecord PDAs, Groth16 proofs, not_sanctioned / kyc_passed / accredited_investor types, backend REST API |
 | [Stability Fee PID](docs/STABILITY-FEE-PID.md) | Automatic peg-stabilisation via PID controller (SSS-130): PidConfig PDA, permissionless keeper updates, anti-windup integral clamp, PidConfigInitialised + PidFeeUpdated events |
 | [Graduated Liquidation Bonus](docs/GRADUATED-LIQUIDATION-BONUS.md) | Dynamic three-tier liquidation incentives (SSS-131): LiquidationBonusConfig PDA, FLAG_GRAD_LIQUIDATION_BONUS, tier-based bonus schedule, GraduatedLiquidationBonusApplied event, Kani proof |
+| [PSM Dynamic AMM Slippage](docs/PSM-AMM-SLIPPAGE.md) | Depth-based AMM fee curve for PSM redemptions (SSS-132): PsmCurveConfig PDA, quadratic imbalance formula, FLAG_PSM_DYNAMIC_FEES, psm_dynamic_swap + get_psm_quote instructions, k calibration guide |
+| [Per-Wallet Rate Limiting](docs/WALLET-RATE-LIMIT.md) | Rolling-window transfer caps per address (SSS-133): WalletRateLimit PDA, FLAG_WALLET_RATE_LIMITS, transfer hook enforcement, auto window reset, WalletRateLimitEnforced event |
 
 ## Documentation
 
