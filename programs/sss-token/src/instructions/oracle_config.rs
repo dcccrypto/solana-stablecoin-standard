@@ -43,6 +43,14 @@ pub fn set_oracle_config_handler(
     oracle_type: u8,
     oracle_feed: Pubkey,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     require!(
         oracle_type == ORACLE_PYTH
             || oracle_type == ORACLE_SWITCHBOARD
@@ -99,6 +107,14 @@ pub struct InitCustomPriceFeed<'info> {
 /// Initialise the CustomPriceFeed PDA for a stablecoin mint.
 /// Sets `authority` to the caller and price fields to 0 (must be updated before use).
 pub fn init_custom_price_feed_handler(ctx: Context<InitCustomPriceFeed>) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let feed = &mut ctx.accounts.custom_price_feed;
     feed.authority = ctx.accounts.authority.key();
     feed.price = 0;
@@ -157,6 +173,14 @@ pub fn update_custom_price_handler(
     expo: i32,
     conf: u64,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     require!(price > 0, SssError::InvalidPrice);
     let clock = Clock::get()?;
     let feed = &mut ctx.accounts.custom_price_feed;

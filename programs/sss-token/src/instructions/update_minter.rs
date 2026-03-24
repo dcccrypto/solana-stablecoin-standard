@@ -37,6 +37,14 @@ pub struct UpdateMinter<'info> {
 }
 
 pub fn handler(ctx: Context<UpdateMinter>, cap: u64) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     // When FLAG_DAO_COMMITTEE is set, minter updates must go through a passed proposal.
     require!(
         ctx.accounts.config.feature_flags & FLAG_DAO_COMMITTEE == 0,

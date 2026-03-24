@@ -242,6 +242,14 @@ pub fn set_reserve_attestor_whitelist_handler(
     ctx: Context<SetReserveAttestorWhitelist>,
     whitelist: Vec<Pubkey>,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     require!(
         whitelist.len() <= StablecoinConfig::MAX_RESERVE_ATTESTORS,
         SssError::ReserveAttestorWhitelistFull

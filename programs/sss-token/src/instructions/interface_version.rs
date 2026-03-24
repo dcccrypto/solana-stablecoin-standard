@@ -44,6 +44,14 @@ pub struct InitInterfaceVersion<'info> {
 }
 
 pub fn init_interface_version_handler(ctx: Context<InitInterfaceVersion>) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let iv = &mut ctx.accounts.interface_version;
     iv.mint = ctx.accounts.mint.key();
     iv.version = InterfaceVersion::CURRENT_VERSION;
@@ -91,6 +99,14 @@ pub fn update_interface_version_handler(
     new_version: Option<u8>,
     active: Option<bool>,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let iv = &mut ctx.accounts.interface_version;
     if let Some(v) = new_version {
         iv.version = v;

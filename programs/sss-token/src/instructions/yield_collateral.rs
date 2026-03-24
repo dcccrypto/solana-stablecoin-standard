@@ -50,6 +50,14 @@ pub fn init_yield_collateral_handler(
     ctx: Context<InitYieldCollateral>,
     initial_mints: Vec<Pubkey>,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     require!(
         initial_mints.len() <= YieldCollateralConfig::MAX_MINTS,
         SssError::WhitelistFull
@@ -107,6 +115,14 @@ pub fn add_yield_collateral_mint_handler(
     ctx: Context<AddYieldCollateralMint>,
     collateral_mint: Pubkey,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let yc_config = &mut ctx.accounts.yield_collateral_config;
 
     require!(

@@ -54,6 +54,14 @@ pub fn update_reserve_composition_handler(
     ctx: Context<UpdateReserveComposition>,
     params: ReserveCompositionParams,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     // Validate sum == 10_000
     let sum = (params.cash_bps as u32)
         .saturating_add(params.t_bills_bps as u32)

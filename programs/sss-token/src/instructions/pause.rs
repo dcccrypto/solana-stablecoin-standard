@@ -23,6 +23,14 @@ pub struct Pause<'info> {
 }
 
 pub fn handler(ctx: Context<Pause>, paused: bool) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     require!(
         ctx.accounts.config.feature_flags & FLAG_DAO_COMMITTEE == 0,
         SssError::DaoCommitteeRequired

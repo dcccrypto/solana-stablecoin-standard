@@ -61,6 +61,14 @@ pub fn init_guardian_config_handler(
     guardians: Vec<Pubkey>,
     threshold: u8,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     require!(!guardians.is_empty(), SssError::GuardianListEmpty);
     require!(
         guardians.len() <= GuardianConfig::MAX_GUARDIANS,

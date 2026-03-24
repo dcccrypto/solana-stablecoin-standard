@@ -109,6 +109,14 @@ pub fn init_liquidation_bonus_config_handler(
     ctx: Context<InitLiquidationBonusConfig>,
     params: InitLiquidationBonusConfigParams,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     validate_tiers(
         params.tier1_threshold_bps,
         params.tier2_threshold_bps,
@@ -198,6 +206,14 @@ pub fn update_liquidation_bonus_config_handler(
     ctx: Context<UpdateLiquidationBonusConfig>,
     params: UpdateLiquidationBonusConfigParams,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     validate_tiers(
         params.tier1_threshold_bps,
         params.tier2_threshold_bps,
