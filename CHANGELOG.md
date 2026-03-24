@@ -7,7 +7,7 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 ## [Unreleased]
 
 ### Added
-- `docs/CROSS-CHAIN-BRIDGE.md` README entry — cross-chain bridge hooks (SSS-135): Wormhole + LayerZero, BridgeConfig PDA, bridge_out/bridge_in instructions, FLAG_BRIDGE_ENABLED (bit 17), chain ID table, security model, deployment guide
+- `docs/PYTHON-SDK.md` — Python SDK (`SSSClient`, `FeatureFlags`, PDA helpers, `sss-cli`, pandas analytics) (SSS-144) [PR #223]
 - `docs/compliance-module.md` — full SDK reference for `ComplianceModule` (SSS-017) [PR #73]
 - `docs/ARCHITECTURE.md` — three-layer architecture reference
 - `docs/SSS-1.md` — minimal preset specification

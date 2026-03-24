@@ -135,6 +135,7 @@ Endpoints:
 | [API Reference](docs/api.md) | Full REST API reference for all backend endpoints |
 | [Authentication](docs/authentication.md) | API key creation and management |
 | [SDK & CLI](docs/sdk-cli.md) | TypeScript SDK and `sss-token` CLI usage |
+| [Python SDK](docs/PYTHON-SDK.md) | `SSSClient` async Python library + `sss-cli` — supply, reserves, CDPs, events, pandas analytics (SSS-144) |
 | [Rate Limiting](docs/rate-limiting.md) | Token-bucket rate limiter configuration and `Retry-After` behaviour |
 | [Webhooks](docs/api.md#webhooks) | Event-driven webhook delivery for mint/burn events |
 | [Compliance & Audit Log](docs/compliance-audit-log.md) | Blacklist management and audit log query API (SSS-014) |
