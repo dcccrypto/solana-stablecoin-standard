@@ -54,6 +54,13 @@ pub const FLAG_TRAVEL_RULE: u64 = 1 << 8;
 /// call `update_sanctions_record` as the registered oracle signer.
 pub const FLAG_SANCTIONS_ORACLE: u64 = 1 << 9;
 
+/// SSS-129: ZK credentials flag (bit 10): when set, the transfer hook requires
+/// a valid `CredentialRecord` PDA for the sender — issued by the
+/// `CredentialRegistry` and verified against the on-chain Groth16 Merkle root.
+/// Enables `init_credential_registry`, `verify_zk_credential`, and
+/// `revoke_credential` instructions.
+pub const FLAG_ZK_CREDENTIALS: u64 = 1 << 10;
+
 
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
@@ -802,4 +809,71 @@ pub struct SanctionsRecord {
 
 impl SanctionsRecord {
     pub const SEED: &'static [u8] = b"sanctions-record";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-129: ZK credential registry — Groth16-based selective disclosure
+// ---------------------------------------------------------------------------
+
+/// CredentialRegistry PDA — one per stablecoin mint when FLAG_ZK_CREDENTIALS is set.
+/// Seeds: [b"credential-registry", sss_mint]
+///
+/// Stores the Groth16 Merkle root of the credential set and the issuer authority.
+/// The authority can rotate the `merkle_root` as the credential set evolves.
+/// The transfer hook reads this PDA to verify `CredentialRecord` proofs.
+#[account]
+#[derive(InitSpace)]
+pub struct CredentialRegistry {
+    /// The SSS stablecoin mint this registry belongs to.
+    pub sss_mint: Pubkey,
+    /// Authority allowed to rotate the Merkle root and revoke credentials.
+    pub issuer: Pubkey,
+    /// Groth16 Merkle root of the current credential set (32 bytes).
+    pub merkle_root: [u8; 32],
+    /// Maximum slots a CredentialRecord remains valid after issuance (0 = never expires).
+    pub credential_ttl_slots: u64,
+    /// Slot at which the registry was last updated.
+    pub updated_slot: u64,
+    pub bump: u8,
+}
+
+impl CredentialRegistry {
+    pub const SEED: &'static [u8] = b"credential-registry";
+}
+
+/// CredentialRecord PDA — one per (mint, holder) pair.
+/// Seeds: [b"credential-record", sss_mint, holder_pubkey]
+///
+/// Created by `verify_zk_credential` after on-chain Groth16 proof validation.
+/// The transfer hook checks this PDA when FLAG_ZK_CREDENTIALS is set — if absent
+/// or expired, the transfer is rejected with CredentialRequired.
+#[account]
+#[derive(InitSpace)]
+pub struct CredentialRecord {
+    /// The SSS stablecoin mint this record is scoped to.
+    pub sss_mint: Pubkey,
+    /// Wallet that holds this credential.
+    pub holder: Pubkey,
+    /// Slot at which the credential was issued (via verify_zk_credential).
+    pub issued_slot: u64,
+    /// Slot after which the credential is no longer valid (0 = never expires).
+    pub expires_slot: u64,
+    /// Whether this credential has been explicitly revoked by the issuer.
+    pub revoked: bool,
+    pub bump: u8,
+}
+
+impl CredentialRecord {
+    pub const SEED: &'static [u8] = b"credential-record";
+
+    /// Returns true if the record is currently valid at the given slot.
+    pub fn is_valid(&self, current_slot: u64) -> bool {
+        if self.revoked {
+            return false;
+        }
+        if self.expires_slot > 0 && current_slot > self.expires_slot {
+            return false;
+        }
+        true
+    }
 }

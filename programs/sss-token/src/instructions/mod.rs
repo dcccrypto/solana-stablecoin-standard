@@ -35,6 +35,7 @@ pub mod update_minter;
 pub mod update_roles;
 pub mod yield_collateral;
 pub mod zk_compliance;
+pub mod zk_credential;
 
 pub use bad_debt_backstop::*;
 pub use pbs::*;
@@ -73,6 +74,7 @@ pub use update_minter::*;
 pub use update_roles::*;
 pub use yield_collateral::*;
 pub use zk_compliance::*;
+pub use zk_credential::*;
 
 // Re-export param types from state
 pub use crate::state::{InitializeParams, UpdateRolesParams};

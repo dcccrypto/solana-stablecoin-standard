@@ -437,3 +437,41 @@ pub struct SanctionsRecordUpdated {
     /// Slot at which the record was updated.
     pub slot: u64,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-129: ZK credential registry events
+// ---------------------------------------------------------------------------
+
+/// Emitted when a CredentialRegistry is initialised for a mint.
+#[event]
+pub struct CredentialRegistryInitialised {
+    pub mint: Pubkey,
+    pub issuer: Pubkey,
+    pub merkle_root: [u8; 32],
+    pub credential_ttl_slots: u64,
+}
+
+/// Emitted when the registry Merkle root is rotated.
+#[event]
+pub struct CredentialRegistryRootRotated {
+    pub mint: Pubkey,
+    pub new_merkle_root: [u8; 32],
+    pub slot: u64,
+}
+
+/// Emitted when a ZK credential proof is verified and a CredentialRecord is issued.
+#[event]
+pub struct CredentialIssued {
+    pub mint: Pubkey,
+    pub holder: Pubkey,
+    pub issued_slot: u64,
+    pub expires_slot: u64,
+}
+
+/// Emitted when a credential is revoked by the issuer.
+#[event]
+pub struct CredentialRevoked {
+    pub mint: Pubkey,
+    pub holder: Pubkey,
+    pub slot: u64,
+}
