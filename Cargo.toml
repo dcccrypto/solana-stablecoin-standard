@@ -4,6 +4,7 @@ members = [
     "programs/transfer-hook",
     "programs/cpi-caller",
     "backend",
+    "crates/sss-cpi",
 ]
 resolver = "2"
 
