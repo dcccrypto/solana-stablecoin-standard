@@ -678,6 +678,29 @@ pub mod sss_token {
     }
 
     // -----------------------------------------------------------------------
+    // SSS-130: Stability fee PID auto-adjustment
+    // -----------------------------------------------------------------------
+
+    /// Initialise a `PidConfig` PDA and enable FLAG_PID_FEE_CONTROL.
+    /// Authority-only.  Sets the PID gains, target price, and fee range.
+    pub fn init_pid_config(
+        ctx: Context<InitPidConfig>,
+        params: InitPidConfigParams,
+    ) -> Result<()> {
+        instructions::pid_fee::init_pid_config_handler(ctx, params)
+    }
+
+    /// Update `stability_fee_bps` via the PID controller.
+    /// Permissionless — any keeper may call this.
+    /// `current_price`: oracle price in the same units as `PidConfig.target_price`.
+    pub fn update_stability_fee_pid(
+        ctx: Context<UpdateStabilityFeePid>,
+        current_price: u64,
+    ) -> Result<()> {
+        instructions::pid_fee::update_stability_fee_pid_handler(ctx, current_price)
+    }
+
+    // -----------------------------------------------------------------------
     // SSS-129: ZK credential registry — Groth16-based selective disclosure
     // -----------------------------------------------------------------------
 
