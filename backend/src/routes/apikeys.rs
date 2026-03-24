@@ -16,14 +16,25 @@ pub async fn create_api_key(
         .and_then(|v| v.as_str())
         .unwrap_or("unnamed")
         .to_string();
+    // E-2: caller must specify role; default to "read" if omitted
+    let role = body
+        .get("role")
+        .and_then(|v| v.as_str())
+        .unwrap_or("read")
+        .to_string();
 
-    match state.db.create_api_key(&label) {
+    match state.db.create_api_key(&label, &role) {
         Ok(entry) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "id": entry.id,
             "key": entry.key,
             "label": entry.label,
+            "role": entry.role,
             "created_at": entry.created_at
         })))),
+        Err(crate::error::AppError::BadRequest(msg)) => {
+            tracing::warn!("create_api_key bad request: {}", msg);
+            Err(StatusCode::BAD_REQUEST)
+        }
         Err(e) => {
             tracing::error!("Failed to create API key: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
@@ -42,6 +53,7 @@ pub async fn list_api_keys(
                     serde_json::json!({
                         "id": k.id,
                         "label": k.label,
+                        "role": k.role,
                         "key_prefix": &k.key[..8],
                         "created_at": k.created_at
                     })
