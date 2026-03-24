@@ -204,4 +204,15 @@ pub enum SssError {
     RotationZeroPubkey,
     #[msg("Emergency recovery window has not elapsed (7 days required)")]
     EmergencyRecoveryNotReady,
+    // SSS-121: Guardian Multisig Emergency Pause
+    #[msg("Caller is not a registered guardian")]
+    NotAGuardian,
+    #[msg("Guardian list cannot be empty")]
+    GuardianListEmpty,
+    #[msg("Guardian list is full (max 7)")]
+    GuardianListFull,
+    #[msg("Guardian threshold must be ≥1 and ≤ guardians.len()")]
+    InvalidGuardianThreshold,
+    #[msg("Duplicate guardian pubkey in list")]
+    DuplicateGuardian,
 }

@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, LiquidationHistoryEntry, MintEvent, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, LiquidationHistoryEntry, MintEvent, ParsedEventLogEntry, WebhookEntry};
 use crate::routes::analytics::{CdpHealthResponse, HealthBucket};
 
 pub struct Database {
@@ -581,6 +581,71 @@ impl Database {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(entries)
+    }
+
+    // ── SSS-139: Monitor query_event_log with parsed data ─────────────────────
+
+    /// Query event_log and return entries with `data` parsed as serde_json::Value.
+    /// Used by InvariantChecker and MetricCollector.
+    pub fn query_event_log(
+        &self,
+        event_type: Option<&str>,
+        address: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<ParsedEventLogEntry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = "SELECT id, event_type, address, data, tx_signature, slot, created_at \
+                       FROM event_log WHERE 1=1".to_string();
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(t) = event_type {
+            param_values.push(Box::new(t.to_string()));
+            sql.push_str(&format!(" AND event_type = ?{}", param_values.len()));
+        }
+        if let Some(a) = address {
+            param_values.push(Box::new(a.to_string()));
+            sql.push_str(&format!(" AND address = ?{}", param_values.len()));
+        }
+        param_values.push(Box::new(limit as i64));
+        param_values.push(Box::new(offset as i64));
+        sql.push_str(&format!(
+            " ORDER BY created_at DESC LIMIT ?{} OFFSET ?{}",
+            param_values.len() - 1,
+            param_values.len()
+        ));
+
+        let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let entries = stmt
+            .query_map(refs.as_slice(), |row| {
+                let id: String = row.get(0)?;
+                let event_type: String = row.get(1)?;
+                let address: String = row.get(2)?;
+                let data_str: String = row.get(3)?;
+                let tx_signature: Option<String> = row.get(4)?;
+                let slot: Option<i64> = row.get(5)?;
+                let created_at: String = row.get(6)?;
+                Ok((id, event_type, address, data_str, tx_signature, slot, created_at))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let parsed = entries
+            .into_iter()
+            .map(|(id, event_type, address, data_str, tx_signature, slot, created_at)| {
+                let data = serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null);
+                ParsedEventLogEntry {
+                    id,
+                    event_type,
+                    address,
+                    data,
+                    tx_signature,
+                    slot,
+                    created_at,
+                }
+            })
+            .collect();
+        Ok(parsed)
     }
 
     // ── Indexer state ──────────────────────────────────────────────────────────

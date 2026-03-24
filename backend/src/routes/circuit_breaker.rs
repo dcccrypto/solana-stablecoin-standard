@@ -552,6 +552,6 @@ mod tests {
             &program_id,
         );
         assert_ne!(pda.to_bytes(), [0u8; 32]);
-        assert!(bump <= 255);
+        let _ = bump; // bump is u8, always valid 0–255 by construction
     }
 }
