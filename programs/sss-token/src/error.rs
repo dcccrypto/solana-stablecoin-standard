@@ -188,4 +188,20 @@ pub enum SssError {
     UseTimelockForAuthorityTransfer,
     #[msg("Caller is not authorized to trigger the backstop (authority only)")]
     UnauthorizedBackstopTrigger,
+    // SSS-119: Oracle abstraction layer
+    #[msg("Oracle adapter not configured — Switchboard V2 crate not yet integrated")]
+    OracleNotConfigured,
+    #[msg("oracle_type must be 0 (Pyth), 1 (Switchboard), or 2 (Custom)")]
+    InvalidOracleType,
+    // SSS-120: Authority rotation
+    #[msg("Rotation new_authority must differ from current authority")]
+    RotationNewAuthorityIsCurrent,
+    #[msg("Rotation backup_authority must differ from current authority")]
+    RotationBackupIsCurrent,
+    #[msg("Rotation backup_authority must differ from new_authority")]
+    RotationBackupEqualsNew,
+    #[msg("Rotation pubkeys must be non-zero")]
+    RotationZeroPubkey,
+    #[msg("Emergency recovery window has not elapsed (7 days required)")]
+    EmergencyRecoveryNotReady,
 }

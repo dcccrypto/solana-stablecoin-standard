@@ -3,15 +3,11 @@ use anchor_spl::token_interface::{
     burn_checked as spl_burn_checked, transfer_checked, BurnChecked, Mint, TokenAccount,
     TokenInterface, TransferChecked,
 };
-use pyth_sdk_solana::state::SolanaPriceAccount;
 
 use crate::error::SssError;
 use crate::events::{CdpLiquidated, CollateralLiquidated};
+use crate::oracle;
 use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
-
-/// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
-/// Overridden by `StablecoinConfig.max_oracle_age_secs` when non-zero.
-const DEFAULT_MAX_PRICE_AGE_SECS: u64 = 60;
 
 /// Global fallback liquidation bonus (5%) when no CollateralConfig is provided.
 const DEFAULT_LIQUIDATION_BONUS_BPS: u16 = 500;
@@ -149,55 +145,21 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         SssError::CircuitBreakerActive
     );
 
-    // SSS-085 Fix 1: Validate Pyth feed Pubkey — reject spoofed price feeds.
-    let expected_feed = ctx.accounts.config.expected_pyth_feed;
-    if expected_feed != Pubkey::default() {
-        require!(
-            ctx.accounts.pyth_price_feed.key() == expected_feed,
-            SssError::UnexpectedPriceFeed
-        );
-    }
-
-    // 1. Fetch Pyth price
+    // SSS-119: Oracle abstraction — dispatch to the configured adapter.
     let clock = Clock::get()?;
-    let price_feed = SolanaPriceAccount::account_info_to_feed(
+    let oracle_price = oracle::get_oracle_price(
         &ctx.accounts.pyth_price_feed,
-    )
-    .map_err(|_| error!(SssError::InvalidPriceFeed))?;
-
-    // SSS-090: Use configurable max age (falls back to DEFAULT_MAX_PRICE_AGE_SECS when 0)
-    let max_age_secs = if ctx.accounts.config.max_oracle_age_secs > 0 {
-        ctx.accounts.config.max_oracle_age_secs as u64
-    } else {
-        DEFAULT_MAX_PRICE_AGE_SECS
-    };
-
-    let price = price_feed
-        .get_price_no_older_than(clock.unix_timestamp, max_age_secs)
-        .ok_or(error!(SssError::StalePriceFeed))?;
-
-    require!(price.price > 0, SssError::InvalidPrice);
-
-    // SSS-090: Confidence interval check — reject liquidations with uncertain prices.
-    let conf_bps_limit = ctx.accounts.config.max_oracle_conf_bps;
-    if conf_bps_limit > 0 {
-        let conf_ratio_bps = price
-            .conf
-            .saturating_mul(10_000)
-            / price.price as u64;
-        require!(
-            conf_ratio_bps <= conf_bps_limit as u64,
-            SssError::OracleConfidenceTooWide
-        );
-    }
+        &ctx.accounts.config,
+        &clock,
+    )?;
 
     // 2. Compute collateral value (USD, 6dp scaled)
     let deposited = ctx.accounts.collateral_vault.deposited_amount;
     require!(deposited > 0, SssError::InsufficientCollateral);
 
     let collateral_decimals = ctx.accounts.collateral_mint.decimals as u32;
-    let price_val = price.price as u128;
-    let price_expo_abs = price.expo.unsigned_abs();
+    let price_val = oracle_price.price as u128;
+    let price_expo_abs = oracle_price.expo.unsigned_abs();
 
     let collateral_value_usd_e6: u128 = (deposited as u128)
         .checked_mul(price_val)

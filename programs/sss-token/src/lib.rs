@@ -4,6 +4,7 @@ pub mod error;
 pub mod events;
 pub mod fuzz_tests;
 pub mod instructions;
+pub mod oracle;
 pub mod proofs;
 pub mod state;
 
@@ -325,6 +326,39 @@ pub mod sss_token {
         instructions::admin_timelock::set_oracle_params_handler(ctx, max_age_secs, max_conf_bps)
     }
 
+    // ─── SSS-119: Oracle Abstraction Layer ───────────────────────────────────
+
+    /// SSS-119: Set the oracle type and feed address for CDP operations.
+    /// `oracle_type`: 0=Pyth (default), 1=Switchboard, 2=Custom.
+    /// `oracle_feed`: the feed account pubkey (Pubkey::default() = rely on expected_pyth_feed).
+    /// Authority-only.
+    pub fn set_oracle_config(
+        ctx: Context<SetOracleConfig>,
+        oracle_type: u8,
+        oracle_feed: Pubkey,
+    ) -> Result<()> {
+        instructions::oracle_config::set_oracle_config_handler(ctx, oracle_type, oracle_feed)
+    }
+
+    /// SSS-119: Initialise the CustomPriceFeed PDA for a stablecoin mint.
+    /// Must be called before using oracle_type=2 (Custom) in CDP operations.
+    /// Authority-only.
+    pub fn init_custom_price_feed(ctx: Context<InitCustomPriceFeed>) -> Result<()> {
+        instructions::oracle_config::init_custom_price_feed_handler(ctx)
+    }
+
+    /// SSS-119: Publish a new price to the CustomPriceFeed PDA.
+    /// `price`: raw price > 0.  `expo`: e.g. -8.  `conf`: confidence interval.
+    /// Authority-only — this transaction's authority signature is the admin verification.
+    pub fn update_custom_price(
+        ctx: Context<UpdateCustomPrice>,
+        price: i64,
+        expo: i32,
+        conf: u64,
+    ) -> Result<()> {
+        instructions::oracle_config::update_custom_price_handler(ctx, price, expo, conf)
+    }
+
     /// SSS-092: Set the annual stability fee (in basis points) for CDP borrows.
     /// Max 2000 bps (20% p.a.).  0 = no fee (default).
     /// Authority-only; takes effect on next `collect_stability_fee` call.
@@ -500,5 +534,37 @@ pub mod sss_token {
 
     pub fn force_close(ctx: Context<ForceClose>, channel_id: u64) -> Result<()> {
         instructions::apc::force_close_handler(ctx, channel_id)
+    }
+
+    // ─── SSS-120: Admin key rotation + recovery path ───────────────────────────
+
+    /// Propose an authority rotation with a 48-hour timelock and a backup recovery key.
+    /// Only the current authority may call this.
+    pub fn propose_authority_rotation(
+        ctx: Context<ProposeAuthorityRotation>,
+        new_authority: Pubkey,
+        backup_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::authority_rotation::propose_authority_rotation_handler(
+            ctx,
+            new_authority,
+            backup_authority,
+        )
+    }
+
+    /// Accept the pending rotation after the 48-hour timelock.
+    /// Must be signed by the rotation_request.new_authority.
+    pub fn accept_authority_rotation(ctx: Context<AcceptAuthorityRotation>) -> Result<()> {
+        instructions::authority_rotation::accept_authority_rotation_handler(ctx)
+    }
+
+    /// Emergency recovery: backup_authority claims authority after 7 days of non-acceptance.
+    pub fn emergency_recover_authority(ctx: Context<EmergencyRecoverAuthority>) -> Result<()> {
+        instructions::authority_rotation::emergency_recover_authority_handler(ctx)
+    }
+
+    /// Cancel an in-flight rotation proposal. Only the current authority may cancel.
+    pub fn cancel_authority_rotation(ctx: Context<CancelAuthorityRotation>) -> Result<()> {
+        instructions::authority_rotation::cancel_authority_rotation_handler(ctx)
     }
 }

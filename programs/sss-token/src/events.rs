@@ -264,3 +264,40 @@ pub struct ChannelForceClosed {
     pub initiator: Pubkey,
     pub amount_returned: u64,
 }
+
+// ─── SSS-120: Authority Rotation events ──────────────────────────────────────
+
+/// Emitted when an authority rotation is proposed.
+#[event]
+pub struct AuthorityRotationProposed {
+    pub mint: Pubkey,
+    pub current_authority: Pubkey,
+    pub new_authority: Pubkey,
+    pub backup_authority: Pubkey,
+    pub proposed_slot: u64,
+    pub timelock_slots: u64,
+}
+
+/// Emitted when the new_authority accepts the rotation after the timelock.
+#[event]
+pub struct AuthorityRotationCompleted {
+    pub mint: Pubkey,
+    pub prev_authority: Pubkey,
+    pub new_authority: Pubkey,
+}
+
+/// Emitted when the backup_authority claims authority via emergency recovery.
+#[event]
+pub struct AuthorityRotationEmergencyRecovered {
+    pub mint: Pubkey,
+    pub prev_authority: Pubkey,
+    pub backup_authority: Pubkey,
+}
+
+/// Emitted when the current authority cancels an in-flight rotation proposal.
+#[event]
+pub struct AuthorityRotationCancelled {
+    pub mint: Pubkey,
+    pub authority: Pubkey,
+    pub cancelled_new_authority: Pubkey,
+}

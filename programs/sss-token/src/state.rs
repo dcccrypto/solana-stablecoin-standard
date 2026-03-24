@@ -141,6 +141,14 @@ pub struct StablecoinConfig {
     /// SSS-106: Auditor ElGamal pubkey for confidential transfers.
     /// All-zero if FLAG_CONFIDENTIAL_TRANSFERS is not enabled.
     pub auditor_elgamal_pubkey: [u8; 32],
+    /// SSS-119: Oracle type discriminant. 0=Pyth (default), 1=Switchboard, 2=Custom.
+    /// Set via `set_oracle_config` (authority-only).
+    pub oracle_type: u8,
+    /// SSS-119: Generic oracle feed account address used by the oracle abstraction layer.
+    /// For Pyth: the Pyth price feed account (overrides expected_pyth_feed when set).
+    /// For Custom: the CustomPriceFeed PDA address.
+    /// Pubkey::default() = validation deferred to expected_pyth_feed (backward compat).
+    pub oracle_feed: Pubkey,
     pub bump: u8,
 }
 
@@ -569,4 +577,72 @@ pub struct ConfidentialTransferConfig {
 
 impl ConfidentialTransferConfig {
     pub const SEED: &'static [u8] = b"ct-config";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-119: CustomPriceFeed — on-chain price maintained by the admin
+// ---------------------------------------------------------------------------
+
+/// Custom oracle price feed PDA — one per SSS-3 stablecoin mint.
+/// Seeds: [b"custom-price-feed", sss_mint]
+///
+/// Only the stablecoin authority may update prices via `update_custom_price`.
+/// The `custom` oracle adapter verifies `feed.authority == config.authority`
+/// (admin signature verification) before trusting the stored price.
+#[account]
+#[derive(InitSpace)]
+pub struct CustomPriceFeed {
+    /// The authority (stablecoin config authority) who may update this feed.
+    pub authority: Pubkey,
+    /// Price value — same semantics as Pyth: raw integer, scaled by 10^expo.
+    pub price: i64,
+    /// Price exponent — typically negative (e.g. -8 means price in 10^-8 USD).
+    pub expo: i32,
+    /// Confidence half-interval in the same units as price.
+    pub conf: u64,
+    /// Slot at which the price was last updated (informational).
+    pub last_update_slot: u64,
+    /// Unix timestamp (seconds) at which the price was last updated.
+    /// Used by the custom oracle adapter to enforce max_oracle_age_secs staleness check.
+    pub last_update_unix_timestamp: i64,
+    pub bump: u8,
+}
+
+impl CustomPriceFeed {
+    pub const SEED: &'static [u8] = b"custom-price-feed";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-120: AuthorityRotationRequest PDA
+// ---------------------------------------------------------------------------
+/// Stores an in-flight authority rotation proposal.
+/// Seeds: [b"authority-rotation", mint.key().as_ref()]
+///
+/// Lifecycle:
+///   propose_authority_rotation → AuthorityRotationRequest created
+///   accept_authority_rotation  → PDA closed (after 48-hr timelock)
+///   emergency_recover_authority→ PDA closed (after 7-day window)
+///   cancel_authority_rotation  → PDA closed immediately (current authority only)
+#[account]
+pub struct AuthorityRotationRequest {
+    /// The stablecoin mint this rotation belongs to.
+    pub config_mint: Pubkey,
+    /// The authority at proposal time — must still match config.authority at accept/emergency/cancel.
+    pub current_authority: Pubkey,
+    /// The new authority that must sign `accept_authority_rotation`.
+    pub new_authority: Pubkey,
+    /// Fallback authority: can claim after `EMERGENCY_RECOVERY_SLOTS` if acceptance never happens.
+    pub backup_authority: Pubkey,
+    /// Slot at which the proposal was made.
+    pub proposed_slot: u64,
+    /// Slots that must elapse before `accept_authority_rotation` is valid (≈48 hr).
+    pub timelock_slots: u64,
+    /// PDA bump.
+    pub bump: u8,
+}
+
+impl AuthorityRotationRequest {
+    pub const SEED: &'static [u8] = b"authority-rotation";
+    /// Discriminator(8) + 3×Pubkey(96) + 2×u64(16) + u8(1) + padding(7) = 128
+    pub const SPACE: usize = 96 + 16 + 1 + 7;
 }
