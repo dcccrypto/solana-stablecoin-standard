@@ -576,3 +576,48 @@ pub struct GuardianPauseLifted {
     /// true if lifted by full guardian quorum, false if lifted by authority.
     pub by_quorum: bool,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-131: Graduated liquidation bonus events
+// ---------------------------------------------------------------------------
+
+/// Emitted when a LiquidationBonusConfig PDA is created for a mint.
+#[event]
+pub struct LiquidationBonusConfigInitialised {
+    pub mint: Pubkey,
+    pub tier1_threshold_bps: u16,
+    pub tier1_bonus_bps: u16,
+    pub tier2_threshold_bps: u16,
+    pub tier2_bonus_bps: u16,
+    pub tier3_threshold_bps: u16,
+    pub tier3_bonus_bps: u16,
+    pub max_bonus_bps: u16,
+}
+
+/// Emitted when an existing LiquidationBonusConfig is updated.
+#[event]
+pub struct LiquidationBonusConfigUpdated {
+    pub mint: Pubkey,
+    pub old_tier1_threshold_bps: u16,
+    pub old_tier1_bonus_bps: u16,
+    pub new_tier1_threshold_bps: u16,
+    pub new_tier1_bonus_bps: u16,
+    pub old_tier2_threshold_bps: u16,
+    pub old_tier2_bonus_bps: u16,
+    pub new_tier2_threshold_bps: u16,
+    pub new_tier2_bonus_bps: u16,
+    pub old_tier3_threshold_bps: u16,
+    pub old_tier3_bonus_bps: u16,
+    pub new_tier3_threshold_bps: u16,
+    pub new_tier3_bonus_bps: u16,
+}
+
+/// Emitted by cdp_liquidate when the graduated bonus schedule is applied.
+#[event]
+pub struct GraduatedLiquidationBonusApplied {
+    pub mint: Pubkey,
+    pub cdp_owner: Pubkey,
+    pub ratio_bps: u64,
+    pub tier_applied: u8,
+    pub bonus_bps: u16,
+}
