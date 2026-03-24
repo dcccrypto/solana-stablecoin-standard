@@ -465,37 +465,33 @@ pub mod sss_token {
         instructions::bridge::bridge_in_handler(ctx, proof, amount, recipient)
     }
 
-    // SSS-137: On-chain redemption pools
+    // -----------------------------------------------------------------------
+    // SSS-138: Market Maker Hooks
+    // -----------------------------------------------------------------------
 
-    pub fn seed_redemption_pool(
-        ctx: Context<SeedRedemptionPool>,
-        amount: u64,
-        max_pool_size: u64,
-        instant_redemption_fee_bps: u16,
+    pub fn init_market_maker_config(
+        ctx: Context<InitMarketMakerConfig>,
+        params: InitMarketMakerConfigParams,
     ) -> Result<()> {
-        instructions::redemption_pool::seed_redemption_pool_handler(
-            ctx,
-            amount,
-            max_pool_size,
-            instant_redemption_fee_bps,
-        )
+        instructions::market_maker::init_market_maker_config_handler(ctx, params)
     }
 
-    pub fn instant_redemption(
-        ctx: Context<InstantRedemptionCtx>,
-        amount: u64,
+    pub fn register_market_maker(
+        ctx: Context<RegisterMarketMaker>,
+        mm_pubkey: Pubkey,
     ) -> Result<()> {
-        instructions::redemption_pool::instant_redemption_handler(ctx, amount)
+        instructions::market_maker::register_market_maker_handler(ctx, mm_pubkey)
     }
 
-    pub fn replenish_redemption_pool(
-        ctx: Context<ReplenishRedemptionPool>,
-        amount: u64,
-    ) -> Result<()> {
-        instructions::redemption_pool::replenish_redemption_pool_handler(ctx, amount)
+    pub fn mm_mint(ctx: Context<MmMintAccounts>, amount: u64) -> Result<()> {
+        instructions::market_maker::mm_mint_handler(ctx, amount)
     }
 
-    pub fn drain_redemption_pool(ctx: Context<DrainRedemptionPool>) -> Result<()> {
-        instructions::redemption_pool::drain_redemption_pool_handler(ctx)
+    pub fn mm_burn(ctx: Context<MmBurnAccounts>, amount: u64) -> Result<()> {
+        instructions::market_maker::mm_burn_handler(ctx, amount)
+    }
+
+    pub fn get_mm_capacity(ctx: Context<GetMmCapacity>) -> Result<()> {
+        instructions::market_maker::get_mm_capacity_handler(ctx)
     }
 }

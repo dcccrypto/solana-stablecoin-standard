@@ -39,7 +39,16 @@ pub const FLAG_CONFIDENTIAL_TRANSFERS: u64 = 1 << 5;
 /// Cross-chain bridge flag (bit 13): when set, `bridge_out` and `bridge_in`
 /// instructions are enabled.  Requires a `BridgeConfig` PDA to be initialized
 /// via `init_bridge_config`.  See docs/CROSS-CHAIN-BRIDGE.md for details.
-pub const FLAG_BRIDGE_ENABLED: u64 = 1 << 13;
+pub const FLAG_BRIDGE_ENABLED: u64 = 1 << 17;
+
+/// SSS-138: Market maker hooks flag (bit 18): when set, `mm_mint` and `mm_burn`
+/// instructions are available to whitelisted market makers for programmatic peg
+/// spread management.  Requires a `MarketMakerConfig` PDA via `init_market_maker_config`.
+pub const FLAG_MARKET_MAKER_HOOKS: u64 = 1 << 18;
+
+/// PRESET_INSTITUTIONAL (4): all SSS-3 features + Squads V4 multisig authority.
+/// Recommended for issuers holding > $1 M in reserves.
+pub const PRESET_INSTITUTIONAL: u8 = 4;
 
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
@@ -648,37 +657,44 @@ impl BridgeConfig {
 }
 
 // ---------------------------------------------------------------------------
-// SSS-137: On-chain redemption pool PDA
+// SSS-138: MarketMakerConfig PDA
 // ---------------------------------------------------------------------------
 
-/// Holds always-available liquidity for instant par redemption.
-/// Seeds: [b"redemption-pool-v2", sss_mint]
+/// MarketMakerConfig PDA — one per stablecoin mint when FLAG_MARKET_MAKER_HOOKS is set.
+///
+/// Whitelisted market makers may call `mm_mint` and `mm_burn` to tighten the peg
+/// spread programmatically.  Both instructions:
+///   - bypass stability fees
+///   - are rate-limited per slot (mm_mint_limit_per_slot / mm_burn_limit_per_slot)
+///   - require oracle price within spread_bps of the $1 peg
+///
+/// Seeds: [b"mm-config", sss_mint]
 #[account]
 #[derive(InitSpace)]
-pub struct RedemptionPool {
-    /// The SSS stablecoin mint this pool serves.
+pub struct MarketMakerConfig {
+    /// The SSS stablecoin mint this config belongs to.
     pub sss_mint: Pubkey,
-    /// Token account holding the reserve assets (same mint as sss_mint).
-    pub reserve_vault: Pubkey,
-    /// Hard cap on pool size (0 = unlimited).
-    pub max_pool_size: u64,
-    /// Current liquid reserve assets available for instant redemption.
-    pub current_liquidity: u64,
-    /// Fee charged on instant redemption in basis points (0–500).
-    pub instant_redemption_fee_bps: u16,
-    /// Utilization ratio snapshot in basis points (redeemed / total_seeded + replenished).
-    pub utilization_bps: u16,
-    /// Cumulative tokens seeded by authority.
-    pub total_seeded: u64,
-    /// Cumulative tokens replenished by market makers / anyone.
-    pub total_replenished: u64,
-    /// Cumulative SSS tokens burned via instant redemption.
-    pub total_redeemed: u64,
+    /// Up to 10 whitelisted market maker pubkeys.
+    #[max_len(10)]
+    pub whitelisted_mms: Vec<Pubkey>,
+    /// Maximum tokens any MM may mint across all MMs per slot.
+    pub mm_mint_limit_per_slot: u64,
+    /// Maximum tokens any MM may burn across all MMs per slot.
+    pub mm_burn_limit_per_slot: u64,
+    /// Oracle spread tolerance in basis points (e.g. 50 = 0.5%).
+    /// MM ops require |oracle_price - peg| <= spread_bps * 10 (price in µUSD).
+    pub spread_bps: u16,
+    /// Slot when mm_minted_this_slot was last updated (resets counter on new slot).
+    pub last_mint_slot: u64,
+    /// Running total of tokens minted by all MMs in last_mint_slot.
+    pub mm_minted_this_slot: u64,
+    /// Slot when mm_burned_this_slot was last updated (resets counter on new slot).
+    pub last_burn_slot: u64,
+    /// Running total of tokens burned by all MMs in last_burn_slot.
+    pub mm_burned_this_slot: u64,
     pub bump: u8,
 }
 
-impl RedemptionPool {
-    pub const SEED: &'static [u8] = b"redemption-pool-v2";
-    /// Maximum allowed instant redemption fee: 500 bps = 5%.
-    pub const MAX_FEE_BPS: u16 = 500;
+impl MarketMakerConfig {
+    pub const SEED: &'static [u8] = b"mm-config";
 }

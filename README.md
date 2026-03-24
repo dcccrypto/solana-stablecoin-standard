@@ -134,6 +134,7 @@ Endpoints:
 | [ZK Credentials](docs/ZK-CREDENTIALS.md) | Selective-disclosure ZK compliance proofs (SSS-129): CredentialRegistry + CredentialRecord PDAs, Groth16 proofs, not_sanctioned / kyc_passed / accredited_investor types, backend REST API |
 | [Stability Fee PID](docs/STABILITY-FEE-PID.md) | Automatic peg-stabilisation via PID controller (SSS-130): PidConfig PDA, permissionless keeper updates, anti-windup integral clamp, PidConfigInitialised + PidFeeUpdated events |
 | [Graduated Liquidation Bonus](docs/GRADUATED-LIQUIDATION-BONUS.md) | Dynamic three-tier liquidation incentives (SSS-131): LiquidationBonusConfig PDA, FLAG_GRAD_LIQUIDATION_BONUS, tier-based bonus schedule, GraduatedLiquidationBonusApplied event, Kani proof |
+| [Market Maker Hooks](docs/MARKET-MAKER-HOOKS.md) | Whitelisted MM mint/burn for programmatic peg maintenance (SSS-138): MarketMakerConfig PDA, FLAG_MARKET_MAKER_HOOKS (bit 18), per-slot rate limits, oracle spread check, fee-free MM ops |
 
 ## Documentation
 

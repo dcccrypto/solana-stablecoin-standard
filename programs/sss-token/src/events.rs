@@ -229,44 +229,50 @@ pub struct BridgeConfigInitialized {
 }
 
 // ---------------------------------------------------------------------------
-// SSS-137: Redemption pool events
+// SSS-138: Market maker hook events
 // ---------------------------------------------------------------------------
 
-/// Emitted when authority seeds the redemption pool with reserve assets.
+/// Emitted on a successful `mm_mint`.
 #[event]
-pub struct RedemptionPoolSeeded {
-    pub sss_mint: Pubkey,
+pub struct MmMint {
+    pub mint: Pubkey,
+    pub market_maker: Pubkey,
     pub amount: u64,
-    pub new_liquidity: u64,
+    pub slot: u64,
 }
 
-/// Emitted when a user performs an instant redemption (burns SSS, receives reserves).
+/// Emitted on a successful `mm_burn`.
 #[event]
-pub struct InstantRedemption {
-    pub sss_mint: Pubkey,
-    pub user: Pubkey,
-    /// SSS tokens burned.
-    pub burned: u64,
-    /// Reserve assets received after fee.
-    pub received: u64,
-    /// Fee deducted from payout.
-    pub fee: u64,
-    /// Pool liquidity remaining after redemption.
-    pub remaining_liquidity: u64,
+pub struct MmBurn {
+    pub mint: Pubkey,
+    pub market_maker: Pubkey,
+    pub amount: u64,
+    pub slot: u64,
 }
 
-/// Emitted when anyone replenishes the pool.
+/// Emitted by `get_mm_capacity` — reports remaining per-slot limits.
 #[event]
-pub struct RedemptionPoolReplenished {
-    pub sss_mint: Pubkey,
-    pub replenisher: Pubkey,
-    pub amount: u64,
-    pub new_liquidity: u64,
+pub struct MmCapacity {
+    pub mint: Pubkey,
+    pub mint_remaining: u64,
+    pub burn_remaining: u64,
+    pub slot: u64,
 }
 
-/// Emitted when authority drains the pool.
+/// Emitted when MarketMakerConfig is initialised.
 #[event]
-pub struct RedemptionPoolDrained {
-    pub sss_mint: Pubkey,
-    pub amount: u64,
+pub struct MarketMakerConfigInitialized {
+    pub mint: Pubkey,
+    pub mm_mint_limit_per_slot: u64,
+    pub mm_burn_limit_per_slot: u64,
+    pub spread_bps: u16,
+    pub authority: Pubkey,
+}
+
+/// Emitted when a market maker is registered or removed.
+#[event]
+pub struct MarketMakerRegistered {
+    pub mint: Pubkey,
+    pub market_maker: Pubkey,
+    pub authority: Pubkey,
 }

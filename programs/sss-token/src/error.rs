@@ -187,16 +187,19 @@ pub enum SssError {
     BridgeProofEmpty,
     #[msg("Bridge proof verification failed")]
     BridgeProofInvalid,
-
-    // SSS-137: Redemption pool errors
-    #[msg("Redemption pool mint does not match stablecoin mint")]
-    RedemptionPoolMintMismatch,
-    #[msg("Redemption pool vault does not match stored vault")]
-    RedemptionPoolVaultMismatch,
-    #[msg("Redemption pool is full — deposit would exceed max_pool_size")]
-    RedemptionPoolFull,
-    #[msg("Redemption pool has insufficient liquidity for this redemption")]
-    RedemptionPoolEmpty,
-    #[msg("Instant redemption fee bps exceeds maximum (500 = 5%)")]
-    RedemptionFeeTooHigh,
+    // SSS-138: Market maker errors
+    #[msg("Market maker hooks not enabled — set FLAG_MARKET_MAKER_HOOKS first")]
+    MarketMakerHooksNotEnabled,
+    #[msg("Caller is not a whitelisted market maker")]
+    NotWhitelistedMarketMaker,
+    #[msg("Market maker whitelist is full (max 10)")]
+    MarketMakerListFull,
+    #[msg("Market maker mint limit exceeded for this slot")]
+    MmMintLimitExceeded,
+    #[msg("Market maker burn limit exceeded for this slot")]
+    MmBurnLimitExceeded,
+    #[msg("Oracle price is outside the market maker spread tolerance")]
+    OraclePriceOutsideSpread,
+    #[msg("Market maker already registered")]
+    MarketMakerAlreadyRegistered,
 }

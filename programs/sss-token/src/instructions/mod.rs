@@ -94,6 +94,9 @@ pub use psm_amm_slippage::*;
 pub use squads_authority::*;
 pub use wallet_rate_limit::*;
 
+pub mod market_maker;
+pub use market_maker::*;
+
 pub mod upgrade;
 pub use upgrade::*;
 
