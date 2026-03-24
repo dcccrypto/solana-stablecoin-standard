@@ -182,6 +182,19 @@ pub struct StablecoinConfig {
     /// 0 = staleness check disabled (is_sanctioned is authoritative regardless of age).
     /// Recommended: 150 slots (~1 min at 400 ms/slot).
     pub sanctions_max_staleness_slots: u64,
+    /// SSS-119: Program config schema version, incremented by `upgrade_config`.
+    /// Instructions that require a minimum schema version (e.g. CDP borrow, burn)
+    /// check this against `MIN_SUPPORTED_VERSION`.
+    pub version: u8,
+    /// SSS-119: Oracle type for CDP price reads.
+    /// 0 = Pyth, 1 = Switchboard (stub), 2 = Custom (CustomPriceFeed PDA).
+    /// Set via `set_oracle_config` (authority-only).
+    pub oracle_type: u8,
+    /// SSS-119: Oracle feed account address.
+    /// For Pyth: the Pyth price feed pubkey.
+    /// For Custom: the CustomPriceFeed PDA pubkey.
+    /// Pubkey::default() = feed address enforcement disabled.
+    pub oracle_feed: Pubkey,
     pub bump: u8,
 }
 
@@ -921,4 +934,131 @@ pub struct PidConfig {
 
 impl PidConfig {
     pub const SEED: &'static [u8] = b"pid-config";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-120: Authority rotation request PDA
+// ---------------------------------------------------------------------------
+
+/// AuthorityRotationRequest PDA — created by `propose_authority_rotation`.
+/// Seeds: [b"authority-rotation-request", sss_mint]
+///
+/// Stores the pending rotation proposal including new authority, backup authority,
+/// and timing constraints.  Closed (reclaimed) on accept, emergency_recover, or cancel.
+#[account]
+pub struct AuthorityRotationRequest {
+    /// The mint this rotation request applies to.
+    pub config_mint: Pubkey,
+    /// The current authority (must sign the proposal).
+    pub current_authority: Pubkey,
+    /// The proposed new authority (must accept within timelock window).
+    pub new_authority: Pubkey,
+    /// Backup authority (can emergency-recover after 7-day window).
+    pub backup_authority: Pubkey,
+    /// Slot at which the proposal was submitted.
+    pub proposed_slot: u64,
+    /// Number of slots to wait before new_authority can accept (default: 432_000 = ~48h).
+    pub timelock_slots: u64,
+    pub bump: u8,
+}
+
+impl AuthorityRotationRequest {
+    pub const SEED: &'static [u8] = b"authority-rotation-request";
+    /// Anchor account space: 32+32+32+32+8+8+1 = 145 bytes
+    pub const SPACE: usize = 32 + 32 + 32 + 32 + 8 + 8 + 1;
+}
+
+// ---------------------------------------------------------------------------
+// SSS-121: Guardian multisig pause config
+// ---------------------------------------------------------------------------
+
+/// GuardianConfig PDA — one per stablecoin config when guardians are registered.
+/// Seeds: [b"guardian-config", stablecoin_config_pubkey]
+///
+/// Stores up to MAX_GUARDIANS guardian pubkeys, threshold, and pending lift-vote state.
+#[account]
+#[derive(InitSpace)]
+pub struct GuardianConfig {
+    /// The StablecoinConfig this guardian set is attached to.
+    pub config: Pubkey,
+    /// Up to 7 guardian pubkeys.
+    #[max_len(7)]
+    pub guardians: Vec<Pubkey>,
+    /// Number of YES votes required to pause (e.g. 3 for a 3-of-5 setup).
+    pub threshold: u8,
+    /// Monotonically increasing proposal ID counter.
+    pub next_proposal_id: u64,
+    /// Guardians who have voted to lift the current pause (cleared on lift).
+    #[max_len(7)]
+    pub pending_lift_votes: Vec<Pubkey>,
+    pub bump: u8,
+}
+
+impl GuardianConfig {
+    pub const SEED: &'static [u8] = b"guardian-config";
+    /// Maximum number of guardians in a single config.
+    pub const MAX_GUARDIANS: usize = 7;
+}
+
+/// PauseProposal PDA — one per open pause proposal.
+/// Seeds: [b"pause-proposal", stablecoin_config_pubkey, proposal_id_le_bytes]
+///
+/// Auto-executes (pauses mint) once `votes.len() >= threshold`.
+#[account]
+#[derive(InitSpace)]
+pub struct PauseProposal {
+    /// The StablecoinConfig this proposal targets.
+    pub config: Pubkey,
+    /// Monotonic proposal index.
+    pub proposal_id: u64,
+    /// Guardian who opened the proposal.
+    pub proposer: Pubkey,
+    /// UTF-8 reason bytes (fixed 32-byte array, zero-padded).
+    pub reason: [u8; 32],
+    /// List of guardian pubkeys that have voted YES.
+    #[max_len(7)]
+    pub votes: Vec<Pubkey>,
+    /// Threshold snapshot at proposal time.
+    pub threshold: u8,
+    /// Whether the proposal has already executed (paused the mint).
+    pub executed: bool,
+    pub bump: u8,
+}
+
+impl PauseProposal {
+    pub const SEED: &'static [u8] = b"pause-proposal";
+    /// Maximum number of YES votes that can be stored (= MAX_GUARDIANS).
+    pub const MAX_VOTES: usize = 7;
+}
+
+// ---------------------------------------------------------------------------
+// SSS-119: Custom price feed PDA
+// ---------------------------------------------------------------------------
+
+/// CustomPriceFeed PDA — authority-maintained price feed for the Custom oracle type.
+/// Seeds: [b"custom-price-feed", sss_mint]
+///
+/// The authority calls `update_custom_price` to publish a new price.
+/// `oracle/custom.rs` reads this PDA when oracle_type == ORACLE_CUSTOM.
+#[account]
+#[derive(InitSpace)]
+pub struct CustomPriceFeed {
+    /// The authority who may update this feed (must match StablecoinConfig.authority).
+    pub authority: Pubkey,
+    /// Latest price value (signed, Pyth-compatible). Positive values only are valid.
+    /// e.g. price=1_00000000, expo=-8 → $1.00 USD.
+    pub price: i64,
+    /// Price exponent (e.g. -8 means price * 10^-8 gives the real-world value).
+    pub expo: i32,
+    /// Confidence half-interval in the same units as `price`. 0 = no uncertainty stated.
+    pub conf: u64,
+    /// Slot at which `update_custom_price` was last called.
+    pub last_update_slot: u64,
+    /// Unix timestamp at which `update_custom_price` was last called.
+    pub last_update_unix_timestamp: i64,
+    pub bump: u8,
+}
+
+impl CustomPriceFeed {
+    pub const SEED: &'static [u8] = b"custom-price-feed";
 }
