@@ -146,6 +146,84 @@ app.post('/sss-hook', express.raw({ type: '*/*' }), (req, res) => {
 
 ---
 
+## Webhook Reliability — Retry & Dead Letter Queue (SSS-145)
+
+SSS-145 introduced durable webhook delivery: every outbound call is logged and
+retried automatically on failure.
+
+### How It Works
+
+| Attempt | Delay before retry | Status after failure |
+|--------:|-------------------|----------------------|
+| 1       | 1 s               | `failed`             |
+| 2       | 5 s               | `failed`             |
+| 3       | —                 | `permanently_failed` + `MetricsAlert` emitted |
+
+A background worker runs every **60 seconds** and re-drives any `failed`
+delivery whose `next_retry_at` has passed.
+
+### Delivery Log Schema
+
+Each delivery attempt is recorded in `webhook_delivery_log`:
+
+| Field             | Type    | Description                                        |
+|-------------------|---------|----------------------------------------------------|
+| `id`              | UUID    | Unique delivery id                                 |
+| `webhook_id`      | UUID    | References the registered webhook                  |
+| `event_type`      | string  | SSS event type (e.g. `MintExecuted`)               |
+| `payload`         | string  | Raw JSON payload sent in the POST body             |
+| `status`          | string  | `pending` / `failed` / `delivered` / `permanently_failed` |
+| `attempt_count`   | integer | Number of attempts made so far                     |
+| `last_attempt_at` | ISO-8601| Timestamp of the most recent attempt               |
+| `next_retry_at`   | ISO-8601| When the retry worker will try again (null if done)|
+| `created_at`      | ISO-8601| When the delivery was first scheduled              |
+
+### Inspecting Failed Deliveries
+
+```http
+GET /api/webhook-deliveries?status=failed
+Authorization: Bearer <operator-token>
+```
+
+Returns all `permanently_failed` rows so operators can triage undelivered events:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "d1a2b3c4-...",
+      "webhook_id": "a0b1c2d3-...",
+      "event_type": "CDPLiquidated",
+      "status": "permanently_failed",
+      "attempt_count": 3,
+      "last_attempt_at": "2026-03-24T01:00:15Z",
+      "next_retry_at": null,
+      "created_at": "2026-03-24T00:59:55Z"
+    }
+  ]
+}
+```
+
+> **Note:** `?status=failed` currently returns `permanently_failed` rows. Future
+> releases may support filtering by `pending` or `delivered`.
+
+### MetricsAlert Events
+
+When a delivery permanently fails, the backend emits a `MetricsAlert` event to
+`event_log` with `reason: "max_retries_exceeded"`. Wire your alerting pipeline
+to this event type to receive real-time pager notifications.
+
+### Recommendations for Subscribers
+
+- **Respond quickly:** Return HTTP 200 within 5 s to avoid retries on slow handlers.
+- **Idempotency:** Use the delivery `id` to deduplicate re-delivered events in case
+  your endpoint is called more than once.
+- **Dead-letter handling:** Poll `GET /api/webhook-deliveries?status=failed` after
+  incidents and replay events manually if needed.
+
+---
+
 ## Event Schema Reference
 
 See [EVENT-SCHEMA.md](./EVENT-SCHEMA.md) for the full list of event types,
