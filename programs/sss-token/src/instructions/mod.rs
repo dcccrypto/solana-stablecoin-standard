@@ -41,6 +41,7 @@ pub mod pid_fee;
 pub mod zk_compliance;
 pub mod zk_credential;
 pub mod liquidation_bonus;
+pub mod psm_amm_slippage;
 
 pub use authority_rotation::*;
 pub use guardian::*;
@@ -85,6 +86,7 @@ pub use pid_fee::*;
 pub use zk_compliance::*;
 pub use zk_credential::*;
 pub use liquidation_bonus::*;
+pub use psm_amm_slippage::*;
 
 pub mod upgrade;
 pub use upgrade::*;

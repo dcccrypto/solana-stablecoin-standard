@@ -1,7 +1,7 @@
 ## Last Heartbeat
-Timestamp: 2026-03-24 06:12 UTC
-Did: Implemented SSS-131 graduated liquidation bonuses. Added FLAG_GRAD_LIQUIDATION_BONUS (bit 12), LiquidationBonusConfig PDA (3-tier), init/update instructions, cdp_liquidate updated for tiered bonus, Kani proof proof_liquidation_bonus_bounded, 20 tests passing. Committed/pushed feat/sss-131-graduated-liquidation, opened PR #205 (base: feat/sss-bug-001-main-fix). Notified QA+PM.
-Reported: SSS-131 PR #205 open and sent to QA.
+Timestamp: 2026-03-24 06:30 UTC
+Did: Implemented SSS-132 (PSM dynamic AMM-style slippage curves). FLAG_PSM_DYNAMIC_FEES (bit 13), PsmCurveConfig PDA with quadratic fee formula, psm_dynamic_swap, get_psm_quote (read-only), 4 events, 5 errors, 2 Kani proofs, 20/20 tests. PR #207 opened on dcccrypto fork. Messaged QA+PM.
+Reported: SSS-132 PR #207 open and sent to QA.
 
 ---
 
@@ -10,12 +10,13 @@ Reported: SSS-131 PR #205 open and sent to QA.
 - SSS-130: PID fee controller complete. pid_fee.rs (220 lines): PidConfig PDA, init_pid_config, update_stability_fee_pid with PID formula + anti-windup + clamped output. 20 anchor tests covering all scenarios. PR #200 on feat/sss-130-pid-fees. Notified QA+PM.
 
 ## Session: 2026-03-24 06:12 UTC
-- SSS-BUG-001: PM confirmed complete (PR #203 with QA, merge hold). Resumed SSS-131.
-- SSS-131: Graduated liquidation bonuses implemented on feat/sss-131-graduated-liquidation (based on feat/sss-bug-001-main-fix):
-  - FLAG_GRAD_LIQUIDATION_BONUS (bit 12)
-  - LiquidationBonusConfig PDA: tier1/tier2/tier3 thresholds+bonuses, max_bonus_bps, bonus_for_ratio()
-  - init_liquidation_bonus_config + update_liquidation_bonus_config (authority-only, with tier validation)
-  - cdp_liquidate: optional LiquidationBonusConfig account, tiered bonus when flag set, GraduatedLiquidationBonusApplied event emitted
-  - Kani proof: proof_liquidation_bonus_bounded
-  - 20 tests: 20/20 passing
-  - PR #205 open. QA+PM notified.
+- SSS-131: Graduated liquidation bonuses. PR #205 open. QA-approved ✅.
+
+## Session: 2026-03-24 06:30 UTC
+- SSS-132: PSM dynamic AMM-style slippage curves on feat/sss-132-psm-amm-slippage:
+  - FLAG_PSM_DYNAMIC_FEES (bit 13), PsmCurveConfig PDA
+  - fee_bps = base_fee + k * (imbalance/total_reserves)^2, clamped to [base, max]
+  - init_psm_curve_config + update_psm_curve_config (authority-only)
+  - psm_dynamic_swap + get_psm_quote (read-only for frontend simulation)
+  - 4 events, 5 errors, 2 Kani proofs (curve_bounded + balanced_is_base)
+  - 20/20 tests passing. PR #207 open. QA+PM notified.

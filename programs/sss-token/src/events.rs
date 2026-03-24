@@ -621,3 +621,65 @@ pub struct GraduatedLiquidationBonusApplied {
     pub tier_applied: u8,
     pub bonus_bps: u16,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-132: PSM dynamic AMM-style slippage curves
+// ---------------------------------------------------------------------------
+
+/// Emitted when a `PsmCurveConfig` PDA is created for a mint.
+#[event]
+pub struct PsmCurveConfigInitialised {
+    pub mint: Pubkey,
+    pub base_fee_bps: u16,
+    pub curve_k: u64,
+    pub max_fee_bps: u16,
+    pub authority: Pubkey,
+}
+
+/// Emitted when an existing `PsmCurveConfig` is updated.
+#[event]
+pub struct PsmCurveConfigUpdated {
+    pub mint: Pubkey,
+    pub old_base_fee_bps: u16,
+    pub new_base_fee_bps: u16,
+    pub old_curve_k: u64,
+    pub new_curve_k: u64,
+    pub old_max_fee_bps: u16,
+    pub new_max_fee_bps: u16,
+    pub authority: Pubkey,
+}
+
+/// Emitted on every PSM swap when FLAG_PSM_DYNAMIC_FEES is active.
+#[event]
+pub struct PsmDynamicSwapEvent {
+    pub mint: Pubkey,
+    pub redeemer: Pubkey,
+    /// SSS tokens burned by the redeemer.
+    pub sss_burned: u64,
+    /// Collateral tokens released to the redeemer.
+    pub collateral_out: u64,
+    /// Collateral retained in vault as fee.
+    pub fee_collected: u64,
+    /// Dynamic fee rate applied in basis points.
+    pub fee_bps: u16,
+    /// Vault amount before the swap (for curve computation reference).
+    pub vault_amount_before: u64,
+    /// Total reserves used for imbalance computation.
+    pub total_reserves: u64,
+}
+
+/// Emitted by `get_psm_quote` — read-only fee preview for frontends.
+#[event]
+pub struct PsmQuoteEvent {
+    pub mint: Pubkey,
+    /// Hypothetical swap amount queried.
+    pub amount_in: u64,
+    /// Expected output (amount_in - fee).
+    pub expected_out: u64,
+    /// Expected fee in native units.
+    pub expected_fee: u64,
+    /// Fee rate that would apply in basis points.
+    pub fee_bps: u16,
+    /// Current vault amount at time of query.
+    pub vault_amount: u64,
+}
