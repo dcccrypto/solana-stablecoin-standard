@@ -263,6 +263,7 @@ The current implementation (direction 1) is a **supply snapshot** — a single-l
 - The `holder` query parameter is accepted but not used to filter the proof.
 - The snapshot reflects devnet state; mainnet support is forthcoming.
 - The proof covers total supply only, not individual reserve wallet balances.
+- **Reserve composition is self-reported, not machine-verified.** The PoR proof commits to the on-chain `totalSupply` — it does not verify what assets back that supply. An issuer supplies the reserve breakdown (e.g. "100% USD cash") separately; the protocol has no mechanism to verify this claim on-chain. Users relying on reserve composition figures should require off-chain auditor attestations in addition to the PoR Merkle proof. Direction 3 (oracle-attested proof) is planned to address this gap, but is not yet implemented.
 
 ---
 

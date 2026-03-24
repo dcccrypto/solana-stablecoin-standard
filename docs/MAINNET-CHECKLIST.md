@@ -78,6 +78,8 @@ solana program show <PROGRAM_ID>
 
 > **Critical.** If the deployer keypair remains upgrade authority, a single key compromise gives an attacker full program control.
 
+> **⚠️ Audit finding H-1 — No on-chain upgrade timelock (checklist-only).** Solana's BPF loader does not enforce a timelock on program upgrades. The SSS admin timelock (Section 5f of DEPLOYMENT-GUIDE.md) only applies to `admin` instructions — it does **not** block an instantaneous BPF upgrade once the multisig threshold is reached. This is a platform limitation. All signers must understand this: approving an upgrade proposal in Squads replaces the program immediately. Use a high multisig threshold (4-of-5 or 5-of-5) for upgrade proposals and monitor for upgrade authority changes via your alerting pipeline (see Section 11 below).
+
 ```bash
 # Transfer sss_token upgrade authority to multisig
 solana program set-upgrade-authority <SSS_TOKEN_MAINNET_ID> \
@@ -100,6 +102,9 @@ solana program show <TRANSFER_HOOK_MAINNET_ID>
 | `sss_transfer_hook` upgrade authority → Squads multisig | 🔲 |
 | Deployer keypair upgrade authority revoked | 🔲 |
 | `solana program show` confirms multisig on both programs | 🔲 |
+| Upgrade multisig threshold set to 4-of-5 or higher (not same as operational threshold) | 🔲 |
+| Team briefed: BPF upgrades take effect immediately with no on-chain timelock | 🔲 |
+| **[Regulated/SSS-4 issuers only]** Immutable deployment (`--final`) considered and decision documented | 🔲 |
 
 ---
 

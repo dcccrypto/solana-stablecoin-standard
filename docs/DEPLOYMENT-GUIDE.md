@@ -357,6 +357,8 @@ npm run smoke:mainnet
 
 The deployer keypair must not remain as upgrade authority on mainnet. Transfer to a DAO multisig before accepting real liquidity.
 
+> **⚠️ Audit finding H-1 — No on-chain upgrade timelock.** Solana's BPF loader does not enforce a timelock on program upgrades. Once the multisig approves an upgrade proposal, the program is replaced immediately with no on-chain delay. The timelock configured in Section 5f applies only to `admin` instruction calls via the SSS timelock PDA — it does **not** cover BPF loader upgrades. Relying on the multisig threshold (≥3-of-5) is the only on-chain safeguard against an instantaneous malicious upgrade. This is a known platform limitation. Mitigations: (a) use a high threshold (4-of-5 or 5-of-5 for upgrade proposals), (b) consider marking programs immutable (`--final`) once the protocol is stable, or (c) adopt a DAO governance layer with a separate timelock proposal type for upgrades. See also: [SSS-4 issuers](#immutable-recommendation).
+
 ### 6a. Create a Squads v4 Multisig
 
 1. Go to [app.squads.so](https://app.squads.so) (or use the Squads CLI)
@@ -387,6 +389,8 @@ solana program show <SSS_TOKEN_PROGRAM_ID>
 ```
 
 > ⚠️ If you want an **immutable** deployment (no future upgrades), use `--final` instead of `--new-upgrade-authority`. This is irreversible.
+
+> <a name="immutable-recommendation"></a>**Recommendation for regulated / SSS-4 issuers:** If your stablecoin is targeting regulated use (e.g. e-money, payment token under MiCA, or any context where token holders rely on the program being unalterable), strongly consider making the program immutable at mainnet launch. This eliminates upgrade risk entirely at the cost of requiring a migration if critical bugs are found. Document this decision explicitly in your issuer disclosures.
 
 ### 6c. Transfer Stablecoin Config Authority
 
