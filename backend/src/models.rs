@@ -295,3 +295,55 @@ pub struct LiquidationsQuery {
     /// Row offset for pagination (default: 0).
     pub offset: Option<u32>,
 }
+
+// ─── SSS-127: Travel Rule records ────────────────────────────────────────────
+
+/// A single indexed TravelRuleRecord event from on-chain.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TravelRuleRecord {
+    pub id: String,
+    /// SSS stablecoin mint.
+    pub mint: String,
+    /// Monotonic nonce used to derive the PDA.
+    pub nonce: i64,
+    /// Originating VASP pubkey (base58).
+    pub originator_vasp: String,
+    /// Beneficiary VASP pubkey (base58).
+    pub beneficiary_vasp: String,
+    /// Transfer amount in native token units.
+    pub transfer_amount: i64,
+    /// Slot at which the record was created on-chain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot: Option<i64>,
+    /// Encrypted payload (base64 ECIES blob).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encrypted_payload: Option<String>,
+    /// Transaction signature.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_signature: Option<String>,
+    pub created_at: String,
+}
+
+/// Query params for GET /api/travel-rule/records
+#[derive(Debug, Deserialize)]
+pub struct TravelRuleQuery {
+    /// Filter by wallet address (originator_vasp or beneficiary_vasp).
+    pub wallet: Option<String>,
+    /// Filter by mint address.
+    pub mint: Option<String>,
+    /// Maximum rows to return (default: 100, max: 1000).
+    pub limit: Option<u32>,
+}
+
+/// Response for GET /api/pid-config
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PidConfigResponse {
+    /// Program ID for the SSS token program.
+    pub sss_token_program_id: String,
+    /// Program ID for the SSS transfer hook.
+    pub sss_transfer_hook_program_id: String,
+    /// Whether travel-rule indexing is active.
+    pub travel_rule_indexing_active: bool,
+    /// Minimum transfer amount that triggers travel-rule record creation (native units, 0 = not set).
+    pub travel_rule_threshold: i64,
+}

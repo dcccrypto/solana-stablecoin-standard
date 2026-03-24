@@ -42,6 +42,10 @@ pub const FLAG_PROBABILISTIC_MONEY: u64 = 1 << 6;
 /// SSS-110: Agent Payment Channel — enables open_channel and related APC instructions
 /// for trustless agent-to-agent payment channels with work proof and dispute resolution.
 pub const FLAG_AGENT_PAYMENT_CHANNEL: u64 = 1 << 7;
+/// SSS-127: Travel Rule compliance — when set, transfers at or above `travel_rule_threshold`
+/// require a corresponding `TravelRuleRecord` PDA to exist in the same transaction.
+/// Implements FATF Travel Rule for VASP-to-VASP data sharing.
+pub const FLAG_TRAVEL_RULE: u64 = 1 << 8;
 
 
 // ---------------------------------------------------------------------------
@@ -147,6 +151,9 @@ pub struct StablecoinConfig {
     /// SSS-119: Whitelisted custodian pubkeys allowed to submit reserve attestations.
     /// Up to MAX_RESERVE_ATTESTORS entries; unused slots are Pubkey::default().
     pub reserve_attestor_whitelist: [Pubkey; StablecoinConfig::MAX_RESERVE_ATTESTORS],
+    /// SSS-127: Minimum transfer amount (in token native units) that requires a
+    /// TravelRuleRecord PDA when FLAG_TRAVEL_RULE is set.  0 = Travel Rule disabled.
+    pub travel_rule_threshold: u64,
     pub bump: u8,
 }
 
@@ -714,4 +721,42 @@ pub struct RedemptionRequest {
 
 impl RedemptionRequest {
     pub const SEED: &'static [u8] = b"redemption-request";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-127: Travel Rule — VASP-to-VASP compliance data sharing
+// ---------------------------------------------------------------------------
+
+/// TravelRuleRecord PDA — one per transfer that meets the threshold.
+/// Seeds: [b"travel-rule-record", sss_mint, &nonce.to_le_bytes()]
+///
+/// Created by `submit_travel_rule_record` in the same transaction as a transfer.
+/// When FLAG_TRAVEL_RULE is set and amount >= travel_rule_threshold, the transfer
+/// hook verifies this PDA exists before allowing the transfer through.
+///
+/// The `encrypted_payload` field carries VASP-to-VASP data encrypted to the
+/// beneficiary VASP's key using an agreed-upon ECIES or similar scheme.
+/// The program does not interpret payload contents — it only stores/verifies presence.
+#[account]
+#[derive(InitSpace)]
+pub struct TravelRuleRecord {
+    /// The SSS stablecoin mint this record belongs to.
+    pub sss_mint: Pubkey,
+    /// Monotonic nonce used to derive the PDA seed (caller-chosen, must be unique per transfer).
+    pub nonce: u64,
+    /// Encrypted originator/beneficiary data (256 bytes, VASP-encrypted, opaque to program).
+    pub encrypted_payload: [u8; 256],
+    /// Pubkey of the originating VASP.
+    pub originator_vasp: Pubkey,
+    /// Pubkey of the beneficiary VASP.
+    pub beneficiary_vasp: Pubkey,
+    /// Transfer amount this record covers (in token native units).
+    pub transfer_amount: u64,
+    /// Solana slot at which this record was submitted.
+    pub slot: u64,
+    pub bump: u8,
+}
+
+impl TravelRuleRecord {
+    pub const SEED: &'static [u8] = b"travel-rule-record";
 }

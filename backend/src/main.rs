@@ -39,6 +39,7 @@ use routes::{
     burn::burn,
     reserves::get_reserves_proof,
     supply::supply,
+    travel_rule::{get_pid_config, get_travel_rule_records},
     webhooks::{delete_webhook, list_webhooks, register_webhook},
     ws_events::ws_events_handler,
 };
@@ -120,6 +121,8 @@ async fn main() {
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
         .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+        .route("/api/travel-rule/records", get(get_travel_rule_records))
+        .route("/api/pid-config", get(get_pid_config))
         .route("/api/ws/events", get(ws_events_handler))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
@@ -199,6 +202,8 @@ mod tests {
             .route("/api/webhooks/:id", delete(delete_webhook))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
             .route("/api/admin/keys/:id", delete(delete_api_key))
+            .route("/api/travel-rule/records", get(get_travel_rule_records))
+            .route("/api/pid-config", get(get_pid_config))
             .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
             .layer(cors)
             .with_state(state);
@@ -1966,5 +1971,217 @@ mod analytics_tests {
             .await.unwrap();
         let json = parse_body(resp).await;
         assert_eq!(json["data"]["psm_balance"].as_i64().unwrap(), 250_000);
+    }
+}
+
+// ─── SSS-127: Travel Rule tests ───────────────────────────────────────────────
+
+#[cfg(test)]
+mod travel_rule_tests {
+    use super::*;
+    use axum::{
+        body::Body,
+        http::{Method, Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    /// Build a minimal app wired with travel-rule routes (no auth middleware).
+    fn build_tr_app() -> (Router<()>, db::Database) {
+        let db = db::Database::new(":memory:").unwrap();
+        let state = state::AppState::new(db);
+        let app = Router::new()
+            .route("/api/travel-rule/records", get(routes::travel_rule::get_travel_rule_records))
+            .route("/api/pid-config", get(routes::travel_rule::get_pid_config))
+            .with_state(state);
+        // We can't return the db from inside AppState easily; rebuild for seeding.
+        let db2 = db::Database::new(":memory:").unwrap();
+        (app, db2)
+    }
+
+    fn build_tr_app_with_db(db: db::Database) -> Router<()> {
+        let state = state::AppState::new(db);
+        Router::new()
+            .route("/api/travel-rule/records", get(routes::travel_rule::get_travel_rule_records))
+            .route("/api/pid-config", get(routes::travel_rule::get_pid_config))
+            .with_state(state)
+    }
+
+    async fn body_json(resp: axum::response::Response) -> serde_json::Value {
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_empty() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["success"], true);
+        assert!(json["data"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_insert_and_list() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record(
+            "mint1", 1, "origVASP", "benVASP", 5_000_000, Some(100), Some("enc_abc"), Some("sig1"),
+        ).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["mint"], "mint1");
+        assert_eq!(records[0]["originator_vasp"], "origVASP");
+        assert_eq!(records[0]["beneficiary_vasp"], "benVASP");
+        assert_eq!(records[0]["transfer_amount"].as_i64().unwrap(), 5_000_000);
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_filter_by_wallet_originator() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 1, "vaspA", "vaspB", 1000, Some(1), None, Some("s1")).unwrap();
+        db.insert_travel_rule_record("mint1", 2, "vaspC", "vaspD", 2000, Some(2), None, Some("s2")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records?wallet=vaspA").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["originator_vasp"], "vaspA");
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_filter_by_wallet_beneficiary() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 1, "vaspA", "vaspB", 1000, Some(1), None, Some("s1")).unwrap();
+        db.insert_travel_rule_record("mint1", 2, "vaspC", "vaspD", 2000, Some(2), None, Some("s2")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records?wallet=vaspD").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["beneficiary_vasp"], "vaspD");
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_filter_by_mint() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mintX", 1, "v1", "v2", 100, Some(1), None, Some("s1")).unwrap();
+        db.insert_travel_rule_record("mintY", 2, "v3", "v4", 200, Some(2), None, Some("s2")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records?mint=mintX").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["mint"], "mintX");
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_limit() {
+        let db = db::Database::new(":memory:").unwrap();
+        for i in 0..5i64 {
+            db.insert_travel_rule_record("mint1", i, "vA", "vB", 100, Some(i), None, Some(&format!("s{i}"))).unwrap();
+        }
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records?limit=3").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        assert_eq!(json["data"].as_array().unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_duplicate_nonce_ignored() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 1, "v1", "v2", 1000, Some(1), None, Some("s1")).unwrap();
+        // Duplicate (mint, nonce) — should be silently ignored (INSERT OR IGNORE).
+        db.insert_travel_rule_record("mint1", 1, "v1", "v2", 9999, Some(2), None, Some("s2")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["transfer_amount"].as_i64().unwrap(), 1000); // original value kept
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_encrypted_payload_optional() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 1, "v1", "v2", 100, None, None, None).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let rec = &json["data"][0];
+        // encrypted_payload is skip_serializing_if(None) — should be absent or null
+        assert!(rec.get("encrypted_payload").map_or(true, |v| v.is_null()));
+    }
+
+    #[tokio::test]
+    async fn test_pid_config_returns_program_ids() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/pid-config").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["sss_token_program_id"], "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat");
+        assert_eq!(json["sss_transfer_hook_program_id"], "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp");
+        assert_eq!(json["travel_rule_indexing_active"], true);
+        assert!(json["travel_rule_threshold"].is_number());
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_multiple_mints() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mintA", 1, "v1", "v2", 500, Some(1), None, Some("s1")).unwrap();
+        db.insert_travel_rule_record("mintB", 2, "v3", "v4", 700, Some(2), None, Some("s2")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        assert_eq!(json["data"].as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_wallet_no_match_returns_empty() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 1, "vaspA", "vaspB", 100, Some(1), None, Some("s1")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records?wallet=vaspZ").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        assert!(json["data"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_nonce_stored_correctly() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 42, "v1", "v2", 100, Some(1), None, Some("s1")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        assert_eq!(json["data"][0]["nonce"].as_i64().unwrap(), 42);
     }
 }
