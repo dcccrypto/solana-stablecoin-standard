@@ -73,6 +73,11 @@ pub struct CdpBorrowStable<'info> {
 
 #[inline(never)]
 pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> Result<()> {
+    // SSS-122: version guard
+    require!(
+        ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
+        SssError::ConfigVersionTooOld
+    );
     require!(amount > 0, SssError::ZeroAmount);
     // SSS-110: Circuit breaker — halt CDP borrows when FLAG_CIRCUIT_BREAKER is set.
     require!(

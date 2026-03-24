@@ -40,6 +40,11 @@ pub struct BurnTokens<'info> {
 }
 
 pub fn handler(ctx: Context<BurnTokens>, amount: u64) -> Result<()> {
+    // SSS-122: version guard
+    require!(
+        ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
+        SssError::ConfigVersionTooOld
+    );
     require!(amount > 0, SssError::ZeroAmount);
     require!(!ctx.accounts.config.paused, SssError::MintPaused);
     // SSS-113 HIGH-01: Circuit breaker — halt all burns when FLAG_CIRCUIT_BREAKER is set.

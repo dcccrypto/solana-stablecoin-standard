@@ -70,5 +70,8 @@ pub use update_roles::*;
 pub use yield_collateral::*;
 pub use zk_compliance::*;
 
+pub mod upgrade;
+pub use upgrade::*;
+
 // Re-export param types from state
 pub use crate::state::{InitializeParams, UpdateRolesParams};

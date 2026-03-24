@@ -179,6 +179,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     } else {
         [0u8; 32]
     };
+    config.version = crate::instructions::upgrade::CURRENT_VERSION;
     config.bump = ctx.bumps.config;
 
     msg!(
