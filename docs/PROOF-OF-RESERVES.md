@@ -302,7 +302,11 @@ The original backend-based supply snapshot proof (SHA-256 Merkle root over `tota
 
 This returns a `merkle_root` computed as `SHA-256(SHA-256(supply_le8))` tied to a Solana slot. Use the on-chain PoR PDA as the primary source of truth; the REST endpoint is suitable for dashboards and lightweight clients that do not hold an RPC connection.
 
-See the [API Reference](API-REFERENCE.md) for full request/response details.
+**Current limitations to be aware of:**
+- The `holder` query parameter is accepted but not used to filter the proof.
+- The snapshot reflects devnet state; mainnet support is forthcoming.
+- The proof covers total supply only, not individual reserve wallet balances.
+- **Reserve composition is self-reported, not machine-verified.** The PoR proof commits to the on-chain `totalSupply` — it does not verify what assets back that supply. An issuer supplies the reserve breakdown (e.g. "100% USD cash") separately; the protocol has no mechanism to verify this claim on-chain. Users relying on reserve composition figures should require off-chain auditor attestations in addition to the PoR Merkle proof. Direction 3 (oracle-attested proof) is planned to address this gap, but is not yet implemented.
 
 ---
 
