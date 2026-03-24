@@ -154,7 +154,6 @@ Endpoints:
 | [Preset: SSS-3 Trustless](docs/SSS-3.md) | SSS-3 trustless collateral-backed reference design |
 | [Preset: SSS-4 Institutional](docs/SSS-4-INSTITUTIONAL.md) | SSS-4 Squads V4 multisig authority — institutional grade m-of-n governance (SSS-134) |
 | [Architecture](docs/ARCHITECTURE.md) | Three-layer system architecture |
-| [Submission](docs/SUBMISSION.md) | Bounty submission — what was built, how to run, what makes it innovative |
 | [Devnet Deployment](docs/devnet-deploy.md) | Deploying and smoke-testing on Solana devnet |
 | [Integration Testing](docs/integration-testing.md) | Running the full integration test suite and CI setup |
 | [Anchor Program Tests](docs/anchor-program-testing.md) | Running the Anchor on-chain test suite locally and in CI (SSS-015) |
@@ -163,15 +162,6 @@ Endpoints:
 | [Proof Demo: Agent-to-Agent Task Payment](docs/PROOF-DEMO.md) | End-to-end runnable demo — two autonomous agents completing a verifiable task payment using APC + PBS on devnet (SSS-112) |
 | [Event Schema v1](docs/EVENT-SCHEMA.md) | Canonical on-chain event schema — 13 event types, discriminators, envelope format, HMAC signing (SSS-142) |
 | [Indexer Integration Guide](docs/INDEXER-GUIDE.md) | Helius, Shyft, Triton, and custom indexer setup — webhook registration, signature verification, TypeScript examples (SSS-142) |
-
-## Judging Criteria
-
-- **SDK Design & Modularity**: Layer-based architecture, clean preset API
-- **Completeness**: SSS-1 + SSS-2 both implemented
-- **Code Quality**: Anchor constraints, safe math, comprehensive errors
-- **Security**: Freeze authority, blacklist, minter caps, pause mechanism
-- **Solana Expertise**: Token-2022 extensions, PDAs, transfer hooks
-- **Usability**: TypeScript SDK + CLI + REST API + Docker
 
 ## License
 
