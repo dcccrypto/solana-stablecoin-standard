@@ -309,4 +309,25 @@ pub enum SssError {
     SquadsMembersTooMany,
     #[msg("Duplicate pubkey in Squads member list")]
     SquadsDuplicateMember,
+    // SSS-135: Cross-chain bridge
+    #[msg("Bridge not enabled — set FLAG_BRIDGE_ENABLED via set_feature_flag")]
+    BridgeNotEnabled,
+    #[msg("Bridge fee bps exceeds maximum allowed (1000 = 10%)")]
+    BridgeFeeTooHigh,
+    #[msg("Invalid bridge type — must be 1 (Wormhole) or 2 (LayerZero)")]
+    InvalidBridgeType,
+    #[msg("Bridge amount exceeds max_bridge_amount_per_tx limit")]
+    BridgeAmountExceedsLimit,
+    #[msg("Bridge config mint does not match the provided mint account")]
+    BridgeConfigMintMismatch,
+    #[msg("Token account owner does not match expected signer")]
+    TokenAccountOwnerMismatch,
+    #[msg("Token account mint does not match the stablecoin mint")]
+    TokenAccountMintMismatch,
+    #[msg("Bridge recipient does not match recipient_token_account owner")]
+    BridgeRecipientMismatch,
+    #[msg("Bridge proof bytes are empty")]
+    BridgeProofEmpty,
+    #[msg("Bridge proof verification failed")]
+    BridgeProofInvalid,
 }
