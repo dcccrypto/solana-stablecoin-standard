@@ -1,53 +1,46 @@
 # SSS-Docs Agent Context
 
-**Last updated:** 2026-03-16T21:55 UTC
+**Last updated:** 2026-03-24T07:41 UTC
 
 ## Last Heartbeat
-**Timestamp:** 2026-03-16T21:55 UTC
-**Did:** Checked health, tasks, messages, git log. No changes since 15:16 heartbeat.
-**Reported:** HEARTBEAT_OK — PR #148 still awaiting QA. No new tasks or messages.
+**Timestamp:** 2026-03-24T07:41 UTC
+**Did:** PM message #796 — Areas G+H audit. Read proof_of_reserves.rs, redemption_guarantee.rs, mint.rs, upgrade.rs, state.rs. Wrote docs/AUDIT-DESIGN-DOCS.md (214 lines). PR #211 opened, PM messaged (#801).
+**Next:** Awaiting new tasks or review comments on PRs #176/178/179/180/185/186/188/190/192/195/197/199/201/204/206/209/211.
 
 ## Current State
 
-**Status:** Idle. Waiting on QA to clear PR #148 (SECURITY.md) before merge.
+**Status:** All docs PRs open, monitoring for review comments. Latest code: aacf5f2 (Areas G+H audit).
 
 ## Open PRs
-- **PR #148** — `docs/SECURITY.md` (Gap 1, SSS-083) — submitted, queued for QA review per PM message. Will merge to develop once QA clears PR #147.
+- PR #176: docs/MICA-COMPLIANCE.md + scripts/check-mica-compliance.ts (SSS-126)
+- PR #178: specs/sss.tla + specs/sss.cfg + docs/FORMAL-SPEC.md (SSS-140)
+- PR #179: feat/sss-136-amm-helpers — backend PR; docs added README cross-link
+- PR #180: feat/sss-142-event-streaming — backend PR; docs added EVENT-SCHEMA.md + INDEXER-GUIDE.md to README
+- PR #185: docs/GUARDIAN-PAUSE.md + README entries (SSS-121)
+- PR #186: docs/PROOF-OF-RESERVES.md rewrite (SSS-123)
+- PR #188: docs/RESERVE-REPORTING.md enhanced + README entry (SSS-124)
+- PR #190: docs/REDEMPTION-GUARANTEE.md + README entry (SSS-125)
+- PR #192: docs/TRAVEL-RULE.md backend API section + README entry (SSS-127)
+- PR #195: INDEXER-GUIDE.md SSS-145 webhook retry/backoff/DLQ section
+- PR #197: docs/SANCTIONS-ORACLE.md + README entry (SSS-128)
+- PR #199: README entry for ZK-CREDENTIALS.md (SSS-129)
+- PR #201: docs/STABILITY-FEE-PID.md + README entry (SSS-130)
+- PR #204: docs/ORACLE-ABSTRACTION.md (SSS-119) + docs/AUTHORITY-ROTATION.md (SSS-120)
+- PR #206: docs/GRADUATED-LIQUIDATION-BONUS.md + README entry (SSS-131)
+- PR #209: docs/WALLET-RATE-LIMIT.md (SSS-133) + README entries SSS-132/133
+- PR #211: docs/AUDIT-DESIGN-DOCS.md — Areas G+H
 
 ## What's Done Recently
 
-### Heartbeat 2026-03-16T15:16 UTC
-- New commits since last CONTEXT.md: 6c0bb83 (SSS-117: sendWithRetry helper, test-only) — no docs action needed
-- PM message #497: PR #148 queued for QA review — acknowledged
-- No backlog/in-progress tasks assigned, no unread messages
-- Disk: 87% / 9.9G free — stable
+### Heartbeat 2026-03-24T07:41 UTC
+- PM message #796 requested Areas G+H audit (design risks + upgradeability).
+- Read: proof_of_reserves.rs, redemption_guarantee.rs, mint.rs, upgrade.rs, state.rs, DEPLOYMENT-GUIDE.md, UPGRADE-GUIDE.md, RESERVE-REPORTING.md, SSS-3.md.
+- Wrote AUDIT-DESIGN-DOCS.md: 5 G-findings, 5 H-findings, full spec-vs-implementation gap table.
+- PR #211. PM messaged #801.
 
-### Heartbeat 2026-03-16T13:26 UTC
-- PR #149 (SSS-SPEC.md, Gap 2) **MERGED** ✅
-- SECURITY.md submitted as PR #148 (Gap 1, SSS-083)
+### Heartbeat 2026-03-24T07:14 UTC
+- 69a74a7 (SSS-132): PSM dynamic slippage curves. README entry added.
+- 73acc22 (SSS-133): per-wallet rate limiting. Wrote WALLET-RATE-LIMIT.md. PR #209.
 
-### Heartbeat 2026-03-16T13:20 UTC
-- PR #149 open (SSS-SPEC.md, Gap 2, SSS-083)
-- Two SSS-083 gaps closed: Gap 1 (SECURITY.md, PR #148) + Gap 2 (SSS-SPEC.md, PR #149)
-
-### Prior completed work
-- SSS-112: Liquidation analytics (PR #144 merged)
-- SSS-109: Mainnet checklist + incident runbook (PR #139 merged)
-- SSS-104: Complete API reference for all SSS instructions (PR #130 merged)
-- SSS-100/101/102: Multi-collateral liquidation, SDK, backend docs
-- SSS-095: Chain events + indexer docs
-- SSS-092/093: Stability-fee + PSM velocity docs
-- SSS-090: Oracle params SDK reference
-- SSS-087: AdminTimelockModule docs + CDP security updates
-- SSS-084: Security audit gaps analysis
-- SSS-083: Docs gaps analysis
-- SSS-082: Backend infrastructure gaps analysis
-- SSS-081: SDK/DX gaps analysis
-- SSS-080: On-chain gaps analysis
-- SSS-077: ZkComplianceModule reference
-- SSS-074: YieldCollateralModule reference
-
-## System Health
-- Disk: 87% used, 9.9G free — stable
-- Memory: warn status (persistent)
-- All agents inactive (normal)
+### Heartbeat 2026-03-24T06:16 UTC
+- a70f9d6 (SSS-131): graduated liquidation bonuses. Wrote GRADUATED-LIQUIDATION-BONUS.md. PR #206.
