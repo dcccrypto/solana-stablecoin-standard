@@ -597,4 +597,42 @@ pub mod sss_token {
     pub fn claim_expired_redemption(ctx: Context<ClaimExpiredRedemption>) -> Result<()> {
         instructions::redemption_guarantee::claim_expired_redemption_handler(ctx)
     }
+
+    // -------------------------------------------------------------------------
+    // SSS-127: Travel Rule compliance hooks
+    // -------------------------------------------------------------------------
+
+    /// Set the Travel Rule transfer threshold (token native units). 0 = disabled.
+    pub fn set_travel_rule_threshold(
+        ctx: Context<SetTravelRuleThreshold>,
+        threshold: u64,
+    ) -> Result<()> {
+        instructions::travel_rule::set_travel_rule_threshold_handler(ctx, threshold)
+    }
+
+    /// Submit a Travel Rule record for a qualifying transfer.
+    /// Must be called in the same transaction as the transfer.
+    pub fn submit_travel_rule_record(
+        ctx: Context<SubmitTravelRuleRecord>,
+        nonce: u64,
+        encrypted_payload: [u8; 256],
+        beneficiary_vasp: Pubkey,
+        transfer_amount: u64,
+    ) -> Result<()> {
+        instructions::travel_rule::submit_travel_rule_record_handler(
+            ctx,
+            nonce,
+            encrypted_payload,
+            beneficiary_vasp,
+            transfer_amount,
+        )
+    }
+
+    /// Close a Travel Rule record and reclaim rent after the transfer settles.
+    pub fn close_travel_rule_record(
+        ctx: Context<CloseTravelRuleRecord>,
+        nonce: u64,
+    ) -> Result<()> {
+        instructions::travel_rule::close_travel_rule_record_handler(ctx, nonce)
+    }
 }

@@ -381,3 +381,24 @@ pub struct RedemptionSLABreached {
     /// Penalty paid out from the insurance fund (collateral token units).
     pub penalty_paid: u64,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-127: Travel Rule events
+// ---------------------------------------------------------------------------
+
+/// Emitted when a TravelRuleRecord is submitted for a qualifying transfer.
+#[event]
+pub struct TravelRuleRecordSubmitted {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// Monotonic nonce used to derive the TravelRuleRecord PDA.
+    pub nonce: u64,
+    /// Originating VASP pubkey.
+    pub originator_vasp: Pubkey,
+    /// Beneficiary VASP pubkey.
+    pub beneficiary_vasp: Pubkey,
+    /// Transfer amount this record covers (in token native units).
+    pub transfer_amount: u64,
+    /// Solana slot at which the record was submitted.
+    pub slot: u64,
+}

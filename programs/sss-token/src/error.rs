@@ -207,4 +207,11 @@ pub enum SssError {
     RedemptionNotExpired,
     #[msg("Insurance fund is not configured on this stablecoin")]
     InsuranceFundNotConfigured,
+    // SSS-127: Travel Rule
+    #[msg("Travel Rule record required: transfer amount meets threshold but no TravelRuleRecord found")]
+    TravelRuleRequired,
+    #[msg("Travel Rule record is invalid: transfer_amount or beneficiary_vasp does not match")]
+    TravelRuleRecordInvalid,
+    #[msg("Travel Rule threshold must be greater than zero when FLAG_TRAVEL_RULE is set")]
+    TravelRuleThresholdNotSet,
 }
