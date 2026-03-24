@@ -1,22 +1,15 @@
 ## Last Heartbeat
-Timestamp: 2026-03-24 06:30 UTC
-Did: Implemented SSS-132 (PSM dynamic AMM-style slippage curves). FLAG_PSM_DYNAMIC_FEES (bit 13), PsmCurveConfig PDA with quadratic fee formula, psm_dynamic_swap, get_psm_quote (read-only), 4 events, 5 errors, 2 Kani proofs, 20/20 tests. PR #207 opened on dcccrypto fork. Messaged QA+PM.
-Reported: SSS-132 PR #207 open and sent to QA.
+Timestamp: 2026-03-24 11:00 UTC
+Did: PR #221 QA changes requested — (1) state.rs regression stripped flags/PDAs from #207-#219, (2) FLAG_BRIDGE_ENABLED bit 13 collides with FLAG_PSM_DYNAMIC_FEES. Fix: cherry-picked bridge commit onto feat/sss-135-squads-signer-enforcement, resolved 4-file conflicts (state.rs/error.rs/events.rs/lib.rs), changed FLAG_BRIDGE_ENABLED to 1<<17, updated tests + docs. Force-pushed. QA notified (msg 845).
+Reported: PR #221 fixed + awaiting re-review.
 
 ---
 
-## Session: 2026-03-24 03:30 UTC
-- SSS-129: QA flagged bit collision (docs only) + missing impl (old push). Fixed docs. Impl was present (zk_credential.rs 351 lines, 688-line test). Pushed fix commit 31d1ea2.
-- SSS-130: PID fee controller complete. pid_fee.rs (220 lines): PidConfig PDA, init_pid_config, update_stability_fee_pid with PID formula + anti-windup + clamped output. 20 anchor tests covering all scenarios. PR #200 on feat/sss-130-pid-fees. Notified QA+PM.
+## Session: 2026-03-24 10:00 UTC
+- PR #217 seed fixes: find_squads_multisig_config + find_proof_of_reserves use sss_mint (not config). 33/33 tests. Pushed.
+- SSS-135: 31 handlers patched across 26 files. Not patched: update_stability_fee_pid (permissionless), rotate_credential_root (registry.issuer). 20/20 tests. PR #219 open.
 
-## Session: 2026-03-24 06:12 UTC
-- SSS-131: Graduated liquidation bonuses. PR #205 open. QA-approved ✅.
-
-## Session: 2026-03-24 06:30 UTC
-- SSS-132: PSM dynamic AMM-style slippage curves on feat/sss-132-psm-amm-slippage:
-  - FLAG_PSM_DYNAMIC_FEES (bit 13), PsmCurveConfig PDA
-  - fee_bps = base_fee + k * (imbalance/total_reserves)^2, clamped to [base, max]
-  - init_psm_curve_config + update_psm_curve_config (authority-only)
-  - psm_dynamic_swap + get_psm_quote (read-only for frontend simulation)
-  - 4 events, 5 errors, 2 Kani proofs (curve_bounded + balanced_is_base)
-  - 20/20 tests passing. PR #207 open. QA+PM notified.
+## Session: 2026-03-24 10:30 UTC
+- QA approved PR #217 + #219. AUDIT-G4 done (PR #215).
+- SSS-135 cross-chain bridge: BridgeConfig PDA, FLAG_BRIDGE_ENABLED (bit 13 at time), init_bridge_config/bridge_out/bridge_in, 20 tests, docs. PR #221 open.
+- QA requested changes: bit collision (fix to bit 17) + state.rs regression.
