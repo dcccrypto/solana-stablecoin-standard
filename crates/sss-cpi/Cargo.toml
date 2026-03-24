@@ -1,0 +1,24 @@
+[package]
+name = "sss-cpi"
+version = "0.1.0"
+edition = "2021"
+description = "Rust CPI client library for the Solana Stablecoin Standard (SSS) on-chain program"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dcccrypto/solana-stablecoin-standard"
+keywords = ["solana", "stablecoin", "cpi", "anchor", "defi"]
+categories = ["cryptography::cryptocurrencies"]
+
+[features]
+default = []
+# Enable if you want the full anchor IDL-derived cpi module (requires sss-token as a dep)
+cpi = ["dep:sss-token"]
+
+[dependencies]
+anchor-lang = { workspace = true }
+anchor-spl  = { workspace = true }
+sss-token   = { path = "../../programs/sss-token", features = ["cpi"], optional = true }
+
+[dev-dependencies]
+anchor-lang  = { workspace = true }
+solana-program = "2"
+sss-token    = { path = "../../programs/sss-token", features = ["cpi"] }
