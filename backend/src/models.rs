@@ -347,3 +347,192 @@ pub struct PidConfigResponse {
     /// Minimum transfer amount that triggers travel-rule record creation (native units, 0 = not set).
     pub travel_rule_threshold: i64,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-129: ZK Credentials — selective disclosure compliance proofs
+// ---------------------------------------------------------------------------
+
+/// Credential type for a ZK compliance proof.
+/// Mirrors on-chain CredentialType enum (u8).
+#[allow(dead_code)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialType {
+    NotSanctioned,
+    KycPassed,
+    AccreditedInvestor,
+}
+
+impl CredentialType {
+    pub fn from_u8(v: u8) -> Option<Self> {
+        match v {
+            0 => Some(Self::NotSanctioned),
+            1 => Some(Self::KycPassed),
+            2 => Some(Self::AccreditedInvestor),
+            _ => None,
+        }
+    }
+
+    pub fn to_u8(&self) -> u8 {
+        match self {
+            Self::NotSanctioned => 0,
+            Self::KycPassed => 1,
+            Self::AccreditedInvestor => 2,
+        }
+    }
+}
+
+impl std::fmt::Display for CredentialType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::NotSanctioned => "not_sanctioned",
+            Self::KycPassed => "kyc_passed",
+            Self::AccreditedInvestor => "accredited_investor",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl std::str::FromStr for CredentialType {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "not_sanctioned" => Ok(Self::NotSanctioned),
+            "kyc_passed" => Ok(Self::KycPassed),
+            "accredited_investor" => Ok(Self::AccreditedInvestor),
+            _ => Err(format!("Unknown credential type: {s}")),
+        }
+    }
+}
+
+/// Indexed CredentialRecord from on-chain `CredentialRecord` PDA.
+/// Created/refreshed when a user submits a valid ZK proof.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CredentialRecord {
+    /// Internal UUID.
+    pub id: String,
+    /// SSS stablecoin mint (base58).
+    pub mint: String,
+    /// User wallet that submitted the proof (base58).
+    pub user: String,
+    /// Credential type (not_sanctioned | kyc_passed | accredited_investor).
+    pub credential_type: String,
+    /// Issuer pubkey (base58) from the on-chain CredentialRegistry.
+    pub issuer_pubkey: String,
+    /// Unix timestamp (seconds) when the proof was accepted on-chain.
+    pub verified_at: i64,
+    /// Unix timestamp (seconds) when this record expires.
+    pub expires_at: i64,
+    /// Whether the record is currently valid (computed: expires_at > now).
+    pub is_valid: bool,
+    /// Transaction signature.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_signature: Option<String>,
+    /// Slot at which the record was created/updated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot: Option<i64>,
+    pub created_at: String,
+}
+
+/// Query params for GET /api/zk-credentials/records
+#[derive(Debug, Deserialize)]
+pub struct CredentialQuery {
+    /// Filter by user wallet (base58).
+    pub user: Option<String>,
+    /// Filter by mint (base58).
+    pub mint: Option<String>,
+    /// Filter by credential type (not_sanctioned | kyc_passed | accredited_investor).
+    pub credential_type: Option<String>,
+    /// If true, only return currently valid (non-expired) records.
+    pub valid_only: Option<bool>,
+    /// Maximum rows to return (default: 100, max: 1000).
+    pub limit: Option<u32>,
+}
+
+/// Request body for POST /api/zk-credentials/submit
+#[derive(Debug, Deserialize)]
+pub struct SubmitCredentialRequest {
+    /// SSS stablecoin mint (base58).
+    pub mint: String,
+    /// User wallet (base58).
+    pub user: String,
+    /// Credential type.
+    pub credential_type: String,
+    /// Issuer pubkey (base58).
+    pub issuer_pubkey: String,
+    /// Groth16 proof bytes (base64-encoded, 256 bytes).
+    pub proof_data: String,
+    /// ABI-encoded public inputs (base64-encoded, 64 bytes max).
+    #[serde(default)]
+    pub public_inputs: Option<String>,
+    /// Proof validity window in seconds (default 2592000 = 30 days).
+    #[serde(default)]
+    pub proof_expiry_seconds: Option<u64>,
+    /// Optional on-chain tx signature.
+    pub tx_signature: Option<String>,
+    /// Optional slot.
+    pub slot: Option<i64>,
+}
+
+/// Request body for POST /api/zk-credentials/verify
+#[derive(Debug, Deserialize)]
+pub struct VerifyCredentialRequest {
+    /// SSS stablecoin mint (base58).
+    pub mint: String,
+    /// User wallet (base58).
+    pub user: String,
+    /// Credential type to check.
+    pub credential_type: String,
+}
+
+/// Response for POST /api/zk-credentials/verify
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifyCredentialResponse {
+    pub is_valid: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub record: Option<CredentialRecord>,
+    pub message: String,
+}
+
+/// CredentialRegistry configuration PDA data.
+/// Stored off-chain for query convenience.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CredentialRegistry {
+    /// Internal UUID.
+    pub id: String,
+    /// SSS stablecoin mint (base58).
+    pub mint: String,
+    /// Credential type this registry governs.
+    pub credential_type: String,
+    /// Issuer pubkey (base58) — the authorised credential issuer.
+    pub issuer_pubkey: String,
+    /// Merkle root of valid credentials (hex-encoded).
+    pub merkle_root: String,
+    /// Proof validity window in seconds.
+    pub proof_expiry_seconds: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Request body for POST /api/zk-credentials/registry
+#[derive(Debug, Deserialize)]
+pub struct UpsertRegistryRequest {
+    /// SSS stablecoin mint (base58).
+    pub mint: String,
+    /// Credential type.
+    pub credential_type: String,
+    /// Issuer pubkey (base58).
+    pub issuer_pubkey: String,
+    /// Merkle root (hex-encoded 32 bytes).
+    pub merkle_root: String,
+    /// Proof expiry seconds (default 2592000).
+    #[serde(default)]
+    pub proof_expiry_seconds: Option<i64>,
+}
+
+/// Query params for GET /api/zk-credentials/registry
+#[derive(Debug, Deserialize)]
+pub struct RegistryQuery {
+    pub mint: Option<String>,
+    pub credential_type: Option<String>,
+}

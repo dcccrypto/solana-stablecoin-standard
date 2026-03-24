@@ -42,6 +42,10 @@ use routes::{
     travel_rule::{get_pid_config, get_travel_rule_records},
     webhooks::{delete_webhook, list_webhooks, register_webhook},
     ws_events::ws_events_handler,
+    zk_credentials::{
+        list_credential_records, list_registries, submit_credential, upsert_registry,
+        verify_credential,
+    },
 };
 use state::AppState;
 
@@ -123,6 +127,10 @@ async fn main() {
         .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
         .route("/api/travel-rule/records", get(get_travel_rule_records))
         .route("/api/pid-config", get(get_pid_config))
+        .route("/api/zk-credentials/records", get(list_credential_records))
+        .route("/api/zk-credentials/submit", post(submit_credential))
+        .route("/api/zk-credentials/verify", post(verify_credential))
+        .route("/api/zk-credentials/registry", get(list_registries).post(upsert_registry))
         .route("/api/ws/events", get(ws_events_handler))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
@@ -2183,5 +2191,343 @@ mod travel_rule_tests {
             .await.unwrap();
         let json = body_json(resp).await;
         assert_eq!(json["data"][0]["nonce"].as_i64().unwrap(), 42);
+    }
+}
+
+// ─── SSS-129: ZK Credentials tests ───────────────────────────────────────────
+
+#[cfg(test)]
+mod zk_credentials_tests {
+    use super::*;
+    use axum::{
+        body::Body,
+        http::{Method, Request, StatusCode},
+        Router,
+    };
+    use tower::ServiceExt;
+
+    const MINT: &str = "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat";
+    const USER: &str = "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R";
+    const ISSUER: &str = "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp";
+    // 64 hex chars = 32-byte merkle root
+    const MERKLE_ROOT: &str = "a3f2b1c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2";
+    // 512 hex chars = 256-byte Groth16 proof
+    const PROOF_HEX: &str = "ab12cd34ef56789012345678901234567890123456789012345678901234567890\
+                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
+                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
+                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
+                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
+                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
+                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
+                             ab12cd34ef56789012345678901234567890123456789012";
+
+    fn build_zk_app(db: db::Database) -> Router<()> {
+        let state = state::AppState::new(db);
+        Router::new()
+            .route("/api/zk-credentials/records", get(routes::zk_credentials::list_credential_records))
+            .route("/api/zk-credentials/submit", axum::routing::post(routes::zk_credentials::submit_credential))
+            .route("/api/zk-credentials/verify", axum::routing::post(routes::zk_credentials::verify_credential))
+            .route(
+                "/api/zk-credentials/registry",
+                get(routes::zk_credentials::list_registries)
+                    .post(routes::zk_credentials::upsert_registry),
+            )
+            .with_state(state)
+    }
+
+    async fn body_json(resp: axum::response::Response) -> serde_json::Value {
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    fn json_body(v: serde_json::Value) -> Body {
+        Body::from(serde_json::to_vec(&v).unwrap())
+    }
+
+    // ── Registry tests ──────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_registry_list_empty() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_zk_app(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/zk-credentials/registry").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["success"], true);
+        assert!(json["data"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_registry_upsert_and_list() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_zk_app(db);
+        let body = serde_json::json!({
+            "mint": MINT,
+            "credential_type": "kyc_passed",
+            "issuer_pubkey": ISSUER,
+            "merkle_root": MERKLE_ROOT,
+            "proof_expiry_seconds": 86400
+        });
+        let resp = app.clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/zk-credentials/registry")
+                    .header("Content-Type", "application/json")
+                    .body(json_body(body)).unwrap(),
+            )
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["credential_type"], "kyc_passed");
+        assert_eq!(json["data"]["merkle_root"], MERKLE_ROOT);
+        assert_eq!(json["data"]["proof_expiry_seconds"], 86400);
+    }
+
+    #[tokio::test]
+    async fn test_registry_invalid_merkle_root_rejected() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_zk_app(db);
+        let body = serde_json::json!({
+            "mint": MINT,
+            "credential_type": "not_sanctioned",
+            "issuer_pubkey": ISSUER,
+            "merkle_root": "tooshort",
+        });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/zk-credentials/registry")
+                    .header("Content-Type", "application/json")
+                    .body(json_body(body)).unwrap(),
+            )
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["success"], false);
+        assert!(json["error"].as_str().unwrap().contains("merkle_root"));
+    }
+
+    // ── Submit tests ─────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_submit_credential_valid() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_zk_app(db);
+        let body = serde_json::json!({
+            "mint": MINT,
+            "user": USER,
+            "credential_type": "not_sanctioned",
+            "issuer_pubkey": ISSUER,
+            "proof_data": PROOF_HEX,
+            "tx_signature": "5JxFakeSignaturexxx",
+        });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/zk-credentials/submit")
+                    .header("Content-Type", "application/json")
+                    .body(json_body(body)).unwrap(),
+            )
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["user"], USER);
+        assert_eq!(json["data"]["credential_type"], "not_sanctioned");
+        assert_eq!(json["data"]["is_valid"], true);
+        assert!(json["data"]["expires_at"].as_i64().unwrap() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_submit_credential_invalid_proof_data() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_zk_app(db);
+        let body = serde_json::json!({
+            "mint": MINT,
+            "user": USER,
+            "credential_type": "kyc_passed",
+            "issuer_pubkey": ISSUER,
+            "proof_data": "",  // empty — invalid
+        });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/zk-credentials/submit")
+                    .header("Content-Type", "application/json")
+                    .body(json_body(body)).unwrap(),
+            )
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["success"], false);
+        assert!(json["error"].as_str().unwrap().contains("proof_data"));
+    }
+
+    #[tokio::test]
+    async fn test_submit_updates_existing_record() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_zk_app(db);
+        let body = serde_json::json!({
+            "mint": MINT, "user": USER,
+            "credential_type": "accredited_investor",
+            "issuer_pubkey": ISSUER, "proof_data": PROOF_HEX,
+        });
+        // Submit twice — second should refresh expiry
+        for _ in 0..2 {
+            let resp = app.clone()
+                .oneshot(
+                    Request::builder()
+                        .method(Method::POST)
+                        .uri("/api/zk-credentials/submit")
+                        .header("Content-Type", "application/json")
+                        .body(json_body(body.clone())).unwrap(),
+                )
+                .await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+        }
+
+        // List — should still be 1 record (upsert)
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/zk-credentials/records")
+                    .body(Body::empty()).unwrap(),
+            )
+            .await.unwrap();
+        let json = body_json(resp).await;
+        assert_eq!(json["data"].as_array().unwrap().len(), 1);
+    }
+
+    // ── Verify tests ─────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_verify_no_record_returns_not_valid() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_zk_app(db);
+        let body = serde_json::json!({
+            "mint": MINT, "user": USER, "credential_type": "not_sanctioned"
+        });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/zk-credentials/verify")
+                    .header("Content-Type", "application/json")
+                    .body(json_body(body)).unwrap(),
+            )
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["is_valid"], false);
+        assert!(json["record"].is_null());
+        assert!(json["message"].as_str().unwrap().contains("No credential record found"));
+    }
+
+    #[tokio::test]
+    async fn test_verify_valid_after_submit() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_zk_app(db);
+
+        // Submit proof
+        let submit_body = serde_json::json!({
+            "mint": MINT, "user": USER,
+            "credential_type": "kyc_passed",
+            "issuer_pubkey": ISSUER, "proof_data": PROOF_HEX,
+        });
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/zk-credentials/submit")
+                    .header("Content-Type", "application/json")
+                    .body(json_body(submit_body)).unwrap(),
+            )
+            .await.unwrap();
+
+        // Verify
+        let verify_body = serde_json::json!({
+            "mint": MINT, "user": USER, "credential_type": "kyc_passed"
+        });
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/zk-credentials/verify")
+                    .header("Content-Type", "application/json")
+                    .body(json_body(verify_body)).unwrap(),
+            )
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["is_valid"], true);
+        assert!(!json["record"].is_null());
+        assert_eq!(json["record"]["credential_type"], "kyc_passed");
+    }
+
+    // ── Records list tests ────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_records_list_empty() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_zk_app(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/zk-credentials/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert!(json["data"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_records_filter_by_user() {
+        let db = db::Database::new(":memory:").unwrap();
+        // Seed two users directly in db
+        let now = chrono::Utc::now().timestamp();
+        db.upsert_credential_record(MINT, USER, "not_sanctioned", ISSUER, now, now + 86400, None, None).unwrap();
+        db.upsert_credential_record(MINT, "AnotherUser111", "not_sanctioned", ISSUER, now, now + 86400, None, None).unwrap();
+
+        let app = build_zk_app(db);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(&format!("/api/zk-credentials/records?user={USER}"))
+                    .body(Body::empty()).unwrap(),
+            )
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["user"], USER);
+    }
+
+    #[tokio::test]
+    async fn test_records_valid_only_filter() {
+        let db = db::Database::new(":memory:").unwrap();
+        let now = chrono::Utc::now().timestamp();
+        // Valid record
+        db.upsert_credential_record(MINT, USER, "kyc_passed", ISSUER, now, now + 86400, None, None).unwrap();
+        // Expired record (different user)
+        db.upsert_credential_record(MINT, "ExpiredUser222", "kyc_passed", ISSUER, now - 10000, now - 1, None, None).unwrap();
+
+        let app = build_zk_app(db);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/zk-credentials/records?valid_only=true")
+                    .body(Body::empty()).unwrap(),
+            )
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["user"], USER);
+        assert_eq!(records[0]["is_valid"], true);
     }
 }
