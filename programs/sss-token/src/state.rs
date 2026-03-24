@@ -36,6 +36,66 @@ pub const FLAG_ZK_COMPLIANCE: u64 = 1 << 4;
 /// See docs/confidential-transfers.md for the full compliance model.
 pub const FLAG_CONFIDENTIAL_TRANSFERS: u64 = 1 << 5;
 
+/// SSS-109: Probabilistic Balance Standard — enables commit_probabilistic and
+/// related PBS instructions for conditional "pay on proof" transfers.
+pub const FLAG_PROBABILISTIC_MONEY: u64 = 1 << 6;
+/// SSS-110: Agent Payment Channel — enables open_channel and related APC instructions
+/// for trustless agent-to-agent payment channels with work proof and dispute resolution.
+pub const FLAG_AGENT_PAYMENT_CHANNEL: u64 = 1 << 7;
+/// SSS-127: Travel Rule compliance — when set, transfers at or above `travel_rule_threshold`
+/// require a corresponding `TravelRuleRecord` PDA to exist in the same transaction.
+/// Implements FATF Travel Rule for VASP-to-VASP data sharing.
+pub const FLAG_TRAVEL_RULE: u64 = 1 << 8;
+
+/// SSS-128: Sanctions oracle flag (bit 9): when set, the transfer hook reads a
+/// `SanctionsRecord` PDA from the sss-token program (written by the configured
+/// sanctions oracle signer) and rejects transfers from sanctioned addresses.
+/// oracle-agnostic — any compliance provider (Chainalysis, Elliptic, TRM) can
+/// call `update_sanctions_record` as the registered oracle signer.
+pub const FLAG_SANCTIONS_ORACLE: u64 = 1 << 9;
+
+/// SSS-129: ZK credentials flag (bit 10): when set, the transfer hook requires
+/// a valid `CredentialRecord` PDA for the sender — issued by the
+/// `CredentialRegistry` and verified against the on-chain Groth16 Merkle root.
+/// Enables `init_credential_registry`, `verify_zk_credential`, and
+/// `revoke_credential` instructions.
+pub const FLAG_ZK_CREDENTIALS: u64 = 1 << 10;
+
+/// SSS-130: PID fee control flag (bit 11): when set, `stability_fee_bps` is
+/// managed by the `PidConfig` controller rather than manual `set_stability_fee`.
+/// Enables `init_pid_config` / `update_stability_fee_pid` instructions.
+pub const FLAG_PID_FEE_CONTROL: u64 = 1 << 11;
+
+/// SSS-131: Graduated liquidation bonus flag (bit 12): when set, CDP liquidations
+/// use a tiered bonus schedule from a `LiquidationBonusConfig` PDA rather than
+/// the flat `CollateralConfig.liquidation_bonus_bps`.
+pub const FLAG_GRAD_LIQUIDATION_BONUS: u64 = 1 << 12;
+
+/// SSS-132: PSM dynamic AMM-style slippage flag (bit 13): when set, PSM redeem
+/// uses a depth-based fee curve from a `PsmCurveConfig` PDA rather than the flat
+/// `redemption_fee_bps` in `StablecoinConfig`.
+/// fee_bps = base_fee + k * (reserve_imbalance / total_reserves)^2
+pub const FLAG_PSM_DYNAMIC_FEES: u64 = 1 << 13;
+
+/// SSS-133: Per-wallet rate limiting flag (bit 14): when set, the transfer hook
+/// checks a `WalletRateLimit` PDA for the sender.  If the PDA exists, the sender's
+/// outbound transfers are capped to `max_transfer_per_window` tokens within
+/// `window_slots` slots (rolling window reset).
+/// Distinct from FLAG_SPEND_POLICY (global per-tx cap) — this is per-address
+/// rolling window enforcement, useful for corporate treasury controls.
+pub const FLAG_WALLET_RATE_LIMITS: u64 = 1 << 14;
+
+// ---------------------------------------------------------------------------
+// SSS-134: Squads Protocol V4 multisig native authority
+// ---------------------------------------------------------------------------
+/// When set, all authority-gated instructions require the signer to be the
+/// registered Squads V4 multisig PDA.  Irreversible once set.
+pub const FLAG_SQUADS_AUTHORITY: u64 = 1 << 15;
+
+/// PRESET_INSTITUTIONAL (4): all SSS-3 features + Squads V4 multisig authority.
+/// Recommended for issuers holding > $1 M in reserves.
+pub const PRESET_INSTITUTIONAL: u8 = 4;
+
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
 // ---------------------------------------------------------------------------
@@ -133,6 +193,41 @@ pub struct StablecoinConfig {
     /// SSS-106: Auditor ElGamal pubkey for confidential transfers.
     /// All-zero if FLAG_CONFIDENTIAL_TRANSFERS is not enabled.
     pub auditor_elgamal_pubkey: [u8; 32],
+    /// SSS-119: Minimum reserve ratio (basis points) for ReserveBreach event.
+    /// 0 = no minimum enforced.  e.g. 10_000 = 100% fully backed required.
+    pub min_reserve_ratio_bps: u16,
+    /// SSS-119: Whitelisted custodian pubkeys allowed to submit reserve attestations.
+    /// Up to MAX_RESERVE_ATTESTORS entries; unused slots are Pubkey::default().
+    pub reserve_attestor_whitelist: [Pubkey; StablecoinConfig::MAX_RESERVE_ATTESTORS],
+    /// SSS-127: Minimum transfer amount (in token native units) that requires a
+    /// TravelRuleRecord PDA when FLAG_TRAVEL_RULE is set.  0 = Travel Rule disabled.
+    pub travel_rule_threshold: u64,
+    /// SSS-128: Pubkey of the registered sanctions oracle signer.
+    /// When non-default, the oracle calls `update_sanctions_record` to write
+    /// `SanctionsRecord` PDAs. Transfer hook rejects sanctioned senders when
+    /// FLAG_SANCTIONS_ORACLE is set.  Pubkey::default() = sanctions oracle disabled.
+    pub sanctions_oracle: Pubkey,
+    /// SSS-128: Maximum age in slots for a SanctionsRecord to be considered fresh.
+    /// 0 = staleness check disabled (is_sanctioned is authoritative regardless of age).
+    /// Recommended: 150 slots (~1 min at 400 ms/slot).
+    pub sanctions_max_staleness_slots: u64,
+    /// SSS-119: Program config schema version, incremented by `upgrade_config`.
+    /// Instructions that require a minimum schema version (e.g. CDP borrow, burn)
+    /// check this against `MIN_SUPPORTED_VERSION`.
+    pub version: u8,
+    /// SSS-119: Oracle type for CDP price reads.
+    /// 0 = Pyth, 1 = Switchboard (stub), 2 = Custom (CustomPriceFeed PDA).
+    /// Set via `set_oracle_config` (authority-only).
+    pub oracle_type: u8,
+    /// SSS-119: Oracle feed account address.
+    /// For Pyth: the Pyth price feed pubkey.
+    /// For Custom: the CustomPriceFeed PDA pubkey.
+    /// Pubkey::default() = feed address enforcement disabled.
+    pub oracle_feed: Pubkey,
+    /// SSS-134: Squads Protocol V4 multisig PDA acting as program authority.
+    /// Pubkey::default() = Squads authority not configured.
+    /// Set by `init_squads_authority` (irreversible); also sets FLAG_SQUADS_AUTHORITY.
+    pub squads_multisig: Pubkey,
     pub bump: u8,
 }
 
@@ -563,4 +658,687 @@ pub struct ConfidentialTransferConfig {
 
 impl ConfidentialTransferConfig {
     pub const SEED: &'static [u8] = b"ct-config";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-123: Proof of Reserves — trustless on-chain PoR attestation
+// ---------------------------------------------------------------------------
+
+/// ProofOfReserves PDA — one per stablecoin mint.
+/// Seeds: [b"proof-of-reserves", sss_mint]
+///
+/// Stores the latest reserve attestation submitted by a whitelisted attestor
+/// (authority, Pyth publisher, or custodian pubkey).
+/// `verify_reserve_ratio` computes reserve_amount / net_supply and emits events.
+#[account]
+#[derive(InitSpace)]
+pub struct ProofOfReserves {
+    /// The SSS stablecoin mint this record belongs to.
+    pub sss_mint: Pubkey,
+    /// Last submitted reserve amount (in collateral token native units).
+    pub reserve_amount: u64,
+    /// 32-byte attestation hash (e.g. SHA-256 of off-chain audit report or Pyth price feed id).
+    pub attestation_hash: [u8; 32],
+    /// Pubkey of the entity that submitted the latest attestation.
+    pub attestor: Pubkey,
+    /// Solana slot at which the latest attestation was submitted.
+    pub last_attestation_slot: u64,
+    /// Last computed reserve ratio in basis points (set by verify_reserve_ratio).
+    pub last_verified_ratio_bps: u64,
+    pub bump: u8,
+}
+
+impl ProofOfReserves {
+    pub const SEED: &'static [u8] = b"proof-of-reserves";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-124: Reserve Composition — on-chain breakdown of backing asset types
+// ---------------------------------------------------------------------------
+
+/// ReserveComposition PDA — one per stablecoin mint.
+/// Seeds: [b"reserve-composition", sss_mint]
+///
+/// Stores the percentage breakdown of reserve backing assets in basis points.
+/// All four fields must sum to exactly 10_000 (100%).
+/// Updated by the stablecoin authority via `update_reserve_composition`.
+#[account]
+#[derive(InitSpace)]
+pub struct ReserveComposition {
+    /// The SSS stablecoin mint this record belongs to.
+    pub sss_mint: Pubkey,
+    /// Cash and cash equivalents (basis points, 0–10000).
+    pub cash_bps: u16,
+    /// US Treasury Bills (basis points, 0–10000).
+    pub t_bills_bps: u16,
+    /// Crypto assets (basis points, 0–10000).
+    pub crypto_bps: u16,
+    /// Other assets (basis points, 0–10000).
+    pub other_bps: u16,
+    /// Solana slot at which composition was last updated.
+    pub last_updated_slot: u64,
+    /// Authority who last submitted the composition update.
+    pub last_updated_by: Pubkey,
+    pub bump: u8,
+}
+
+impl ReserveComposition {
+    pub const SEED: &'static [u8] = b"reserve-composition";
+
+    /// Validate that all four bps fields sum to exactly 10_000.
+    pub fn validate(&self) -> bool {
+        (self.cash_bps as u32)
+            .saturating_add(self.t_bills_bps as u32)
+            .saturating_add(self.crypto_bps as u32)
+            .saturating_add(self.other_bps as u32)
+            == 10_000
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SSS-125: Redemption Guarantee — enforceable redemption SLA
+// ---------------------------------------------------------------------------
+
+/// RedemptionGuarantee PDA — one per stablecoin mint.
+/// Seeds: [b"redemption-guarantee", sss_mint]
+///
+/// Stores pool config: which reserve vault backs redemptions, the max daily
+/// limit, and the SLA window in slots.
+#[account]
+#[derive(InitSpace)]
+pub struct RedemptionGuarantee {
+    /// The SSS stablecoin mint this pool belongs to.
+    pub sss_mint: Pubkey,
+    /// The reserve vault pubkey (token account) used to pay out redemptions.
+    pub reserve_vault: Pubkey,
+    /// Maximum total stable tokens redeemable within a single day-window.
+    pub max_daily_redemption: u64,
+    /// Running total redeemed in the current day-window.
+    pub daily_redeemed: u64,
+    /// Slot at which the current day-window started.
+    pub day_start_slot: u64,
+    /// SLA in slots: user must be fulfilled within this many slots of request.
+    /// Default: 450 slots (~3 min). Breach triggers penalty from insurance fund.
+    pub sla_slots: u64,
+    /// Last slot at which pool params were updated.
+    pub last_updated_slot: u64,
+    pub bump: u8,
+}
+
+impl RedemptionGuarantee {
+    pub const SEED: &'static [u8] = b"redemption-guarantee";
+}
+
+/// RedemptionRequest PDA — one per (mint, user) at a time.
+/// Seeds: [b"redemption-request", sss_mint, user]
+///
+/// Created by `request_redemption`; closed when fulfilled or expired.
+#[account]
+#[derive(InitSpace)]
+pub struct RedemptionRequest {
+    /// The SSS stablecoin mint.
+    pub sss_mint: Pubkey,
+    /// The user who initiated the redemption.
+    pub user: Pubkey,
+    /// Amount of stable tokens to redeem (in token native units).
+    pub amount: u64,
+    /// Slot at which the request was made.
+    pub requested_slot: u64,
+    /// Slot by which the request must be fulfilled (requested_slot + sla_slots).
+    pub expiry_slot: u64,
+    /// True once `fulfill_redemption` succeeds.
+    pub fulfilled: bool,
+    /// True once `claim_expired_redemption` fires the SLA breach penalty.
+    pub sla_breached: bool,
+    pub bump: u8,
+}
+
+impl RedemptionRequest {
+    pub const SEED: &'static [u8] = b"redemption-request";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-127: Travel Rule — VASP-to-VASP compliance data sharing
+// ---------------------------------------------------------------------------
+
+/// TravelRuleRecord PDA — one per transfer that meets the threshold.
+/// Seeds: [b"travel-rule-record", sss_mint, &nonce.to_le_bytes()]
+///
+/// Created by `submit_travel_rule_record` in the same transaction as a transfer.
+/// When FLAG_TRAVEL_RULE is set and amount >= travel_rule_threshold, the transfer
+/// hook verifies this PDA exists before allowing the transfer through.
+///
+/// The `encrypted_payload` field carries VASP-to-VASP data encrypted to the
+/// beneficiary VASP's key using an agreed-upon ECIES or similar scheme.
+/// The program does not interpret payload contents — it only stores/verifies presence.
+#[account]
+#[derive(InitSpace)]
+pub struct TravelRuleRecord {
+    /// The SSS stablecoin mint this record belongs to.
+    pub sss_mint: Pubkey,
+    /// Monotonic nonce used to derive the PDA seed (caller-chosen, must be unique per transfer).
+    pub nonce: u64,
+    /// Encrypted originator/beneficiary data (256 bytes, VASP-encrypted, opaque to program).
+    pub encrypted_payload: [u8; 256],
+    /// Pubkey of the originating VASP.
+    pub originator_vasp: Pubkey,
+    /// Pubkey of the beneficiary VASP.
+    pub beneficiary_vasp: Pubkey,
+    /// Transfer amount this record covers (in token native units).
+    pub transfer_amount: u64,
+    /// Solana slot at which this record was submitted.
+    pub slot: u64,
+    pub bump: u8,
+}
+
+impl TravelRuleRecord {
+    pub const SEED: &'static [u8] = b"travel-rule-record";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-128: Sanctions screening oracle — pluggable OFAC/sanctions list integration
+// ---------------------------------------------------------------------------
+
+/// SanctionsRecord PDA — written by the registered oracle signer via
+/// `update_sanctions_record`, read by the transfer hook when FLAG_SANCTIONS_ORACLE is set.
+///
+/// Seeds: [b"sanctions-record", sss_mint, wallet_pubkey]
+///
+/// Any compliance provider (Chainalysis, Elliptic, TRM) implements the oracle role
+/// by calling `update_sanctions_record` as the registered `sanctions_oracle` signer.
+/// The program is oracle-agnostic — it only verifies the signer matches
+/// `StablecoinConfig.sanctions_oracle`.
+#[account]
+#[derive(InitSpace)]
+pub struct SanctionsRecord {
+    /// Whether this wallet is currently on the sanctions list.
+    pub is_sanctioned: bool,
+    /// Solana slot at which this record was last updated by the oracle.
+    pub updated_slot: u64,
+    pub bump: u8,
+}
+
+impl SanctionsRecord {
+    pub const SEED: &'static [u8] = b"sanctions-record";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-129: ZK credential registry — Groth16-based selective disclosure
+// ---------------------------------------------------------------------------
+
+/// CredentialRegistry PDA — one per stablecoin mint when FLAG_ZK_CREDENTIALS is set.
+/// Seeds: [b"credential-registry", sss_mint]
+///
+/// Stores the Groth16 Merkle root of the credential set and the issuer authority.
+/// The authority can rotate the `merkle_root` as the credential set evolves.
+/// The transfer hook reads this PDA to verify `CredentialRecord` proofs.
+#[account]
+#[derive(InitSpace)]
+pub struct CredentialRegistry {
+    /// The SSS stablecoin mint this registry belongs to.
+    pub sss_mint: Pubkey,
+    /// Authority allowed to rotate the Merkle root and revoke credentials.
+    pub issuer: Pubkey,
+    /// Groth16 Merkle root of the current credential set (32 bytes).
+    pub merkle_root: [u8; 32],
+    /// Maximum slots a CredentialRecord remains valid after issuance (0 = never expires).
+    pub credential_ttl_slots: u64,
+    /// Slot at which the registry was last updated.
+    pub updated_slot: u64,
+    pub bump: u8,
+}
+
+impl CredentialRegistry {
+    pub const SEED: &'static [u8] = b"credential-registry";
+}
+
+/// CredentialRecord PDA — one per (mint, holder) pair.
+/// Seeds: [b"credential-record", sss_mint, holder_pubkey]
+///
+/// Created by `verify_zk_credential` after on-chain Groth16 proof validation.
+/// The transfer hook checks this PDA when FLAG_ZK_CREDENTIALS is set — if absent
+/// or expired, the transfer is rejected with CredentialRequired.
+#[account]
+#[derive(InitSpace)]
+pub struct CredentialRecord {
+    /// The SSS stablecoin mint this record is scoped to.
+    pub sss_mint: Pubkey,
+    /// Wallet that holds this credential.
+    pub holder: Pubkey,
+    /// Slot at which the credential was issued (via verify_zk_credential).
+    pub issued_slot: u64,
+    /// Slot after which the credential is no longer valid (0 = never expires).
+    pub expires_slot: u64,
+    /// Whether this credential has been explicitly revoked by the issuer.
+    pub revoked: bool,
+    pub bump: u8,
+}
+
+impl CredentialRecord {
+    pub const SEED: &'static [u8] = b"credential-record";
+
+    /// Returns true if the record is currently valid at the given slot.
+    pub fn is_valid(&self, current_slot: u64) -> bool {
+        if self.revoked {
+            return false;
+        }
+        if self.expires_slot > 0 && current_slot > self.expires_slot {
+            return false;
+        }
+        true
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SSS-130: Stability fee PID auto-adjustment
+// ---------------------------------------------------------------------------
+
+/// PidConfig PDA — one per stablecoin mint when FLAG_PID_FEE_CONTROL is set.
+/// Seeds: [b"pid-config", sss_mint]
+///
+/// Stores PID gains and state.  `update_stability_fee_pid` is permissionless:
+/// any keeper can call it to push a fresh oracle price and have the controller
+/// adjust `stability_fee_bps` in `StablecoinConfig` automatically.
+#[account]
+#[derive(InitSpace)]
+pub struct PidConfig {
+    /// The SSS stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// Proportional gain (scaled by 1_000_000; e.g. 0.001 → 1_000)
+    pub kp: i64,
+    /// Integral gain (scaled by 1_000_000)
+    pub ki: i64,
+    /// Derivative gain (scaled by 1_000_000)
+    pub kd: i64,
+    /// Target peg price in oracle units (e.g. 1_000_000 for $1.00 with 6 dec)
+    pub target_price: u64,
+    /// Minimum stability fee in bps (floor clamping)
+    pub min_fee_bps: u16,
+    /// Maximum stability fee in bps (ceiling clamping)
+    pub max_fee_bps: u16,
+    /// Last error value (target - observed), carried for derivative term
+    pub last_error: i64,
+    /// Running integral of error (clamped to ±1e9 for anti-windup)
+    pub integral: i64,
+    /// Slot at which update_stability_fee_pid was last called
+    pub last_update_slot: u64,
+    pub bump: u8,
+}
+
+impl PidConfig {
+    pub const SEED: &'static [u8] = b"pid-config";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-120: Authority rotation request PDA
+// ---------------------------------------------------------------------------
+
+/// AuthorityRotationRequest PDA — created by `propose_authority_rotation`.
+/// Seeds: [b"authority-rotation-request", sss_mint]
+///
+/// Stores the pending rotation proposal including new authority, backup authority,
+/// and timing constraints.  Closed (reclaimed) on accept, emergency_recover, or cancel.
+#[account]
+pub struct AuthorityRotationRequest {
+    /// The mint this rotation request applies to.
+    pub config_mint: Pubkey,
+    /// The current authority (must sign the proposal).
+    pub current_authority: Pubkey,
+    /// The proposed new authority (must accept within timelock window).
+    pub new_authority: Pubkey,
+    /// Backup authority (can emergency-recover after 7-day window).
+    pub backup_authority: Pubkey,
+    /// Slot at which the proposal was submitted.
+    pub proposed_slot: u64,
+    /// Number of slots to wait before new_authority can accept (default: 432_000 = ~48h).
+    pub timelock_slots: u64,
+    pub bump: u8,
+}
+
+impl AuthorityRotationRequest {
+    pub const SEED: &'static [u8] = b"authority-rotation-request";
+    /// Anchor account space: 32+32+32+32+8+8+1 = 145 bytes
+    pub const SPACE: usize = 32 + 32 + 32 + 32 + 8 + 8 + 1;
+}
+
+// ---------------------------------------------------------------------------
+// SSS-121: Guardian multisig pause config
+// ---------------------------------------------------------------------------
+
+/// GuardianConfig PDA — one per stablecoin config when guardians are registered.
+/// Seeds: [b"guardian-config", stablecoin_config_pubkey]
+///
+/// Stores up to MAX_GUARDIANS guardian pubkeys, threshold, and pending lift-vote state.
+#[account]
+#[derive(InitSpace)]
+pub struct GuardianConfig {
+    /// The StablecoinConfig this guardian set is attached to.
+    pub config: Pubkey,
+    /// Up to 7 guardian pubkeys.
+    #[max_len(7)]
+    pub guardians: Vec<Pubkey>,
+    /// Number of YES votes required to pause (e.g. 3 for a 3-of-5 setup).
+    pub threshold: u8,
+    /// Monotonically increasing proposal ID counter.
+    pub next_proposal_id: u64,
+    /// Guardians who have voted to lift the current pause (cleared on lift).
+    #[max_len(7)]
+    pub pending_lift_votes: Vec<Pubkey>,
+    pub bump: u8,
+}
+
+impl GuardianConfig {
+    pub const SEED: &'static [u8] = b"guardian-config";
+    /// Maximum number of guardians in a single config.
+    pub const MAX_GUARDIANS: usize = 7;
+}
+
+/// PauseProposal PDA — one per open pause proposal.
+/// Seeds: [b"pause-proposal", stablecoin_config_pubkey, proposal_id_le_bytes]
+///
+/// Auto-executes (pauses mint) once `votes.len() >= threshold`.
+#[account]
+#[derive(InitSpace)]
+pub struct PauseProposal {
+    /// The StablecoinConfig this proposal targets.
+    pub config: Pubkey,
+    /// Monotonic proposal index.
+    pub proposal_id: u64,
+    /// Guardian who opened the proposal.
+    pub proposer: Pubkey,
+    /// UTF-8 reason bytes (fixed 32-byte array, zero-padded).
+    pub reason: [u8; 32],
+    /// List of guardian pubkeys that have voted YES.
+    #[max_len(7)]
+    pub votes: Vec<Pubkey>,
+    /// Threshold snapshot at proposal time.
+    pub threshold: u8,
+    /// Whether the proposal has already executed (paused the mint).
+    pub executed: bool,
+    pub bump: u8,
+}
+
+impl PauseProposal {
+    pub const SEED: &'static [u8] = b"pause-proposal";
+    /// Maximum number of YES votes that can be stored (= MAX_GUARDIANS).
+    pub const MAX_VOTES: usize = 7;
+}
+
+// ---------------------------------------------------------------------------
+// SSS-119: Custom price feed PDA
+// ---------------------------------------------------------------------------
+
+/// CustomPriceFeed PDA — authority-maintained price feed for the Custom oracle type.
+/// Seeds: [b"custom-price-feed", sss_mint]
+///
+/// The authority calls `update_custom_price` to publish a new price.
+/// `oracle/custom.rs` reads this PDA when oracle_type == ORACLE_CUSTOM.
+#[account]
+#[derive(InitSpace)]
+pub struct CustomPriceFeed {
+    /// The authority who may update this feed (must match StablecoinConfig.authority).
+    pub authority: Pubkey,
+    /// Latest price value (signed, Pyth-compatible). Positive values only are valid.
+    /// e.g. price=1_00000000, expo=-8 → $1.00 USD.
+    pub price: i64,
+    /// Price exponent (e.g. -8 means price * 10^-8 gives the real-world value).
+    pub expo: i32,
+    /// Confidence half-interval in the same units as `price`. 0 = no uncertainty stated.
+    pub conf: u64,
+    /// Slot at which `update_custom_price` was last called.
+    pub last_update_slot: u64,
+    /// Unix timestamp at which `update_custom_price` was last called.
+    pub last_update_unix_timestamp: i64,
+    pub bump: u8,
+}
+
+impl CustomPriceFeed {
+    pub const SEED: &'static [u8] = b"custom-price-feed";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-131: Graduated liquidation bonus PDA
+// ---------------------------------------------------------------------------
+
+/// LiquidationBonusConfig PDA — one per stablecoin mint when FLAG_GRAD_LIQUIDATION_BONUS is set.
+/// Seeds: [b"liquidation-bonus-config", sss_mint]
+///
+/// Replaces the flat `CollateralConfig.liquidation_bonus_bps` with a three-tier
+/// graduated schedule.  Each tier is activated when the CDP collateral ratio is
+/// **below** its threshold (expressed in basis points, e.g. 10000 = 100%).
+///
+/// Tier evaluation order (most-distressed first):
+///   ratio < tier3_threshold_bps  →  tier3_bonus_bps   (e.g. <80% → 12%)
+///   ratio < tier2_threshold_bps  →  tier2_bonus_bps   (e.g. <90% → 8%)
+///   ratio < tier1_threshold_bps  →  tier1_bonus_bps   (e.g. <100% → 5%)
+///
+/// All thresholds must satisfy: tier3 < tier2 < tier1 ≤ 15000 (150%).
+/// All bonuses must satisfy: tier1 ≤ tier2 ≤ tier3 ≤ max_bonus_bps ≤ 5000 (50%).
+#[account]
+#[derive(InitSpace)]
+pub struct LiquidationBonusConfig {
+    /// The stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// Authority that may update this config (= StablecoinConfig.authority).
+    pub authority: Pubkey,
+
+    // --- Tier 1: mildly undercollateralised ---
+    /// Collateral-ratio upper threshold for tier 1 (bps, e.g. 10000 = 100%).
+    /// A CDP with ratio in [tier2, tier1) gets tier1_bonus_bps.
+    pub tier1_threshold_bps: u16,
+    /// Bonus awarded in tier 1 (bps, e.g. 500 = 5%).
+    pub tier1_bonus_bps: u16,
+
+    // --- Tier 2: moderately undercollateralised ---
+    pub tier2_threshold_bps: u16,
+    pub tier2_bonus_bps: u16,
+
+    // --- Tier 3: severely undercollateralised ---
+    pub tier3_threshold_bps: u16,
+    pub tier3_bonus_bps: u16,
+
+    /// Hard ceiling on any bonus regardless of tier (bps, e.g. 2000 = 20%).
+    /// The Kani proof `proof_liquidation_bonus_bounded` verifies this invariant.
+    pub max_bonus_bps: u16,
+
+    pub bump: u8,
+}
+
+impl LiquidationBonusConfig {
+    pub const SEED: &'static [u8] = b"liquidation-bonus-config";
+
+    /// Compute the graduated bonus for a given collateral ratio.
+    ///
+    /// Returns the appropriate tier bonus (clamped to `max_bonus_bps`).
+    /// Falls back to `tier1_bonus_bps` if ratio is below tier1 but above tier2.
+    #[inline]
+    pub fn bonus_for_ratio(&self, ratio_bps: u128) -> u16 {
+        let raw = if ratio_bps < self.tier3_threshold_bps as u128 {
+            self.tier3_bonus_bps
+        } else if ratio_bps < self.tier2_threshold_bps as u128 {
+            self.tier2_bonus_bps
+        } else {
+            self.tier1_bonus_bps
+        };
+        raw.min(self.max_bonus_bps)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SSS-132: PSM dynamic AMM-style slippage curves
+// ---------------------------------------------------------------------------
+
+/// PsmCurveConfig PDA — one per stablecoin mint when FLAG_PSM_DYNAMIC_FEES is set.
+/// Seeds: [b"psm-curve-config", sss_mint]
+///
+/// Replaces the flat `redemption_fee_bps` with a depth-based AMM fee curve:
+///
+///   fee_bps = base_fee_bps + k * (imbalance / total_reserves)^2
+///
+/// where imbalance = |vault_amount - ideal_balance|, ideal_balance = total_reserves / 2,
+/// and k = `curve_k` (the "steepness" amplifier).  The result is clamped to [0, max_fee_bps].
+///
+/// When the PSM pool is perfectly balanced (50/50), the fee equals `base_fee_bps`.
+/// As the pool becomes one-sided, fees increase quadratically up to `max_fee_bps`.
+///
+/// The `get_psm_quote` read-only instruction uses this PDA to return a fee estimate
+/// for frontends without executing a swap.
+#[account]
+#[derive(InitSpace)]
+pub struct PsmCurveConfig {
+    /// The SSS stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// Authority that may update this config (= StablecoinConfig.authority).
+    pub authority: Pubkey,
+    /// Base fee in basis points when the pool is perfectly balanced (e.g. 5 = 0.05%).
+    /// Must be ≤ max_fee_bps.
+    pub base_fee_bps: u16,
+    /// Curve steepness amplifier (k).  Fee delta = k * (imbalance_ratio)^2 in bps.
+    /// Stored scaled by 1_000_000 so fractional k values are representable.
+    /// e.g. k=500_000 means at 100% imbalance, delta = 500_000 * 1 / 1_000_000 = 0.5 bps.
+    /// A k of 10_000_000_000 at full imbalance adds 10_000 bps (100%) — clamped to max.
+    pub curve_k: u64,
+    /// Maximum fee in basis points (ceiling clamping, e.g. 500 = 5%).
+    /// Must be ≤ MAX_PSM_CURVE_FEE_BPS (2000 = 20%).
+    pub max_fee_bps: u16,
+    pub bump: u8,
+}
+
+impl PsmCurveConfig {
+    pub const SEED: &'static [u8] = b"psm-curve-config";
+    /// Absolute ceiling on PSM dynamic fees: 20% (2000 bps).
+    pub const MAX_FEE_BPS: u16 = 2_000;
+
+    /// Compute the dynamic PSM fee for a given vault state.
+    ///
+    /// `vault_amount`:   current collateral held in the PSM reserve vault (native units).
+    /// `total_reserves`: total collateral including all sources (used as denominator).
+    ///
+    /// Returns fee_bps clamped to [base_fee_bps, max_fee_bps].
+    ///
+    /// If `total_reserves` == 0, returns `base_fee_bps` (no imbalance can be computed).
+    pub fn compute_fee(&self, vault_amount: u64, total_reserves: u64) -> u16 {
+        if total_reserves == 0 {
+            return self.base_fee_bps;
+        }
+
+        // ideal_balance = total_reserves / 2 (perfect 50/50 balance point)
+        let ideal: u128 = total_reserves as u128 / 2;
+        let vault: u128 = vault_amount as u128;
+
+        // imbalance = |vault - ideal| in [0, total_reserves/2]
+        let imbalance: u128 = if vault > ideal {
+            vault - ideal
+        } else {
+            ideal - vault
+        };
+
+        // imbalance_ratio = imbalance / total_reserves  in [0, 1], scaled as u128 * 1e12
+        // imbalance_ratio^2 = imbalance^2 / total_reserves^2, scaled as u128 * 1e12
+        // To avoid overflow: we compute (imbalance * 1_000_000)^2 / total_reserves^2
+        // but that can overflow. Use 32-bit precision: ratio_1e6 = imbalance * 1_000_000 / total_reserves
+        let ratio_1e6: u128 = imbalance
+            .saturating_mul(1_000_000)
+            .checked_div(total_reserves as u128)
+            .unwrap_or(0);
+
+        // ratio_squared_1e12 = ratio_1e6^2 (dimensionless, 1e12 scale)
+        let ratio_sq_1e12: u128 = ratio_1e6.saturating_mul(ratio_1e6);
+
+        // fee_delta_bps = curve_k * ratio_sq / 1e12
+        // curve_k already encodes the desired bps delta at full imbalance
+        let fee_delta_bps: u128 = (self.curve_k as u128)
+            .saturating_mul(ratio_sq_1e12)
+            .checked_div(1_000_000_000_000u128)
+            .unwrap_or(0);
+
+        let raw_fee = (self.base_fee_bps as u128).saturating_add(fee_delta_bps);
+        let clamped = raw_fee.min(self.max_fee_bps as u128) as u16;
+        clamped
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SSS-133: Per-wallet rate limiting — WalletRateLimit PDA
+// ---------------------------------------------------------------------------
+
+/// Per-wallet rolling-window transfer rate limit.
+///
+/// Seeds: [b"wallet-rate-limit", sss_mint, wallet]
+///
+/// Created by `set_wallet_rate_limit` (authority-only).
+/// Closed by `remove_wallet_rate_limit` (authority-only).
+///
+/// When FLAG_WALLET_RATE_LIMITS is set and a `WalletRateLimit` PDA exists for
+/// the sender, the transfer hook enforces:
+///
+///   if current_slot < window_start_slot + window_slots:
+///       # still in same window
+///       require transferred_this_window + amount <= max_transfer_per_window
+///       transferred_this_window += amount
+///   else:
+///       # window elapsed — reset
+///       window_start_slot = current_slot
+///       transferred_this_window = amount
+///       require transferred_this_window <= max_transfer_per_window
+///
+/// The `transferred_this_window` and `window_start_slot` fields are updated
+/// **in the transfer hook** (account must be passed as writable).
+#[account]
+#[derive(InitSpace)]
+pub struct WalletRateLimit {
+    /// The SSS mint this limit applies to.
+    pub sss_mint: Pubkey,
+    /// The wallet (token account owner) being rate-limited.
+    pub wallet: Pubkey,
+    /// Maximum tokens allowed to transfer per window.
+    pub max_transfer_per_window: u64,
+    /// Window duration in slots.
+    pub window_slots: u64,
+    /// Tokens transferred in the current window (reset when window elapses).
+    pub transferred_this_window: u64,
+    /// Slot at which the current window started.
+    pub window_start_slot: u64,
+    pub bump: u8,
+}
+
+impl WalletRateLimit {
+    pub const SEED: &'static [u8] = b"wallet-rate-limit";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-134: SquadsMultisigConfig PDA — threshold + member list for SDK use
+// ---------------------------------------------------------------------------
+
+/// Per-stablecoin metadata for the Squads V4 multisig authority.
+///
+/// Seeds: [b"squads-multisig-config", sss_mint]
+///
+/// Created atomically by `init_squads_authority`.
+/// Threshold and member list are informational — enforcement is delegated to
+/// the Squads on-chain program.  The PDA pubkey itself (`multisig_pda`) is the
+/// canonical signer that must be present for authority-gated instructions.
+#[account]
+pub struct SquadsMultisigConfig {
+    /// The SSS mint this multisig config belongs to.
+    pub sss_mint: Pubkey,
+    /// The Squads V4 multisig PDA — the account that must sign authority ops.
+    pub multisig_pda: Pubkey,
+    /// Approval threshold (m of n). Informational; enforced by Squads program.
+    pub threshold: u8,
+    /// Member pubkeys (up to MAX_MEMBERS = 10).
+    pub members: Vec<Pubkey>,
+    pub bump: u8,
+}
+
+impl SquadsMultisigConfig {
+    pub const SEED: &'static [u8] = b"squads-multisig-config";
+    pub const MAX_MEMBERS: usize = 10;
+
+    /// Returns account space for a given member count (excluding Anchor 8-byte discriminator).
+    pub fn space(member_count: usize) -> usize {
+        // sss_mint: 32, multisig_pda: 32, threshold: 1,
+        // members: 4 (vec len) + 32 * member_count, bump: 1
+        32 + 32 + 1 + 4 + 32 * member_count + 1
+    }
 }

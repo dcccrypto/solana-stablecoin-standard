@@ -32,6 +32,7 @@ pub mod zk_compliance;
 pub mod zk_credential;
 pub mod liquidation_bonus;
 pub mod psm_amm_slippage;
+pub mod squads_authority;
 pub mod wallet_rate_limit;
 
 pub use bad_debt_backstop::*;
@@ -68,6 +69,7 @@ pub use zk_compliance::*;
 pub use zk_credential::*;
 pub use liquidation_bonus::*;
 pub use psm_amm_slippage::*;
+pub use squads_authority::*;
 pub use wallet_rate_limit::*;
 
 pub mod upgrade;
