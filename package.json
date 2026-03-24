@@ -23,17 +23,8 @@
     "@types/sinon": "^21.0.0",
     "chai": "^4.3.6",
     "mocha": "^9.0.3",
-    "sinon": "^21.0.3",
     "ts-mocha": "^11.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
-  },
-  "dependencies": {
-    "@orca-so/common-sdk": "^0.7.0",
-    "@orca-so/whirlpools-sdk": "^0.20.0",
-    "@raydium-io/raydium-sdk-v2": "^0.2.33-alpha",
-    "@solana/spl-token": "^0.4.14",
-    "@solana/web3.js": "^1.98.4",
-    "decimal.js": "^10.6.0"
   }
 }

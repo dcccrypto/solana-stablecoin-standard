@@ -6,9 +6,11 @@ use anchor_spl::token_interface::{
 
 use crate::error::SssError;
 use crate::events::{CdpLiquidated, CollateralLiquidated};
-use crate::oracle;
-use crate::state::{CdpPosition, CollateralConfig, CollateralVault, LiquidationBonusConfig, StablecoinConfig, FLAG_CIRCUIT_BREAKER, FLAG_GRAD_LIQUIDATION_BONUS};
-use crate::events::GraduatedLiquidationBonusApplied;
+use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
+
+/// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
+/// Overridden by `StablecoinConfig.max_oracle_age_secs` when non-zero.
+const DEFAULT_MAX_PRICE_AGE_SECS: u64 = 60;
 
 /// Global fallback liquidation bonus (5%) when no CollateralConfig is provided.
 const DEFAULT_LIQUIDATION_BONUS_BPS: u16 = 500;
@@ -126,21 +128,7 @@ pub struct CdpLiquidate<'info> {
         constraint = collateral_config.sss_mint == sss_mint.key() @ SssError::Unauthorized,
         constraint = collateral_config.collateral_mint == collateral_mint.key() @ SssError::WrongCollateralMint,
     )]
-    pub collateral_config: Option<Box<Account<'info, CollateralConfig>>>,
-
-    /// SSS-131: Optional graduated liquidation bonus config PDA.
-    /// When provided (and FLAG_GRAD_LIQUIDATION_BONUS is set on config), the bonus is
-    /// computed from the tier schedule rather than the flat CollateralConfig value.
-    /// Seeds: [b"liquidation-bonus-config", sss_mint]
-    #[account(
-        seeds = [
-            LiquidationBonusConfig::SEED,
-            sss_mint.key().as_ref(),
-        ],
-        bump = liquidation_bonus_config.bump,
-        constraint = liquidation_bonus_config.sss_mint == sss_mint.key() @ SssError::Unauthorized,
-    )]
-    pub liquidation_bonus_config: Option<Box<Account<'info, LiquidationBonusConfig>>>,
+    pub collateral_config: Option<Account<'info, CollateralConfig>>,
 
     /// Token program for SSS-3 (Token-2022)
     pub sss_token_program: Interface<'info, TokenInterface>,
@@ -149,7 +137,6 @@ pub struct CdpLiquidate<'info> {
     pub collateral_token_program: Interface<'info, TokenInterface>,
 }
 
-#[inline(never)]
 pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidateParams) -> Result<()> {
     let min_collateral_amount = params.min_collateral_amount;
     let partial_repay_amount = params.partial_repay_amount;
@@ -160,6 +147,33 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         SssError::CircuitBreakerActive
     );
 
+    // SSS-085 Fix 1: Validate Pyth feed Pubkey — reject spoofed price feeds.
+    let expected_feed = ctx.accounts.config.expected_pyth_feed;
+    if expected_feed != Pubkey::default() {
+        require!(
+            ctx.accounts.pyth_price_feed.key() == expected_feed,
+            SssError::UnexpectedPriceFeed
+        );
+    }
+
+    // 1. Fetch Pyth price
+    let clock = Clock::get()?;
+    let price_feed = SolanaPriceAccount::account_info_to_feed(
+        &ctx.accounts.pyth_price_feed,
+    )
+    .map_err(|_| error!(SssError::InvalidPriceFeed))?;
+
+    // SSS-090: Use configurable max age (falls back to DEFAULT_MAX_PRICE_AGE_SECS when 0)
+    let max_age_secs = if ctx.accounts.config.max_oracle_age_secs > 0 {
+        ctx.accounts.config.max_oracle_age_secs as u64
+    } else {
+        DEFAULT_MAX_PRICE_AGE_SECS
+    };
+
+    let price = price_feed
+        .get_price_no_older_than(clock.unix_timestamp, max_age_secs)
+        .ok_or(error!(SssError::StalePriceFeed))?;
+
     // SSS-119: Oracle abstraction — dispatch to the configured adapter.
     let clock = Clock::get()?;
     let oracle_price = oracle::get_oracle_price(
@@ -167,6 +181,19 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         &ctx.accounts.config,
         &clock,
     )?;
+
+    // SSS-090: Confidence interval check — reject liquidations with uncertain prices.
+    let conf_bps_limit = ctx.accounts.config.max_oracle_conf_bps;
+    if conf_bps_limit > 0 {
+        let conf_ratio_bps = price
+            .conf
+            .saturating_mul(10_000)
+            / price.price as u64;
+        require!(
+            conf_ratio_bps <= conf_bps_limit as u64,
+            SssError::OracleConfidenceTooWide
+        );
+    }
 
     // 2. Compute collateral value (USD, 6dp scaled)
     let deposited = ctx.accounts.collateral_vault.deposited_amount;
@@ -185,14 +212,13 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         / 10u128.pow(collateral_decimals);
 
     // 3. Compute current collateral ratio and check liquidatability
-    // SSS-113 HIGH-05: Use effective debt (principal + accrued fees) for ratio and liquidation.
     let debt = ctx.accounts.cdp_position.debt_amount;
     let accrued_fees = ctx.accounts.cdp_position.accrued_fees;
     let effective_debt = debt.checked_add(accrued_fees).unwrap_or(debt);
     require!(effective_debt > 0, SssError::InsufficientDebt);
 
     let sss_decimals = ctx.accounts.sss_mint.decimals as u32;
-    let debt_usd_e6: u128 = (effective_debt as u128)
+    let debt_usd_e6: u128 = (debt as u128)
         .checked_mul(1_000_000u128)
         .unwrap()
         / 10u128.pow(sss_decimals);
@@ -205,7 +231,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
 
     // SSS-100: Use per-collateral threshold from CollateralConfig when available,
     // otherwise fall back to global CdpPosition::LIQUIDATION_THRESHOLD_BPS.
-    let (liquidation_threshold_bps, flat_bonus_bps) = if let Some(cc) = &ctx.accounts.collateral_config {
+    let (liquidation_threshold_bps, bonus_bps) = if let Some(cc) = &ctx.accounts.collateral_config {
         (cc.liquidation_threshold_bps as u128, cc.liquidation_bonus_bps)
     } else {
         (
@@ -219,48 +245,17 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         SssError::CdpNotLiquidatable
     );
 
-    // SSS-131: Graduated liquidation bonus — use tiered schedule when FLAG_GRAD_LIQUIDATION_BONUS
-    // is set AND the LiquidationBonusConfig account is provided; otherwise use flat bonus.
-    let (bonus_bps, tier_applied) = if ctx.accounts.config.feature_flags & FLAG_GRAD_LIQUIDATION_BONUS != 0 {
-        if let Some(lbc) = &ctx.accounts.liquidation_bonus_config {
-            let tier = if ratio_bps < lbc.tier3_threshold_bps as u128 {
-                3u8
-            } else if ratio_bps < lbc.tier2_threshold_bps as u128 {
-                2u8
-            } else {
-                1u8
-            };
-            (lbc.bonus_for_ratio(ratio_bps), tier)
-        } else {
-            (flat_bonus_bps, 0u8)
-        }
-    } else {
-        (flat_bonus_bps, 0u8)
-    };
-
-    // Emit graduated bonus event if flag is set
-    if tier_applied > 0 {
-        emit!(GraduatedLiquidationBonusApplied {
-            mint: ctx.accounts.sss_mint.key(),
-            cdp_owner: ctx.accounts.cdp_owner.key(),
-            ratio_bps: ratio_bps as u64,
-            tier_applied,
-            bonus_bps,
-        });
-    }
-
     // 4. Determine debt to burn and collateral to seize.
     //
-    // Full liquidation: burn all debt (principal + fees), seize all collateral.
+    // Full liquidation: burn all debt, seize all collateral.
     // Partial liquidation: burn `partial_repay_amount`, seize exactly
     //   enough collateral (at market price + bonus) to cover that debt.
     //   After the partial liquidation the ratio must be >= healthy (120% == 12000 bps).
-    // SSS-113 HIGH-05: Use effective_debt (includes accrued fees) as the total debt basis.
-    let is_partial = partial_repay_amount > 0 && partial_repay_amount < effective_debt;
+    let is_partial = partial_repay_amount > 0 && partial_repay_amount < debt;
 
     let (debt_to_burn, collateral_to_seize) = if is_partial {
         let repay = partial_repay_amount;
-        require!(repay <= effective_debt, SssError::InvalidAmount);
+        require!(repay <= debt, SssError::InvalidAmount);
 
         // Collateral equivalent to the repaid debt, scaled by bonus
         // collateral_for_repay = repay_usd_e6 * 10^coll_decimals / (price * 10^(6 - expo_abs)) * (10000 + bonus) / 10000
@@ -286,7 +281,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
 
         // Verify the remaining position would be healthy (>= 12000 bps = 120%).
         // If remaining_debt == 0 treat as full liquidation path.
-        let remaining_debt = effective_debt.saturating_sub(repay);
+        let remaining_debt = debt.saturating_sub(repay);
         if remaining_debt > 0 {
             let remaining_collateral = deposited.saturating_sub(coll_to_seize);
             let remaining_coll_value: u128 = (remaining_collateral as u128)
@@ -316,8 +311,8 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
 
         (repay, coll_to_seize)
     } else {
-        // Full liquidation: burn all effective debt (principal + fees), seize all collateral
-        (effective_debt, deposited)
+        // Full liquidation: burn all debt, seize all collateral
+        (debt, deposited)
     };
 
     // SSS-085 Fix 5: Slippage protection
@@ -372,14 +367,8 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
     )?;
 
     // 7. Update state
-    // SSS-113 HIGH-05: Deduct fees first from accrued_fees, remainder from debt_amount.
     let position = &mut ctx.accounts.cdp_position;
-    if debt_to_burn >= accrued_fees {
-        position.accrued_fees = 0;
-        position.debt_amount = position.debt_amount.saturating_sub(debt_to_burn - accrued_fees);
-    } else {
-        position.accrued_fees = position.accrued_fees.saturating_sub(debt_to_burn);
-    }
+    position.debt_amount = position.debt_amount.saturating_sub(debt_to_burn);
 
     let vault = &mut ctx.accounts.collateral_vault;
     vault.deposited_amount = vault.deposited_amount.saturating_sub(collateral_to_seize);
@@ -405,7 +394,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         owner: ctx.accounts.cdp_owner.key(),
         liquidator: ctx.accounts.liquidator.key(),
         collateral_mint: ctx.accounts.collateral_mint.key(),
-        debt_burned: debt_to_burn,
+        debt_burned: debt,
         collateral_seized: collateral_to_seize,
         ratio_bps: ratio_bps as u64,
     });

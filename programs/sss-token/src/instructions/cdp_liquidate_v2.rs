@@ -25,11 +25,14 @@ use anchor_spl::token_interface::{
     burn_checked as spl_burn_checked, transfer_checked, BurnChecked, Mint, TokenAccount,
     TokenInterface, TransferChecked,
 };
+use pyth_sdk_solana::state::SolanaPriceAccount;
 
 use crate::error::SssError;
 use crate::events::CollateralLiquidated;
-use crate::oracle;
 use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig};
+
+/// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
+const DEFAULT_MAX_PRICE_AGE_SECS: u64 = 60;
 
 // ---------------------------------------------------------------------------
 // Accounts
@@ -46,14 +49,14 @@ pub struct CdpLiquidateV2<'info> {
         bump = config.bump,
         constraint = config.preset == 3 @ SssError::InvalidPreset,
     )]
-    pub config: Box<Account<'info, StablecoinConfig>>,
+    pub config: Account<'info, StablecoinConfig>,
 
     /// SSS-3 stablecoin mint
     #[account(
         mut,
         constraint = sss_mint.key() == config.mint,
     )]
-    pub sss_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub sss_mint: InterfaceAccount<'info, Mint>,
 
     /// Liquidator's SSS token account (source, will be burned)
     #[account(
@@ -61,7 +64,7 @@ pub struct CdpLiquidateV2<'info> {
         constraint = liquidator_sss_account.mint == sss_mint.key(),
         constraint = liquidator_sss_account.owner == liquidator.key(),
     )]
-    pub liquidator_sss_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub liquidator_sss_account: InterfaceAccount<'info, TokenAccount>,
 
     /// CDP position of the user being liquidated
     #[account(
@@ -73,7 +76,7 @@ pub struct CdpLiquidateV2<'info> {
         // Enforce the vault being seized matches the position's locked collateral
         constraint = cdp_position.collateral_mint == collateral_mint.key() @ SssError::WrongCollateralMint,
     )]
-    pub cdp_position: Box<Account<'info, CdpPosition>>,
+    pub cdp_position: Account<'info, CdpPosition>,
 
     /// CHECK: CDP owner being liquidated — used as PDA seed; no authority check needed
     pub cdp_owner: AccountInfo<'info>,
@@ -91,10 +94,10 @@ pub struct CdpLiquidateV2<'info> {
         constraint = collateral_vault.owner == cdp_owner.key(),
         constraint = collateral_vault.collateral_mint == collateral_mint.key(),
     )]
-    pub collateral_vault: Box<Account<'info, CollateralVault>>,
+    pub collateral_vault: Account<'info, CollateralVault>,
 
     /// The collateral token mint
-    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub collateral_mint: InterfaceAccount<'info, Mint>,
 
     /// Vault token account (holds collateral, owned by collateral_vault PDA)
     #[account(
@@ -102,7 +105,7 @@ pub struct CdpLiquidateV2<'info> {
         constraint = vault_token_account.key() == collateral_vault.vault_token_account,
         constraint = vault_token_account.mint == collateral_mint.key(),
     )]
-    pub vault_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub vault_token_account: InterfaceAccount<'info, TokenAccount>,
 
     /// Liquidator's collateral token account — receives seized collateral
     #[account(
@@ -110,7 +113,7 @@ pub struct CdpLiquidateV2<'info> {
         constraint = liquidator_collateral_account.mint == collateral_mint.key(),
         constraint = liquidator_collateral_account.owner == liquidator.key(),
     )]
-    pub liquidator_collateral_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub liquidator_collateral_account: InterfaceAccount<'info, TokenAccount>,
 
     /// SSS-098: CollateralConfig PDA for per-collateral liquidation params.
     /// Provides per-collateral liquidation_threshold_bps and liquidation_bonus_bps.
@@ -125,7 +128,7 @@ pub struct CdpLiquidateV2<'info> {
         constraint = collateral_config.sss_mint == sss_mint.key() @ SssError::InvalidCollateralMint,
         constraint = collateral_config.collateral_mint == collateral_mint.key() @ SssError::WrongCollateralMint,
     )]
-    pub collateral_config: Box<Account<'info, CollateralConfig>>,
+    pub collateral_config: Account<'info, CollateralConfig>,
 
     /// CHECK: Pyth price feed account — validated in handler
     pub pyth_price_feed: AccountInfo<'info>,
@@ -149,19 +152,47 @@ pub struct CdpLiquidateV2<'info> {
 ///     healthy after the seize).
 /// - `min_collateral_amount`: slippage guard — minimum collateral tokens to
 ///   receive.  0 = no guard (backward-compatible with SSS-085 callers).
-#[inline(never)]
 pub fn cdp_liquidate_v2_handler(
     ctx: Context<CdpLiquidateV2>,
     debt_to_repay: u64,
     min_collateral_amount: u64,
 ) -> Result<()> {
-    // ── 0+1. Oracle dispatch (SSS-119) ────────────────────────────────────
+    // ── 0. Pyth feed Pubkey validation (SSS-085) ──────────────────────────
+    let expected_feed = ctx.accounts.config.expected_pyth_feed;
+    if expected_feed != Pubkey::default() {
+        require!(
+            ctx.accounts.pyth_price_feed.key() == expected_feed,
+            SssError::UnexpectedPriceFeed
+        );
+    }
+
+    // ── 1. Fetch Pyth price ───────────────────────────────────────────────
     let clock = Clock::get()?;
-    let oracle_price = oracle::get_oracle_price(
-        &ctx.accounts.pyth_price_feed,
-        &ctx.accounts.config,
-        &clock,
-    )?;
+    let price_feed =
+        SolanaPriceAccount::account_info_to_feed(&ctx.accounts.pyth_price_feed)
+            .map_err(|_| error!(SssError::InvalidPriceFeed))?;
+
+    let max_age_secs = if ctx.accounts.config.max_oracle_age_secs > 0 {
+        ctx.accounts.config.max_oracle_age_secs as u64
+    } else {
+        DEFAULT_MAX_PRICE_AGE_SECS
+    };
+
+    let price = price_feed
+        .get_price_no_older_than(clock.unix_timestamp, max_age_secs)
+        .ok_or(error!(SssError::StalePriceFeed))?;
+
+    require!(price.price > 0, SssError::InvalidPrice);
+
+    // SSS-090: confidence check
+    let conf_bps_limit = ctx.accounts.config.max_oracle_conf_bps;
+    if conf_bps_limit > 0 {
+        let conf_ratio_bps = price.conf.saturating_mul(10_000) / price.price as u64;
+        require!(
+            conf_ratio_bps <= conf_bps_limit as u64,
+            SssError::OracleConfidenceTooWide
+        );
+    }
 
     // ── 2. Read per-collateral params from CollateralConfig PDA ──────────
     let cc = &ctx.accounts.collateral_config;
@@ -174,8 +205,8 @@ pub fn cdp_liquidate_v2_handler(
     require!(deposited > 0, SssError::InsufficientCollateral);
 
     let collateral_decimals = ctx.accounts.collateral_mint.decimals as u32;
-    let price_val = oracle_price.price as u128;
-    let price_expo_abs = oracle_price.expo.unsigned_abs();
+    let price_val = price.price as u128;
+    let price_expo_abs = price.expo.unsigned_abs();
 
     let collateral_value_usd_e6: u128 = (deposited as u128)
         .checked_mul(price_val)
@@ -186,14 +217,11 @@ pub fn cdp_liquidate_v2_handler(
         / 10u128.pow(collateral_decimals);
 
     // ── 4. Current collateral ratio check ────────────────────────────────
-    // SSS-113 HIGH-05: Use effective debt (principal + accrued fees) for all ratio math.
     let total_debt = ctx.accounts.cdp_position.debt_amount;
-    let accrued_fees = ctx.accounts.cdp_position.accrued_fees;
-    let effective_total_debt = total_debt.checked_add(accrued_fees).unwrap_or(total_debt);
-    require!(effective_total_debt > 0, SssError::InsufficientDebt);
+    require!(total_debt > 0, SssError::InsufficientDebt);
 
     let sss_decimals = ctx.accounts.sss_mint.decimals as u32;
-    let debt_usd_e6: u128 = (effective_total_debt as u128)
+    let debt_usd_e6: u128 = (total_debt as u128)
         .checked_mul(1_000_000u128)
         .unwrap()
         / 10u128.pow(sss_decimals);
@@ -209,15 +237,14 @@ pub fn cdp_liquidate_v2_handler(
     );
 
     // ── 5. Determine debt to burn and collateral to seize ────────────────
-    // SSS-113 HIGH-05: Use effective_total_debt as the full-liquidation amount.
-    // debt_to_repay = 0 → full liquidation (burn principal + fees)
-    let actual_debt_repaid = if debt_to_repay == 0 || debt_to_repay >= effective_total_debt {
-        effective_total_debt
+    // debt_to_repay = 0 → full liquidation
+    let actual_debt_repaid = if debt_to_repay == 0 || debt_to_repay >= total_debt {
+        total_debt
     } else {
         debt_to_repay
     };
 
-    let is_partial = actual_debt_repaid < effective_total_debt;
+    let is_partial = actual_debt_repaid < total_debt;
 
     // Collateral to seize (in collateral token native units):
     //   seize = debt_USD * (1 + bonus_bps/10000) / collateral_price
@@ -262,7 +289,7 @@ pub fn cdp_liquidate_v2_handler(
     // to prevent over-liquidation.
     if is_partial {
         let remaining_collateral = deposited.saturating_sub(collateral_to_seize);
-        let remaining_debt = effective_total_debt.saturating_sub(actual_debt_repaid);
+        let remaining_debt = total_debt.saturating_sub(actual_debt_repaid);
 
         if remaining_debt > 0 {
             let remaining_collateral_usd_e6: u128 = (remaining_collateral as u128)
@@ -343,14 +370,8 @@ pub fn cdp_liquidate_v2_handler(
     )?;
 
     // ── 10. Update state ──────────────────────────────────────────────────
-    // SSS-113 HIGH-05: Deduct fees first from accrued_fees, remainder from debt_amount.
     let position = &mut ctx.accounts.cdp_position;
-    if actual_debt_repaid >= accrued_fees {
-        position.accrued_fees = 0;
-        position.debt_amount = total_debt.saturating_sub(actual_debt_repaid - accrued_fees);
-    } else {
-        position.accrued_fees = accrued_fees.saturating_sub(actual_debt_repaid);
-    }
+    position.debt_amount = total_debt.saturating_sub(actual_debt_repaid);
 
     let vault = &mut ctx.accounts.collateral_vault;
     vault.deposited_amount = deposited.saturating_sub(collateral_to_seize);

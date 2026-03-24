@@ -164,49 +164,9 @@ export class SolanaStablecoin {
       maxSupply: config.maxSupply !== undefined && config.maxSupply > 0n
         ? new BN(config.maxSupply.toString())
         : null,
-      // SSS-106: feature flags + confidential transfers
-      featureFlags: config.featureFlags !== undefined
-        ? new BN(config.featureFlags.toString())
-        : null,
-      auditorElgamalPubkey: config.auditorElGamalPubkey
-        ? Array.from(config.auditorElGamalPubkey)
-        : null,
-    };
-
-    // Derive the optional CT config PDA — only included when FLAG_CONFIDENTIAL_TRANSFERS is set
-    const FLAG_CONFIDENTIAL_TRANSFERS = 0x20n; // bit 5
-    const usesCt = config.featureFlags !== undefined &&
-      (config.featureFlags & FLAG_CONFIDENTIAL_TRANSFERS) !== 0n;
-
-    // Validate: auditorElGamalPubkey required (and must be 32 bytes) when CT flag is set
-    if (usesCt) {
-      if (!config.auditorElGamalPubkey) {
-        throw new Error(
-          'auditorElGamalPubkey is required when FLAG_CONFIDENTIAL_TRANSFERS is set'
-        );
-      }
-      if (config.auditorElGamalPubkey.length !== 32) {
-        throw new Error(
-          `auditorElGamalPubkey must be exactly 32 bytes, got ${config.auditorElGamalPubkey.length}`
-        );
-      }
-    }
-    const [ctConfigPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('ct-config'), mint.toBuffer()],
-      programId,
-    );
-
-    // Anchor 0.32 JS requires optional accounts to be explicitly set to null
-    // when omitted — omitting them entirely causes a byte-layout shift that
-    // triggers InstructionDidNotDeserialize (AnchorError 102) on-chain.
-    const accounts: Record<string, PublicKey | null> = {
-      payer,
-      mint,
-      config: configPda,
-      ctConfig: usesCt ? ctConfigPda : null,
-      tokenProgram: TOKEN_2022_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
-      rent: SYSVAR_RENT_PUBKEY,
+      // SSS-106: confidential transfer feature flags (null = disabled)
+      featureFlags: null,
+      auditorElgamalPubkey: null,
     };
 
     await program.methods
@@ -301,8 +261,8 @@ export class SolanaStablecoin {
 
   /**
    * Freeze a token account (compliance action).
-   * Routes through the on-chain `freeze_account` instruction — the program
-   * does CPI with the config PDA as freeze authority signer.
+   * Calls the on-chain `freeze_account` instruction — the program does CPI
+   * with the config PDA as the freeze authority signer.
    * Caller (provider.wallet) must be the compliance authority.
    */
   async freeze(params: FreezeParams): Promise<TransactionSignature> {
@@ -322,8 +282,8 @@ export class SolanaStablecoin {
 
   /**
    * Thaw a frozen token account.
-   * Routes through the on-chain `thaw_account` instruction — the program
-   * does CPI with the config PDA as freeze authority signer.
+   * Calls the on-chain `thaw_account` instruction — the program does CPI
+   * with the config PDA as the freeze authority signer.
    * Caller (provider.wallet) must be the compliance authority.
    */
   async thaw(params: FreezeParams): Promise<TransactionSignature> {

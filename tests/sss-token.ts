@@ -24,9 +24,9 @@ import {
 } from "@solana/spl-token";
 import { expect } from "chai";
 
-/** Retry a transaction up to `attempts` times, re-fetching blockhash each time.
- *  Handles "Blockhash not found" flakiness on CI localnet. */
-async function sendWithRetry(
+/** SSS-117: Retry a transaction on "Blockhash not found" CI flakiness.
+ *  Uses skipPreflight + finalized commitment to avoid stale-blockhash rejections. */
+async function sendTxWithRetry(
   provider: anchor.AnchorProvider,
   buildTx: () => Promise<anchor.web3.Transaction>,
   signers: anchor.web3.Signer[] = [],
@@ -135,8 +135,8 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -619,9 +619,10 @@ describe("sss-token", () => {
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
     // SSS-091: DefaultAccountState=Frozen means the ATA may already be frozen.
-    // Thaw first (no-op if already thawed). Use sendWithRetry (SSS-117) for CI blockhash flakiness.
+    // Thaw first (no-op if already thawed) so the explicit freeze call succeeds.
+    // Use sendTxWithRetry (SSS-117) with skipPreflight + finalized blockhash for CI stability.
     try {
-      await sendWithRetry(provider, () =>
+      await sendTxWithRetry(provider, () =>
         program.methods
           .thawAccount()
           .accounts({
@@ -640,7 +641,7 @@ describe("sss-token", () => {
     // SSS-091: DefaultAccountState=Frozen — account may already be frozen after thaw
     // attempt. Issue another freeze; if already frozen (Invalid account state), skip.
     try {
-      await sendWithRetry(provider, () =>
+      await sendTxWithRetry(provider, () =>
         program.methods
           .freezeAccount()
           .accounts({
@@ -676,9 +677,9 @@ describe("sss-token", () => {
       TOKEN_2022_PROGRAM_ID,
       ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    // Ensure frozen first (prior test may have left it thawed). Use sendWithRetry (SSS-117).
+    // Ensure frozen first before thawing
     try {
-      await sendWithRetry(provider, () =>
+      await sendTxWithRetry(provider, () =>
         program.methods
           .freezeAccount()
           .accounts({
@@ -694,7 +695,7 @@ describe("sss-token", () => {
       // Already frozen — safe to proceed
     }
 
-    await sendWithRetry(provider, () =>
+    await sendTxWithRetry(provider, () =>
       program.methods
         .thawAccount()
         .accounts({
@@ -1583,8 +1584,8 @@ describe("sss-token", () => {
           collateralMint: collateralMint,
           reserveVault: vaultTokenAccount, // re-use vault as "reserve" for SSS-3 init
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -2671,8 +2672,8 @@ describe("sss-token", () => {
           collateralMint: mockStSolMint,
           reserveVault: vaultStSolTokenAccount,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -3072,8 +3073,8 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           authority: authority.publicKey,
@@ -3099,8 +3100,8 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           authority: authority.publicKey,
@@ -3255,8 +3256,8 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           authority: authority.publicKey,
@@ -3611,8 +3612,8 @@ describe("sss-token", () => {
             collateralMint: null,
             reserveVault: null,
             maxSupply: null,
-            featureFlags: null,
-            auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
           })
           .accounts({
             authority: authority.publicKey,
@@ -3839,15 +3840,14 @@ describe("sss-token", () => {
             collateralMint: null,
             reserveVault: null,
             maxSupply: null,
-            featureFlags: null,
-            auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
           })
           .accounts({
             authority: authority.publicKey,
             mint: shortTtlMintKp.publicKey,
             config: shortConfigPda,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-            ctConfig: null,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
@@ -4115,14 +4115,13 @@ describe("sss-token", () => {
           collateralMint: sec085CollateralMint,
           reserveVault: sec085VaultTokenAccount,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sec085MintKp.publicKey,
           config: sec085ConfigPda,
-          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -4435,14 +4434,13 @@ describe("sss-token", () => {
             collateralMint: daoColMint,
             reserveVault: daoVaultTaKp.publicKey,
             maxSupply: null,
-            featureFlags: null,
-            auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
           })
           .accounts({
             payer: authority.publicKey,
             mint: daoTestMintKp.publicKey,
             config: daoTestConfigPda,
-            ctConfig: null,
             tokenProgram: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -4595,14 +4593,13 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss091MintKp.publicKey,
           config: sss091ConfigPda,
-          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -4728,14 +4725,13 @@ describe("sss-token", () => {
           collateralMint: sss090CollateralMint,
           reserveVault: sss090VaultTokenAccount,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss090MintKp.publicKey,
           config: sss090ConfigPda,
-          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5050,14 +5046,13 @@ describe("sss-token", () => {
           collateralMint: Keypair.generate().publicKey,
           reserveVault: Keypair.generate().publicKey,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss092MintKp.publicKey,
           config: sss092ConfigPda,
-          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5201,14 +5196,13 @@ describe("sss-token", () => {
           collateralMint: sss097CollateralMint,
           reserveVault: sss097ReserveVault,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss097MintKp.publicKey,
           config: sss097ConfigPda,
-          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5318,14 +5312,13 @@ describe("sss-token", () => {
           collateralMint: null,
           reserveVault: null,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss1MintKp.publicKey,
           config: sss1ConfigPda,
-          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -5528,14 +5521,13 @@ describe("sss-token", () => {
           collateralMint: sss098CollateralMint,
           reserveVault: sss098ReserveVault,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss098MintKp.publicKey,
           config: sss098ConfigPda,
-          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -6099,14 +6091,13 @@ describe("sss-token", () => {
           collateralMint: sss100CollateralMint,
           reserveVault: sss100ReserveVault,
           maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
+        featureFlags: null,
+        auditorElgamalPubkey: null,
         })
         .accounts({
           payer: authority.publicKey,
           mint: sss100MintKp.publicKey,
           config: sss100ConfigPda,
-          ctConfig: null,
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
@@ -6872,161 +6863,4 @@ describe("sss-token", () => {
       expect(cc.collateralMint).to.be.instanceOf(PublicKey);
     });
   });
-
-  // ── SSS-106: FLAG_CONFIDENTIAL_TRANSFERS (bit 5) ────────────────────────
-
-  describe("SSS-106: FLAG_CONFIDENTIAL_TRANSFERS (bit 5)", () => {
-    let sss106MintKeypair: Keypair;
-    let sss106ConfigPda: PublicKey;
-    let sss106CtConfigPda: PublicKey;
-    const FLAG_CONFIDENTIAL_TRANSFERS = 1 << 5; // 32
-
-    before(async () => {
-      sss106MintKeypair = Keypair.generate();
-      [sss106ConfigPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("stablecoin-config"), sss106MintKeypair.publicKey.toBuffer()],
-        program.programId
-      );
-      [sss106CtConfigPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("ct-config"), sss106MintKeypair.publicKey.toBuffer()],
-        program.programId
-      );
-    });
-
-    it("SSS-106: initialize with FLAG_CONFIDENTIAL_TRANSFERS stores auditor key in ConfidentialTransferConfig PDA", async () => {
-      const auditorKey = new Array(32).fill(0x42); // mock ElGamal pubkey
-      await program.methods
-        .initialize({
-          preset: 1,
-          decimals: 6,
-          name: "CT USD",
-          symbol: "CTUSD",
-          uri: "https://example.com/ct.json",
-          transferHookProgram: null,
-          collateralMint: null,
-          reserveVault: null,
-          maxSupply: null,
-          featureFlags: new anchor.BN(FLAG_CONFIDENTIAL_TRANSFERS),
-          auditorElgamalPubkey: auditorKey,
-        })
-        .accounts({
-          payer: authority.publicKey,
-          mint: sss106MintKeypair.publicKey,
-          config: sss106ConfigPda,
-          ctConfig: sss106CtConfigPda,
-          tokenProgram: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        })
-        .signers([sss106MintKeypair])
-        .rpc();
-
-      const config = await program.account.stablecoinConfig.fetch(sss106ConfigPda);
-      expect(
-        BigInt(config.featureFlags.toString()) & BigInt(FLAG_CONFIDENTIAL_TRANSFERS)
-      ).to.not.equal(BigInt(0), "FLAG_CONFIDENTIAL_TRANSFERS must be set");
-
-      const ctConfig = await program.account.confidentialTransferConfig.fetch(sss106CtConfigPda);
-      expect(ctConfig.mint.toBase58()).to.equal(sss106MintKeypair.publicKey.toBase58());
-      expect(ctConfig.autoApproveNewAccounts).to.equal(true);
-      const storedKey = Array.from(ctConfig.auditorElgamalPubkey as Uint8Array);
-      expect(storedKey).to.deep.equal(auditorKey, "auditor ElGamal key must match");
-    });
-
-    it("SSS-106: initialize WITHOUT FLAG_CONFIDENTIAL_TRANSFERS sets auditor key to zero", async () => {
-      const plainMint = Keypair.generate();
-      const [plainConfig] = PublicKey.findProgramAddressSync(
-        [Buffer.from("stablecoin-config"), plainMint.publicKey.toBuffer()],
-        program.programId
-      );
-      await program.methods
-        .initialize({
-          preset: 1,
-          decimals: 6,
-          name: "Plain USD",
-          symbol: "PUSD",
-          uri: "https://example.com/plain.json",
-          transferHookProgram: null,
-          collateralMint: null,
-          reserveVault: null,
-          maxSupply: null,
-          featureFlags: null,
-          auditorElgamalPubkey: null,
-        })
-        .accounts({
-          payer: authority.publicKey,
-          mint: plainMint.publicKey,
-          config: plainConfig,
-          ctConfig: null,
-          tokenProgram: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        })
-        .signers([plainMint])
-        .rpc();
-
-      const config = await program.account.stablecoinConfig.fetch(plainConfig);
-      expect(config.featureFlags.toNumber()).to.equal(0);
-
-      // Assert CT PDA was NOT created
-      const [plainCtConfigPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("ct-config"), plainMint.publicKey.toBuffer()],
-        program.programId
-      );
-      const plainCtInfo = await provider.connection.getAccountInfo(plainCtConfigPda);
-      expect(plainCtInfo, "ConfidentialTransferConfig PDA must not exist when flag is unset").to.be.null;
-    });
-
-    it("SSS-106: initialize with FLAG_CONFIDENTIAL_TRANSFERS but no auditor key fails", async () => {
-      const badMint = Keypair.generate();
-      const [badConfig] = PublicKey.findProgramAddressSync(
-        [Buffer.from("stablecoin-config"), badMint.publicKey.toBuffer()],
-        program.programId
-      );
-      const [badCtConfig] = PublicKey.findProgramAddressSync(
-        [Buffer.from("ct-config"), badMint.publicKey.toBuffer()],
-        program.programId
-      );
-      try {
-        await program.methods
-          .initialize({
-            preset: 1,
-            decimals: 6,
-            name: "Bad CT",
-            symbol: "BCT",
-            uri: "https://example.com/bad.json",
-            transferHookProgram: null,
-            collateralMint: null,
-            reserveVault: null,
-            maxSupply: null,
-            featureFlags: new anchor.BN(FLAG_CONFIDENTIAL_TRANSFERS),
-            auditorElgamalPubkey: null,
-          })
-          .accounts({
-            payer: authority.publicKey,
-            mint: badMint.publicKey,
-            config: badConfig,
-            ctConfig: badCtConfig,
-            tokenProgram: TOKEN_2022_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-            rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-          })
-          .signers([badMint])
-          .rpc();
-        expect.fail("Should have thrown MissingAuditorKey");
-      } catch (e: any) {
-        expect(e.toString()).to.include("MissingAuditorKey");
-      }
-    });
-
-    it("SSS-106: IDL includes ConfidentialTransferConfig account type", () => {
-      const rawIdl = program.idl as any;
-      const accounts = rawIdl.accounts as Array<{ name: string }>;
-      const acc = accounts?.find(
-        (a: any) => a.name === "ConfidentialTransferConfig" || a.name === "confidentialTransferConfig"
-      );
-      expect(acc, "ConfidentialTransferConfig must be in IDL").to.not.be.undefined;
-    });
-  });
-
 });

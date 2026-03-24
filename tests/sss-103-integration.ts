@@ -137,7 +137,6 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           maxSupply: null,
           featureFlags: null,
           auditorElgamalPubkey: null,
-          ctConfig: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -146,6 +145,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          ctConfig: null,
         })
         .signers([mintKp])
         .rpc();
@@ -405,7 +405,6 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           maxSupply: null,
           featureFlags: null,
           auditorElgamalPubkey: null,
-          ctConfig: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -414,6 +413,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          ctConfig: null,
         })
         .signers([mintKp])
         .rpc();
@@ -628,7 +628,6 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           maxSupply: null,
           featureFlags: null,
           auditorElgamalPubkey: null,
-          ctConfig: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -637,6 +636,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          ctConfig: null,
         })
         .signers([mintKp])
         .rpc();
@@ -886,7 +886,6 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           maxSupply: null,
           featureFlags: null,
           auditorElgamalPubkey: null,
-          ctConfig: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -895,6 +894,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          ctConfig: null,
         })
         .signers([mintKp])
         .rpc();
@@ -1022,7 +1022,6 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           maxSupply: null,
           featureFlags: null,
           auditorElgamalPubkey: null,
-          ctConfig: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -1031,6 +1030,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          ctConfig: null,
         })
         .signers([noBackstopMintKp])
         .rpc();
@@ -1084,7 +1084,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
       const evt = events?.find(
         (e: any) => e.name === "BadDebtTriggered" || e.name === "badDebtTriggered"
       );
-      expect(evt, "BadDebtTriggered event must be in IDL events section").to.not.be.undefined;
+      expect(evt, "BadDebtTriggered event must be in IDL").to.not.be.undefined;
 
       // Resolve fields: prefer inline (legacy IDL) or fall back to types[] (Anchor ≥0.30)
       let fieldNames: string[];
@@ -1206,7 +1206,6 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           maxSupply: null,
           featureFlags: null,
           auditorElgamalPubkey: null,
-          ctConfig: null,
         })
         .accounts({
           payer: authority.publicKey,
@@ -1215,6 +1214,7 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           tokenProgram: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          ctConfig: null,
         })
         .signers([mintKp])
         .rpc();

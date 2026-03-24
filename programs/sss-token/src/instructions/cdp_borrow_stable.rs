@@ -3,8 +3,11 @@ use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInte
 
 use crate::error::SssError;
 use crate::events::CdpBorrowed;
-use crate::oracle;
 use crate::state::{CdpPosition, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
+
+/// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
+/// Overridden by `StablecoinConfig.max_oracle_age_secs` when non-zero.
+const DEFAULT_MAX_PRICE_AGE_SECS: u64 = 60;
 
 /// Borrow SSS-3 stablecoins against deposited collateral.
 /// Enforces minimum 150% collateral ratio using Pyth price feed.
@@ -85,18 +88,53 @@ pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> 
         SssError::CircuitBreakerActive
     );
 
+    // SSS-085 Fix 1: Validate Pyth feed Pubkey — reject unknown/spoofed price feeds.
+    // If expected_pyth_feed is set (non-default), the provided account must match exactly.
+    let expected_feed = ctx.accounts.config.expected_pyth_feed;
+    if expected_feed != Pubkey::default() {
+        require!(
+            ctx.accounts.pyth_price_feed.key() == expected_feed,
+            SssError::UnexpectedPriceFeed
+        );
+    }
+
     // SSS-119: Oracle abstraction — dispatch to the configured adapter (Pyth/Switchboard/Custom).
     // Feed key validation, staleness check, and confidence check are all inside get_oracle_price.
     let clock = Clock::get()?;
     let oracle_price = oracle::get_oracle_price(
         &ctx.accounts.pyth_price_feed,
-        &ctx.accounts.config,
-        &clock,
-    )?;
+    )
+    .map_err(|_| error!(SssError::InvalidPriceFeed))?;
+
+    // SSS-090: Use configurable max age (falls back to DEFAULT_MAX_PRICE_AGE_SECS when 0)
+    let max_age_secs = if ctx.accounts.config.max_oracle_age_secs > 0 {
+        ctx.accounts.config.max_oracle_age_secs as u64
+    } else {
+        DEFAULT_MAX_PRICE_AGE_SECS
+    };
+
+    let price = price_feed
+        .get_price_no_older_than(clock.unix_timestamp, max_age_secs)
+        .ok_or(error!(SssError::StalePriceFeed))?;
 
     let price_val = oracle_price.price as u128;
     // expo is negative (e.g. -8 means price in 10^-8 USD per unit)
     let price_expo_abs = oracle_price.expo.unsigned_abs();
+
+    // SSS-090: Confidence interval check — reject prices with excessive uncertainty.
+    // If max_oracle_conf_bps is set (non-zero), reject when conf/price > threshold.
+    let conf_bps_limit = ctx.accounts.config.max_oracle_conf_bps;
+    if conf_bps_limit > 0 {
+        // conf_ratio_bps = conf * 10_000 / price (price is positive, checked above)
+        let conf_ratio_bps = price
+            .conf
+            .saturating_mul(10_000)
+            / price.price as u64;
+        require!(
+            conf_ratio_bps <= conf_bps_limit as u64,
+            SssError::OracleConfidenceTooWide
+        );
+    }
 
     // 2. Compute collateral USD value
     let deposited = ctx.accounts.collateral_vault.deposited_amount;

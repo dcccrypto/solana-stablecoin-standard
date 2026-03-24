@@ -1,9 +1,57 @@
 //! SSS-108: Liquidation analytics + CDP health score endpoints.
 //!
 //! # Endpoints
-//! - `GET /api/analytics/liquidations` — aggregated liquidation stats by date range + collateral mint
-//! - `GET /api/analytics/cdp-health` — health ratio histogram + flat health counts
-//! - `GET /api/analytics/protocol-stats` — TVL, debt outstanding, backstop balance, PSM balance
+//! | Method | Path                              | Description                              |
+//! |--------|-----------------------------------|------------------------------------------|
+//! | GET    | /api/analytics/liquidations       | Liquidation volume & stats over a window |
+//! | GET    | /api/analytics/cdp-health         | Distribution of CDP health ratios        |
+//! | GET    | /api/analytics/protocol-stats     | Total collateral, debt, backstop fund    |
+//!
+//! ## GET /api/analytics/liquidations
+//! Query params:
+//! - `window`: `24h` | `7d` | `30d`  (default: `24h`)
+//!
+//! Response:
+//! ```json
+//! {
+//!   "ok": true,
+//!   "data": {
+//!     "window": "24h",
+//!     "count": 5,
+//!     "total_collateral_seized": 12345,
+//!     "total_debt_repaid": 9800,
+//!     "avg_collateral_seized": 2469
+//!   }
+//! }
+//! ```
+//!
+//! ## GET /api/analytics/cdp-health
+//! Response:
+//! ```json
+//! {
+//!   "ok": true,
+//!   "data": {
+//!     "healthy": 120,
+//!     "at_risk": 15,
+//!     "liquidatable": 3,
+//!     "total": 138
+//!   }
+//! }
+//! ```
+//!
+//! ## GET /api/analytics/protocol-stats
+//! Response:
+//! ```json
+//! {
+//!   "ok": true,
+//!   "data": {
+//!     "total_collateral_locked_native": 500000,
+//!     "total_debt_native": 300000,
+//!     "backstop_fund_debt_repaid": 42000,
+//!     "active_collateral_types": 2
+//!   }
+//! }
+//! ```
 
 use axum::{
     extract::{Query, State},
@@ -16,9 +64,9 @@ use crate::{error::AppError, models::ApiResponse, state::AppState};
 // ─── Query params ─────────────────────────────────────────────────────────────
 
 /// Window options for liquidation analytics.
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
+#[allow(dead_code)]
 pub enum Window {
     #[default]
     #[serde(rename = "24h")]
@@ -43,101 +91,45 @@ impl Window {
 
 #[derive(Debug, Deserialize, Default)]
 pub struct LiquidationAnalyticsQuery {
-    /// ISO-8601 datetime lower bound (inclusive), e.g. `2026-01-01T00:00:00Z`
-    pub from: Option<String>,
-    /// ISO-8601 datetime upper bound (inclusive)
-    pub to: Option<String>,
-    /// Optional collateral mint filter
-    pub collateral_mint: Option<String>,
-    /// Time window shorthand: "24h" | "7d" | "30d" (overrides from/to when set)
-    pub window: Option<String>,
+    #[serde(default)]
+    pub window: Window,
 }
 
 // ─── Response models ──────────────────────────────────────────────────────────
 
-// ---------------------------------------------------------------------------
-// Response structs
-// ---------------------------------------------------------------------------
-
-/// Aggregated liquidation stats for the requested period.
-/// Satisfies both analytics_tests and qa_tests field expectations.
+/// Liquidation analytics over a time window.
 #[derive(Debug, Serialize)]
 pub struct LiquidationAnalyticsResponse {
-    /// Time window label (e.g. "24h", "7d", "30d", or "custom").
     pub window: String,
-    /// Total number of liquidation events in the period.
-    pub count: i64,
-    /// Sum of all collateral seized (native units).
+    pub count: u64,
     pub total_collateral_seized: i64,
-    /// Average collateral seized per liquidation (native units).
+    pub total_debt_repaid: i64,
     pub avg_collateral_seized: i64,
-    /// Sum of all debt covered / repaid (native units).
-    pub total_debt_covered: i64,
-    /// Breakdown per collateral mint.
-    pub by_collateral_mint: Vec<CollateralMintStats>,
 }
 
-/// Per-collateral-mint liquidation stats.
-#[derive(Debug, Serialize)]
-pub struct CollateralMintStats {
-    pub collateral_mint: String,
-    pub count: i64,
-    pub total_collateral_seized: i64,
-    pub total_debt_covered: i64,
-}
-
-/// Single bucket in the CDP health ratio histogram.
-#[derive(Debug, Serialize)]
-pub struct HealthBucket {
-    /// Lower bound of this bucket (inclusive), e.g. 1.0
-    pub from: f64,
-    /// Upper bound of this bucket (exclusive), e.g. 1.25
-    pub to: f64,
-    /// Number of CDPs whose health ratio falls in [from, to)
-    pub count: i64,
-}
-
-/// CDP health response — includes both histogram buckets and flat health counts.
-/// Satisfies both analytics_tests (buckets/total_cdps) and qa_tests (total/healthy/at_risk/liquidatable).
+/// CDP health distribution.
 #[derive(Debug, Serialize)]
 pub struct CdpHealthResponse {
-    /// Histogram buckets (ratio distribution).
-    pub buckets: Vec<HealthBucket>,
-    /// Total CDPs analysed (alias for `total`).
-    pub total_cdps: i64,
-    /// Total CDPs analysed.
-    pub total: i64,
-    /// CDPs with health ratio > 1.5 (healthy).
-    pub healthy: i64,
-    /// CDPs with health ratio in [1.0, 1.5) (at risk).
-    pub at_risk: i64,
-    /// CDPs with health ratio < 1.0 (liquidatable).
-    pub liquidatable: i64,
+    /// CDPs with health factor >= 1.5 (well-collateralised).
+    pub healthy: u64,
+    /// CDPs with health factor between 1.0 and 1.5 (approaching liquidation threshold).
+    pub at_risk: u64,
+    /// CDPs with health factor < 1.0 (liquidatable now).
+    pub liquidatable: u64,
+    pub total: u64,
 }
 
-/// Protocol-wide stats snapshot.
-/// Includes both naming conventions to satisfy all test suites.
+/// Protocol-level stats.
 #[derive(Debug, Serialize)]
 pub struct ProtocolStatsResponse {
-    // --- analytics_tests field names ---
-    /// Total value locked — sum of all collateral deposited (native units).
-    pub total_tvl: i64,
-    /// Total stablecoin debt outstanding (native units).
-    pub total_debt_outstanding: i64,
-    /// Backstop pool balance (native units) — derived from event_log.
-    pub backstop_balance: i64,
-    /// PSM pool balance (native units) — derived from event_log.
-    pub psm_balance: i64,
-
-    // --- qa_tests field names ---
-    /// Alias for total_tvl.
+    /// Sum of `total_deposited` across all active collateral configs (native units).
     pub total_collateral_locked_native: i64,
-    /// Alias for total_debt_outstanding.
+    /// Proxy for total debt: total SSS minted - burned (native units).
     pub total_debt_native: i64,
-    /// Total debt repaid via backstop fund (from BackstopDebtRepaid events).
+    /// Sum of `debt_repaid` in `liquidation_history` — approximates backstop fund utilisation.
     pub backstop_fund_debt_repaid: i64,
-    /// Number of distinct active collateral types.
-    pub active_collateral_types: i64,
+    /// Number of whitelisted collateral types with any deposited collateral.
+    pub active_collateral_types: u32,
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -148,26 +140,24 @@ pub struct ProtocolStatsResponse {
 /// specified time window, sourced from `liquidation_history`.
 pub async fn get_liquidation_analytics(
     State(state): State<AppState>,
-    Query(q): Query<LiquidationAnalyticsQuery>,
+    Query(query): Query<LiquidationAnalyticsQuery>,
 ) -> Result<Json<ApiResponse<LiquidationAnalyticsResponse>>, AppError> {
-    let window_label = q.window.clone().unwrap_or_else(|| "24h".to_string());
-    let data = state.db.analytics_liquidations(
-        q.from.as_deref(),
-        q.to.as_deref(),
-        q.collateral_mint.as_deref(),
-        &window_label,
-    )?;
-    Ok(Json(ApiResponse::ok(data)))
+    // Best-effort sync of new on-chain events before computing analytics.
+    let _ = state.db.sync_liquidations_from_event_log();
+
+    let (label, hours) = query.window.label_and_hours();
+    let stats = state.db.liquidation_analytics(hours)?;
+
+    Ok(Json(ApiResponse::ok(LiquidationAnalyticsResponse {
+        window: label.to_string(),
+        count: stats.count,
+        total_collateral_seized: stats.total_collateral_seized,
+        total_debt_repaid: stats.total_debt_repaid,
+        avg_collateral_seized: stats.avg_collateral_seized,
+    })))
 }
 
-/// Query parameters for `GET /api/analytics/cdp-health`.
-#[derive(Debug, serde::Deserialize)]
-pub struct CdpHealthQuery {
-    /// Number of histogram buckets (default: 10).
-    pub buckets: Option<usize>,
-}
-
-/// `GET /api/analytics/cdp-health?buckets=<n>`
+/// `GET /api/analytics/cdp-health`
 ///
 /// Returns a distribution of CDP health ratios derived from
 /// `cdp_deposit` and `cdp_borrow` events in `event_log`.
@@ -176,10 +166,14 @@ pub struct CdpHealthQuery {
 /// maintain a live CDP state table; positions are inferred from events.
 pub async fn get_cdp_health(
     State(state): State<AppState>,
-    Query(q): Query<CdpHealthQuery>,
 ) -> Result<Json<ApiResponse<CdpHealthResponse>>, AppError> {
-    let dist = state.db.cdp_health_distribution(q.buckets)?;
-    Ok(Json(ApiResponse::ok(dist)))
+    let dist = state.db.cdp_health_distribution()?;
+    Ok(Json(ApiResponse::ok(CdpHealthResponse {
+        healthy: dist.healthy,
+        at_risk: dist.at_risk,
+        liquidatable: dist.liquidatable,
+        total: dist.healthy + dist.at_risk + dist.liquidatable,
+    })))
 }
 
 /// `GET /api/analytics/protocol-stats`
@@ -189,8 +183,13 @@ pub async fn get_cdp_health(
 pub async fn get_protocol_stats(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<ProtocolStatsResponse>>, AppError> {
-    let stats = state.db.analytics_protocol_stats()?;
-    Ok(Json(ApiResponse::ok(stats)))
+    let stats = state.db.protocol_stats()?;
+    Ok(Json(ApiResponse::ok(ProtocolStatsResponse {
+        total_collateral_locked_native: stats.total_collateral_locked_native,
+        total_debt_native: stats.total_debt_native,
+        backstop_fund_debt_repaid: stats.backstop_fund_debt_repaid,
+        active_collateral_types: stats.active_collateral_types,
+    })))
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -232,38 +231,29 @@ mod tests {
             window: "24h".to_string(),
             count: 3,
             total_collateral_seized: 9000,
-            total_debt_covered: 7500,
+            total_debt_repaid: 7500,
             avg_collateral_seized: 3000,
-            by_collateral_mint: vec![],
         };
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("\"window\":\"24h\""));
         assert!(json.contains("\"count\":3"));
         assert!(json.contains("\"avg_collateral_seized\":3000"));
-        assert!(json.contains("\"total_debt_covered\":7500"));
     }
 
     #[test]
     fn cdp_health_response_total_is_sum() {
         let r = CdpHealthResponse {
-            buckets: vec![],
-            total_cdps: 14,
             healthy: 10,
             at_risk: 3,
             liquidatable: 1,
             total: 14,
         };
         assert_eq!(r.total, r.healthy + r.at_risk + r.liquidatable);
-        assert_eq!(r.total_cdps, r.total);
     }
 
     #[test]
     fn protocol_stats_response_serialises() {
         let r = ProtocolStatsResponse {
-            total_tvl: 500_000,
-            total_debt_outstanding: 300_000,
-            backstop_balance: 0,
-            psm_balance: 0,
             total_collateral_locked_native: 500_000,
             total_debt_native: 300_000,
             backstop_fund_debt_repaid: 42_000,
@@ -272,7 +262,6 @@ mod tests {
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("\"total_collateral_locked_native\":500000"));
         assert!(json.contains("\"active_collateral_types\":2"));
-        assert!(json.contains("\"total_tvl\":500000"));
     }
 
     #[test]

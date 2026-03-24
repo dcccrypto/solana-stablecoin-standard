@@ -4,8 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, CredentialRecord, CredentialRegistry, EventLogEntry, LiquidationHistoryEntry, MintEvent, TravelRuleRecord, WebhookEntry};
-use crate::routes::analytics::{CdpHealthResponse, HealthBucket};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, LiquidationHistoryEntry, MintEvent, WebhookEntry};
 
 pub struct Database {
     pub conn: Mutex<Connection>,
@@ -18,7 +17,18 @@ impl Database {
             conn: Mutex::new(conn),
         };
         db.init_schema()?;
+        db.migrate_api_keys_role()?;
         Ok(db)
+    }
+
+    /// E-2: Add role column to api_keys if it doesn't exist yet (idempotent migration).
+    fn migrate_api_keys_role(&self) -> Result<(), AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        // SQLite returns an error if the column already exists; ignore it.
+        let _ = conn.execute_batch(
+            "ALTER TABLE api_keys ADD COLUMN role TEXT NOT NULL DEFAULT 'read';"
+        );
+        Ok(())
     }
 
     fn init_schema(&self) -> Result<(), AppError> {
@@ -64,8 +74,12 @@ impl Database {
                 id TEXT PRIMARY KEY,
                 key TEXT NOT NULL UNIQUE,
                 label TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'read',
                 created_at TEXT NOT NULL
             );
+            -- E-2: migrate existing rows that predate the role column
+            -- (ALTER TABLE ... ADD COLUMN is idempotent-safe via try-in-code)
+
             CREATE TABLE IF NOT EXISTS event_log (
                 id TEXT PRIMARY KEY,
                 event_type TEXT NOT NULL,
@@ -105,52 +119,6 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_liq_history_cdp ON liquidation_history(cdp_address);
             CREATE INDEX IF NOT EXISTS idx_liq_history_collateral ON liquidation_history(collateral_mint);
             CREATE INDEX IF NOT EXISTS idx_liq_history_created ON liquidation_history(created_at DESC);
-            CREATE TABLE IF NOT EXISTS travel_rule_records (
-                id TEXT PRIMARY KEY,
-                mint TEXT NOT NULL,
-                nonce INTEGER NOT NULL,
-                originator_vasp TEXT NOT NULL,
-                beneficiary_vasp TEXT NOT NULL,
-                transfer_amount INTEGER NOT NULL,
-                slot INTEGER,
-                encrypted_payload TEXT,
-                tx_signature TEXT,
-                created_at TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_trr_originator ON travel_rule_records(originator_vasp);
-            CREATE INDEX IF NOT EXISTS idx_trr_beneficiary ON travel_rule_records(beneficiary_vasp);
-            CREATE INDEX IF NOT EXISTS idx_trr_mint ON travel_rule_records(mint);
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_trr_mint_nonce ON travel_rule_records(mint, nonce);
-
-            CREATE TABLE IF NOT EXISTS credential_registries (
-                id TEXT PRIMARY KEY,
-                mint TEXT NOT NULL,
-                credential_type TEXT NOT NULL,
-                issuer_pubkey TEXT NOT NULL,
-                merkle_root TEXT NOT NULL,
-                proof_expiry_seconds INTEGER NOT NULL DEFAULT 2592000,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                UNIQUE(mint, credential_type)
-            );
-            CREATE INDEX IF NOT EXISTS idx_creg_mint ON credential_registries(mint);
-
-            CREATE TABLE IF NOT EXISTS credential_records (
-                id TEXT PRIMARY KEY,
-                mint TEXT NOT NULL,
-                user TEXT NOT NULL,
-                credential_type TEXT NOT NULL,
-                issuer_pubkey TEXT NOT NULL,
-                verified_at INTEGER NOT NULL,
-                expires_at INTEGER NOT NULL,
-                tx_signature TEXT,
-                slot INTEGER,
-                created_at TEXT NOT NULL,
-                UNIQUE(mint, user, credential_type)
-            );
-            CREATE INDEX IF NOT EXISTS idx_crec_user ON credential_records(user);
-            CREATE INDEX IF NOT EXISTS idx_crec_mint ON credential_records(mint);
-            CREATE INDEX IF NOT EXISTS idx_crec_expires ON credential_records(expires_at);
         ")?;
         Ok(())
     }
@@ -498,42 +466,59 @@ impl Database {
 
     // ─── API key management ─────────────────────────────────────────────────
 
-    /// Generate a new API key with the given label.
-    pub fn create_api_key(&self, label: &str) -> Result<ApiKeyEntry, AppError> {
+    /// Generate a new API key with the given label and role.
+    /// Valid roles: "read", "write", "admin".
+    pub fn create_api_key(&self, label: &str, role: &str) -> Result<ApiKeyEntry, AppError> {
+        if !["read", "write", "admin"].contains(&role) {
+            return Err(AppError::BadRequest(format!(
+                "Invalid role '{}'. Must be one of: read, write, admin", role
+            )));
+        }
         let id = Uuid::new_v4().to_string();
         let key = format!("sss_{}", Uuid::new_v4().to_string().replace('-', ""));
         let created_at = Utc::now().to_rfc3339();
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         conn.execute(
-            "INSERT INTO api_keys (id, key, label, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![id, key, label, created_at],
+            "INSERT INTO api_keys (id, key, label, role, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, key, label, role, created_at],
         )?;
-        Ok(ApiKeyEntry { id, key, label: label.to_string(), created_at })
+        Ok(ApiKeyEntry { id, key, label: label.to_string(), role: role.to_string(), created_at })
     }
 
-    /// Validate that the given key exists.
-    pub fn validate_api_key(&self, key: &str) -> Result<bool, AppError> {
+    /// Validate that the given key exists and return its role.
+    /// Returns None if key not found.
+    pub fn get_api_key_role(&self, key: &str) -> Result<Option<String>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM api_keys WHERE key = ?1",
+        let result = conn.query_row(
+            "SELECT role FROM api_keys WHERE key = ?1",
             params![key],
-            |row| row.get(0),
-        )?;
-        Ok(count > 0)
+            |row| row.get::<_, String>(0),
+        );
+        match result {
+            Ok(role) => Ok(Some(role)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Internal(e.to_string())),
+        }
+    }
+
+    /// Validate that the given key exists (any role).
+    pub fn validate_api_key(&self, key: &str) -> Result<bool, AppError> {
+        Ok(self.get_api_key_role(key)?.is_some())
     }
 
     /// List all API keys (full key included — redaction happens at route level).
     pub fn list_api_keys(&self) -> Result<Vec<ApiKeyEntry>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let mut stmt = conn.prepare(
-            "SELECT id, key, label, created_at FROM api_keys ORDER BY created_at DESC",
+            "SELECT id, key, label, role, created_at FROM api_keys ORDER BY created_at DESC",
         )?;
         let entries = stmt.query_map([], |row| {
             Ok(ApiKeyEntry {
                 id: row.get(0)?,
                 key: row.get(1)?,
                 label: row.get(2)?,
-                created_at: row.get(3)?,
+                role: row.get(3)?,
+                created_at: row.get(4)?,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(entries)
@@ -614,71 +599,6 @@ impl Database {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(entries)
-    }
-
-    // ── SSS-139: Monitor query_event_log with parsed data ─────────────────────
-
-    /// Query event_log and return entries with `data` parsed as serde_json::Value.
-    /// Used by InvariantChecker and MetricCollector.
-    pub fn query_event_log(
-        &self,
-        event_type: Option<&str>,
-        address: Option<&str>,
-        limit: usize,
-        offset: usize,
-    ) -> Result<Vec<ParsedEventLogEntry>, AppError> {
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let mut sql = "SELECT id, event_type, address, data, tx_signature, slot, created_at \
-                       FROM event_log WHERE 1=1".to_string();
-        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-
-        if let Some(t) = event_type {
-            param_values.push(Box::new(t.to_string()));
-            sql.push_str(&format!(" AND event_type = ?{}", param_values.len()));
-        }
-        if let Some(a) = address {
-            param_values.push(Box::new(a.to_string()));
-            sql.push_str(&format!(" AND address = ?{}", param_values.len()));
-        }
-        param_values.push(Box::new(limit as i64));
-        param_values.push(Box::new(offset as i64));
-        sql.push_str(&format!(
-            " ORDER BY created_at DESC LIMIT ?{} OFFSET ?{}",
-            param_values.len() - 1,
-            param_values.len()
-        ));
-
-        let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
-        let mut stmt = conn.prepare(&sql)?;
-        let entries = stmt
-            .query_map(refs.as_slice(), |row| {
-                let id: String = row.get(0)?;
-                let event_type: String = row.get(1)?;
-                let address: String = row.get(2)?;
-                let data_str: String = row.get(3)?;
-                let tx_signature: Option<String> = row.get(4)?;
-                let slot: Option<i64> = row.get(5)?;
-                let created_at: String = row.get(6)?;
-                Ok((id, event_type, address, data_str, tx_signature, slot, created_at))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let parsed = entries
-            .into_iter()
-            .map(|(id, event_type, address, data_str, tx_signature, slot, created_at)| {
-                let data = serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null);
-                ParsedEventLogEntry {
-                    id,
-                    event_type,
-                    address,
-                    data,
-                    tx_signature,
-                    slot,
-                    created_at,
-                }
-            })
-            .collect();
-        Ok(parsed)
     }
 
     // ── Indexer state ──────────────────────────────────────────────────────────
@@ -1052,79 +972,35 @@ impl Database {
         Ok(inserted)
     }
 
-    // -----------------------------------------------------------------------
-    // SSS-112: Analytics DB methods
-    // -----------------------------------------------------------------------
+    // ─── SSS-108: Analytics queries ───────────────────────────────────────────
 
-    /// Aggregated liquidation stats for a date range, window shorthand, and optional collateral mint.
-    pub fn analytics_liquidations(
-        &self,
-        from: Option<&str>,
-        to: Option<&str>,
-        collateral_mint: Option<&str>,
-        window: &str,
-    ) -> Result<crate::routes::analytics::LiquidationAnalyticsResponse, AppError> {
-        use crate::routes::analytics::{CollateralMintStats, LiquidationAnalyticsResponse};
+    /// Liquidation analytics over the last `hours` hours.
+    #[allow(dead_code)]
+    pub fn liquidation_analytics(&self, hours: i64) -> Result<LiquidationAnalyticsStats, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-
-        // Build dynamic WHERE clause from optional filters.
-        let mut conditions: Vec<String> = Vec::new();
-        let mut bind_vals: Vec<String> = Vec::new();
-        if let Some(f) = from {
-            bind_vals.push(f.to_string());
-            conditions.push(format!("created_at >= ?{}", bind_vals.len()));
-        }
-        if let Some(t) = to {
-            bind_vals.push(t.to_string());
-            conditions.push(format!("created_at <= ?{}", bind_vals.len()));
-        }
-        if let Some(m) = collateral_mint {
-            bind_vals.push(m.to_string());
-            conditions.push(format!("collateral_mint = ?{}", bind_vals.len()));
-        }
-        let where_clause = if conditions.is_empty() {
-            String::new()
+        // SQLite datetime arithmetic: created_at is stored as RFC-3339 string.
+        let row: (i64, i64, i64) = conn.query_row(
+            "SELECT COUNT(*), \
+                    COALESCE(SUM(collateral_seized), 0), \
+                    COALESCE(SUM(debt_repaid), 0) \
+             FROM liquidation_history \
+             WHERE created_at >= datetime('now', ?1)",
+            rusqlite::params![format!("-{} hours", hours)],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        let count = row.0 as u64;
+        let total_collateral_seized = row.1;
+        let total_debt_repaid = row.2;
+        let avg_collateral_seized = if count > 0 {
+            total_collateral_seized / count as i64
         } else {
-            format!("WHERE {}", conditions.join(" AND "))
+            0
         };
-
-        // Aggregate totals
-        let totals_sql = format!(
-            "SELECT COUNT(*), COALESCE(SUM(collateral_seized),0), COALESCE(SUM(debt_repaid),0) \
-             FROM liquidation_history {where_clause}"
-        );
-        let (count, total_collateral_seized, total_debt_covered): (i64, i64, i64) =
-            conn.query_row(&totals_sql, rusqlite::params_from_iter(bind_vals.iter()), |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-            })?;
-
-        let avg_collateral_seized = if count > 0 { total_collateral_seized / count } else { 0 };
-
-        // Per-collateral-mint breakdown
-        let breakdown_sql = format!(
-            "SELECT collateral_mint, COUNT(*), COALESCE(SUM(collateral_seized),0), COALESCE(SUM(debt_repaid),0) \
-             FROM liquidation_history {where_clause} \
-             GROUP BY collateral_mint ORDER BY COUNT(*) DESC"
-        );
-        let mut stmt = conn.prepare(&breakdown_sql)?;
-        let by_collateral_mint: Vec<CollateralMintStats> = stmt
-            .query_map(rusqlite::params_from_iter(bind_vals.iter()), |row| {
-                Ok(CollateralMintStats {
-                    collateral_mint: row.get(0)?,
-                    count: row.get(1)?,
-                    total_collateral_seized: row.get(2)?,
-                    total_debt_covered: row.get(3)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(LiquidationAnalyticsResponse {
-            window: window.to_string(),
+        Ok(LiquidationAnalyticsStats {
             count,
             total_collateral_seized,
+            total_debt_repaid,
             avg_collateral_seized,
-            total_debt_covered,
-            by_collateral_mint,
         })
     }
 
@@ -1136,622 +1012,119 @@ impl Database {
     ///
     /// Health factor = net_collateral / net_debt  (unitless; >1 = healthy relative to 1:1 peg).
     /// Thresholds (conservative, no live price feed here):
-    ///   healthy      : health_factor >= 1.5
-    ///   at_risk      : 1.0 <= health_factor < 1.5
+    ///   healthy      : health_factor >= 2.0  (collateral >= 2× debt)
+    ///   at_risk      : 1.0 <= health_factor < 2.0
     ///   liquidatable : health_factor < 1.0  (or net_debt == 0 counts as healthy)
-    pub fn cdp_health_distribution(&self, bucket_count: Option<usize>) -> Result<CdpHealthResponse, AppError> {
+    pub fn cdp_health_distribution(&self) -> Result<CdpHealthDistribution, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // Build per-CDP collateral and debt maps from event_log.
-        // Strategy 1: CdpBorrowed events with both collateral_amount + debt_amount in one event.
-        // Strategy 2: Separate cdp_deposit (collateral) + cdp_borrow (debt) events per address.
-        let mut cdp_collateral: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
-        let mut cdp_debt: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
-
-        // Strategy 1: combined CdpBorrowed events
-        {
-            let sql = "SELECT address, data FROM event_log WHERE event_type = 'CdpBorrowed' ORDER BY slot DESC";
-            let mut stmt = conn.prepare(sql)?;
-            let rows = stmt.query_map([], |row| {
-                let addr: String = row.get(0)?;
-                let data_str: String = row.get(1)?;
-                Ok((addr, data_str))
+        // Pull aggregate deposit and borrow totals per CDP address from event_log.
+        // event_log.data is JSON with an `amount` field for deposit/borrow events.
+        let rows: Vec<(f64, f64)> = {
+            let mut stmt = conn.prepare(
+                "SELECT \
+                    SUM(CASE WHEN event_type = 'cdp_deposit'  THEN CAST(json_extract(data, '$.amount') AS REAL) ELSE 0 END) \
+                    - SUM(CASE WHEN event_type = 'cdp_withdraw' THEN CAST(json_extract(data, '$.amount') AS REAL) ELSE 0 END), \
+                    SUM(CASE WHEN event_type = 'cdp_borrow'   THEN CAST(json_extract(data, '$.amount') AS REAL) ELSE 0 END) \
+                    - SUM(CASE WHEN event_type = 'cdp_repay'   THEN CAST(json_extract(data, '$.amount') AS REAL) ELSE 0 END) \
+                 FROM event_log \
+                 WHERE event_type IN ('cdp_deposit','cdp_withdraw','cdp_borrow','cdp_repay') \
+                 GROUP BY address",
+            )?;
+            let iter = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, Option<f64>>(0)?.unwrap_or(0.0),
+                    row.get::<_, Option<f64>>(1)?.unwrap_or(0.0),
+                ))
             })?;
-            for row_res in rows {
-                let (addr, data_str) = row_res?;
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
-                    let collateral = v.get("collateral_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
-                    let debt = v.get("debt_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
-                    // Only record if not already seen (latest wins due to ORDER BY slot DESC)
-                    cdp_collateral.entry(addr.clone()).or_insert(collateral);
-                    cdp_debt.entry(addr).or_insert(debt);
-                }
-            }
-        }
+            iter.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| AppError::Internal(e.to_string()))?
+        };
 
-        // Strategy 2: separate cdp_deposit / cdp_borrow events
-        {
-            // Sum all deposits per address
-            let sql = "SELECT address, data FROM event_log WHERE event_type = 'cdp_deposit'";
-            let mut stmt = conn.prepare(sql)?;
-            let rows = stmt.query_map([], |row| {
-                let addr: String = row.get(0)?;
-                let data_str: String = row.get(1)?;
-                Ok((addr, data_str))
-            })?;
-            for row_res in rows {
-                let (addr, data_str) = row_res?;
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
-                    let amount = v.get("amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
-                    *cdp_collateral.entry(addr).or_insert(0.0) += amount;
-                }
-            }
-        }
-        {
-            // Sum all borrows per address
-            let sql = "SELECT address, data FROM event_log WHERE event_type = 'cdp_borrow'";
-            let mut stmt = conn.prepare(sql)?;
-            let rows = stmt.query_map([], |row| {
-                let addr: String = row.get(0)?;
-                let data_str: String = row.get(1)?;
-                Ok((addr, data_str))
-            })?;
-            for row_res in rows {
-                let (addr, data_str) = row_res?;
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
-                    let amount = v.get("amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
-                    *cdp_debt.entry(addr).or_insert(0.0) += amount;
-                }
-            }
-        }
+        let mut healthy = 0u64;
+        let mut at_risk = 0u64;
+        let mut liquidatable = 0u64;
 
-        // Also supplement with cdp_liquidate events
-        {
-            let liq_sql = "SELECT data FROM event_log WHERE event_type IN ('cdp_liquidate','CdpLiquidated')";
-            let mut lstmt = conn.prepare(liq_sql)?;
-            let liq_rows = lstmt.query_map([], |row| {
-                let data_str: String = row.get(0)?;
-                Ok(data_str)
-            })?;
-            for row_res in liq_rows {
-                let data_str = row_res?;
-                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&data_str) {
-                    let collateral = v.get("collateral_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
-                    let debt = v.get("debt_amount").and_then(|x| x.as_f64()).unwrap_or(0.0);
-                    if debt > 0.0 {
-                        // These are anonymous (no specific address key needed for ratio)
-                        let key = format!("__liq_{}", cdp_collateral.len());
-                        cdp_collateral.insert(key.clone(), collateral);
-                        cdp_debt.insert(key, debt);
-                    }
-                }
-            }
-        }
-
-        // Compute health ratios from combined maps
-        let mut ratios: Vec<f64> = Vec::new();
-        for (addr, &collateral) in &cdp_collateral {
-            let debt = *cdp_debt.get(addr).unwrap_or(&0.0);
-            if debt > 0.0 {
-                ratios.push(collateral / debt);
-            } else if collateral > 0.0 {
-                ratios.push(10.0); // infinite health, capped
-            }
-        }
-
-        let total_cdps = ratios.len() as i64;
-        let bucket_count: usize = bucket_count.unwrap_or(10).max(1);
-        let max_ratio: f64 = 5.0;
-        let bucket_width = max_ratio / bucket_count as f64;
-
-        let mut buckets: Vec<HealthBucket> = (0..bucket_count)
-            .map(|i| {
-                let from = i as f64 * bucket_width;
-                let to = from + bucket_width;
-                HealthBucket { from, to, count: 0 }
-            })
-            .collect();
-        // Overflow bucket for ratios >= max_ratio
-        buckets.push(HealthBucket {
-            from: max_ratio,
-            to: f64::INFINITY,
-            count: 0,
-        });
-
-        for ratio in &ratios {
-            let idx = (ratio / bucket_width).floor() as usize;
-            let idx = idx.min(bucket_count); // last bucket is overflow
-            buckets[idx].count += 1;
-        }
-
-        // Flat health counts (qa_tests schema): ratio >= 1.5 = healthy, [1.0, 1.5) = at_risk, <1.0 = liquidatable
-        let mut healthy: i64 = 0;
-        let mut at_risk: i64 = 0;
-        let mut liquidatable: i64 = 0;
-        for ratio in &ratios {
-            if *ratio >= 1.5 {
+        for (net_collateral, net_debt) in &rows {
+            let nc = net_collateral.max(0.0);
+            let nd = net_debt.max(0.0);
+            if nd <= 0.0 {
+                // No debt → always healthy.
                 healthy += 1;
-            } else if *ratio >= 1.0 {
-                at_risk += 1;
             } else {
-                liquidatable += 1;
+                let hf = nc / nd;
+                if hf >= 2.0 {
+                    healthy += 1;
+                } else if hf >= 1.0 {
+                    at_risk += 1;
+                } else {
+                    liquidatable += 1;
+                }
             }
         }
 
-        Ok(CdpHealthResponse {
-            buckets,
-            total_cdps,
-            total: total_cdps,
+        // Also include CDPs that appear only in liquidation_history (fully liquidated).
+        // These count as liquidatable unless we already saw their events above.
+        // (Intentionally not double-counting — event_log is the source of truth.)
+
+        Ok(CdpHealthDistribution {
             healthy,
             at_risk,
             liquidatable,
         })
     }
 
-    /// Protocol-wide stats: TVL, debt, backstop, PSM.
-    pub fn analytics_protocol_stats(
-        &self,
-    ) -> Result<crate::routes::analytics::ProtocolStatsResponse, AppError> {
-        use crate::routes::analytics::ProtocolStatsResponse;
-
+    /// Protocol-level aggregate stats.
+    pub fn protocol_stats(&self) -> Result<ProtocolStats, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // TVL = sum of collateral_deposited events in event_log
-        let total_tvl: i64 = {
-            let sql = "SELECT COALESCE(SUM(CAST(json_extract(data,'$.collateral_amount') AS INTEGER)), 0) \
-                       FROM event_log WHERE event_type IN ('CdpCollateralDeposited','cdp_deposit')";
-            conn.query_row(sql, [], |row| row.get(0)).unwrap_or(0)
-        };
+        // Total collateral locked: sum of total_deposited across all whitelisted configs.
+        let total_collateral_locked_native: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(total_deposited), 0) FROM collateral_config WHERE whitelisted = 1",
+            [],
+            |row| row.get(0),
+        )?;
 
-        // total_debt_outstanding — net minted stablecoin supply.
-        // Sources: dedicated mint_events/burn_events tables (primary) +
-        //          event_log with StablecoinMinted/StablecoinBurned event types.
-        let total_debt_outstanding: i64 = {
-            let minted_table: i64 = conn
-                .query_row("SELECT COALESCE(SUM(amount), 0) FROM mint_events", [], |row| row.get(0))
-                .unwrap_or(0);
-            let burned_table: i64 = conn
-                .query_row("SELECT COALESCE(SUM(amount), 0) FROM burn_events", [], |row| row.get(0))
-                .unwrap_or(0);
-            let minted_log: i64 = conn
-                .query_row(
-                    "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('StablecoinMinted','mint')",
-                    [],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
-            let burned_log: i64 = conn
-                .query_row(
-                    "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('StablecoinBurned','burn')",
-                    [],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
-            ((minted_table + minted_log) - (burned_table + burned_log)).max(0)
-        };
+        // Total debt: total minted - total burned (native units).
+        let total_minted: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(amount), 0) FROM mint_events",
+            [],
+            |row| row.get(0),
+        )?;
+        let total_burned: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(amount), 0) FROM burn_events",
+            [],
+            |row| row.get(0),
+        )?;
+        let total_debt_native = (total_minted - total_burned).max(0);
 
-        // backstop_balance — current backstop pool balance.
-        // Supports: BackstopDeposit/BackstopWithdraw (net) and BackstopFunded events.
-        let backstop_balance: i64 = {
-            let deposits: i64 = conn
-                .query_row(
-                    "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('BackstopDeposit','BackstopFunded','backstop_fund')",
-                    [],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
-            let withdrawals: i64 = conn
-                .query_row(
-                    "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('BackstopWithdraw')",
-                    [],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
-            (deposits - withdrawals).max(0)
-        };
+        // Backstop fund utilisation: total debt_repaid in liquidation_history.
+        let backstop_fund_debt_repaid: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(debt_repaid), 0) FROM liquidation_history",
+            [],
+            |row| row.get(0),
+        )?;
 
-        // psm_balance — PSM pool balance (net deposits minus redemptions).
-        let psm_balance: i64 = {
-            let deposits: i64 = conn
-                .query_row(
-                    "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('PsmDeposit','PsmSwap','psm_swap')",
-                    [],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
-            let redeems: i64 = conn
-                .query_row(
-                    "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                     FROM event_log WHERE event_type IN ('PsmRedeem')",
-                    [],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
-            (deposits - redeems).max(0)
-        };
-
-        // backstop_fund_debt_repaid — from BackstopDebtRepaid events
-        let backstop_fund_debt_repaid: i64 = conn
-            .query_row(
-                "SELECT COALESCE(SUM(CAST(json_extract(data,'$.amount') AS INTEGER)), 0) \
-                 FROM event_log WHERE event_type IN ('BackstopDebtRepaid','backstop_debt_repaid')",
+        // Active collateral types: whitelisted configs with some deposited collateral.
+        let active_collateral_types: u32 = {
+            let count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM collateral_config WHERE whitelisted = 1 AND total_deposited > 0",
                 [],
                 |row| row.get(0),
-            )
-            .unwrap_or(0);
+            )?;
+            count as u32
+        };
 
-        // active_collateral_types — distinct collateral mints in liquidation_history
-        let active_collateral_types: i64 = conn
-            .query_row(
-                "SELECT COUNT(DISTINCT collateral_mint) FROM liquidation_history",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
-
-        Ok(ProtocolStatsResponse {
-            total_tvl,
-            total_debt_outstanding,
-            backstop_balance,
-            psm_balance,
-            total_collateral_locked_native: total_tvl,
-            total_debt_native: total_debt_outstanding,
+        Ok(ProtocolStats {
+            total_collateral_locked_native,
+            total_debt_native,
             backstop_fund_debt_repaid,
             active_collateral_types,
         })
     }
-
-    // ─── SSS-127: Travel Rule records ─────────────────────────────────────────
-
-    /// Insert (or ignore duplicate) a TravelRuleRecord.
-    #[allow(clippy::too_many_arguments)]
-    pub fn insert_travel_rule_record(
-        &self,
-        mint: &str,
-        nonce: i64,
-        originator_vasp: &str,
-        beneficiary_vasp: &str,
-        transfer_amount: i64,
-        slot: Option<i64>,
-        encrypted_payload: Option<&str>,
-        tx_signature: Option<&str>,
-    ) -> Result<TravelRuleRecord, AppError> {
-        let id = Uuid::new_v4().to_string();
-        let created_at = Utc::now().to_rfc3339();
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        conn.execute(
-            "INSERT OR IGNORE INTO travel_rule_records \
-             (id, mint, nonce, originator_vasp, beneficiary_vasp, transfer_amount, slot, encrypted_payload, tx_signature, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                id,
-                mint,
-                nonce,
-                originator_vasp,
-                beneficiary_vasp,
-                transfer_amount,
-                slot,
-                encrypted_payload,
-                tx_signature,
-                created_at,
-            ],
-        )?;
-        Ok(TravelRuleRecord {
-            id,
-            mint: mint.to_string(),
-            nonce,
-            originator_vasp: originator_vasp.to_string(),
-            beneficiary_vasp: beneficiary_vasp.to_string(),
-            transfer_amount,
-            slot,
-            encrypted_payload: encrypted_payload.map(str::to_string),
-            tx_signature: tx_signature.map(str::to_string),
-            created_at,
-        })
-    }
-
-    /// List TravelRuleRecords with optional wallet / mint filters.
-    pub fn list_travel_rule_records(
-        &self,
-        wallet: Option<&str>,
-        mint: Option<&str>,
-        limit: u32,
-    ) -> Result<Vec<TravelRuleRecord>, AppError> {
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let mut sql = String::from(
-            "SELECT id, mint, nonce, originator_vasp, beneficiary_vasp, transfer_amount, \
-             slot, encrypted_payload, tx_signature, created_at \
-             FROM travel_rule_records WHERE 1=1",
-        );
-        let mut binds: Vec<String> = Vec::new();
-
-        if let Some(w) = wallet {
-            binds.push(w.to_string());
-            let idx = binds.len();
-            binds.push(w.to_string());
-            sql.push_str(&format!(
-                " AND (originator_vasp = ?{} OR beneficiary_vasp = ?{})",
-                idx,
-                idx + 1
-            ));
-        }
-        if let Some(m) = mint {
-            binds.push(m.to_string());
-            sql.push_str(&format!(" AND mint = ?{}", binds.len()));
-        }
-        binds.push(limit.to_string());
-        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", binds.len()));
-
-        let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(
-            rusqlite::params_from_iter(binds.iter()),
-            |row| {
-                Ok(TravelRuleRecord {
-                    id: row.get(0)?,
-                    mint: row.get(1)?,
-                    nonce: row.get(2)?,
-                    originator_vasp: row.get(3)?,
-                    beneficiary_vasp: row.get(4)?,
-                    transfer_amount: row.get(5)?,
-                    slot: row.get(6)?,
-                    encrypted_payload: row.get(7)?,
-                    tx_signature: row.get(8)?,
-                    created_at: row.get(9)?,
-                })
-            },
-        )?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| AppError::Internal(e.to_string()))
-    }
-
-    // -----------------------------------------------------------------------
-    // SSS-129: ZK Credentials
-    // -----------------------------------------------------------------------
-
-    /// Upsert a CredentialRegistry entry (on new merkle root from on-chain event).
-    pub fn upsert_credential_registry(
-        &self,
-        mint: &str,
-        credential_type: &str,
-        issuer_pubkey: &str,
-        merkle_root: &str,
-        proof_expiry_seconds: i64,
-    ) -> Result<CredentialRegistry, AppError> {
-        let id = Uuid::new_v4().to_string();
-        let now = Utc::now().to_rfc3339();
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        conn.execute(
-            "INSERT INTO credential_registries \
-             (id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7) \
-             ON CONFLICT(mint, credential_type) DO UPDATE SET \
-               issuer_pubkey = excluded.issuer_pubkey, \
-               merkle_root = excluded.merkle_root, \
-               proof_expiry_seconds = excluded.proof_expiry_seconds, \
-               updated_at = excluded.updated_at",
-            rusqlite::params![id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds, now],
-        )?;
-        // Fetch back (may have pre-existing id)
-        let reg = conn.query_row(
-            "SELECT id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds, created_at, updated_at \
-             FROM credential_registries WHERE mint = ?1 AND credential_type = ?2",
-            rusqlite::params![mint, credential_type],
-            |row| Ok(CredentialRegistry {
-                id: row.get(0)?,
-                mint: row.get(1)?,
-                credential_type: row.get(2)?,
-                issuer_pubkey: row.get(3)?,
-                merkle_root: row.get(4)?,
-                proof_expiry_seconds: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
-            }),
-        )?;
-        Ok(reg)
-    }
-
-    /// List CredentialRegistry entries with optional mint / credential_type filters.
-    pub fn list_credential_registries(
-        &self,
-        mint: Option<&str>,
-        credential_type: Option<&str>,
-    ) -> Result<Vec<CredentialRegistry>, AppError> {
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let mut sql = String::from(
-            "SELECT id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds, \
-             created_at, updated_at FROM credential_registries WHERE 1=1",
-        );
-        let mut binds: Vec<String> = Vec::new();
-
-        if let Some(m) = mint {
-            binds.push(m.to_string());
-            sql.push_str(&format!(" AND mint = ?{}", binds.len()));
-        }
-        if let Some(ct) = credential_type {
-            binds.push(ct.to_string());
-            sql.push_str(&format!(" AND credential_type = ?{}", binds.len()));
-        }
-        sql.push_str(" ORDER BY updated_at DESC");
-
-        let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(
-            rusqlite::params_from_iter(binds.iter()),
-            |row| Ok(CredentialRegistry {
-                id: row.get(0)?,
-                mint: row.get(1)?,
-                credential_type: row.get(2)?,
-                issuer_pubkey: row.get(3)?,
-                merkle_root: row.get(4)?,
-                proof_expiry_seconds: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
-            }),
-        )?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| AppError::Internal(e.to_string()))
-    }
-
-    /// Insert or refresh a CredentialRecord (user submitted valid ZK proof).
-    pub fn upsert_credential_record(
-        &self,
-        mint: &str,
-        user: &str,
-        credential_type: &str,
-        issuer_pubkey: &str,
-        verified_at: i64,
-        expires_at: i64,
-        tx_signature: Option<&str>,
-        slot: Option<i64>,
-    ) -> Result<CredentialRecord, AppError> {
-        let id = Uuid::new_v4().to_string();
-        let now = Utc::now().to_rfc3339();
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        conn.execute(
-            "INSERT INTO credential_records \
-             (id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, \
-              tx_signature, slot, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) \
-             ON CONFLICT(mint, user, credential_type) DO UPDATE SET \
-               issuer_pubkey = excluded.issuer_pubkey, \
-               verified_at = excluded.verified_at, \
-               expires_at = excluded.expires_at, \
-               tx_signature = excluded.tx_signature, \
-               slot = excluded.slot",
-            rusqlite::params![
-                id, mint, user, credential_type, issuer_pubkey,
-                verified_at, expires_at, tx_signature, slot, now
-            ],
-        )?;
-        // Fetch back
-        let now_unix = Utc::now().timestamp();
-        let record = conn.query_row(
-            "SELECT id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, \
-             tx_signature, slot, created_at FROM credential_records \
-             WHERE mint = ?1 AND user = ?2 AND credential_type = ?3",
-            rusqlite::params![mint, user, credential_type],
-            |row| {
-                let exp: i64 = row.get(6)?;
-                Ok(CredentialRecord {
-                    id: row.get(0)?,
-                    mint: row.get(1)?,
-                    user: row.get(2)?,
-                    credential_type: row.get(3)?,
-                    issuer_pubkey: row.get(4)?,
-                    verified_at: row.get(5)?,
-                    expires_at: exp,
-                    is_valid: exp > now_unix,
-                    tx_signature: row.get(7)?,
-                    slot: row.get(8)?,
-                    created_at: row.get(9)?,
-                })
-            },
-        )?;
-        Ok(record)
-    }
-
-    /// Fetch a single CredentialRecord for (mint, user, credential_type).
-    pub fn get_credential_record(
-        &self,
-        mint: &str,
-        user: &str,
-        credential_type: &str,
-    ) -> Result<Option<CredentialRecord>, AppError> {
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let now_unix = Utc::now().timestamp();
-        let result = conn.query_row(
-            "SELECT id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, \
-             tx_signature, slot, created_at FROM credential_records \
-             WHERE mint = ?1 AND user = ?2 AND credential_type = ?3",
-            rusqlite::params![mint, user, credential_type],
-            |row| {
-                let exp: i64 = row.get(6)?;
-                Ok(CredentialRecord {
-                    id: row.get(0)?,
-                    mint: row.get(1)?,
-                    user: row.get(2)?,
-                    credential_type: row.get(3)?,
-                    issuer_pubkey: row.get(4)?,
-                    verified_at: row.get(5)?,
-                    expires_at: exp,
-                    is_valid: exp > now_unix,
-                    tx_signature: row.get(7)?,
-                    slot: row.get(8)?,
-                    created_at: row.get(9)?,
-                })
-            },
-        );
-        match result {
-            Ok(r) => Ok(Some(r)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(AppError::Internal(e.to_string())),
-        }
-    }
-
-    /// List CredentialRecords with optional filters.
-    pub fn list_credential_records(
-        &self,
-        user: Option<&str>,
-        mint: Option<&str>,
-        credential_type: Option<&str>,
-        valid_only: bool,
-        limit: u32,
-    ) -> Result<Vec<CredentialRecord>, AppError> {
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let now_unix = Utc::now().timestamp();
-        let mut sql = String::from(
-            "SELECT id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, \
-             tx_signature, slot, created_at FROM credential_records WHERE 1=1",
-        );
-        let mut binds: Vec<String> = Vec::new();
-
-        if let Some(u) = user {
-            binds.push(u.to_string());
-            sql.push_str(&format!(" AND user = ?{}", binds.len()));
-        }
-        if let Some(m) = mint {
-            binds.push(m.to_string());
-            sql.push_str(&format!(" AND mint = ?{}", binds.len()));
-        }
-        if let Some(ct) = credential_type {
-            binds.push(ct.to_string());
-            sql.push_str(&format!(" AND credential_type = ?{}", binds.len()));
-        }
-        if valid_only {
-            binds.push(now_unix.to_string());
-            sql.push_str(&format!(" AND expires_at > ?{}", binds.len()));
-        }
-        binds.push(limit.to_string());
-        sql.push_str(&format!(" ORDER BY verified_at DESC LIMIT ?{}", binds.len()));
-
-        let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(
-            rusqlite::params_from_iter(binds.iter()),
-            |row| {
-                let exp: i64 = row.get(6)?;
-                Ok(CredentialRecord {
-                    id: row.get(0)?,
-                    mint: row.get(1)?,
-                    user: row.get(2)?,
-                    credential_type: row.get(3)?,
-                    issuer_pubkey: row.get(4)?,
-                    verified_at: row.get(5)?,
-                    expires_at: exp,
-                    is_valid: exp > now_unix,
-                    tx_signature: row.get(7)?,
-                    slot: row.get(8)?,
-                    created_at: row.get(9)?,
-                })
-            },
-        )?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| AppError::Internal(e.to_string()))
-    }
 }
+
+// ─── Analytics result types ───────────────────────────────────────────────────
 
 /// Raw stats returned by `Db::liquidation_analytics`.
 #[allow(dead_code)]

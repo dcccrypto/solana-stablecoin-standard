@@ -2,9 +2,6 @@ export { SolanaStablecoin, SSS_TOKEN_PROGRAM_ID, SSS_TRANSFER_HOOK_PROGRAM_ID } 
 export { ComplianceModule } from './ComplianceModule';
 export { ProofOfReserves } from './ProofOfReserves';
 export type { ReservesProof, MerkleProof, ProofType } from './ProofOfReserves';
-// ─── SSS-124: Reserve Composition ───────────────────────────────────────────
-export { ReserveCompositionModule } from './ReserveCompositionModule';
-export type { ReserveCompositionData } from './ReserveCompositionModule';
 export { FeatureFlagsModule, FLAG_CIRCUIT_BREAKER } from './FeatureFlagsModule';
 export type { FeatureFlagParams } from './FeatureFlagsModule';
 export { CircuitBreakerModule, FLAG_CIRCUIT_BREAKER_V2 } from './CircuitBreakerModule';
@@ -98,48 +95,5 @@ export type {
   EnableConfidentialTransfersParams,
   DepositConfidentialParams,
   WithdrawConfidentialParams,
-  ApplyPendingBalanceParams,
-  AuditTransferParams,
-  AuditTransferResult,
   ConfidentialTransferConfigAccount,
 } from './ConfidentialTransferModule';
-
-// ─── SSS-111: PBS + APC SDK modules ──────────────────────────────────────────
-export {
-  ProbabilisticModule,
-  VaultStatus,
-  FLAG_PROBABILISTIC_MONEY,
-  PBS_VAULT_SEED,
-  PBS_CONFIG_SEED,
-  derivePbsConfigPda,
-  derivePbsVaultPda,
-} from './ProbabilisticModule';
-export type {
-  ProbabilisticVault,
-  CommitProbabilisticParams,
-  CommitResult,
-  ProveAndResolveParams,
-  PartialResolveParams,
-  ExpireAndRefundParams,
-} from './ProbabilisticModule';
-
-export {
-  AgentPaymentChannelModule,
-  ChannelStatus,
-  DisputePolicy,
-  ApcProofType,
-  APC_CHANNEL_SEED,
-  APC_CONFIG_SEED,
-  deriveApcConfigPda,
-  deriveChannelPda,
-} from './AgentPaymentChannelModule';
-export type {
-  PaymentChannel,
-  OpenChannelParams,
-  OpenChannelResult,
-  SubmitWorkProofParams,
-  ProposeSettleParams,
-  CountersignSettleParams,
-  DisputeParams,
-  ForceCloseParams,
-} from './AgentPaymentChannelModule';

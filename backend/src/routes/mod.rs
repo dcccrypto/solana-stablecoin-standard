@@ -18,4 +18,3 @@ pub mod supply;
 pub mod travel_rule;
 pub mod webhooks;
 pub mod ws_events;
-pub mod zk_credentials;

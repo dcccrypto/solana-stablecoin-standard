@@ -27,7 +27,6 @@ hmac = "0.12"
 hex = "0.4"
 base64 = "0.22"
 hyper-rustls = { version = "0.27", features = ["webpki-tokio"] }
-ed25519-dalek = { version = "2", features = ["rand_core"] }
 bs58 = "0.5"
 solana-program = "=2.3.0"
 reqwest = { version = "0.12", features = ["rustls-tls", "json"], default-features = false }

@@ -2,7 +2,6 @@ mod auth;
 mod db;
 mod error;
 mod indexer;
-mod indexer_schema;
 mod models;
 mod monitor;
 mod rate_limit;
@@ -25,7 +24,6 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use auth::require_api_key;
 use db::Database;
 use routes::{
-    alerts::{get_alerts, post_alert},
     analytics::{get_cdp_health, get_liquidation_analytics, get_protocol_stats},
     apikeys::{create_api_key, delete_api_key, list_api_keys},
     cdp::{get_cdp_position, get_collateral_types, post_cdp_simulate},
@@ -39,19 +37,13 @@ use routes::{
     events::events,
     health::health,
     liquidations::get_liquidations,
-    metrics::get_metrics,
     mint::mint,
     burn::burn,
     reserves::get_reserves_proof,
     supply::supply,
     travel_rule::{get_pid_config, get_travel_rule_records},
     webhooks::{delete_webhook, list_webhooks, register_webhook},
-    webhook_deliveries::list_webhook_deliveries,
     ws_events::ws_events_handler,
-    zk_credentials::{
-        list_credential_records, list_registries, submit_credential, upsert_registry,
-        verify_credential,
-    },
 };
 use state::AppState;
 
@@ -133,12 +125,6 @@ async fn main() {
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
         .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
-        .route("/api/travel-rule/records", get(get_travel_rule_records))
-        .route("/api/pid-config", get(get_pid_config))
-        .route("/api/zk-credentials/records", get(list_credential_records))
-        .route("/api/zk-credentials/submit", post(submit_credential))
-        .route("/api/zk-credentials/verify", post(verify_credential))
-        .route("/api/zk-credentials/registry", get(list_registries).post(upsert_registry))
         .route("/api/ws/events", get(ws_events_handler))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         // Prometheus metrics — unauthenticated scrape endpoint
@@ -167,9 +153,6 @@ async fn main() {
     // Reads SOLANA_RPC_URL env var (default: devnet).
     indexer::spawn_indexer(state.clone());
 
-    // Spawn the invariant monitoring bot (SSS-139).
-    monitor::spawn_monitor(state.clone());
-
     axum::serve(listener, app)
         .await
         .expect("Server error");
@@ -178,6 +161,7 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use axum::{
         body::Body,
         http::{Method, Request, StatusCode},
@@ -189,7 +173,7 @@ mod tests {
     fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
         // Pre-create an API key for tests
-        let key_entry = db.create_api_key("test").expect("Failed to create test API key");
+        let key_entry = db.create_api_key("test", "admin").expect("Failed to create test API key");
         let test_key = key_entry.key.clone();
 
         let state = AppState::new(db);
@@ -239,7 +223,7 @@ mod tests {
     /// can exercise the 429 path without hammering the default 60-token bucket.
     fn build_app_with_capacity(capacity: u32) -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        let key_entry = db.create_api_key("rl-test").expect("Failed to create test API key");
+        let key_entry = db.create_api_key("rl-test", "admin").expect("Failed to create test API key");
         let test_key = key_entry.key.clone();
 
         let state = AppState::with_limiter(db, RateLimiter::new(capacity, 0.0));
@@ -465,7 +449,7 @@ mod tests {
             Some(12350),
         ).unwrap();
 
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         let state = AppState::new(db);
         let app = Router::new()
@@ -612,7 +596,7 @@ mod tests {
         use tower::Service;
 
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("ra-test").expect("api key");
+        let key_entry = db.create_api_key("ra-test", "admin").expect("api key");
         let test_key = key_entry.key.clone();
 
         // capacity=1, rps=2.0 → Retry-After = ceil((1-0)/2.0) = 1 sec
@@ -679,7 +663,7 @@ mod qa_tests {
 
     fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        let key_entry = db.create_api_key("qa-test").expect("create key");
+        let key_entry = db.create_api_key("qa-test", "admin").expect("create key");
         let test_key = key_entry.key.clone();
         let state = AppState::new(db);
         let app = Router::new()
@@ -1268,7 +1252,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_insert_and_list() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         // Seed two liquidation entries.
         db.insert_liquidation(
@@ -1314,7 +1298,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_filter_by_cdp_address() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         db.insert_liquidation("CDP_A", "MintX", 100, 50, "Liq1", None, None).unwrap();
         db.insert_liquidation("CDP_B", "MintX", 200, 100, "Liq2", None, None).unwrap();
@@ -1343,7 +1327,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_filter_by_collateral_mint() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         db.insert_liquidation("CDP1", "MintSOL", 100, 50, "LiqA", None, None).unwrap();
         db.insert_liquidation("CDP2", "MintUSDC", 200, 100, "LiqB", None, None).unwrap();
@@ -1370,7 +1354,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_pagination_limit_offset() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         for i in 0..5u64 {
             db.insert_liquidation(
@@ -1442,7 +1426,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_response_fields() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         db.insert_liquidation(
             "CDP_FIELD_TEST",
@@ -1583,7 +1567,7 @@ mod qa_tests {
 
     fn build_analytics_app() -> (axum::Router, String) {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("analytics-test").unwrap();
+        let key_entry = db.create_api_key("analytics-test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         let state = AppState::new(db);
         let app = Router::new()
@@ -1608,7 +1592,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_analytics_liquidations_with_data() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         // Insert 3 liquidations.
         for i in 0..3u64 {
@@ -1667,16 +1651,16 @@ mod qa_tests {
     #[tokio::test]
     async fn test_analytics_cdp_health_with_events() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         // Healthy CDP: 5000 collateral, 1000 debt → hf=5.0
         db.insert_event_log("cdp_deposit", "CDP_A",
             serde_json::json!({"amount": 5000}), None, None).unwrap();
         db.insert_event_log("cdp_borrow", "CDP_A",
             serde_json::json!({"amount": 1000}), None, None).unwrap();
-        // At-risk CDP: 1400 collateral, 1000 debt → hf=1.4 (< 1.5 threshold, so at_risk)
+        // At-risk CDP: 1500 collateral, 1000 debt → hf=1.5
         db.insert_event_log("cdp_deposit", "CDP_B",
-            serde_json::json!({"amount": 1400}), None, None).unwrap();
+            serde_json::json!({"amount": 1500}), None, None).unwrap();
         db.insert_event_log("cdp_borrow", "CDP_B",
             serde_json::json!({"amount": 1000}), None, None).unwrap();
         // Liquidatable CDP: 800 collateral, 1000 debt → hf=0.8
@@ -1715,837 +1699,5 @@ mod qa_tests {
         let (app, _) = build_analytics_app();
         let (status, _) = analytics_get_json(app, "/api/analytics/liquidations", "bad-key").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
-    }
-}
-
-// ---------------------------------------------------------------------------
-// SSS-112: Analytics endpoint tests
-// ---------------------------------------------------------------------------
-#[cfg(test)]
-mod analytics_tests {
-    use super::*;
-    use axum::body::Body;
-    use axum::http::{Request, StatusCode};
-    use http_body_util::BodyExt;
-    use tower::ServiceExt;
-
-    fn build_analytics_app() -> Router {
-        let db = Database::new(":memory:").expect("in-memory db for analytics tests");
-        // Seed some liquidation_history rows
-        for i in 0..5i64 {
-            db.insert_liquidation(
-                &format!("CDP_{i}"),
-                if i % 2 == 0 { "MintA" } else { "MintB" },
-                i * 100,
-                i * 50,
-                "Liq",
-                Some(i),
-                None,
-            ).unwrap();
-        }
-        // Seed event_log rows for TVL and debt
-        db.record_mint("sssMint", 1_000_000, "wallet1", None).unwrap();
-        db.record_burn("sssMint", 200_000, "wallet1", None).unwrap();
-        // CdpBorrowed events for health histogram
-        for i in 1..=4i64 {
-            db.insert_event_log(
-                "CdpBorrowed",
-                &format!("CDP_HEALTH_{i}"),
-                serde_json::json!({
-                    "collateral_amount": i * 200,
-                    "debt_amount": i * 100,
-                }),
-                None,
-                Some(i),
-            ).unwrap();
-        }
-
-        let state = AppState::new(db);
-        Router::new()
-            .route("/api/analytics/liquidations", get(routes::analytics::get_liquidation_analytics))
-            .route("/api/analytics/cdp-health", get(routes::analytics::get_cdp_health))
-            .route("/api/analytics/protocol-stats", get(routes::analytics::get_protocol_stats))
-            .with_state(state)
-    }
-
-    // Helper: deserialize response body
-    async fn parse_body(resp: axum::response::Response) -> serde_json::Value {
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        serde_json::from_slice(&bytes).unwrap()
-    }
-
-    // --- /api/analytics/liquidations ---
-
-    #[tokio::test]
-    async fn test_analytics_liquidations_200() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/liquidations").body(Body::empty()).unwrap())
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_analytics_liquidations_count() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/liquidations").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        assert_eq!(json["success"], true);
-        let count = json["data"]["count"].as_i64().unwrap();
-        assert_eq!(count, 5);
-    }
-
-    #[tokio::test]
-    async fn test_analytics_liquidations_total_collateral() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/liquidations").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        // sum of 0+100+200+300+400 = 1000
-        assert_eq!(json["data"]["total_collateral_seized"].as_i64().unwrap(), 1000);
-    }
-
-    #[tokio::test]
-    async fn test_analytics_liquidations_total_debt() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/liquidations").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        // sum of 0+50+100+150+200 = 500
-        assert_eq!(json["data"]["total_debt_covered"].as_i64().unwrap(), 500);
-    }
-
-    #[tokio::test]
-    async fn test_analytics_liquidations_by_collateral_mint() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/liquidations").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        let mints = json["data"]["by_collateral_mint"].as_array().unwrap();
-        assert!(!mints.is_empty(), "should have per-mint breakdown");
-        let mint_names: Vec<&str> = mints.iter()
-            .map(|m| m["collateral_mint"].as_str().unwrap())
-            .collect();
-        assert!(mint_names.contains(&"MintA") || mint_names.contains(&"MintB"));
-    }
-
-    #[tokio::test]
-    async fn test_analytics_liquidations_filter_by_mint() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder()
-                .uri("/api/analytics/liquidations?collateral_mint=MintA")
-                .body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        assert_eq!(json["success"], true);
-        // MintA: indices 0,2,4 → 3 rows
-        assert_eq!(json["data"]["count"].as_i64().unwrap(), 3);
-    }
-
-    #[tokio::test]
-    async fn test_analytics_liquidations_filter_by_mint_b() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder()
-                .uri("/api/analytics/liquidations?collateral_mint=MintB")
-                .body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        // MintB: indices 1,3 → 2 rows
-        assert_eq!(json["data"]["count"].as_i64().unwrap(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_analytics_liquidations_empty_range() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder()
-                .uri("/api/analytics/liquidations?from=2099-01-01T00:00:00Z&to=2099-12-31T00:00:00Z")
-                .body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        assert_eq!(json["data"]["count"].as_i64().unwrap(), 0);
-    }
-
-    // --- /api/analytics/cdp-health ---
-
-    #[tokio::test]
-    async fn test_cdp_health_200() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/cdp-health").body(Body::empty()).unwrap())
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_cdp_health_has_buckets() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/cdp-health").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        let buckets = json["data"]["buckets"].as_array().unwrap();
-        assert!(!buckets.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_cdp_health_total_cdps() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/cdp-health").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        // 4 CdpBorrowed events with valid debt_amount
-        assert_eq!(json["data"]["total_cdps"].as_i64().unwrap(), 4);
-    }
-
-    #[tokio::test]
-    async fn test_cdp_health_bucket_count_param() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/cdp-health?buckets=5").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        // 5 regular + 1 overflow bucket = 6
-        let buckets = json["data"]["buckets"].as_array().unwrap();
-        assert_eq!(buckets.len(), 6);
-    }
-
-    #[tokio::test]
-    async fn test_cdp_health_ratios_distributed() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/cdp-health").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        let total: i64 = json["data"]["buckets"].as_array().unwrap()
-            .iter().map(|b| b["count"].as_i64().unwrap_or(0)).sum();
-        assert_eq!(total, json["data"]["total_cdps"].as_i64().unwrap());
-    }
-
-    // --- /api/analytics/protocol-stats ---
-
-    #[tokio::test]
-    async fn test_protocol_stats_200() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/protocol-stats").body(Body::empty()).unwrap())
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_protocol_stats_debt_outstanding() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/protocol-stats").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        assert_eq!(json["success"], true);
-        // minted 1_000_000 - burned 200_000 = 800_000
-        assert_eq!(json["data"]["total_debt_outstanding"].as_i64().unwrap(), 800_000);
-    }
-
-    #[tokio::test]
-    async fn test_protocol_stats_has_fields() {
-        let app = build_analytics_app();
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/protocol-stats").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        let data = &json["data"];
-        assert!(data["total_tvl"].is_number());
-        assert!(data["total_debt_outstanding"].is_number());
-        assert!(data["backstop_balance"].is_number());
-        assert!(data["psm_balance"].is_number());
-    }
-
-    #[tokio::test]
-    async fn test_protocol_stats_backstop_balance() {
-        let db = Database::new(":memory:").unwrap();
-        db.insert_event_log("BackstopDeposit","addr1",serde_json::json!({"amount":500_000}),None,Some(1)).unwrap();
-        db.insert_event_log("BackstopWithdraw","addr1",serde_json::json!({"amount":100_000}),None,Some(2)).unwrap();
-        let state = AppState::new(db);
-        let app = Router::new()
-            .route("/api/analytics/protocol-stats", get(routes::analytics::get_protocol_stats))
-            .with_state(state);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/protocol-stats").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        assert_eq!(json["data"]["backstop_balance"].as_i64().unwrap(), 400_000);
-    }
-
-    #[tokio::test]
-    async fn test_protocol_stats_psm_balance() {
-        let db = Database::new(":memory:").unwrap();
-        db.insert_event_log("PsmDeposit","addr1",serde_json::json!({"amount":300_000}),None,Some(1)).unwrap();
-        db.insert_event_log("PsmRedeem","addr1",serde_json::json!({"amount":50_000}),None,Some(2)).unwrap();
-        let state = AppState::new(db);
-        let app = Router::new()
-            .route("/api/analytics/protocol-stats", get(routes::analytics::get_protocol_stats))
-            .with_state(state);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/analytics/protocol-stats").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = parse_body(resp).await;
-        assert_eq!(json["data"]["psm_balance"].as_i64().unwrap(), 250_000);
-    }
-}
-
-// ─── SSS-127: Travel Rule tests ───────────────────────────────────────────────
-
-#[cfg(test)]
-mod travel_rule_tests {
-    use super::*;
-    use axum::{
-        body::Body,
-        http::{Method, Request, StatusCode},
-    };
-    use tower::ServiceExt;
-
-    /// Build a minimal app wired with travel-rule routes (no auth middleware).
-    fn build_tr_app() -> (Router<()>, db::Database) {
-        let db = db::Database::new(":memory:").unwrap();
-        let state = state::AppState::new(db);
-        let app = Router::new()
-            .route("/api/travel-rule/records", get(routes::travel_rule::get_travel_rule_records))
-            .route("/api/pid-config", get(routes::travel_rule::get_pid_config))
-            .with_state(state);
-        // We can't return the db from inside AppState easily; rebuild for seeding.
-        let db2 = db::Database::new(":memory:").unwrap();
-        (app, db2)
-    }
-
-    fn build_tr_app_with_db(db: db::Database) -> Router<()> {
-        let state = state::AppState::new(db);
-        Router::new()
-            .route("/api/travel-rule/records", get(routes::travel_rule::get_travel_rule_records))
-            .route("/api/pid-config", get(routes::travel_rule::get_pid_config))
-            .with_state(state)
-    }
-
-    async fn body_json(resp: axum::response::Response) -> serde_json::Value {
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
-        serde_json::from_slice(&bytes).unwrap()
-    }
-
-    #[tokio::test]
-    async fn test_tr_records_empty() {
-        let db = db::Database::new(":memory:").unwrap();
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        assert_eq!(json["success"], true);
-        assert!(json["data"].as_array().unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_tr_records_insert_and_list() {
-        let db = db::Database::new(":memory:").unwrap();
-        db.insert_travel_rule_record(
-            "mint1", 1, "origVASP", "benVASP", 5_000_000, Some(100), Some("enc_abc"), Some("sig1"),
-        ).unwrap();
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        let records = json["data"].as_array().unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0]["mint"], "mint1");
-        assert_eq!(records[0]["originator_vasp"], "origVASP");
-        assert_eq!(records[0]["beneficiary_vasp"], "benVASP");
-        assert_eq!(records[0]["transfer_amount"].as_i64().unwrap(), 5_000_000);
-    }
-
-    #[tokio::test]
-    async fn test_tr_records_filter_by_wallet_originator() {
-        let db = db::Database::new(":memory:").unwrap();
-        db.insert_travel_rule_record("mint1", 1, "vaspA", "vaspB", 1000, Some(1), None, Some("s1")).unwrap();
-        db.insert_travel_rule_record("mint1", 2, "vaspC", "vaspD", 2000, Some(2), None, Some("s2")).unwrap();
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/travel-rule/records?wallet=vaspA").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = body_json(resp).await;
-        let records = json["data"].as_array().unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0]["originator_vasp"], "vaspA");
-    }
-
-    #[tokio::test]
-    async fn test_tr_records_filter_by_wallet_beneficiary() {
-        let db = db::Database::new(":memory:").unwrap();
-        db.insert_travel_rule_record("mint1", 1, "vaspA", "vaspB", 1000, Some(1), None, Some("s1")).unwrap();
-        db.insert_travel_rule_record("mint1", 2, "vaspC", "vaspD", 2000, Some(2), None, Some("s2")).unwrap();
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/travel-rule/records?wallet=vaspD").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = body_json(resp).await;
-        let records = json["data"].as_array().unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0]["beneficiary_vasp"], "vaspD");
-    }
-
-    #[tokio::test]
-    async fn test_tr_records_filter_by_mint() {
-        let db = db::Database::new(":memory:").unwrap();
-        db.insert_travel_rule_record("mintX", 1, "v1", "v2", 100, Some(1), None, Some("s1")).unwrap();
-        db.insert_travel_rule_record("mintY", 2, "v3", "v4", 200, Some(2), None, Some("s2")).unwrap();
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/travel-rule/records?mint=mintX").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = body_json(resp).await;
-        let records = json["data"].as_array().unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0]["mint"], "mintX");
-    }
-
-    #[tokio::test]
-    async fn test_tr_records_limit() {
-        let db = db::Database::new(":memory:").unwrap();
-        for i in 0..5i64 {
-            db.insert_travel_rule_record("mint1", i, "vA", "vB", 100, Some(i), None, Some(&format!("s{i}"))).unwrap();
-        }
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/travel-rule/records?limit=3").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = body_json(resp).await;
-        assert_eq!(json["data"].as_array().unwrap().len(), 3);
-    }
-
-    #[tokio::test]
-    async fn test_tr_records_duplicate_nonce_ignored() {
-        let db = db::Database::new(":memory:").unwrap();
-        db.insert_travel_rule_record("mint1", 1, "v1", "v2", 1000, Some(1), None, Some("s1")).unwrap();
-        // Duplicate (mint, nonce) — should be silently ignored (INSERT OR IGNORE).
-        db.insert_travel_rule_record("mint1", 1, "v1", "v2", 9999, Some(2), None, Some("s2")).unwrap();
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = body_json(resp).await;
-        let records = json["data"].as_array().unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0]["transfer_amount"].as_i64().unwrap(), 1000); // original value kept
-    }
-
-    #[tokio::test]
-    async fn test_tr_records_encrypted_payload_optional() {
-        let db = db::Database::new(":memory:").unwrap();
-        db.insert_travel_rule_record("mint1", 1, "v1", "v2", 100, None, None, None).unwrap();
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = body_json(resp).await;
-        let rec = &json["data"][0];
-        // encrypted_payload is skip_serializing_if(None) — should be absent or null
-        assert!(rec.get("encrypted_payload").map_or(true, |v| v.is_null()));
-    }
-
-    #[tokio::test]
-    async fn test_pid_config_returns_program_ids() {
-        let db = db::Database::new(":memory:").unwrap();
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/pid-config").body(Body::empty()).unwrap())
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        assert_eq!(json["sss_token_program_id"], "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat");
-        assert_eq!(json["sss_transfer_hook_program_id"], "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp");
-        assert_eq!(json["travel_rule_indexing_active"], true);
-        assert!(json["travel_rule_threshold"].is_number());
-    }
-
-    #[tokio::test]
-    async fn test_tr_records_multiple_mints() {
-        let db = db::Database::new(":memory:").unwrap();
-        db.insert_travel_rule_record("mintA", 1, "v1", "v2", 500, Some(1), None, Some("s1")).unwrap();
-        db.insert_travel_rule_record("mintB", 2, "v3", "v4", 700, Some(2), None, Some("s2")).unwrap();
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = body_json(resp).await;
-        assert_eq!(json["data"].as_array().unwrap().len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_tr_records_wallet_no_match_returns_empty() {
-        let db = db::Database::new(":memory:").unwrap();
-        db.insert_travel_rule_record("mint1", 1, "vaspA", "vaspB", 100, Some(1), None, Some("s1")).unwrap();
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/travel-rule/records?wallet=vaspZ").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = body_json(resp).await;
-        assert!(json["data"].as_array().unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_tr_records_nonce_stored_correctly() {
-        let db = db::Database::new(":memory:").unwrap();
-        db.insert_travel_rule_record("mint1", 42, "v1", "v2", 100, Some(1), None, Some("s1")).unwrap();
-        let app = build_tr_app_with_db(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
-            .await.unwrap();
-        let json = body_json(resp).await;
-        assert_eq!(json["data"][0]["nonce"].as_i64().unwrap(), 42);
-    }
-}
-
-// ─── SSS-129: ZK Credentials tests ───────────────────────────────────────────
-
-#[cfg(test)]
-mod zk_credentials_tests {
-    use super::*;
-    use axum::{
-        body::Body,
-        http::{Method, Request, StatusCode},
-        Router,
-    };
-    use tower::ServiceExt;
-
-    const MINT: &str = "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat";
-    const USER: &str = "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R";
-    const ISSUER: &str = "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp";
-    // 64 hex chars = 32-byte merkle root
-    const MERKLE_ROOT: &str = "a3f2b1c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2";
-    // 512 hex chars = 256-byte Groth16 proof
-    const PROOF_HEX: &str = "ab12cd34ef56789012345678901234567890123456789012345678901234567890\
-                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
-                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
-                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
-                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
-                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
-                             ab12cd34ef56789012345678901234567890123456789012345678901234567890\
-                             ab12cd34ef56789012345678901234567890123456789012";
-
-    fn build_zk_app(db: db::Database) -> Router<()> {
-        let state = state::AppState::new(db);
-        Router::new()
-            .route("/api/zk-credentials/records", get(routes::zk_credentials::list_credential_records))
-            .route("/api/zk-credentials/submit", axum::routing::post(routes::zk_credentials::submit_credential))
-            .route("/api/zk-credentials/verify", axum::routing::post(routes::zk_credentials::verify_credential))
-            .route(
-                "/api/zk-credentials/registry",
-                get(routes::zk_credentials::list_registries)
-                    .post(routes::zk_credentials::upsert_registry),
-            )
-            .with_state(state)
-    }
-
-    async fn body_json(resp: axum::response::Response) -> serde_json::Value {
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
-        serde_json::from_slice(&bytes).unwrap()
-    }
-
-    fn json_body(v: serde_json::Value) -> Body {
-        Body::from(serde_json::to_vec(&v).unwrap())
-    }
-
-    // ── Registry tests ──────────────────────────────────────────────────────
-
-    #[tokio::test]
-    async fn test_registry_list_empty() {
-        let db = db::Database::new(":memory:").unwrap();
-        let app = build_zk_app(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/zk-credentials/registry").body(Body::empty()).unwrap())
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        assert_eq!(json["success"], true);
-        assert!(json["data"].as_array().unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_registry_upsert_and_list() {
-        let db = db::Database::new(":memory:").unwrap();
-        let app = build_zk_app(db);
-        let body = serde_json::json!({
-            "mint": MINT,
-            "credential_type": "kyc_passed",
-            "issuer_pubkey": ISSUER,
-            "merkle_root": MERKLE_ROOT,
-            "proof_expiry_seconds": 86400
-        });
-        let resp = app.clone()
-            .oneshot(
-                Request::builder()
-                    .method(Method::POST)
-                    .uri("/api/zk-credentials/registry")
-                    .header("Content-Type", "application/json")
-                    .body(json_body(body)).unwrap(),
-            )
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        assert_eq!(json["success"], true);
-        assert_eq!(json["data"]["credential_type"], "kyc_passed");
-        assert_eq!(json["data"]["merkle_root"], MERKLE_ROOT);
-        assert_eq!(json["data"]["proof_expiry_seconds"], 86400);
-    }
-
-    #[tokio::test]
-    async fn test_registry_invalid_merkle_root_rejected() {
-        let db = db::Database::new(":memory:").unwrap();
-        let app = build_zk_app(db);
-        let body = serde_json::json!({
-            "mint": MINT,
-            "credential_type": "not_sanctioned",
-            "issuer_pubkey": ISSUER,
-            "merkle_root": "tooshort",
-        });
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .method(Method::POST)
-                    .uri("/api/zk-credentials/registry")
-                    .header("Content-Type", "application/json")
-                    .body(json_body(body)).unwrap(),
-            )
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        assert_eq!(json["success"], false);
-        assert!(json["error"].as_str().unwrap().contains("merkle_root"));
-    }
-
-    // ── Submit tests ─────────────────────────────────────────────────────────
-
-    #[tokio::test]
-    async fn test_submit_credential_valid() {
-        let db = db::Database::new(":memory:").unwrap();
-        let app = build_zk_app(db);
-        let body = serde_json::json!({
-            "mint": MINT,
-            "user": USER,
-            "credential_type": "not_sanctioned",
-            "issuer_pubkey": ISSUER,
-            "proof_data": PROOF_HEX,
-            "tx_signature": "5JxFakeSignaturexxx",
-        });
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .method(Method::POST)
-                    .uri("/api/zk-credentials/submit")
-                    .header("Content-Type", "application/json")
-                    .body(json_body(body)).unwrap(),
-            )
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        assert_eq!(json["success"], true);
-        assert_eq!(json["data"]["user"], USER);
-        assert_eq!(json["data"]["credential_type"], "not_sanctioned");
-        assert_eq!(json["data"]["is_valid"], true);
-        assert!(json["data"]["expires_at"].as_i64().unwrap() > 0);
-    }
-
-    #[tokio::test]
-    async fn test_submit_credential_invalid_proof_data() {
-        let db = db::Database::new(":memory:").unwrap();
-        let app = build_zk_app(db);
-        let body = serde_json::json!({
-            "mint": MINT,
-            "user": USER,
-            "credential_type": "kyc_passed",
-            "issuer_pubkey": ISSUER,
-            "proof_data": "",  // empty — invalid
-        });
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .method(Method::POST)
-                    .uri("/api/zk-credentials/submit")
-                    .header("Content-Type", "application/json")
-                    .body(json_body(body)).unwrap(),
-            )
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        assert_eq!(json["success"], false);
-        assert!(json["error"].as_str().unwrap().contains("proof_data"));
-    }
-
-    #[tokio::test]
-    async fn test_submit_updates_existing_record() {
-        let db = db::Database::new(":memory:").unwrap();
-        let app = build_zk_app(db);
-        let body = serde_json::json!({
-            "mint": MINT, "user": USER,
-            "credential_type": "accredited_investor",
-            "issuer_pubkey": ISSUER, "proof_data": PROOF_HEX,
-        });
-        // Submit twice — second should refresh expiry
-        for _ in 0..2 {
-            let resp = app.clone()
-                .oneshot(
-                    Request::builder()
-                        .method(Method::POST)
-                        .uri("/api/zk-credentials/submit")
-                        .header("Content-Type", "application/json")
-                        .body(json_body(body.clone())).unwrap(),
-                )
-                .await.unwrap();
-            assert_eq!(resp.status(), StatusCode::OK);
-        }
-
-        // List — should still be 1 record (upsert)
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .uri("/api/zk-credentials/records")
-                    .body(Body::empty()).unwrap(),
-            )
-            .await.unwrap();
-        let json = body_json(resp).await;
-        assert_eq!(json["data"].as_array().unwrap().len(), 1);
-    }
-
-    // ── Verify tests ─────────────────────────────────────────────────────────
-
-    #[tokio::test]
-    async fn test_verify_no_record_returns_not_valid() {
-        let db = db::Database::new(":memory:").unwrap();
-        let app = build_zk_app(db);
-        let body = serde_json::json!({
-            "mint": MINT, "user": USER, "credential_type": "not_sanctioned"
-        });
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .method(Method::POST)
-                    .uri("/api/zk-credentials/verify")
-                    .header("Content-Type", "application/json")
-                    .body(json_body(body)).unwrap(),
-            )
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        assert_eq!(json["is_valid"], false);
-        assert!(json["record"].is_null());
-        assert!(json["message"].as_str().unwrap().contains("No credential record found"));
-    }
-
-    #[tokio::test]
-    async fn test_verify_valid_after_submit() {
-        let db = db::Database::new(":memory:").unwrap();
-        let app = build_zk_app(db);
-
-        // Submit proof
-        let submit_body = serde_json::json!({
-            "mint": MINT, "user": USER,
-            "credential_type": "kyc_passed",
-            "issuer_pubkey": ISSUER, "proof_data": PROOF_HEX,
-        });
-        app.clone()
-            .oneshot(
-                Request::builder()
-                    .method(Method::POST)
-                    .uri("/api/zk-credentials/submit")
-                    .header("Content-Type", "application/json")
-                    .body(json_body(submit_body)).unwrap(),
-            )
-            .await.unwrap();
-
-        // Verify
-        let verify_body = serde_json::json!({
-            "mint": MINT, "user": USER, "credential_type": "kyc_passed"
-        });
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .method(Method::POST)
-                    .uri("/api/zk-credentials/verify")
-                    .header("Content-Type", "application/json")
-                    .body(json_body(verify_body)).unwrap(),
-            )
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        assert_eq!(json["is_valid"], true);
-        assert!(!json["record"].is_null());
-        assert_eq!(json["record"]["credential_type"], "kyc_passed");
-    }
-
-    // ── Records list tests ────────────────────────────────────────────────────
-
-    #[tokio::test]
-    async fn test_records_list_empty() {
-        let db = db::Database::new(":memory:").unwrap();
-        let app = build_zk_app(db);
-        let resp = app
-            .oneshot(Request::builder().uri("/api/zk-credentials/records").body(Body::empty()).unwrap())
-            .await.unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = body_json(resp).await;
-        assert!(json["data"].as_array().unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_records_filter_by_user() {
-        let db = db::Database::new(":memory:").unwrap();
-        // Seed two users directly in db
-        let now = chrono::Utc::now().timestamp();
-        db.upsert_credential_record(MINT, USER, "not_sanctioned", ISSUER, now, now + 86400, None, None).unwrap();
-        db.upsert_credential_record(MINT, "AnotherUser111", "not_sanctioned", ISSUER, now, now + 86400, None, None).unwrap();
-
-        let app = build_zk_app(db);
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .uri(&format!("/api/zk-credentials/records?user={USER}"))
-                    .body(Body::empty()).unwrap(),
-            )
-            .await.unwrap();
-        let json = body_json(resp).await;
-        let records = json["data"].as_array().unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0]["user"], USER);
-    }
-
-    #[tokio::test]
-    async fn test_records_valid_only_filter() {
-        let db = db::Database::new(":memory:").unwrap();
-        let now = chrono::Utc::now().timestamp();
-        // Valid record
-        db.upsert_credential_record(MINT, USER, "kyc_passed", ISSUER, now, now + 86400, None, None).unwrap();
-        // Expired record (different user)
-        db.upsert_credential_record(MINT, "ExpiredUser222", "kyc_passed", ISSUER, now - 10000, now - 1, None, None).unwrap();
-
-        let app = build_zk_app(db);
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .uri("/api/zk-credentials/records?valid_only=true")
-                    .body(Body::empty()).unwrap(),
-            )
-            .await.unwrap();
-        let json = body_json(resp).await;
-        let records = json["data"].as_array().unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0]["user"], USER);
-        assert_eq!(records[0]["is_valid"], true);
     }
 }

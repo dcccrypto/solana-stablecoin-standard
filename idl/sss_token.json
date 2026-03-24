@@ -6024,23 +6024,33 @@
     },
     {
       "code": 6069,
+      "name": "PartialLiquidationInsufficientRepay",
+      "msg": "partial_repay_amount would not restore CDP to healthy ratio — increase repay amount"
+    },
+    {
+      "code": 6070,
+      "name": "InvalidAmount",
+      "msg": "invalid amount: partial_repay_amount exceeds total debt"
+    },
+    {
+      "code": 6071,
       "name": "ConfidentialTransferNotEnabled",
       "msg": "Confidential transfer not enabled for this mint"
     },
     {
-      "code": 6070,
+      "code": 6072,
       "name": "MissingAuditorKey",
       "msg": "Auditor ElGamal pubkey required for confidential transfers"
     },
     {
-      "code": 6071,
-      "name": "InvalidAmount",
-      "msg": "Invalid amount"
+      "code": 6073,
+      "name": "InvalidElGamalKey",
+      "msg": "Auditor ElGamal pubkey must be non-zero (all-zero key is invalid)"
     },
     {
-      "code": 6072,
-      "name": "PartialLiquidationInsufficientRepay",
-      "msg": "Insufficient repayment amount for partial liquidation"
+      "code": 6074,
+      "name": "UnexpectedCtConfig",
+      "msg": "ct_config account must be omitted when FLAG_CONFIDENTIAL_TRANSFERS is not set"
     }
   ],
   "types": [

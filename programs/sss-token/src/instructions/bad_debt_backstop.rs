@@ -61,36 +61,38 @@ pub fn set_backstop_params_handler(
 
 // ─── trigger_backstop ────────────────────────────────────────────────────────
 
-/// Called by the stablecoin authority (or keeper) after a liquidation leaves collateral < debt.
-/// Draws up to `max_backstop_bps` of outstanding debt from the insurance fund to cover the
-/// shortfall.  Emits `BadDebtTriggered`.
+/// Called by the liquidation handler after a liquidation leaves collateral < debt.
+/// Draws up to `max_backstop_bps` of outstanding debt from the insurance fund
+/// to cover the shortfall.  Emits `BadDebtTriggered`.
 ///
-/// SSS-113 HIGH-03 Fix: The original design required the config PDA to be a signer (only
-/// achievable from within a CPI), but no instruction ever invoked this via CPI, making
-/// the backstop unreachable.  Changed to authority-controlled: the stablecoin authority
-/// verifies the shortfall off-chain (e.g., by inspecting post-liquidation CDP state) and
-/// calls this instruction manually to inject insurance funds.
+/// Access control: only the CDP liquidation PDA (`cdp_liquidate` signer) may call
+/// this.  In practice this means the instruction must be invoked *by the caller of
+/// `cdp_liquidate`* in the same transaction, with the config PDA as the signer
+/// authority.  We enforce this by requiring `liquidation_authority` == `config` key,
+/// which only the on-chain `cdp_liquidate` handler can supply.
 ///
-/// The `shortfall_amount` argument is accepted from the caller; the instruction validates
-/// that the backstop is configured and the insurance fund has balance, but does not
-/// re-run the oracle.
+/// Note: we accept `shortfall_amount` as an instruction argument (computed by the
+/// caller from post-liquidation state) to avoid re-running the oracle here.  The
+/// instruction independently verifies that bad debt is plausible (net_supply > 0,
+/// backstop configured) but does NOT re-validate the oracle price — that validation
+/// already occurred inside `cdp_liquidate`.
 #[derive(Accounts)]
 pub struct TriggerBackstop<'info> {
-    /// SSS-113: Must be the stablecoin authority (previously required config PDA signer
-    /// which was unreachable).  Authority verifies bad debt and triggers backstop manually.
-    pub authority: Signer<'info>,
+    /// Must be the config PDA — enforces that only the liquidation handler (which
+    /// holds a mutable borrow of config) can invoke trigger_backstop via CPI.
+    pub liquidation_authority: Signer<'info>,
 
     #[account(
         mut,
         seeds = [StablecoinConfig::SEED, sss_mint.key().as_ref()],
         bump = config.bump,
         constraint = config.preset == 3 @ SssError::InvalidPreset,
-        // SSS-113: Only the registered authority may trigger the backstop.
-        constraint = authority.key() == config.authority @ SssError::UnauthorizedBackstopCaller,
+        // Only the config PDA itself is authorised to trigger the backstop.
+        constraint = liquidation_authority.key() == config.key() @ SssError::UnauthorizedBackstopCaller,
     )]
-    pub config: Box<Account<'info, StablecoinConfig>>,
+    pub config: Account<'info, StablecoinConfig>,
 
-    pub sss_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub sss_mint: InterfaceAccount<'info, Mint>,
 
     /// Insurance fund token account — source of backstop collateral.
     #[account(
@@ -98,7 +100,7 @@ pub struct TriggerBackstop<'info> {
         constraint = insurance_fund.key() == config.insurance_fund_pubkey @ SssError::BackstopNotConfigured,
         constraint = insurance_fund.mint == collateral_mint.key(),
     )]
-    pub insurance_fund: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub insurance_fund: InterfaceAccount<'info, TokenAccount>,
 
     /// Reserve vault — destination for backstop collateral (same vault used by CDP).
     #[account(
@@ -106,13 +108,13 @@ pub struct TriggerBackstop<'info> {
         constraint = reserve_vault.key() == config.reserve_vault,
         constraint = reserve_vault.mint == collateral_mint.key(),
     )]
-    pub reserve_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub reserve_vault: InterfaceAccount<'info, TokenAccount>,
 
     /// The collateral token mint (e.g. USDC).
     #[account(
         constraint = collateral_mint.key() == config.collateral_mint,
     )]
-    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub collateral_mint: InterfaceAccount<'info, Mint>,
 
     /// Insurance fund authority — must sign to allow transfer from insurance fund.
     pub insurance_fund_authority: Signer<'info>,
