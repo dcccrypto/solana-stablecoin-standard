@@ -604,6 +604,38 @@ The API key is missing or wrong. Check that `X-Api-Key` header matches a key in 
 
 Check the Pyth status dashboard at [https://pyth.network/price-feeds](https://pyth.network/price-feeds). If the feed is stale, **pause the program immediately** via the circuit breaker and on-chain `pause()` instruction. Resume only after the feed is confirmed live.
 
+### Prometheus scraping `/api/metrics` returns 401
+
+`/api/metrics` requires a valid `X-Api-Key` header (security audit finding E-3). Create a dedicated read-only API key for your scraper and configure it via a Kubernetes Secret or network policy:
+
+```bash
+# Create a read-only key for Prometheus
+curl -s -X POST http://localhost:3000/api/admin/keys \
+  -H "X-Api-Key: $BOOTSTRAP_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"label":"prometheus-scraper","role":"read"}'
+```
+
+Then set the key in your Prometheus `scrape_configs`:
+
+```yaml
+scrape_configs:
+  - job_name: sss-backend
+    static_configs:
+      - targets: ["localhost:3000"]
+    metrics_path: /api/metrics
+    scheme: http
+    params: {}
+    authorization:
+      type: X-Api-Key          # custom header — use bearer_token_file workaround
+    # Or use basic_auth / custom header via relabelling if your Prometheus version
+    # does not support custom auth headers natively.
+    # Recommended: restrict /api/metrics to the Prometheus scrape IP via network
+    # policy (firewall / k8s NetworkPolicy) as an additional layer of defence.
+```
+
+> **Security note:** Never expose `/api/metrics` to the public internet without authentication. The endpoint reveals internal counters that can aid attackers in fingerprinting the deployment.
+
 ---
 
 ## Related Docs
