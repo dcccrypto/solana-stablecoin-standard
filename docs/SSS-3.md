@@ -230,9 +230,11 @@ await stablecoin.redeem({
 
 **SSS-1** gives Solana projects a clean, minimal way to issue tokens.
 **SSS-2** gives regulated issuers a compliant path.
-**SSS-3** gives DeFi protocols a trustless, privacy-preserving stablecoin that doesn't require trusting any issuer, oracle, or off-chain system.
+**SSS-3** gives DeFi protocols a collateral-backed, privacy-preserving stablecoin with strong on-chain enforcement of the collateral ratio. Reserve attestation is performed by a whitelisted attestor keypair (not a trustless on-chain vault verification); see [TRUST-MODEL.md](./TRUST-MODEL.md) for a complete breakdown of trust assumptions per tier.
 
-This is the arc: from centralized trust (USDC) → algorithmic (Terra, broken) → trustless on-chain collateral with ZK privacy (SSS-3). Solana has the throughput, the ZK infrastructure (Token-2022 confidential transfers), and the composability to make this work. SSS-3 is the blueprint.
+This is the arc: from centralized trust (USDC) → algorithmic (Terra, broken) → collateral-backed with on-chain enforcement and ZK privacy (SSS-3). Solana has the throughput, the ZK infrastructure (Token-2022 confidential transfers), and the composability to make this work. SSS-3 is the blueprint.
+
+> ⚠️ **Trust caveat (v1):** In the current implementation the reserve amount is submitted by a whitelisted attestor keypair — the program does not independently verify vault balances on-chain. `set_reserve_attestor_whitelist` is not timelocked. `max_supply = 0` means **uncapped**. ZK credential verification and the cross-chain bridge are v1 stubs. See [TRUST-MODEL.md](./TRUST-MODEL.md) for full details.
 
 ---
 

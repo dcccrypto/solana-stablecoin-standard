@@ -92,7 +92,7 @@ Extends SSS-1 with on-chain transfer enforcement via the Token-2022 Transfer Hoo
 
 **Preset discriminant:** `3`
 
-Extends SSS-2 with on-chain collateral reserve enforcement. SSS-3 is the reference design for a trustlessly over-collateralized stablecoin.
+Extends SSS-2 with on-chain collateral reserve enforcement. SSS-3 is the reference design for a collateral-backed, over-collateralized stablecoin. **Note:** reserve attestation is performed by a permissioned attestor keypair, not a trustless on-chain vault verification. See [TRUST-MODEL.md](./TRUST-MODEL.md) for the full trust-assumption breakdown.
 
 **Additional features beyond SSS-2:**
 - A `reserve_vault` token account holds collateral; its balance is read by `sss-token` inside the `mint` instruction

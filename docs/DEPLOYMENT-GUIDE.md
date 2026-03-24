@@ -4,6 +4,13 @@ _Author: sss-docs | Task: SSS-106 | Date: 2026-03-16_
 
 This guide covers end-to-end deployment of the Solana Stablecoin Standard (SSS) programs and backend API — from a local build through devnet smoke-testing to a production mainnet launch. Read [API-REFERENCE.md](./API-REFERENCE.md) for instruction-level details and [GAPS-ANALYSIS-ANCHOR.md](./GAPS-ANALYSIS-ANCHOR.md) for known gaps and open action items.
 
+> ⚠️ **v1 Feature Stubs — Do Not Rely On In Production:**
+> - **ZK credential verifier** (`zk_credential.rs`): Groth16 proof verification is **not implemented** in v1. The verifier accepts any proof shape. Do not deploy with ZK-credential-gated features unless this is replaced.
+> - **Cross-chain bridge** (`bridge.rs`): The bridge is a **CPI stub** that emits events but does not enforce cross-chain collateral state. Bridge minting is not collateral-verified end-to-end.
+> - **Reserve attestation**: `reserve_amount` is admin-submitted by a whitelisted keypair; the program does not independently verify vault balances. See [TRUST-MODEL.md](./TRUST-MODEL.md).
+> - **`max_supply = 0` means uncapped**: Always set an explicit `max_supply` for production deployments.
+> - **Upgrade authority**: Transfer BPF upgrade authority to a DAO multisig before accepting real TVL (see Section 6). MAINNET-CHECKLIST items for this are currently unchecked.
+
 ---
 
 ## Table of Contents

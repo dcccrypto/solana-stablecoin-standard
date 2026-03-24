@@ -7,6 +7,23 @@ _Reference: GAPS-ANALYSIS-ANCHOR.md, devnet-deploy.md, audit/sss-030-mainnet-rea
 
 ---
 
+## ⚠️ v1 Known Stubs — Must Be Resolved Before Mainnet
+
+The following features are **not production-ready** in v1. Each requires explicit sign-off or replacement before launch:
+
+| Feature | Status | Required Action |
+|---|---|---|
+| ZK credential verifier (`zk_credential.rs`) | **Stub** — Groth16 not implemented | Replace with real verifier or disable gating |
+| Cross-chain bridge (`bridge.rs`) | **Stub** — CPI only, no cross-chain enforcement | Implement or explicitly disable |
+| Reserve attestation trust | **Attestor-submitted** — not trustless | Document; consider decentralized oracle |
+| `set_reserve_attestor_whitelist` timelock | **Missing** — instant admin control | Add timelock before mainnet |
+| `max_supply` uncapped when = 0 | **Footgun** | Always set explicitly |
+| BPF upgrade authority | **Unchecked** (all 3 items below) | Transfer to DAO multisig |
+
+See [TRUST-MODEL.md](./TRUST-MODEL.md) for full trust-assumption breakdown.
+
+---
+
 ## 0. Prerequisites
 
 | Item | Owner | Status |
