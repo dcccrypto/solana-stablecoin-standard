@@ -130,6 +130,8 @@ Endpoints:
 | [Redemption Guarantee at Par](docs/REDEMPTION-GUARANTEE.md) | On-chain 1:1 redemption with SLA enforcement (SSS-125): ~3 min SLA, 10% penalty from insurance fund on breach |
 | [Travel Rule Compliance](docs/TRAVEL-RULE.md) | FATF Travel Rule (SSS-127): TravelRuleRecord PDA, VASP-to-VASP encrypted payloads, backend indexer + REST API |
 | [Sanctions Oracle](docs/SANCTIONS-ORACLE.md) | Pluggable OFAC/sanctions screening (SSS-128): SanctionsRecord PDA, oracle registration, transfer hook enforcement, staleness window |
+| [ZK Credentials](docs/ZK-CREDENTIALS.md) | Selective-disclosure ZK compliance proofs (SSS-129): CredentialRegistry + CredentialRecord PDAs, Groth16 proofs, not_sanctioned / kyc_passed / accredited_investor types, backend REST API |
+| [Stability Fee PID](docs/STABILITY-FEE-PID.md) | Automatic peg-stabilisation via PID controller (SSS-130): PidConfig PDA, permissionless keeper updates, anti-windup integral clamp, PidConfigInitialised + PidFeeUpdated events |
 
 ## Documentation
 

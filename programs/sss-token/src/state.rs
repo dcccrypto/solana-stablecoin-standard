@@ -54,6 +54,18 @@ pub const FLAG_TRAVEL_RULE: u64 = 1 << 8;
 /// call `update_sanctions_record` as the registered oracle signer.
 pub const FLAG_SANCTIONS_ORACLE: u64 = 1 << 9;
 
+/// SSS-129: ZK credentials flag (bit 10): when set, the transfer hook requires
+/// a valid `CredentialRecord` PDA for the sender — issued by the
+/// `CredentialRegistry` and verified against the on-chain Groth16 Merkle root.
+/// Enables `init_credential_registry`, `verify_zk_credential`, and
+/// `revoke_credential` instructions.
+pub const FLAG_ZK_CREDENTIALS: u64 = 1 << 10;
+
+/// SSS-130: PID fee control flag (bit 11): when set, `stability_fee_bps` is
+/// managed by the `PidConfig` controller rather than manual `set_stability_fee`.
+/// Enables `init_pid_config` / `update_stability_fee_pid` instructions.
+pub const FLAG_PID_FEE_CONTROL: u64 = 1 << 11;
+
 
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
@@ -802,4 +814,111 @@ pub struct SanctionsRecord {
 
 impl SanctionsRecord {
     pub const SEED: &'static [u8] = b"sanctions-record";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-129: ZK credential registry — Groth16-based selective disclosure
+// ---------------------------------------------------------------------------
+
+/// CredentialRegistry PDA — one per stablecoin mint when FLAG_ZK_CREDENTIALS is set.
+/// Seeds: [b"credential-registry", sss_mint]
+///
+/// Stores the Groth16 Merkle root of the credential set and the issuer authority.
+/// The authority can rotate the `merkle_root` as the credential set evolves.
+/// The transfer hook reads this PDA to verify `CredentialRecord` proofs.
+#[account]
+#[derive(InitSpace)]
+pub struct CredentialRegistry {
+    /// The SSS stablecoin mint this registry belongs to.
+    pub sss_mint: Pubkey,
+    /// Authority allowed to rotate the Merkle root and revoke credentials.
+    pub issuer: Pubkey,
+    /// Groth16 Merkle root of the current credential set (32 bytes).
+    pub merkle_root: [u8; 32],
+    /// Maximum slots a CredentialRecord remains valid after issuance (0 = never expires).
+    pub credential_ttl_slots: u64,
+    /// Slot at which the registry was last updated.
+    pub updated_slot: u64,
+    pub bump: u8,
+}
+
+impl CredentialRegistry {
+    pub const SEED: &'static [u8] = b"credential-registry";
+}
+
+/// CredentialRecord PDA — one per (mint, holder) pair.
+/// Seeds: [b"credential-record", sss_mint, holder_pubkey]
+///
+/// Created by `verify_zk_credential` after on-chain Groth16 proof validation.
+/// The transfer hook checks this PDA when FLAG_ZK_CREDENTIALS is set — if absent
+/// or expired, the transfer is rejected with CredentialRequired.
+#[account]
+#[derive(InitSpace)]
+pub struct CredentialRecord {
+    /// The SSS stablecoin mint this record is scoped to.
+    pub sss_mint: Pubkey,
+    /// Wallet that holds this credential.
+    pub holder: Pubkey,
+    /// Slot at which the credential was issued (via verify_zk_credential).
+    pub issued_slot: u64,
+    /// Slot after which the credential is no longer valid (0 = never expires).
+    pub expires_slot: u64,
+    /// Whether this credential has been explicitly revoked by the issuer.
+    pub revoked: bool,
+    pub bump: u8,
+}
+
+impl CredentialRecord {
+    pub const SEED: &'static [u8] = b"credential-record";
+
+    /// Returns true if the record is currently valid at the given slot.
+    pub fn is_valid(&self, current_slot: u64) -> bool {
+        if self.revoked {
+            return false;
+        }
+        if self.expires_slot > 0 && current_slot > self.expires_slot {
+            return false;
+        }
+        true
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SSS-130: Stability fee PID auto-adjustment
+// ---------------------------------------------------------------------------
+
+/// PidConfig PDA — one per stablecoin mint when FLAG_PID_FEE_CONTROL is set.
+/// Seeds: [b"pid-config", sss_mint]
+///
+/// Stores PID gains and state.  `update_stability_fee_pid` is permissionless:
+/// any keeper can call it to push a fresh oracle price and have the controller
+/// adjust `stability_fee_bps` in `StablecoinConfig` automatically.
+#[account]
+#[derive(InitSpace)]
+pub struct PidConfig {
+    /// The SSS stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// Proportional gain (scaled by 1_000_000; e.g. 0.001 → 1_000)
+    pub kp: i64,
+    /// Integral gain (scaled by 1_000_000)
+    pub ki: i64,
+    /// Derivative gain (scaled by 1_000_000)
+    pub kd: i64,
+    /// Target peg price in oracle units (e.g. 1_000_000 for $1.00 with 6 dec)
+    pub target_price: u64,
+    /// Minimum stability fee in bps (floor clamping)
+    pub min_fee_bps: u16,
+    /// Maximum stability fee in bps (ceiling clamping)
+    pub max_fee_bps: u16,
+    /// Last error value (target - observed), carried for derivative term
+    pub last_error: i64,
+    /// Running integral of error (clamped to ±1e9 for anti-windup)
+    pub integral: i64,
+    /// Slot at which update_stability_fee_pid was last called
+    pub last_update_slot: u64,
+    pub bump: u8,
+}
+
+impl PidConfig {
+    pub const SEED: &'static [u8] = b"pid-config";
 }

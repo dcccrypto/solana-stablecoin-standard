@@ -710,4 +710,74 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::sanctions_oracle::close_sanctions_record_handler(ctx, wallet)
     }
+
+    // -----------------------------------------------------------------------
+    // SSS-130: Stability fee PID auto-adjustment
+    // -----------------------------------------------------------------------
+
+    /// Initialise a `PidConfig` PDA and enable FLAG_PID_FEE_CONTROL.
+    /// Authority-only.  Sets the PID gains, target price, and fee range.
+    pub fn init_pid_config(
+        ctx: Context<InitPidConfig>,
+        params: InitPidConfigParams,
+    ) -> Result<()> {
+        instructions::pid_fee::init_pid_config_handler(ctx, params)
+    }
+
+    /// Update `stability_fee_bps` via the PID controller.
+    /// Permissionless — any keeper may call this.
+    /// `current_price`: oracle price in the same units as `PidConfig.target_price`.
+    pub fn update_stability_fee_pid(
+        ctx: Context<UpdateStabilityFeePid>,
+        current_price: u64,
+    ) -> Result<()> {
+        instructions::pid_fee::update_stability_fee_pid_handler(ctx, current_price)
+    }
+
+    // -----------------------------------------------------------------------
+    // SSS-129: ZK credential registry — Groth16-based selective disclosure
+    // -----------------------------------------------------------------------
+
+    /// Initialise a `CredentialRegistry` PDA and enable FLAG_ZK_CREDENTIALS.
+    /// Authority-only.  Sets the issuer, Merkle root, and TTL for credential records.
+    pub fn init_credential_registry(
+        ctx: Context<InitCredentialRegistry>,
+        params: InitCredentialRegistryParams,
+    ) -> Result<()> {
+        instructions::zk_credential::init_credential_registry_handler(ctx, params)
+    }
+
+    /// Rotate the Groth16 Merkle root on an existing CredentialRegistry.
+    /// Issuer-only.  Existing CredentialRecords remain valid until they expire or
+    /// are revoked.
+    pub fn rotate_credential_root(
+        ctx: Context<RotateCredentialRoot>,
+        new_merkle_root: [u8; 32],
+    ) -> Result<()> {
+        instructions::zk_credential::rotate_credential_root_handler(ctx, new_merkle_root)
+    }
+
+    /// Verify a Groth16 ZK credential proof and create/refresh a `CredentialRecord`
+    /// PDA for the calling holder.  Any wallet may call this.
+    /// `proof`: 192-byte Groth16 proof.
+    /// `public_signals`: ABI-encoded public signals (first 32 bytes = Merkle root commitment).
+    pub fn verify_zk_credential(
+        ctx: Context<VerifyZkCredential>,
+        proof: Vec<u8>,
+        public_signals: Vec<u8>,
+    ) -> Result<()> {
+        instructions::zk_credential::verify_zk_credential_handler(ctx, proof, public_signals)
+    }
+
+    /// Revoke a holder's `CredentialRecord`.  Issuer-only.
+    /// Revoked records cause transfer hook to reject the holder's transfers immediately.
+    pub fn revoke_credential(ctx: Context<RevokeCredential>) -> Result<()> {
+        instructions::zk_credential::revoke_credential_handler(ctx)
+    }
+
+    /// Close a `CredentialRecord` PDA and reclaim rent.
+    /// Only the record holder may close their own record.
+    pub fn close_credential_record(ctx: Context<CloseCredentialRecord>) -> Result<()> {
+        instructions::zk_credential::close_credential_record_handler(ctx)
+    }
 }

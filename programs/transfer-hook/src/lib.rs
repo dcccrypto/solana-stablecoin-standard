@@ -46,6 +46,12 @@ const FLAG_ZK_COMPLIANCE: u64 = 1 << 4;
 /// FLAG_SANCTIONS_ORACLE bit in feature_flags (bit 9 = 1 << 9).
 const FLAG_SANCTIONS_ORACLE: u64 = 1 << 9;
 
+/// FLAG_ZK_CREDENTIALS bit in feature_flags (bit 10 = 1 << 10).
+const FLAG_ZK_CREDENTIALS: u64 = 1 << 10;
+
+/// PDA seed for CredentialRecord in the sss-token program.
+const CREDENTIAL_RECORD_SEED: &[u8] = b"credential-record";
+
 /// PDA seed for VerificationRecord in the sss-token program.
 const ZK_VERIFICATION_SEED: &[u8] = b"zk-verification";
 
@@ -315,6 +321,58 @@ pub mod sss_transfer_hook {
                     // No sanctions_record passed or PDA mismatch = wallet not in oracle DB = allow.
                 }
             }
+
+            // SSS-129: If FLAG_ZK_CREDENTIALS is set, the sender must hold a
+            // valid (non-revoked, non-expired) CredentialRecord PDA.
+            // Seeds: [b"credential-record", mint, src_owner]  in sss-token program.
+            if feature_flags & FLAG_ZK_CREDENTIALS != 0 {
+                // CredentialRecord is passed as the last remaining_account
+                // (after sanctions_record when both flags are active).
+                // Find it by deriving the expected PDA and matching.
+                let (expected_cr_pda, _bump) = Pubkey::find_program_address(
+                    &[CREDENTIAL_RECORD_SEED, ctx.accounts.mint.key().as_ref(), src_owner.as_ref()],
+                    &crate::ID, // sss-token program — resolved at build time via cross-program ref
+                );
+                // Walk remaining_accounts looking for the CredentialRecord PDA.
+                let cr_account_opt = ctx.remaining_accounts.iter().find(|a| a.key() == expected_cr_pda);
+
+                if let Some(cr_account) = cr_account_opt {
+                    let cr_data = cr_account.try_borrow_data()?;
+                    if cr_data.len() >= 8 + 32 + 32 + 8 + 8 + 1 + 1 {
+                        // Layout (after 8-byte discriminator):
+                        //   sss_mint   Pubkey  32  @ 8
+                        //   holder     Pubkey  32  @ 40
+                        //   issued_slot u64     8  @ 72
+                        //   expires_slot u64    8  @ 80
+                        //   revoked    bool     1  @ 88
+                        const CR_REVOKED_OFFSET: usize = 88;
+                        const CR_EXPIRES_SLOT_OFFSET: usize = 80;
+
+                        let revoked = cr_data[CR_REVOKED_OFFSET] != 0;
+                        if revoked {
+                            return Err(error!(HookError::CredentialRevoked));
+                        }
+
+                        let expires_slot = u64::from_le_bytes(
+                            cr_data[CR_EXPIRES_SLOT_OFFSET..CR_EXPIRES_SLOT_OFFSET + 8]
+                                .try_into()
+                                .unwrap(),
+                        );
+                        if expires_slot > 0 {
+                            let clock = Clock::get()?;
+                            if clock.slot > expires_slot {
+                                return Err(error!(HookError::CredentialExpired));
+                            }
+                        }
+                        msg!("ZkCredentials OK: sender {} credential valid", src_owner);
+                    } else {
+                        return Err(error!(HookError::CredentialRequired));
+                    }
+                } else {
+                    // No CredentialRecord PDA found — reject.
+                    return Err(error!(HookError::CredentialRequired));
+                }
+            }
         }
 
         msg!("Transfer hook: {} tokens OK", amount);
@@ -555,6 +613,12 @@ pub enum HookError {
     SanctionedAddress,
     #[msg("Sanctions oracle: record is stale — oracle has not updated within max_staleness_slots")]
     SanctionsRecordStale,
+    #[msg("ZK credentials: sender does not hold a valid CredentialRecord")]
+    CredentialRequired,
+    #[msg("ZK credentials: sender's CredentialRecord has expired")]
+    CredentialExpired,
+    #[msg("ZK credentials: sender's CredentialRecord has been revoked")]
+    CredentialRevoked,
 }
 
 /// Blacklist state PDA for a given mint.

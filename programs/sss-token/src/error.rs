@@ -221,4 +221,20 @@ pub enum SssError {
     SanctionsRecordStale,
     #[msg("Sanctions oracle is not configured on this stablecoin (sanctions_oracle is default)")]
     SanctionsOracleNotConfigured,
+    // SSS-130: PID fee control
+    #[msg("PID config not found or FLAG_PID_FEE_CONTROL is not set on this mint")]
+    PidConfigNotFound,
+    #[msg("PID fee range invalid: min_fee_bps must be <= max_fee_bps")]
+    InvalidPidFeeRange,
+    // SSS-129: ZK credentials
+    #[msg("Transfer rejected: sender does not hold a valid ZK credential")]
+    CredentialRequired,
+    #[msg("ZK credential has expired; submit a fresh verify_zk_credential to renew")]
+    CredentialExpired,
+    #[msg("ZK credential has been revoked by the issuer")]
+    CredentialRevoked,
+    #[msg("Invalid Groth16 proof: proof does not verify against the registry Merkle root")]
+    InvalidZkProof,
+    #[msg("Credential registry is not initialised for this mint (FLAG_ZK_CREDENTIALS not set)")]
+    CredentialRegistryNotFound,
 }

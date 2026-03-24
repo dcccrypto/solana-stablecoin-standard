@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, LiquidationHistoryEntry, MintEvent, TravelRuleRecord, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, CredentialRecord, CredentialRegistry, EventLogEntry, LiquidationHistoryEntry, MintEvent, TravelRuleRecord, WebhookEntry};
 use crate::routes::analytics::{CdpHealthResponse, HealthBucket};
 
 pub struct Database {
@@ -121,6 +121,36 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_trr_beneficiary ON travel_rule_records(beneficiary_vasp);
             CREATE INDEX IF NOT EXISTS idx_trr_mint ON travel_rule_records(mint);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_trr_mint_nonce ON travel_rule_records(mint, nonce);
+
+            CREATE TABLE IF NOT EXISTS credential_registries (
+                id TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                credential_type TEXT NOT NULL,
+                issuer_pubkey TEXT NOT NULL,
+                merkle_root TEXT NOT NULL,
+                proof_expiry_seconds INTEGER NOT NULL DEFAULT 2592000,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(mint, credential_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_creg_mint ON credential_registries(mint);
+
+            CREATE TABLE IF NOT EXISTS credential_records (
+                id TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                user TEXT NOT NULL,
+                credential_type TEXT NOT NULL,
+                issuer_pubkey TEXT NOT NULL,
+                verified_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                tx_signature TEXT,
+                slot INTEGER,
+                created_at TEXT NOT NULL,
+                UNIQUE(mint, user, credential_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_crec_user ON credential_records(user);
+            CREATE INDEX IF NOT EXISTS idx_crec_mint ON credential_records(mint);
+            CREATE INDEX IF NOT EXISTS idx_crec_expires ON credential_records(expires_at);
         ")?;
         Ok(())
     }
@@ -1471,6 +1501,249 @@ impl Database {
                     slot: row.get(6)?,
                     encrypted_payload: row.get(7)?,
                     tx_signature: row.get(8)?,
+                    created_at: row.get(9)?,
+                })
+            },
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    // -----------------------------------------------------------------------
+    // SSS-129: ZK Credentials
+    // -----------------------------------------------------------------------
+
+    /// Upsert a CredentialRegistry entry (on new merkle root from on-chain event).
+    pub fn upsert_credential_registry(
+        &self,
+        mint: &str,
+        credential_type: &str,
+        issuer_pubkey: &str,
+        merkle_root: &str,
+        proof_expiry_seconds: i64,
+    ) -> Result<CredentialRegistry, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO credential_registries \
+             (id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7) \
+             ON CONFLICT(mint, credential_type) DO UPDATE SET \
+               issuer_pubkey = excluded.issuer_pubkey, \
+               merkle_root = excluded.merkle_root, \
+               proof_expiry_seconds = excluded.proof_expiry_seconds, \
+               updated_at = excluded.updated_at",
+            rusqlite::params![id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds, now],
+        )?;
+        // Fetch back (may have pre-existing id)
+        let reg = conn.query_row(
+            "SELECT id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds, created_at, updated_at \
+             FROM credential_registries WHERE mint = ?1 AND credential_type = ?2",
+            rusqlite::params![mint, credential_type],
+            |row| Ok(CredentialRegistry {
+                id: row.get(0)?,
+                mint: row.get(1)?,
+                credential_type: row.get(2)?,
+                issuer_pubkey: row.get(3)?,
+                merkle_root: row.get(4)?,
+                proof_expiry_seconds: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            }),
+        )?;
+        Ok(reg)
+    }
+
+    /// List CredentialRegistry entries with optional mint / credential_type filters.
+    pub fn list_credential_registries(
+        &self,
+        mint: Option<&str>,
+        credential_type: Option<&str>,
+    ) -> Result<Vec<CredentialRegistry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = String::from(
+            "SELECT id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds, \
+             created_at, updated_at FROM credential_registries WHERE 1=1",
+        );
+        let mut binds: Vec<String> = Vec::new();
+
+        if let Some(m) = mint {
+            binds.push(m.to_string());
+            sql.push_str(&format!(" AND mint = ?{}", binds.len()));
+        }
+        if let Some(ct) = credential_type {
+            binds.push(ct.to_string());
+            sql.push_str(&format!(" AND credential_type = ?{}", binds.len()));
+        }
+        sql.push_str(" ORDER BY updated_at DESC");
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(binds.iter()),
+            |row| Ok(CredentialRegistry {
+                id: row.get(0)?,
+                mint: row.get(1)?,
+                credential_type: row.get(2)?,
+                issuer_pubkey: row.get(3)?,
+                merkle_root: row.get(4)?,
+                proof_expiry_seconds: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            }),
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    /// Insert or refresh a CredentialRecord (user submitted valid ZK proof).
+    pub fn upsert_credential_record(
+        &self,
+        mint: &str,
+        user: &str,
+        credential_type: &str,
+        issuer_pubkey: &str,
+        verified_at: i64,
+        expires_at: i64,
+        tx_signature: Option<&str>,
+        slot: Option<i64>,
+    ) -> Result<CredentialRecord, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO credential_records \
+             (id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, \
+              tx_signature, slot, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) \
+             ON CONFLICT(mint, user, credential_type) DO UPDATE SET \
+               issuer_pubkey = excluded.issuer_pubkey, \
+               verified_at = excluded.verified_at, \
+               expires_at = excluded.expires_at, \
+               tx_signature = excluded.tx_signature, \
+               slot = excluded.slot",
+            rusqlite::params![
+                id, mint, user, credential_type, issuer_pubkey,
+                verified_at, expires_at, tx_signature, slot, now
+            ],
+        )?;
+        // Fetch back
+        let now_unix = Utc::now().timestamp();
+        let record = conn.query_row(
+            "SELECT id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, \
+             tx_signature, slot, created_at FROM credential_records \
+             WHERE mint = ?1 AND user = ?2 AND credential_type = ?3",
+            rusqlite::params![mint, user, credential_type],
+            |row| {
+                let exp: i64 = row.get(6)?;
+                Ok(CredentialRecord {
+                    id: row.get(0)?,
+                    mint: row.get(1)?,
+                    user: row.get(2)?,
+                    credential_type: row.get(3)?,
+                    issuer_pubkey: row.get(4)?,
+                    verified_at: row.get(5)?,
+                    expires_at: exp,
+                    is_valid: exp > now_unix,
+                    tx_signature: row.get(7)?,
+                    slot: row.get(8)?,
+                    created_at: row.get(9)?,
+                })
+            },
+        )?;
+        Ok(record)
+    }
+
+    /// Fetch a single CredentialRecord for (mint, user, credential_type).
+    pub fn get_credential_record(
+        &self,
+        mint: &str,
+        user: &str,
+        credential_type: &str,
+    ) -> Result<Option<CredentialRecord>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let now_unix = Utc::now().timestamp();
+        let result = conn.query_row(
+            "SELECT id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, \
+             tx_signature, slot, created_at FROM credential_records \
+             WHERE mint = ?1 AND user = ?2 AND credential_type = ?3",
+            rusqlite::params![mint, user, credential_type],
+            |row| {
+                let exp: i64 = row.get(6)?;
+                Ok(CredentialRecord {
+                    id: row.get(0)?,
+                    mint: row.get(1)?,
+                    user: row.get(2)?,
+                    credential_type: row.get(3)?,
+                    issuer_pubkey: row.get(4)?,
+                    verified_at: row.get(5)?,
+                    expires_at: exp,
+                    is_valid: exp > now_unix,
+                    tx_signature: row.get(7)?,
+                    slot: row.get(8)?,
+                    created_at: row.get(9)?,
+                })
+            },
+        );
+        match result {
+            Ok(r) => Ok(Some(r)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Internal(e.to_string())),
+        }
+    }
+
+    /// List CredentialRecords with optional filters.
+    pub fn list_credential_records(
+        &self,
+        user: Option<&str>,
+        mint: Option<&str>,
+        credential_type: Option<&str>,
+        valid_only: bool,
+        limit: u32,
+    ) -> Result<Vec<CredentialRecord>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let now_unix = Utc::now().timestamp();
+        let mut sql = String::from(
+            "SELECT id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, \
+             tx_signature, slot, created_at FROM credential_records WHERE 1=1",
+        );
+        let mut binds: Vec<String> = Vec::new();
+
+        if let Some(u) = user {
+            binds.push(u.to_string());
+            sql.push_str(&format!(" AND user = ?{}", binds.len()));
+        }
+        if let Some(m) = mint {
+            binds.push(m.to_string());
+            sql.push_str(&format!(" AND mint = ?{}", binds.len()));
+        }
+        if let Some(ct) = credential_type {
+            binds.push(ct.to_string());
+            sql.push_str(&format!(" AND credential_type = ?{}", binds.len()));
+        }
+        if valid_only {
+            binds.push(now_unix.to_string());
+            sql.push_str(&format!(" AND expires_at > ?{}", binds.len()));
+        }
+        binds.push(limit.to_string());
+        sql.push_str(&format!(" ORDER BY verified_at DESC LIMIT ?{}", binds.len()));
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(binds.iter()),
+            |row| {
+                let exp: i64 = row.get(6)?;
+                Ok(CredentialRecord {
+                    id: row.get(0)?,
+                    mint: row.get(1)?,
+                    user: row.get(2)?,
+                    credential_type: row.get(3)?,
+                    issuer_pubkey: row.get(4)?,
+                    verified_at: row.get(5)?,
+                    expires_at: exp,
+                    is_valid: exp > now_unix,
+                    tx_signature: row.get(7)?,
+                    slot: row.get(8)?,
                     created_at: row.get(9)?,
                 })
             },
