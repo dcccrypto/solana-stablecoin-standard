@@ -14,7 +14,7 @@ SSS has solid reference documentation (architecture, SDK API, preset specs, devn
 
 | Area | Uniswap v3 | Aave v3 | MakerDAO | OpenZeppelin | **SSS (current)** |
 |------|------------|---------|----------|--------------|-------------------|
-| Whitepaper / overview | ✅ PDF | ✅ | ✅ | ✅ | ✅ (README + SUBMISSION.md) |
+| Whitepaper / overview | ✅ PDF | ✅ | ✅ | ✅ | ✅ (README) |
 | Architecture | ✅ | ✅ | ✅ | ✅ | ✅ ARCHITECTURE.md |
 | SDK / API reference | ✅ | ✅ | ✅ | ✅ | ✅ api.md, on-chain-sdk-*.md |
 | Formal specification | ✅ (whitepaper + TLA+) | ✅ (risk model) | ✅ (MIPs) | ❌ | ❌ **MISSING** |
@@ -148,7 +148,7 @@ Yes. SSS presents itself as a *standard* (not just an SDK), which means external
 - Regulators and auditors (who need a durable spec they can reference)
 - Other Solana protocol teams (who may want to CPI into SSS)
 
-...there must be a canonical document they can cite. The SUBMISSION.md serves this role informally but is bounty-submission prose, not a technical standard.
+...there must be a canonical document they can cite. SSS currently has no such formal proposal document — a technical standard separate from the README and developer guides.
 
 ### Recommended action
 
