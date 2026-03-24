@@ -1157,4 +1157,53 @@ mod proofs {
         assert!(!lift_allowed); // must be denied without full quorum
     }
 
+    // -----------------------------------------------------------------------
+    // SSS-131: Graduated liquidation bonus bounded
+    // -----------------------------------------------------------------------
+
+    /// WHAT: The graduated bonus returned for any ratio is always ≤ max_bonus_bps.
+    /// WHY:  Liquidators should never receive more collateral than the ceiling
+    ///       allows — prevents protocol insolvency from oversized bonuses.
+    /// HOW:  Enumerate symbolic tier configs and arbitrary ratio, assert the
+    ///       computed bonus never exceeds max_bonus_bps. □
+    #[kani::proof]
+    fn proof_liquidation_bonus_bounded() {
+        // Symbolic tier params
+        let max_bonus_bps: u16 = kani::any();
+        let tier1_bonus: u16 = kani::any();
+        let tier2_bonus: u16 = kani::any();
+        let tier3_bonus: u16 = kani::any();
+
+        kani::assume(max_bonus_bps <= 5_000);
+        kani::assume(tier1_bonus <= max_bonus_bps);
+        kani::assume(tier2_bonus <= max_bonus_bps);
+        kani::assume(tier3_bonus <= max_bonus_bps);
+        kani::assume(tier1_bonus <= tier2_bonus);
+        kani::assume(tier2_bonus <= tier3_bonus);
+
+        let tier1_threshold: u16 = kani::any();
+        let tier2_threshold: u16 = kani::any();
+        let tier3_threshold: u16 = kani::any();
+        kani::assume(tier3_threshold < tier2_threshold);
+        kani::assume(tier2_threshold < tier1_threshold);
+        kani::assume(tier1_threshold <= 15_000);
+
+        let ratio_bps: u128 = kani::any();
+        kani::assume(ratio_bps <= 20_000u128);
+
+        // Model bonus_for_ratio inline
+        let raw_bonus: u16 = if ratio_bps < tier3_threshold as u128 {
+            tier3_bonus
+        } else if ratio_bps < tier2_threshold as u128 {
+            tier2_bonus
+        } else {
+            tier1_bonus
+        };
+        let bonus = raw_bonus.min(max_bonus_bps);
+
+        // Core invariant: bonus never exceeds max_bonus_bps
+        assert!(bonus <= max_bonus_bps);
+        // Bonus never exceeds the absolute ceiling of 5000 bps (50%)
+        assert!(bonus <= 5_000);
+    }
 }

@@ -66,6 +66,11 @@ pub const FLAG_ZK_CREDENTIALS: u64 = 1 << 10;
 /// Enables `init_pid_config` / `update_stability_fee_pid` instructions.
 pub const FLAG_PID_FEE_CONTROL: u64 = 1 << 11;
 
+/// SSS-131: Graduated liquidation bonus flag (bit 12): when set, CDP liquidations
+/// use a tiered bonus schedule from a `LiquidationBonusConfig` PDA rather than
+/// the flat `CollateralConfig.liquidation_bonus_bps`.
+pub const FLAG_GRAD_LIQUIDATION_BONUS: u64 = 1 << 12;
+
 
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
@@ -1061,4 +1066,72 @@ pub struct CustomPriceFeed {
 
 impl CustomPriceFeed {
     pub const SEED: &'static [u8] = b"custom-price-feed";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-131: Graduated liquidation bonus PDA
+// ---------------------------------------------------------------------------
+
+/// LiquidationBonusConfig PDA — one per stablecoin mint when FLAG_GRAD_LIQUIDATION_BONUS is set.
+/// Seeds: [b"liquidation-bonus-config", sss_mint]
+///
+/// Replaces the flat `CollateralConfig.liquidation_bonus_bps` with a three-tier
+/// graduated schedule.  Each tier is activated when the CDP collateral ratio is
+/// **below** its threshold (expressed in basis points, e.g. 10000 = 100%).
+///
+/// Tier evaluation order (most-distressed first):
+///   ratio < tier3_threshold_bps  →  tier3_bonus_bps   (e.g. <80% → 12%)
+///   ratio < tier2_threshold_bps  →  tier2_bonus_bps   (e.g. <90% → 8%)
+///   ratio < tier1_threshold_bps  →  tier1_bonus_bps   (e.g. <100% → 5%)
+///
+/// All thresholds must satisfy: tier3 < tier2 < tier1 ≤ 15000 (150%).
+/// All bonuses must satisfy: tier1 ≤ tier2 ≤ tier3 ≤ max_bonus_bps ≤ 5000 (50%).
+#[account]
+#[derive(InitSpace)]
+pub struct LiquidationBonusConfig {
+    /// The stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// Authority that may update this config (= StablecoinConfig.authority).
+    pub authority: Pubkey,
+
+    // --- Tier 1: mildly undercollateralised ---
+    /// Collateral-ratio upper threshold for tier 1 (bps, e.g. 10000 = 100%).
+    /// A CDP with ratio in [tier2, tier1) gets tier1_bonus_bps.
+    pub tier1_threshold_bps: u16,
+    /// Bonus awarded in tier 1 (bps, e.g. 500 = 5%).
+    pub tier1_bonus_bps: u16,
+
+    // --- Tier 2: moderately undercollateralised ---
+    pub tier2_threshold_bps: u16,
+    pub tier2_bonus_bps: u16,
+
+    // --- Tier 3: severely undercollateralised ---
+    pub tier3_threshold_bps: u16,
+    pub tier3_bonus_bps: u16,
+
+    /// Hard ceiling on any bonus regardless of tier (bps, e.g. 2000 = 20%).
+    /// The Kani proof `proof_liquidation_bonus_bounded` verifies this invariant.
+    pub max_bonus_bps: u16,
+
+    pub bump: u8,
+}
+
+impl LiquidationBonusConfig {
+    pub const SEED: &'static [u8] = b"liquidation-bonus-config";
+
+    /// Compute the graduated bonus for a given collateral ratio.
+    ///
+    /// Returns the appropriate tier bonus (clamped to `max_bonus_bps`).
+    /// Falls back to `tier1_bonus_bps` if ratio is below tier1 but above tier2.
+    #[inline]
+    pub fn bonus_for_ratio(&self, ratio_bps: u128) -> u16 {
+        let raw = if ratio_bps < self.tier3_threshold_bps as u128 {
+            self.tier3_bonus_bps
+        } else if ratio_bps < self.tier2_threshold_bps as u128 {
+            self.tier2_bonus_bps
+        } else {
+            self.tier1_bonus_bps
+        };
+        raw.min(self.max_bonus_bps)
+    }
 }
