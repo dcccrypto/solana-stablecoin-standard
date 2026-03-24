@@ -43,6 +43,9 @@ const FLAG_SPEND_POLICY: u64 = 1 << 1;
 /// FLAG_ZK_COMPLIANCE bit in feature_flags (bit 4 = 1 << 4).
 const FLAG_ZK_COMPLIANCE: u64 = 1 << 4;
 
+/// FLAG_SANCTIONS_ORACLE bit in feature_flags (bit 9 = 1 << 9).
+const FLAG_SANCTIONS_ORACLE: u64 = 1 << 9;
+
 /// PDA seed for VerificationRecord in the sss-token program.
 const ZK_VERIFICATION_SEED: &[u8] = b"zk-verification";
 
@@ -54,6 +57,44 @@ const ZK_VERIFICATION_SEED: &[u8] = b"zk-verification";
 ///   bump      u8           1  @ 80
 const ZK_RECORD_EXPIRES_OFFSET: usize = 72;
 const ZK_RECORD_MIN_SIZE: usize = 80;
+
+/// PDA seed for SanctionsRecord in the sss-token program.
+const SANCTIONS_RECORD_SEED: &[u8] = b"sanctions-record";
+
+/// Byte offset of `sanctions_oracle` (Pubkey, 32 bytes) in StablecoinConfig.
+/// Layout from FEATURE_FLAGS_OFFSET=298:
+///   306  max_transfer_amount  u64   8
+///   314  expected_pyth_feed   Pubkey 32
+///   346  admin_op_mature_slot u64   8
+///   354  admin_op_kind        u8    1
+///   355  admin_op_param       u64   8
+///   363  admin_op_target      Pubkey 32
+///   395  admin_timelock_delay u64   8
+///   403  max_oracle_age_secs  u32   4
+///   407  max_oracle_conf_bps  u16   2
+///   409  stability_fee_bps    u16   2
+///   411  redemption_fee_bps   u16   2
+///   413  insurance_fund_pubkey Pubkey 32
+///   445  max_backstop_bps     u16   2
+///   447  auditor_elgamal_pubkey [u8;32] 32
+///   479  min_reserve_ratio_bps u16  2
+///   481  reserve_attestor_whitelist [Pubkey;4] 128
+///   609  travel_rule_threshold u64  8
+///   617  sanctions_oracle     Pubkey 32   <--
+///   649  sanctions_max_staleness_slots u64 8
+///   657  bump                 u8    1
+const SANCTIONS_ORACLE_OFFSET: usize = 617;
+const SANCTIONS_MAX_STALENESS_OFFSET: usize = 649;
+const SANCTIONS_CONFIG_MIN_SIZE: usize = 658; // discriminator(8) + up through bump(1)
+
+/// Byte offsets within SanctionsRecord account data (Borsh layout):
+///   discriminator      8  @ 0
+///   is_sanctioned bool 1  @ 8
+///   updated_slot  u64  8  @ 9
+///   bump          u8   1  @ 17
+const SANCTIONS_IS_SANCTIONED_OFFSET: usize = 8;
+const SANCTIONS_UPDATED_SLOT_OFFSET: usize = 9;
+const SANCTIONS_RECORD_MIN_SIZE: usize = 17;
 
 /// PDA seed for StablecoinConfig in the sss-token program.
 const STABLECOIN_CONFIG_SEED: &[u8] = b"stablecoin-config";
@@ -209,6 +250,70 @@ pub mod sss_transfer_hook {
                     src_owner,
                     expires_at
                 );
+            }
+
+            // --- Sanctions oracle check ---
+            // If FLAG_SANCTIONS_ORACLE is set, check if the sender has a SanctionsRecord
+            // PDA that marks them as sanctioned.  The SanctionsRecord is written by the
+            // registered oracle signer via update_sanctions_record in the sss-token program.
+            // Seeds: [b"sanctions-record", mint, src_owner]
+            if feature_flags & FLAG_SANCTIONS_ORACLE != 0
+                && config_data.len() >= SANCTIONS_CONFIG_MIN_SIZE
+            {
+                let sanctions_oracle_bytes: [u8; 32] = config_data
+                    [SANCTIONS_ORACLE_OFFSET..SANCTIONS_ORACLE_OFFSET + 32]
+                    .try_into()
+                    .unwrap();
+                let sanctions_oracle = Pubkey::from(sanctions_oracle_bytes);
+
+                let sanctions_max_staleness = u64::from_le_bytes(
+                    config_data[SANCTIONS_MAX_STALENESS_OFFSET..SANCTIONS_MAX_STALENESS_OFFSET + 8]
+                        .try_into()
+                        .unwrap(),
+                );
+
+                // Only enforce when oracle is configured (non-default pubkey).
+                if sanctions_oracle != Pubkey::default() {
+                    // The sanctions_record is passed as remaining_accounts[0]
+                    // when FLAG_SANCTIONS_ORACLE is set.
+                    if let Some(sr_account) = ctx.remaining_accounts.first() {
+                        // Verify PDA: seeds = [b"sanctions-record", mint, src_owner]
+                        let (expected_sr_pda, _bump) = Pubkey::find_program_address(
+                            &[
+                                SANCTIONS_RECORD_SEED,
+                                ctx.accounts.mint.key().as_ref(),
+                                src_owner.as_ref(),
+                            ],
+                            &sss_token_program::ID,
+                        );
+                        // Only act if the account matches expected PDA.
+                        if sr_account.key() == expected_sr_pda {
+                            let sr_data = sr_account.try_borrow_data()?;
+                            if sr_data.len() >= SANCTIONS_RECORD_MIN_SIZE {
+                                let is_sanctioned = sr_data[SANCTIONS_IS_SANCTIONED_OFFSET] != 0;
+                                if is_sanctioned {
+                                    // Staleness check.
+                                    if sanctions_max_staleness > 0 {
+                                        let clock = Clock::get()?;
+                                        let updated_slot = u64::from_le_bytes(
+                                            sr_data[SANCTIONS_UPDATED_SLOT_OFFSET
+                                                ..SANCTIONS_UPDATED_SLOT_OFFSET + 8]
+                                                .try_into()
+                                                .unwrap(),
+                                        );
+                                        let age = clock.slot.saturating_sub(updated_slot);
+                                        if age > sanctions_max_staleness {
+                                            return Err(error!(HookError::SanctionsRecordStale));
+                                        }
+                                    }
+                                    return Err(error!(HookError::SanctionedAddress));
+                                }
+                            }
+                            msg!("SanctionsOracle OK: sender {} not sanctioned", src_owner);
+                        }
+                    }
+                    // No sanctions_record passed or PDA mismatch = wallet not in oracle DB = allow.
+                }
             }
         }
 
@@ -446,6 +551,10 @@ pub enum HookError {
     ZkRecordMissing,
     #[msg("ZK compliance: sender's verification record has expired")]
     ZkRecordExpired,
+    #[msg("Sanctions oracle: sender is on the sanctions list")]
+    SanctionedAddress,
+    #[msg("Sanctions oracle: record is stale — oracle has not updated within max_staleness_slots")]
+    SanctionsRecordStale,
 }
 
 /// Blacklist state PDA for a given mint.

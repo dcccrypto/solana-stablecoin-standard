@@ -402,3 +402,38 @@ pub struct TravelRuleRecordSubmitted {
     /// Solana slot at which the record was submitted.
     pub slot: u64,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-128: Sanctions oracle events
+// ---------------------------------------------------------------------------
+
+/// Emitted when a sanctions oracle is registered on a stablecoin config.
+#[event]
+pub struct SanctionsOracleSet {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// Pubkey of the registered sanctions oracle signer.
+    pub oracle: Pubkey,
+    /// Maximum staleness window in slots (0 = staleness check disabled).
+    pub max_staleness_slots: u64,
+}
+
+/// Emitted when the sanctions oracle is cleared from a stablecoin config.
+#[event]
+pub struct SanctionsOracleCleared {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+}
+
+/// Emitted when a SanctionsRecord is created or updated by the oracle.
+#[event]
+pub struct SanctionsRecordUpdated {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// The wallet whose sanctions status was updated.
+    pub wallet: Pubkey,
+    /// Whether the wallet is currently sanctioned.
+    pub is_sanctioned: bool,
+    /// Slot at which the record was updated.
+    pub slot: u64,
+}

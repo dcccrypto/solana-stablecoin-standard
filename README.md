@@ -129,6 +129,7 @@ Endpoints:
 | [Reserve Composition](docs/RESERVE-REPORTING.md) | On-chain breakdown of backing asset types per mint (SSS-124): cash, T-bills, repo, other |
 | [Redemption Guarantee at Par](docs/REDEMPTION-GUARANTEE.md) | On-chain 1:1 redemption with SLA enforcement (SSS-125): ~3 min SLA, 10% penalty from insurance fund on breach |
 | [Travel Rule Compliance](docs/TRAVEL-RULE.md) | FATF Travel Rule (SSS-127): TravelRuleRecord PDA, VASP-to-VASP encrypted payloads, backend indexer + REST API |
+| [Sanctions Oracle](docs/SANCTIONS-ORACLE.md) | Pluggable OFAC/sanctions screening (SSS-128): SanctionsRecord PDA, oracle registration, transfer hook enforcement, staleness window |
 
 ## Documentation
 

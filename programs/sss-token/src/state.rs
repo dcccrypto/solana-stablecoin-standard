@@ -47,6 +47,13 @@ pub const FLAG_AGENT_PAYMENT_CHANNEL: u64 = 1 << 7;
 /// Implements FATF Travel Rule for VASP-to-VASP data sharing.
 pub const FLAG_TRAVEL_RULE: u64 = 1 << 8;
 
+/// SSS-128: Sanctions oracle flag (bit 9): when set, the transfer hook reads a
+/// `SanctionsRecord` PDA from the sss-token program (written by the configured
+/// sanctions oracle signer) and rejects transfers from sanctioned addresses.
+/// oracle-agnostic — any compliance provider (Chainalysis, Elliptic, TRM) can
+/// call `update_sanctions_record` as the registered oracle signer.
+pub const FLAG_SANCTIONS_ORACLE: u64 = 1 << 9;
+
 
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
@@ -154,6 +161,15 @@ pub struct StablecoinConfig {
     /// SSS-127: Minimum transfer amount (in token native units) that requires a
     /// TravelRuleRecord PDA when FLAG_TRAVEL_RULE is set.  0 = Travel Rule disabled.
     pub travel_rule_threshold: u64,
+    /// SSS-128: Pubkey of the registered sanctions oracle signer.
+    /// When non-default, the oracle calls `update_sanctions_record` to write
+    /// `SanctionsRecord` PDAs. Transfer hook rejects sanctioned senders when
+    /// FLAG_SANCTIONS_ORACLE is set.  Pubkey::default() = sanctions oracle disabled.
+    pub sanctions_oracle: Pubkey,
+    /// SSS-128: Maximum age in slots for a SanctionsRecord to be considered fresh.
+    /// 0 = staleness check disabled (is_sanctioned is authoritative regardless of age).
+    /// Recommended: 150 slots (~1 min at 400 ms/slot).
+    pub sanctions_max_staleness_slots: u64,
     pub bump: u8,
 }
 
@@ -759,4 +775,31 @@ pub struct TravelRuleRecord {
 
 impl TravelRuleRecord {
     pub const SEED: &'static [u8] = b"travel-rule-record";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-128: Sanctions screening oracle — pluggable OFAC/sanctions list integration
+// ---------------------------------------------------------------------------
+
+/// SanctionsRecord PDA — written by the registered oracle signer via
+/// `update_sanctions_record`, read by the transfer hook when FLAG_SANCTIONS_ORACLE is set.
+///
+/// Seeds: [b"sanctions-record", sss_mint, wallet_pubkey]
+///
+/// Any compliance provider (Chainalysis, Elliptic, TRM) implements the oracle role
+/// by calling `update_sanctions_record` as the registered `sanctions_oracle` signer.
+/// The program is oracle-agnostic — it only verifies the signer matches
+/// `StablecoinConfig.sanctions_oracle`.
+#[account]
+#[derive(InitSpace)]
+pub struct SanctionsRecord {
+    /// Whether this wallet is currently on the sanctions list.
+    pub is_sanctioned: bool,
+    /// Solana slot at which this record was last updated by the oracle.
+    pub updated_slot: u64,
+    pub bump: u8,
+}
+
+impl SanctionsRecord {
+    pub const SEED: &'static [u8] = b"sanctions-record";
 }
