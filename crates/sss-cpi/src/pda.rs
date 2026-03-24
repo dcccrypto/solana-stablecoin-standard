@@ -219,10 +219,10 @@ pub fn find_collateral_config(config: &Pubkey, collateral_mint: &Pubkey) -> (Pub
 
 /// Derive the proof-of-reserves PDA.
 ///
-/// Seeds: `["proof-of-reserves", config]`
-pub fn find_proof_of_reserves(config: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["proof-of-reserves", sss_mint]`
+pub fn find_proof_of_reserves(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_PROOF_OF_RESERVES, config.as_ref()],
+        &[SEED_PROOF_OF_RESERVES, mint.as_ref()],
         &sss_program_id(),
     )
 }
@@ -321,10 +321,10 @@ pub fn find_wallet_rate_limit(config: &Pubkey, wallet: &Pubkey) -> (Pubkey, u8) 
 
 /// Derive the Squads multisig config PDA.
 ///
-/// Seeds: `["squads-multisig-config", config]`
-pub fn find_squads_multisig_config(config: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["squads-multisig-config", sss_mint]`
+pub fn find_squads_multisig_config(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_SQUADS_MULTISIG_CONFIG, config.as_ref()],
+        &[SEED_SQUADS_MULTISIG_CONFIG, mint.as_ref()],
         &sss_program_id(),
     )
 }
@@ -437,5 +437,53 @@ mod tests {
         )
         .expect("valid PDA");
         assert_eq!(config, recreated);
+    }
+
+    /// Verify find_squads_multisig_config uses sss_mint (not config) as second seed.
+    /// Seeds must be: ["squads-multisig-config", sss_mint] per state.rs SquadsMultisigConfig.
+    #[test]
+    fn find_squads_multisig_config_uses_mint_seed() {
+        let mint = dummy_mint();
+        let program_id = sss_program_id();
+        let (pda, bump) = find_squads_multisig_config(&mint);
+        // Re-derive manually with the expected seeds to confirm they match.
+        let expected = Pubkey::create_program_address(
+            &[SEED_SQUADS_MULTISIG_CONFIG, mint.as_ref(), &[bump]],
+            &program_id,
+        )
+        .expect("valid PDA");
+        assert_eq!(pda, expected, "squads_multisig_config seed must be sss_mint");
+
+        // Also confirm it differs from a config-seeded derivation (would be wrong).
+        let config = dummy_config();
+        let (pda_wrong, _) = Pubkey::find_program_address(
+            &[SEED_SQUADS_MULTISIG_CONFIG, config.as_ref()],
+            &program_id,
+        );
+        assert_ne!(pda, pda_wrong, "config-seeded PDA must not match mint-seeded PDA");
+    }
+
+    /// Verify find_proof_of_reserves uses sss_mint (not config) as second seed.
+    /// Seeds must be: ["proof-of-reserves", sss_mint] per state.rs ProofOfReserves.
+    #[test]
+    fn find_proof_of_reserves_uses_mint_seed() {
+        let mint = dummy_mint();
+        let program_id = sss_program_id();
+        let (pda, bump) = find_proof_of_reserves(&mint);
+        // Re-derive manually with the expected seeds to confirm they match.
+        let expected = Pubkey::create_program_address(
+            &[SEED_PROOF_OF_RESERVES, mint.as_ref(), &[bump]],
+            &program_id,
+        )
+        .expect("valid PDA");
+        assert_eq!(pda, expected, "proof_of_reserves seed must be sss_mint");
+
+        // Also confirm it differs from a config-seeded derivation (would be wrong).
+        let config = dummy_config();
+        let (pda_wrong, _) = Pubkey::find_program_address(
+            &[SEED_PROOF_OF_RESERVES, config.as_ref()],
+            &program_id,
+        );
+        assert_ne!(pda, pda_wrong, "config-seeded PDA must not match mint-seeded PDA");
     }
 }
