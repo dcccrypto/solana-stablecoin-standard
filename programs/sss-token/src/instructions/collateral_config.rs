@@ -79,6 +79,14 @@ pub fn register_collateral_handler(
     ctx: Context<RegisterCollateral>,
     params: RegisterCollateralParams,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     CollateralConfig::validate(
         params.max_ltv_bps,
         params.liquidation_threshold_bps,
@@ -159,6 +167,14 @@ pub fn update_collateral_config_handler(
     ctx: Context<UpdateCollateralConfig>,
     params: UpdateCollateralConfigParams,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     CollateralConfig::validate(
         params.max_ltv_bps,
         params.liquidation_threshold_bps,

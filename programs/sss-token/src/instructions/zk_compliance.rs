@@ -53,6 +53,14 @@ pub fn init_zk_compliance_handler(
     ttl_slots: u64,
     verifier_pubkey: Option<Pubkey>,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let effective_ttl = if ttl_slots == 0 {
         ZkComplianceConfig::DEFAULT_TTL_SLOTS
     } else {

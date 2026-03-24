@@ -42,6 +42,14 @@ pub fn set_sanctions_oracle_handler(
     oracle: Pubkey,
     max_staleness_slots: u64,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let config = &mut ctx.accounts.config;
 
     config.sanctions_oracle = oracle;
@@ -82,6 +90,14 @@ pub struct ClearSanctionsOracle<'info> {
 }
 
 pub fn clear_sanctions_oracle_handler(ctx: Context<ClearSanctionsOracle>) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let config = &mut ctx.accounts.config;
 
     config.sanctions_oracle = Pubkey::default();
