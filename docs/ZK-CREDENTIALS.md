@@ -1,6 +1,6 @@
 # ZK Credentials — SSS-129
 
-> **Feature flag:** `FLAG_ZK_CREDENTIALS` (bit 9, `0x200`)
+> **Feature flag:** `FLAG_ZK_CREDENTIALS` (bit 10, `0x400`)
 > **Backend routes:** `/api/zk-credentials/*`
 > **On-chain PDAs:** `CredentialRegistry`, `CredentialRecord`
 
@@ -33,7 +33,7 @@ The backend indexes `CredentialRecord` PDA events and exposes query/verify REST 
 ## Feature Flag
 
 ```rust
-pub const FLAG_ZK_CREDENTIALS: u64 = 1 << 9; // 0x200
+pub const FLAG_ZK_CREDENTIALS: u64 = 1 << 10; // 0x400
 ```
 
 When set in `StablecoinConfig.feature_flags`, the program gates compliance-sensitive instructions behind a valid `CredentialRecord` for the required credential type.
