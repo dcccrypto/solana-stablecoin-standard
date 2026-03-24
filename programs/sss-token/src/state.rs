@@ -1393,3 +1393,39 @@ impl BridgeConfig {
     /// Bridge type: LayerZero
     pub const BRIDGE_TYPE_LAYERZERO: u8 = 2;
 }
+
+// ---------------------------------------------------------------------------
+// SSS-137: On-chain redemption pool PDA
+// ---------------------------------------------------------------------------
+
+/// Holds always-available liquidity for instant par redemption.
+/// Seeds: [b"redemption-pool-v2", sss_mint]
+#[account]
+#[derive(InitSpace)]
+pub struct RedemptionPool {
+    /// The SSS stablecoin mint this pool serves.
+    pub sss_mint: Pubkey,
+    /// Token account holding the reserve assets (same mint as sss_mint).
+    pub reserve_vault: Pubkey,
+    /// Hard cap on pool size (0 = unlimited).
+    pub max_pool_size: u64,
+    /// Current liquid reserve assets available for instant redemption.
+    pub current_liquidity: u64,
+    /// Fee charged on instant redemption in basis points (0–500).
+    pub instant_redemption_fee_bps: u16,
+    /// Utilization ratio snapshot in basis points (redeemed / total_seeded + replenished).
+    pub utilization_bps: u16,
+    /// Cumulative tokens seeded by authority.
+    pub total_seeded: u64,
+    /// Cumulative tokens replenished by market makers / anyone.
+    pub total_replenished: u64,
+    /// Cumulative SSS tokens burned via instant redemption.
+    pub total_redeemed: u64,
+    pub bump: u8,
+}
+
+impl RedemptionPool {
+    pub const SEED: &'static [u8] = b"redemption-pool-v2";
+    /// Maximum allowed instant redemption fee: 500 bps = 5%.
+    pub const MAX_FEE_BPS: u16 = 500;
+}

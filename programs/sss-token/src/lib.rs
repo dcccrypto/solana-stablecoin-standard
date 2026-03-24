@@ -944,4 +944,38 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::bridge::bridge_in_handler(ctx, proof, amount, recipient)
     }
+
+    // SSS-137: On-chain redemption pools
+
+    pub fn seed_redemption_pool(
+        ctx: Context<SeedRedemptionPool>,
+        amount: u64,
+        max_pool_size: u64,
+        instant_redemption_fee_bps: u16,
+    ) -> Result<()> {
+        instructions::redemption_pool::seed_redemption_pool_handler(
+            ctx,
+            amount,
+            max_pool_size,
+            instant_redemption_fee_bps,
+        )
+    }
+
+    pub fn instant_redemption(
+        ctx: Context<InstantRedemptionCtx>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::redemption_pool::instant_redemption_handler(ctx, amount)
+    }
+
+    pub fn replenish_redemption_pool(
+        ctx: Context<ReplenishRedemptionPool>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::redemption_pool::replenish_redemption_pool_handler(ctx, amount)
+    }
+
+    pub fn drain_redemption_pool(ctx: Context<DrainRedemptionPool>) -> Result<()> {
+        instructions::redemption_pool::drain_redemption_pool_handler(ctx)
+    }
 }
