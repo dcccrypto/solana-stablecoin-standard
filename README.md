@@ -132,6 +132,8 @@ Endpoints:
 | [Sanctions Oracle](docs/SANCTIONS-ORACLE.md) | Pluggable OFAC/sanctions screening (SSS-128): SanctionsRecord PDA, oracle registration, transfer hook enforcement, staleness window |
 | [ZK Credentials](docs/ZK-CREDENTIALS.md) | Selective-disclosure ZK compliance proofs (SSS-129): CredentialRegistry + CredentialRecord PDAs, Groth16 proofs, not_sanctioned / kyc_passed / accredited_investor types, backend REST API |
 | [Stability Fee PID](docs/STABILITY-FEE-PID.md) | Automatic peg-stabilisation via PID controller (SSS-130): PidConfig PDA, permissionless keeper updates, anti-windup integral clamp, PidConfigInitialised + PidFeeUpdated events |
+| [Oracle Abstraction](docs/ORACLE-ABSTRACTION.md) | Pluggable oracle layer (SSS-119): Pyth / Switchboard / Custom adapters, CustomPriceFeed PDA, set_oracle_config + update_custom_price instructions, config schema versioning |
+| [Authority Rotation](docs/AUTHORITY-ROTATION.md) | Time-locked config authority rotation (SSS-120): 48-hr timelock, 7-day backup recovery window, AuthorityRotationRequest PDA, 4 instructions, 4 events |
 
 ## Documentation
 
