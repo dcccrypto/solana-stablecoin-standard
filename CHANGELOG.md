@@ -7,6 +7,7 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 ## [Unreleased]
 
 ### Added
+- `docs/MARKET-MAKER-HOOKS.md` — Market Maker Hooks reference (SSS-138): MarketMakerConfig PDA, FLAG_MARKET_MAKER_HOOKS (bit 18), mm_mint/mm_burn/register_market_maker/get_mm_capacity instructions, per-slot rate limits, oracle spread check, events, errors, TypeScript example [PR #230]
 - `docs/compliance-module.md` — full SDK reference for `ComplianceModule` (SSS-017) [PR #73]
 - `docs/ARCHITECTURE.md` — three-layer architecture reference
 - `docs/SSS-1.md` — minimal preset specification
