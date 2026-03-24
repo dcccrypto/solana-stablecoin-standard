@@ -748,3 +748,22 @@ pub struct SquadsAuthorityVerified {
     pub multisig_pda: Pubkey,
     pub verified: bool,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-145: Supply cap enforcement + PoR mint halt
+// ---------------------------------------------------------------------------
+
+/// Emitted when a mint attempt is rejected because FLAG_POR_HALT_ON_BREACH is
+/// active and the latest PoR attestation shows a reserve breach.
+#[event]
+pub struct MintHaltedByPoRBreach {
+    pub mint: Pubkey,
+    /// Current reserve ratio from the PoR PDA (basis points).
+    pub current_ratio_bps: u64,
+    /// Minimum acceptable ratio (from StablecoinConfig).
+    pub min_ratio_bps: u64,
+    /// Slot of the last PoR attestation.
+    pub last_attestation_slot: u64,
+    /// Amount that was attempted.
+    pub attempted_amount: u64,
+}

@@ -1,9 +1,9 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::{MinterInfo, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
+use crate::events::MintHaltedByPoRBreach;
+use crate::state::{MinterInfo, ProofOfReserves, StablecoinConfig, FLAG_CIRCUIT_BREAKER, FLAG_POR_HALT_ON_BREACH};
 
 // Solana clock is available via Clock::get() in Anchor instructions.
 
@@ -37,9 +37,12 @@ pub struct MintTokens<'info> {
     pub recipient_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,
+    // SSS-145: When FLAG_POR_HALT_ON_BREACH is set, callers must append the
+    // ProofOfReserves PDA as a remaining account (index 0). The handler reads
+    // it via remaining_accounts to keep the struct backward-compatible.
 }
 
-pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
+pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, MintTokens<'info>>, amount: u64) -> Result<()> {
     // SSS-122: version guard — reject pre-migration configs
     require!(
         ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
@@ -52,6 +55,61 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
         ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
         SssError::CircuitBreakerActive
     );
+
+    // SSS-145: Supply cap enforcement.
+    // Invariant: at least one of (max_supply, minter_info.cap) must be > 0.
+    // Rationale: both being zero means neither the issuer-level cap nor the
+    // per-minter cap constrains minting — this is an unsafe configuration that
+    // allows unlimited token creation with no on-chain collateral crosscheck.
+    {
+        let config = &ctx.accounts.config;
+        let minter_info = &ctx.accounts.minter_info;
+        require!(
+            config.max_supply > 0 || minter_info.cap > 0,
+            SssError::SupplyCapAndMinterCapBothZero
+        );
+    }
+
+    // SSS-145: PoR breach halt.
+    // When FLAG_POR_HALT_ON_BREACH is set, the caller must pass the
+    // ProofOfReserves PDA as remaining_accounts[0]. We deserialize it here
+    // and reject minting if ratio < min_reserve_ratio_bps.
+    {
+        let config = &ctx.accounts.config;
+        if config.feature_flags & FLAG_POR_HALT_ON_BREACH != 0 {
+            require!(
+                !ctx.remaining_accounts.is_empty(),
+                SssError::PoRNotAttested
+            );
+            let por_info = &ctx.remaining_accounts[0];
+            // Verify PDA derivation: seeds = [b"proof-of-reserves", mint]
+            let (expected_pda, _bump) = Pubkey::find_program_address(
+                &[ProofOfReserves::SEED, config.mint.as_ref()],
+                ctx.program_id,
+            );
+            require!(
+                por_info.key() == expected_pda,
+                SssError::InvalidVault
+            );
+            let por: Account<ProofOfReserves> = Account::try_from(por_info)?;
+            // Require at least one attestation has been submitted
+            require!(
+                por.last_attestation_slot > 0,
+                SssError::PoRNotAttested
+            );
+            let min_ratio = config.min_reserve_ratio_bps as u64;
+            if min_ratio > 0 && por.last_verified_ratio_bps < min_ratio {
+                emit!(MintHaltedByPoRBreach {
+                    mint: config.mint,
+                    current_ratio_bps: por.last_verified_ratio_bps,
+                    min_ratio_bps: min_ratio,
+                    last_attestation_slot: por.last_attestation_slot,
+                    attempted_amount: amount,
+                });
+                return err!(SssError::PoRBreachHaltsMinting);
+            }
+        }
+    }
 
     // SSS-093: Per-minter epoch velocity limit check.
     {
@@ -83,7 +141,7 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
         );
     }
 
-    // Check max supply constraint (0 = unlimited)
+    // Check max supply constraint
     let config = &ctx.accounts.config;
     if config.max_supply > 0 {
         require!(
