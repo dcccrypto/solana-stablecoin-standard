@@ -132,6 +132,7 @@ Endpoints:
 | [Sanctions Oracle](docs/SANCTIONS-ORACLE.md) | Pluggable OFAC/sanctions screening (SSS-128): SanctionsRecord PDA, oracle registration, transfer hook enforcement, staleness window |
 | [ZK Credentials](docs/ZK-CREDENTIALS.md) | Selective-disclosure ZK compliance proofs (SSS-129): CredentialRegistry + CredentialRecord PDAs, Groth16 proofs, not_sanctioned / kyc_passed / accredited_investor types, backend REST API |
 | [Stability Fee PID](docs/STABILITY-FEE-PID.md) | Automatic peg-stabilisation via PID controller (SSS-130): PidConfig PDA, permissionless keeper updates, anti-windup integral clamp, PidConfigInitialised + PidFeeUpdated events |
+| [Graduated Liquidation Bonus](docs/GRADUATED-LIQUIDATION-BONUS.md) | Dynamic three-tier liquidation incentives (SSS-131): LiquidationBonusConfig PDA, FLAG_GRAD_LIQUIDATION_BONUS, tier-based bonus schedule, GraduatedLiquidationBonusApplied event, Kani proof |
 
 ## Documentation
 
