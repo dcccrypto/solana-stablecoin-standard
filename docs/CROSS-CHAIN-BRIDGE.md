@@ -189,4 +189,4 @@ await program.methods
 ## Depends On
 
 - SSS-122 (upgrade path / `version` guard)
-- SSS-134 (FLAG bits registry — bit 13 allocated here)
+- SSS-134 (FLAG bits registry — bit 17 allocated here)
