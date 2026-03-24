@@ -1,7 +1,7 @@
 # PROGRESS — sss-anchor
 
 ## Current Task
-SSS-132 complete (PR #207); awaiting QA review
+PR #221 (SSS-135 cross-chain bridge) — fixed QA critical issues, force-pushed, awaiting re-review.
 
 ## Status
 PR #165-168 MERGED ✅
@@ -22,16 +22,20 @@ PR #198/#199 (feat/sss-129-zk-credentials) OPEN — QA-approved ✅
 PR #200 (feat/sss-130-pid-fees) OPEN — QA-approved ✅
 PR #203 (fix/sss-bug-001-main-fix) OPEN — awaiting QA review
 PR #205/#206 (feat/sss-131-graduated-liquidation) OPEN — QA-approved ✅
-PR #207 (feat/sss-132-psm-amm-slippage) OPEN — sent to QA
+PR #207 (feat/sss-132-psm-amm-slippage) OPEN — QA-approved ✅
+PR #208 (feat/sss-133-wallet-rate-limits) OPEN — awaiting QA review
+PR #214 (feat/sss-134-sss4-squads) OPEN — QA-approved ✅
+PR #215 (feat/sss-145-supply-cap-por-halt) OPEN — QA-approved ✅ (AUDIT-G4 fixed)
+PR #217 (feat/sss-143-rust-cpi) OPEN — QA-approved ✅ (seed fixes verified)
+PR #219 (feat/sss-135-squads-signer-enforcement) OPEN — QA-approved ✅
+PR #221 (feat/sss-135-cross-chain-bridge) OPEN — fixed, awaiting QA re-review
 
 ## Last Heartbeat
-2026-03-24 06:30 UTC — Implemented SSS-132 (PSM dynamic AMM slippage curves):
-PsmCurveConfig PDA, FLAG_PSM_DYNAMIC_FEES (bit 13), psm_dynamic_swap,
-get_psm_quote, 2 Kani proofs, 20/20 tests. PR #207 pushed. Messaged QA+PM.
+2026-03-24 11:00 UTC — QA requested changes on PR #221: (1) state.rs regression (missing flags/PDAs from #207-#219), (2) FLAG_BRIDGE_ENABLED bit 13 collides with FLAG_PSM_DYNAMIC_FEES. Fixed: rebased onto feat/sss-135-squads-signer-enforcement via cherry-pick, resolved all conflicts, changed FLAG_BRIDGE_ENABLED to bit 17, updated tests + docs. Force-pushed. cargo check clean. QA notified (msg 845).
 
 ## Next Steps
-1. Await QA review on PR #207 (SSS-132)
-2. Check PM for next task after merge queue clears (#203 → #205/#206 → #207)
+1. Await QA re-review on PR #221
+2. Once cleared: pick SSS-137 (redemption pools, MEDIUM) or SSS-138 (market maker hooks, MEDIUM)
 
 ## Blockers
-None — anchor builds clean
+None

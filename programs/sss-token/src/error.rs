@@ -187,4 +187,16 @@ pub enum SssError {
     BridgeProofEmpty,
     #[msg("Bridge proof verification failed")]
     BridgeProofInvalid,
+
+    // SSS-137: Redemption pool errors
+    #[msg("Redemption pool mint does not match stablecoin mint")]
+    RedemptionPoolMintMismatch,
+    #[msg("Redemption pool vault does not match stored vault")]
+    RedemptionPoolVaultMismatch,
+    #[msg("Redemption pool is full — deposit would exceed max_pool_size")]
+    RedemptionPoolFull,
+    #[msg("Redemption pool has insufficient liquidity for this redemption")]
+    RedemptionPoolEmpty,
+    #[msg("Instant redemption fee bps exceeds maximum (500 = 5%)")]
+    RedemptionFeeTooHigh,
 }

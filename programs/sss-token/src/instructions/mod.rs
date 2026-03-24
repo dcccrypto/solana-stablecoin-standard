@@ -1,6 +1,7 @@
 pub mod bad_debt_backstop;
 pub mod accept_authority;
 pub mod bridge;
+pub mod redemption_pool;
 pub mod admin_timelock;
 pub mod burn;
 pub mod dao_committee;
@@ -39,6 +40,7 @@ pub mod wallet_rate_limit;
 pub use bad_debt_backstop::*;
 pub use accept_authority::*;
 pub use bridge::*;
+pub use redemption_pool::*;
 pub use admin_timelock::*;
 pub use burn::*;
 pub use dao_committee::*;

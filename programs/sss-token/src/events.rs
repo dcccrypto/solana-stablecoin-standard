@@ -227,3 +227,46 @@ pub struct BridgeConfigInitialized {
     /// Fee in basis points.
     pub bridge_fee_bps: u16,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-137: Redemption pool events
+// ---------------------------------------------------------------------------
+
+/// Emitted when authority seeds the redemption pool with reserve assets.
+#[event]
+pub struct RedemptionPoolSeeded {
+    pub sss_mint: Pubkey,
+    pub amount: u64,
+    pub new_liquidity: u64,
+}
+
+/// Emitted when a user performs an instant redemption (burns SSS, receives reserves).
+#[event]
+pub struct InstantRedemption {
+    pub sss_mint: Pubkey,
+    pub user: Pubkey,
+    /// SSS tokens burned.
+    pub burned: u64,
+    /// Reserve assets received after fee.
+    pub received: u64,
+    /// Fee deducted from payout.
+    pub fee: u64,
+    /// Pool liquidity remaining after redemption.
+    pub remaining_liquidity: u64,
+}
+
+/// Emitted when anyone replenishes the pool.
+#[event]
+pub struct RedemptionPoolReplenished {
+    pub sss_mint: Pubkey,
+    pub replenisher: Pubkey,
+    pub amount: u64,
+    pub new_liquidity: u64,
+}
+
+/// Emitted when authority drains the pool.
+#[event]
+pub struct RedemptionPoolDrained {
+    pub sss_mint: Pubkey,
+    pub amount: u64,
+}
