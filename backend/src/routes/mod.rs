@@ -17,3 +17,4 @@ pub mod reserves;
 pub mod supply;
 pub mod webhooks;
 pub mod ws_events;
+pub mod webhook_deliveries;

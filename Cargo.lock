@@ -4044,11 +4044,13 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "axum-extra",
+ "base64 0.22.1",
  "bs58",
  "chrono",
  "ed25519-dalek",
  "futures",
  "hex",
+ "hmac",
  "http-body-util",
  "hyper",
  "hyper-rustls",

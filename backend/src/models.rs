@@ -303,3 +303,23 @@ pub struct LiquidationsQuery {
     /// Row offset for pagination (default: 0).
     pub offset: Option<u32>,
 }
+
+/// SSS-145: webhook delivery log entry.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WebhookDeliveryLog {
+    pub id: String,
+    pub webhook_id: String,
+    pub event_type: String,
+    pub payload: String,
+    pub status: String,
+    pub attempt_count: i64,
+    pub last_attempt_at: Option<String>,
+    pub next_retry_at: Option<String>,
+    pub created_at: String,
+}
+
+/// SSS-145: query params for GET /api/webhook-deliveries.
+#[derive(Debug, Deserialize)]
+pub struct WebhookDeliveriesQuery {
+    pub status: Option<String>,
+}
