@@ -126,7 +126,7 @@ Endpoints:
 | Feature | Description |
 |---------|-------------|
 | [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | Cryptographic supply commitments — fetch, verify, and manually reproduce Merkle proofs |
-| [Cross-Chain Bridge Hooks](docs/CROSS-CHAIN-BRIDGE.md) | Wormhole + LayerZero burn-and-mint bridge (SSS-135): BridgeConfig PDA, bridge_out/bridge_in instructions, FLAG_BRIDGE_ENABLED (bit 13), security model |
+| [Cross-Chain Bridge Hooks](docs/CROSS-CHAIN-BRIDGE.md) | Wormhole + LayerZero burn-and-mint bridge (SSS-135): BridgeConfig PDA, bridge_out/bridge_in instructions, FLAG_BRIDGE_ENABLED (bit 17), security model |
 
 ## Documentation
 
