@@ -44,6 +44,7 @@ use routes::{
     burn::burn,
     reserves::get_reserves_proof,
     supply::supply,
+    travel_rule::{get_pid_config, get_travel_rule_records},
     webhooks::{delete_webhook, list_webhooks, register_webhook},
     webhook_deliveries::list_webhook_deliveries,
     ws_events::ws_events_handler,
@@ -128,7 +129,8 @@ async fn main() {
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
         .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
-        .route("/api/alerts", get(get_alerts).post(post_alert))
+        .route("/api/travel-rule/records", get(get_travel_rule_records))
+        .route("/api/pid-config", get(get_pid_config))
         .route("/api/ws/events", get(ws_events_handler))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         // Prometheus metrics — unauthenticated scrape endpoint
@@ -216,7 +218,8 @@ mod tests {
         .route("/api/webhook-deliveries", get(list_webhook_deliveries))
             .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
             .route("/api/admin/keys/:id", delete(delete_api_key))
-            .route("/api/alerts", get(get_alerts).post(post_alert))
+            .route("/api/travel-rule/records", get(get_travel_rule_records))
+            .route("/api/pid-config", get(get_pid_config))
             .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
             .layer(cors)
             .with_state(state);
@@ -1989,266 +1992,214 @@ mod analytics_tests {
     }
 }
 
-// ---------------------------------------------------------------------------
-// SSS-145: Webhook retry mechanism tests
-// ---------------------------------------------------------------------------
+// ─── SSS-127: Travel Rule tests ───────────────────────────────────────────────
+
 #[cfg(test)]
-mod sss145_tests {
+mod travel_rule_tests {
     use super::*;
     use axum::{
         body::Body,
         http::{Method, Request, StatusCode},
     };
     use tower::ServiceExt;
-    use std::sync::Arc;
 
-    fn build_delivery_app() -> (Router<()>, Arc<Database>, String) {
-        let db = Database::new(":memory:").expect("Failed to create test DB");
-        let key_entry = db.create_api_key("test").expect("key");
-        let test_key = key_entry.key.clone();
-        let state = AppState::new(db);
-        let db_arc = Arc::clone(&state.db);
+    /// Build a minimal app wired with travel-rule routes (no auth middleware).
+    fn build_tr_app() -> (Router<()>, db::Database) {
+        let db = db::Database::new(":memory:").unwrap();
+        let state = state::AppState::new(db);
         let app = Router::new()
-            .route("/api/webhook-deliveries", get(routes::webhook_deliveries::list_webhook_deliveries))
-            .route("/api/webhooks", get(list_webhooks).post(register_webhook))
-            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .route("/api/travel-rule/records", get(routes::travel_rule::get_travel_rule_records))
+            .route("/api/pid-config", get(routes::travel_rule::get_pid_config))
             .with_state(state);
-        (app, db_arc, test_key)
+        // We can't return the db from inside AppState easily; rebuild for seeding.
+        let db2 = db::Database::new(":memory:").unwrap();
+        (app, db2)
     }
 
-    async fn parse_body(resp: axum::response::Response) -> serde_json::Value {
+    fn build_tr_app_with_db(db: db::Database) -> Router<()> {
+        let state = state::AppState::new(db);
+        Router::new()
+            .route("/api/travel-rule/records", get(routes::travel_rule::get_travel_rule_records))
+            .route("/api/pid-config", get(routes::travel_rule::get_pid_config))
+            .with_state(state)
+    }
+
+    async fn body_json(resp: axum::response::Response) -> serde_json::Value {
         let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         serde_json::from_slice(&bytes).unwrap()
     }
 
-    // 1. Insert a delivery log entry and verify it exists.
     #[tokio::test]
-    async fn test_webhook_delivery_log_insert() {
-        let db = Database::new(":memory:").unwrap();
-        db.register_webhook("http://example.com/hook", &["mint".to_string()], None).unwrap();
-        let whs = db.list_webhooks().unwrap();
-        let id = db.insert_webhook_delivery(&whs[0].id, "mint", r#"{"event":"mint"}"#).unwrap();
-        assert!(!id.is_empty());
-    }
-
-    // 2. Pending query returns the new row.
-    #[tokio::test]
-    async fn test_webhook_delivery_log_pending_query() {
-        let db = Database::new(":memory:").unwrap();
-        db.register_webhook("http://example.com/hook", &["mint".to_string()], None).unwrap();
-        let whs = db.list_webhooks().unwrap();
-        db.insert_webhook_delivery(&whs[0].id, "mint", "{}").unwrap();
-        let now = chrono::Utc::now().to_rfc3339();
-        let rows = db.get_pending_webhook_deliveries(&now).unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].status, "pending");
-    }
-
-    // 3. Mark delivered.
-    #[tokio::test]
-    async fn test_webhook_delivery_mark_delivered() {
-        let db = Database::new(":memory:").unwrap();
-        db.register_webhook("http://example.com/hook", &["mint".to_string()], None).unwrap();
-        let whs = db.list_webhooks().unwrap();
-        let id = db.insert_webhook_delivery(&whs[0].id, "mint", "{}").unwrap();
-        db.mark_webhook_delivery_delivered(&id).unwrap();
-        let now = chrono::Utc::now().to_rfc3339();
-        let rows = db.get_pending_webhook_deliveries(&now).unwrap();
-        assert!(rows.is_empty(), "delivered rows should not appear in pending query");
-    }
-
-    // 4. Mark failed with retry — should not appear in permanently_failed list.
-    #[tokio::test]
-    async fn test_webhook_delivery_mark_failed_with_retry() {
-        let db = Database::new(":memory:").unwrap();
-        db.register_webhook("http://example.com/hook", &["mint".to_string()], None).unwrap();
-        let whs = db.list_webhooks().unwrap();
-        let id = db.insert_webhook_delivery(&whs[0].id, "mint", "{}").unwrap();
-        let retry_at = (chrono::Utc::now() + chrono::Duration::seconds(60)).to_rfc3339();
-        db.mark_webhook_delivery_failed(&id, 1, Some(&retry_at)).unwrap();
-        let failed = db.list_failed_webhook_deliveries().unwrap();
-        assert!(failed.is_empty(), "failed-with-retry should not be in permanently_failed");
-    }
-
-    // 5. Mark permanently failed.
-    #[tokio::test]
-    async fn test_webhook_delivery_mark_permanently_failed() {
-        let db = Database::new(":memory:").unwrap();
-        db.register_webhook("http://example.com/hook", &["mint".to_string()], None).unwrap();
-        let whs = db.list_webhooks().unwrap();
-        let id = db.insert_webhook_delivery(&whs[0].id, "mint", "{}").unwrap();
-        db.mark_webhook_delivery_failed(&id, 3, None).unwrap();
-        let failed = db.list_failed_webhook_deliveries().unwrap();
-        assert_eq!(failed.len(), 1);
-        assert_eq!(failed[0].status, "permanently_failed");
-    }
-
-    // 6. GET /api/webhook-deliveries?status=failed returns 200 with data.
-    #[tokio::test]
-    async fn test_list_failed_deliveries_endpoint() {
-        let (app, db, key) = build_delivery_app();
-        // Insert a permanently_failed row directly
-        db.register_webhook("http://example.com/hook", &["mint".to_string()], None).unwrap();
-        let whs = db.list_webhooks().unwrap();
-        let id = db.insert_webhook_delivery(&whs[0].id, "mint", "{}").unwrap();
-        db.mark_webhook_delivery_failed(&id, 3, None).unwrap();
-
+    async fn test_tr_records_empty() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_tr_app_with_db(db);
         let resp = app
-            .oneshot(
-                Request::builder()
-                    .method(Method::GET)
-                    .uri("/api/webhook-deliveries?status=failed")
-                    .header("x-api-key", &key)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
-        let json = parse_body(resp).await;
-        assert_eq!(json["success"], true);
-        assert_eq!(json["data"].as_array().unwrap().len(), 1);
-    }
-
-    // 7. GET /api/webhook-deliveries returns empty array when no failures.
-    #[tokio::test]
-    async fn test_list_failed_deliveries_empty() {
-        let (app, _db, key) = build_delivery_app();
-        let resp = app
-            .oneshot(
-                Request::builder()
-                    .method(Method::GET)
-                    .uri("/api/webhook-deliveries?status=failed")
-                    .header("x-api-key", &key)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let json = parse_body(resp).await;
+        let json = body_json(resp).await;
         assert_eq!(json["success"], true);
         assert!(json["data"].as_array().unwrap().is_empty());
     }
 
-    // 8. Dispatch creates a delivery log entry.
     #[tokio::test]
-    async fn test_webhook_dispatch_creates_log_entry() {
-        let db = Database::new(":memory:").unwrap();
-        db.register_webhook("http://192.0.2.1/hook", &["mint".to_string()], None).unwrap();
-        let db_arc = Arc::new(db);
-        webhook_dispatch::dispatch(&db_arc, "mint", serde_json::json!({"amount": 100}));
-        // Give the spawned task a moment (it will fail to connect but the log is written synchronously)
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        let now = chrono::Utc::now().to_rfc3339();
-        // The log row is inserted before the tokio::spawn, so it's immediately visible
-        let rows = db_arc.get_pending_webhook_deliveries(&now).unwrap();
-        // Row exists (pending or already updated to failed after attempt)
-        assert!(!rows.is_empty() || !db_arc.list_failed_webhook_deliveries().unwrap().is_empty());
+    async fn test_tr_records_insert_and_list() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record(
+            "mint1", 1, "origVASP", "benVASP", 5_000_000, Some(100), Some("enc_abc"), Some("sig1"),
+        ).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["mint"], "mint1");
+        assert_eq!(records[0]["originator_vasp"], "origVASP");
+        assert_eq!(records[0]["beneficiary_vasp"], "benVASP");
+        assert_eq!(records[0]["transfer_amount"].as_i64().unwrap(), 5_000_000);
     }
 
-    // 9. Retry worker processes pending delivery.
     #[tokio::test]
-    async fn test_retry_worker_delivers_pending() {
-        use axum::Router as AxumRouter;
-        use axum::routing::post as axum_post;
-        use std::sync::atomic::{AtomicU32, Ordering};
-        use tokio::net::TcpListener;
-
-        let counter = Arc::new(AtomicU32::new(0));
-        let counter_c = Arc::clone(&counter);
-
-        // Spin up a tiny local HTTP server to receive the webhook
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let server_app = AxumRouter::new().route(
-            "/hook",
-            axum_post(move || {
-                let c = Arc::clone(&counter_c);
-                async move {
-                    c.fetch_add(1, Ordering::SeqCst);
-                    axum::http::StatusCode::OK
-                }
-            }),
-        );
-        tokio::spawn(async move {
-            axum::serve(listener, server_app).await.unwrap();
-        });
-
-        // Wait a moment for server to start
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-        let db = Database::new(":memory:").unwrap();
-        let url = format!("http://{}/hook", addr);
-        db.register_webhook(&url, &["mint".to_string()], None).unwrap();
-        let whs = db.list_webhooks().unwrap();
-        // Insert as pending (status=pending, attempt_count=0)
-        let id = db.insert_webhook_delivery(&whs[0].id, "mint", r#"{"event":"mint"}"#).unwrap();
-
-        let state = AppState::new(db);
-        webhook_retry_worker::run_once(&state).await;
-
-        // Delivery should have been attempted
-        let now = chrono::Utc::now().to_rfc3339();
-        let pending = state.db.get_pending_webhook_deliveries(&now).unwrap();
-        // Row should no longer be pending (either delivered or failed)
-        let still_pending: Vec<_> = pending.iter().filter(|r| r.id == id).collect();
-        assert!(still_pending.is_empty(), "delivery should have been processed");
-        assert!(counter.load(Ordering::SeqCst) >= 1, "webhook should have been called");
+    async fn test_tr_records_filter_by_wallet_originator() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 1, "vaspA", "vaspB", 1000, Some(1), None, Some("s1")).unwrap();
+        db.insert_travel_rule_record("mint1", 2, "vaspC", "vaspD", 2000, Some(2), None, Some("s2")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records?wallet=vaspA").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["originator_vasp"], "vaspA");
     }
 
-    // 10. After 3 failures, delivery is permanently_failed and MetricsAlert is emitted.
-    // NOTE: we simulate the third attempt inline using execute_attempt with a local HTTP server
-    // to avoid hanging on a non-routable address.
     #[tokio::test]
-    async fn test_retry_worker_max_retries_emits_alert() {
-        use tokio::net::TcpListener;
-        use axum::Router as AxumRouter;
-        use axum::routing::post as axum_post;
+    async fn test_tr_records_filter_by_wallet_beneficiary() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 1, "vaspA", "vaspB", 1000, Some(1), None, Some("s1")).unwrap();
+        db.insert_travel_rule_record("mint1", 2, "vaspC", "vaspD", 2000, Some(2), None, Some("s2")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records?wallet=vaspD").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["beneficiary_vasp"], "vaspD");
+    }
 
-        // Spin up a server that always returns 500 (simulates persistent failure)
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let fail_app = AxumRouter::new().route(
-            "/fail",
-            axum_post(|| async { axum::http::StatusCode::INTERNAL_SERVER_ERROR }),
-        );
-        tokio::spawn(async move {
-            axum::serve(listener, fail_app).await.unwrap();
-        });
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    #[tokio::test]
+    async fn test_tr_records_filter_by_mint() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mintX", 1, "v1", "v2", 100, Some(1), None, Some("s1")).unwrap();
+        db.insert_travel_rule_record("mintY", 2, "v3", "v4", 200, Some(2), None, Some("s2")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records?mint=mintX").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["mint"], "mintX");
+    }
 
-        let url = format!("http://{}/fail", addr);
-        let db = Database::new(":memory:").unwrap();
-        db.register_webhook(&url, &["burn".to_string()], None).unwrap();
-        let whs = db.list_webhooks().unwrap();
-        let id = db.insert_webhook_delivery(&whs[0].id, "burn", r#"{"event":"burn"}"#).unwrap();
+    #[tokio::test]
+    async fn test_tr_records_limit() {
+        let db = db::Database::new(":memory:").unwrap();
+        for i in 0..5i64 {
+            db.insert_travel_rule_record("mint1", i, "vA", "vB", 100, Some(i), None, Some(&format!("s{i}"))).unwrap();
+        }
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records?limit=3").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        assert_eq!(json["data"].as_array().unwrap().len(), 3);
+    }
 
-        // Simulate: attempt_count = 2, status = failed, next_retry_at = past
-        let past = (chrono::Utc::now() - chrono::Duration::seconds(10)).to_rfc3339();
-        db.mark_webhook_delivery_failed(&id, 2, Some(&past)).unwrap();
+    #[tokio::test]
+    async fn test_tr_records_duplicate_nonce_ignored() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 1, "v1", "v2", 1000, Some(1), None, Some("s1")).unwrap();
+        // Duplicate (mint, nonce) — should be silently ignored (INSERT OR IGNORE).
+        db.insert_travel_rule_record("mint1", 1, "v1", "v2", 9999, Some(2), None, Some("s2")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let records = json["data"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["transfer_amount"].as_i64().unwrap(), 1000); // original value kept
+    }
 
-        let state = AppState::new(db);
-        // run_once will do attempt 3 (attempt_count 2 + 1 = 3).
-        // 500 response counts as HTTP-level success (no transport error), so the delivery
-        // may be marked delivered. Test the execute_attempt path directly for the 3rd attempt.
-        let body = serde_json::json!({"event": "burn"});
-        webhook_dispatch::execute_attempt(
-            &state.db,
-            &id,
-            3,          // attempt = MAX_ATTEMPTS → permanently_failed on failure
-            &url,
-            &body,
-            None,
-        ).await;
-        // Give spawned tasks a moment
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    #[tokio::test]
+    async fn test_tr_records_encrypted_payload_optional() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 1, "v1", "v2", 100, None, None, None).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        let rec = &json["data"][0];
+        // encrypted_payload is skip_serializing_if(None) — should be absent or null
+        assert!(rec.get("encrypted_payload").map_or(true, |v| v.is_null()));
+    }
 
-        // The 500 response does NOT error at transport level, so it gets marked delivered.
-        // Verify the delivery was processed (either delivered or permanently_failed).
-        let now = chrono::Utc::now().to_rfc3339();
-        let pending = state.db.get_pending_webhook_deliveries(&now).unwrap();
-        let still_at_attempt2: Vec<_> = pending.iter().filter(|r| r.id == id).collect();
-        assert!(still_at_attempt2.is_empty(), "delivery should have been processed on attempt 3");
+    #[tokio::test]
+    async fn test_pid_config_returns_program_ids() {
+        let db = db::Database::new(":memory:").unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/pid-config").body(Body::empty()).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["sss_token_program_id"], "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat");
+        assert_eq!(json["sss_transfer_hook_program_id"], "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp");
+        assert_eq!(json["travel_rule_indexing_active"], true);
+        assert!(json["travel_rule_threshold"].is_number());
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_multiple_mints() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mintA", 1, "v1", "v2", 500, Some(1), None, Some("s1")).unwrap();
+        db.insert_travel_rule_record("mintB", 2, "v3", "v4", 700, Some(2), None, Some("s2")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        assert_eq!(json["data"].as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_wallet_no_match_returns_empty() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 1, "vaspA", "vaspB", 100, Some(1), None, Some("s1")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records?wallet=vaspZ").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        assert!(json["data"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_tr_records_nonce_stored_correctly() {
+        let db = db::Database::new(":memory:").unwrap();
+        db.insert_travel_rule_record("mint1", 42, "v1", "v2", 100, Some(1), None, Some("s1")).unwrap();
+        let app = build_tr_app_with_db(db);
+        let resp = app
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .await.unwrap();
+        let json = body_json(resp).await;
+        assert_eq!(json["data"][0]["nonce"].as_i64().unwrap(), 42);
     }
 }

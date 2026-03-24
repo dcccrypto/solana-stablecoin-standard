@@ -19,7 +19,7 @@ cpi_caller = "HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Devnet"
+cluster = "Localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

@@ -340,3 +340,65 @@ pub struct ReserveCompositionUpdated {
     /// Slot at which the composition was updated.
     pub slot: u64,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-125: Redemption Guarantee events
+// ---------------------------------------------------------------------------
+
+/// Emitted when a redemption request is fulfilled at par within SLA.
+#[event]
+pub struct RedemptionFulfilled {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// User whose redemption was fulfilled.
+    pub user: Pubkey,
+    /// Amount of stable tokens redeemed.
+    pub amount: u64,
+    /// Slot at which the request was submitted.
+    pub requested_slot: u64,
+    /// Slot at which fulfillment occurred.
+    pub fulfilled_slot: u64,
+    /// Slots elapsed from request to fulfillment.
+    pub sla_slots_used: u64,
+}
+
+/// Emitted when a redemption request expires unserviced (SLA breach).
+/// User receives their stable tokens back plus a penalty from the insurance fund.
+#[event]
+pub struct RedemptionSLABreached {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// User whose redemption SLA was breached.
+    pub user: Pubkey,
+    /// Amount of stable tokens that were not redeemed in time.
+    pub amount: u64,
+    /// Slot at which the redemption request was made.
+    pub requested_slot: u64,
+    /// Slot at which the SLA expired.
+    pub expiry_slot: u64,
+    /// Slot at which the claim was executed.
+    pub claim_slot: u64,
+    /// Penalty paid out from the insurance fund (collateral token units).
+    pub penalty_paid: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-127: Travel Rule events
+// ---------------------------------------------------------------------------
+
+/// Emitted when a TravelRuleRecord is submitted for a qualifying transfer.
+#[event]
+pub struct TravelRuleRecordSubmitted {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// Monotonic nonce used to derive the TravelRuleRecord PDA.
+    pub nonce: u64,
+    /// Originating VASP pubkey.
+    pub originator_vasp: Pubkey,
+    /// Beneficiary VASP pubkey.
+    pub beneficiary_vasp: Pubkey,
+    /// Transfer amount this record covers (in token native units).
+    pub transfer_amount: u64,
+    /// Solana slot at which the record was submitted.
+    pub slot: u64,
+}

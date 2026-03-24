@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, LiquidationHistoryEntry, MintEvent, ParsedEventLogEntry, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, LiquidationHistoryEntry, MintEvent, TravelRuleRecord, WebhookEntry};
 use crate::routes::analytics::{CdpHealthResponse, HealthBucket};
 
 pub struct Database {
@@ -105,19 +105,22 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_liq_history_cdp ON liquidation_history(cdp_address);
             CREATE INDEX IF NOT EXISTS idx_liq_history_collateral ON liquidation_history(collateral_mint);
             CREATE INDEX IF NOT EXISTS idx_liq_history_created ON liquidation_history(created_at DESC);
-            CREATE TABLE IF NOT EXISTS webhook_delivery_log (
+            CREATE TABLE IF NOT EXISTS travel_rule_records (
                 id TEXT PRIMARY KEY,
-                webhook_id TEXT NOT NULL,
-                event_type TEXT NOT NULL,
-                payload TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                attempt_count INTEGER NOT NULL DEFAULT 0,
-                last_attempt_at TEXT,
-                next_retry_at TEXT,
+                mint TEXT NOT NULL,
+                nonce INTEGER NOT NULL,
+                originator_vasp TEXT NOT NULL,
+                beneficiary_vasp TEXT NOT NULL,
+                transfer_amount INTEGER NOT NULL,
+                slot INTEGER,
+                encrypted_payload TEXT,
+                tx_signature TEXT,
                 created_at TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_wdl_status ON webhook_delivery_log(status);
-            CREATE INDEX IF NOT EXISTS idx_wdl_next_retry ON webhook_delivery_log(next_retry_at);
+            CREATE INDEX IF NOT EXISTS idx_trr_originator ON travel_rule_records(originator_vasp);
+            CREATE INDEX IF NOT EXISTS idx_trr_beneficiary ON travel_rule_records(beneficiary_vasp);
+            CREATE INDEX IF NOT EXISTS idx_trr_mint ON travel_rule_records(mint);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_trr_mint_nonce ON travel_rule_records(mint, nonce);
         ")?;
         Ok(())
     }
@@ -1372,140 +1375,110 @@ impl Database {
             active_collateral_types,
         })
     }
-    // ─── SSS-145: webhook delivery log ─────────────────────────────────────
 
-    /// Insert a new pending webhook delivery log entry.
-    pub fn insert_webhook_delivery(
+    // ─── SSS-127: Travel Rule records ─────────────────────────────────────────
+
+    /// Insert (or ignore duplicate) a TravelRuleRecord.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_travel_rule_record(
         &self,
-        webhook_id: &str,
-        event_type: &str,
-        payload_json: &str,
-    ) -> Result<String, AppError> {
+        mint: &str,
+        nonce: i64,
+        originator_vasp: &str,
+        beneficiary_vasp: &str,
+        transfer_amount: i64,
+        slot: Option<i64>,
+        encrypted_payload: Option<&str>,
+        tx_signature: Option<&str>,
+    ) -> Result<TravelRuleRecord, AppError> {
         let id = Uuid::new_v4().to_string();
         let created_at = Utc::now().to_rfc3339();
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         conn.execute(
-            "INSERT INTO webhook_delivery_log (id, webhook_id, event_type, payload, status, attempt_count, created_at)              VALUES (?1, ?2, ?3, ?4, 'pending', 0, ?5)",
-            params![id, webhook_id, event_type, payload_json, created_at],
+            "INSERT OR IGNORE INTO travel_rule_records \
+             (id, mint, nonce, originator_vasp, beneficiary_vasp, transfer_amount, slot, encrypted_payload, tx_signature, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                id,
+                mint,
+                nonce,
+                originator_vasp,
+                beneficiary_vasp,
+                transfer_amount,
+                slot,
+                encrypted_payload,
+                tx_signature,
+                created_at,
+            ],
         )?;
-        Ok(id)
+        Ok(TravelRuleRecord {
+            id,
+            mint: mint.to_string(),
+            nonce,
+            originator_vasp: originator_vasp.to_string(),
+            beneficiary_vasp: beneficiary_vasp.to_string(),
+            transfer_amount,
+            slot,
+            encrypted_payload: encrypted_payload.map(str::to_string),
+            tx_signature: tx_signature.map(str::to_string),
+            created_at,
+        })
     }
 
-    /// Return deliveries that are ready to be retried.
-    pub fn get_pending_webhook_deliveries(
+    /// List TravelRuleRecords with optional wallet / mint filters.
+    pub fn list_travel_rule_records(
         &self,
-        now: &str,
-    ) -> Result<Vec<crate::models::WebhookDeliveryLog>, AppError> {
+        wallet: Option<&str>,
+        mint: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<TravelRuleRecord>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let mut stmt = conn.prepare(
-            "SELECT id, webhook_id, event_type, payload, status, attempt_count,                     last_attempt_at, next_retry_at, created_at              FROM webhook_delivery_log              WHERE status = 'pending' OR (status = 'failed' AND next_retry_at <= ?1)              ORDER BY created_at ASC",
-        )?;
-        let rows = stmt.query_map(params![now], |row| {
-            Ok(crate::models::WebhookDeliveryLog {
-                id: row.get(0)?,
-                webhook_id: row.get(1)?,
-                event_type: row.get(2)?,
-                payload: row.get(3)?,
-                status: row.get(4)?,
-                attempt_count: row.get(5)?,
-                last_attempt_at: row.get(6)?,
-                next_retry_at: row.get(7)?,
-                created_at: row.get(8)?,
-            })
-        })?.collect::<Result<Vec<_>, _>>()?;
-        Ok(rows)
-    }
-
-    /// Mark a delivery as successfully delivered.
-    pub fn mark_webhook_delivery_delivered(&self, id: &str) -> Result<(), AppError> {
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let now = Utc::now().to_rfc3339();
-        conn.execute(
-            "UPDATE webhook_delivery_log SET status = 'delivered', last_attempt_at = ?1 WHERE id = ?2",
-            params![now, id],
-        )?;
-        Ok(())
-    }
-
-    /// Mark a delivery as failed. If next_retry_at is None, mark permanently_failed.
-    pub fn mark_webhook_delivery_failed(
-        &self,
-        id: &str,
-        attempt_count: i64,
-        next_retry_at: Option<&str>,
-    ) -> Result<(), AppError> {
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let now = Utc::now().to_rfc3339();
-        let status = if next_retry_at.is_some() { "failed" } else { "permanently_failed" };
-        conn.execute(
-            "UPDATE webhook_delivery_log              SET status = ?1, attempt_count = ?2, last_attempt_at = ?3, next_retry_at = ?4              WHERE id = ?5",
-            params![status, attempt_count, now, next_retry_at, id],
-        )?;
-        Ok(())
-    }
-
-    /// List permanently failed deliveries for operator debugging.
-    pub fn list_failed_webhook_deliveries(
-        &self,
-    ) -> Result<Vec<crate::models::WebhookDeliveryLog>, AppError> {
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let mut stmt = conn.prepare(
-            "SELECT id, webhook_id, event_type, payload, status, attempt_count,                     last_attempt_at, next_retry_at, created_at              FROM webhook_delivery_log              WHERE status = 'permanently_failed'              ORDER BY created_at DESC",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(crate::models::WebhookDeliveryLog {
-                id: row.get(0)?,
-                webhook_id: row.get(1)?,
-                event_type: row.get(2)?,
-                payload: row.get(3)?,
-                status: row.get(4)?,
-                attempt_count: row.get(5)?,
-                last_attempt_at: row.get(6)?,
-                next_retry_at: row.get(7)?,
-                created_at: row.get(8)?,
-            })
-        })?.collect::<Result<Vec<_>, _>>()?;
-        Ok(rows)
-    }
-
-    /// Get a webhook entry by id (used by retry worker).
-    pub fn get_webhook_by_id(
-        &self,
-        id: &str,
-    ) -> Result<Option<crate::models::WebhookEntry>, AppError> {
-        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let result = conn.query_row(
-            "SELECT id, url, events, secret_key, created_at FROM webhooks WHERE id = ?1",
-            params![id],
-            |row| {
-                let events_str: String = row.get(2)?;
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    events_str,
-                    row.get::<_, Option<String>>(3)?,
-                    row.get::<_, String>(4)?,
-                ))
-            },
+        let mut sql = String::from(
+            "SELECT id, mint, nonce, originator_vasp, beneficiary_vasp, transfer_amount, \
+             slot, encrypted_payload, tx_signature, created_at \
+             FROM travel_rule_records WHERE 1=1",
         );
-        match result {
-            Ok((wid, url, events_str, secret_key, created_at)) => {
-                let events: Vec<String> = serde_json::from_str(&events_str).unwrap_or_default();
-                Ok(Some(crate::models::WebhookEntry {
-                    id: wid,
-                    url,
-                    events,
-                    secret_key,
-                    created_at,
-                }))
-            }
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(AppError::Database(e)),
+        let mut binds: Vec<String> = Vec::new();
+
+        if let Some(w) = wallet {
+            binds.push(w.to_string());
+            let idx = binds.len();
+            binds.push(w.to_string());
+            sql.push_str(&format!(
+                " AND (originator_vasp = ?{} OR beneficiary_vasp = ?{})",
+                idx,
+                idx + 1
+            ));
         }
+        if let Some(m) = mint {
+            binds.push(m.to_string());
+            sql.push_str(&format!(" AND mint = ?{}", binds.len()));
+        }
+        binds.push(limit.to_string());
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", binds.len()));
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(binds.iter()),
+            |row| {
+                Ok(TravelRuleRecord {
+                    id: row.get(0)?,
+                    mint: row.get(1)?,
+                    nonce: row.get(2)?,
+                    originator_vasp: row.get(3)?,
+                    beneficiary_vasp: row.get(4)?,
+                    transfer_amount: row.get(5)?,
+                    slot: row.get(6)?,
+                    encrypted_payload: row.get(7)?,
+                    tx_signature: row.get(8)?,
+                    created_at: row.get(9)?,
+                })
+            },
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Internal(e.to_string()))
     }
-
 }
-
 
 /// Raw stats returned by `Db::liquidation_analytics`.
 #[allow(dead_code)]

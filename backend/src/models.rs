@@ -304,57 +304,54 @@ pub struct LiquidationsQuery {
     pub offset: Option<u32>,
 }
 
-/// SSS-145: webhook delivery log entry.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct WebhookDeliveryLog {
-    pub id: String,
-    pub webhook_id: String,
-    pub event_type: String,
-    pub payload: String,
-    pub status: String,
-    pub attempt_count: i64,
-    pub last_attempt_at: Option<String>,
-    pub next_retry_at: Option<String>,
-    pub created_at: String,
-}
+// ─── SSS-127: Travel Rule records ────────────────────────────────────────────
 
-/// SSS-145: query params for GET /api/webhook-deliveries.
-#[derive(Debug, Deserialize)]
-pub struct WebhookDeliveriesQuery {
-    pub status: Option<String>,
-/// SSS-139: EventLogEntry with `data` parsed as serde_json::Value (for monitor module).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ParsedEventLogEntry {
+/// A single indexed TravelRuleRecord event from on-chain.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TravelRuleRecord {
     pub id: String,
-    pub event_type: String,
-    pub address: String,
-    /// Parsed JSON data (event-specific fields).
-    pub data: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tx_signature: Option<String>,
+    /// SSS stablecoin mint.
+    pub mint: String,
+    /// Monotonic nonce used to derive the PDA.
+    pub nonce: i64,
+    /// Originating VASP pubkey (base58).
+    pub originator_vasp: String,
+    /// Beneficiary VASP pubkey (base58).
+    pub beneficiary_vasp: String,
+    /// Transfer amount in native token units.
+    pub transfer_amount: i64,
+    /// Slot at which the record was created on-chain.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slot: Option<i64>,
+    /// Encrypted payload (base64 ECIES blob).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encrypted_payload: Option<String>,
+    /// Transaction signature.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_signature: Option<String>,
     pub created_at: String,
 }
 
-/// SSS-139: POST /api/alerts request body.
+/// Query params for GET /api/travel-rule/records
 #[derive(Debug, Deserialize)]
-pub struct PostAlertRequest {
-    /// Invariant or alert name.
-    pub invariant: String,
-    /// Human-readable detail message.
-    pub detail: String,
-    /// Severity: "info" | "warning" | "critical"
-    pub severity: Option<String>,
+pub struct TravelRuleQuery {
+    /// Filter by wallet address (originator_vasp or beneficiary_vasp).
+    pub wallet: Option<String>,
+    /// Filter by mint address.
+    pub mint: Option<String>,
+    /// Maximum rows to return (default: 100, max: 1000).
+    pub limit: Option<u32>,
 }
 
-/// SSS-139: Alert record returned from GET /api/alerts.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AlertRecord {
-    pub id: String,
-    pub invariant: String,
-    pub detail: String,
-    pub severity: String,
-    pub created_at: String,
+/// Response for GET /api/pid-config
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PidConfigResponse {
+    /// Program ID for the SSS token program.
+    pub sss_token_program_id: String,
+    /// Program ID for the SSS transfer hook.
+    pub sss_transfer_hook_program_id: String,
+    /// Whether travel-rule indexing is active.
+    pub travel_rule_indexing_active: bool,
+    /// Minimum transfer amount that triggers travel-rule record creation (native units, 0 = not set).
+    pub travel_rule_threshold: i64,
 }

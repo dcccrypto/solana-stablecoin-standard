@@ -15,6 +15,7 @@ pub mod liquidations;
 pub mod mint;
 pub mod reserves;
 pub mod supply;
+pub mod travel_rule;
 pub mod webhooks;
 pub mod ws_events;
 pub mod webhook_deliveries;
