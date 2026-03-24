@@ -133,8 +133,8 @@ Endpoints:
 | [ZK Credentials](docs/ZK-CREDENTIALS.md) | Selective-disclosure ZK compliance proofs (SSS-129): CredentialRegistry + CredentialRecord PDAs, Groth16 proofs, not_sanctioned / kyc_passed / accredited_investor types, backend REST API |
 | [Stability Fee PID](docs/STABILITY-FEE-PID.md) | Automatic peg-stabilisation via PID controller (SSS-130): PidConfig PDA, permissionless keeper updates, anti-windup integral clamp, PidConfigInitialised + PidFeeUpdated events |
 | [Graduated Liquidation Bonus](docs/GRADUATED-LIQUIDATION-BONUS.md) | Dynamic three-tier liquidation incentives (SSS-131): LiquidationBonusConfig PDA, FLAG_GRAD_LIQUIDATION_BONUS, tier-based bonus schedule, GraduatedLiquidationBonusApplied event, Kani proof |
-| [PSM Dynamic AMM Slippage](docs/PSM-AMM-SLIPPAGE.md) | Depth-based AMM fee curve for PSM redemptions (SSS-132): PsmCurveConfig PDA, quadratic imbalance formula, FLAG_PSM_DYNAMIC_FEES, psm_dynamic_swap + get_psm_quote instructions, k calibration guide |
-| [Per-Wallet Rate Limiting](docs/WALLET-RATE-LIMIT.md) | Rolling-window transfer caps per address (SSS-133): WalletRateLimit PDA, FLAG_WALLET_RATE_LIMITS, transfer hook enforcement, auto window reset, WalletRateLimitEnforced event |
+| [Institutional Preset: SSS-4 / Squads V4](docs/SSS-4-INSTITUTIONAL.md) | Squads Protocol V4 native multisig authority (SSS-134): PRESET_INSTITUTIONAL=4, FLAG_SQUADS_AUTHORITY (bit 15), SquadsMultisigConfig PDA, irreversible init_squads_authority, m-of-n on-chain threshold enforcement |
+| [Supply Cap & PoR Breach Halt](docs/SUPPLY-CAP-POR-HALT.md) | Supply cap enforcement + PoR breach mint halt (SSS-145): rejects dual-zero cap configs, FLAG_POR_HALT_ON_BREACH reads PoR PDA on every mint, MintHaltedByPoRBreach event — closes CRITICAL-1 and CRITICAL-2 audit findings |
 
 ## Documentation
 
@@ -152,6 +152,7 @@ Endpoints:
 | [Preset: SSS-1 Minimal](docs/SSS-1.md) | SSS-1 preset specification |
 | [Preset: SSS-2 Compliant](docs/SSS-2.md) | SSS-2 preset specification |
 | [Preset: SSS-3 Trustless](docs/SSS-3.md) | SSS-3 trustless collateral-backed reference design |
+| [Preset: SSS-4 Institutional](docs/SSS-4-INSTITUTIONAL.md) | SSS-4 Squads V4 multisig authority — institutional grade m-of-n governance (SSS-134) |
 | [Architecture](docs/ARCHITECTURE.md) | Three-layer system architecture |
 | [Submission](docs/SUBMISSION.md) | Bounty submission — what was built, how to run, what makes it innovative |
 | [Devnet Deployment](docs/devnet-deploy.md) | Deploying and smoke-testing on Solana devnet |
