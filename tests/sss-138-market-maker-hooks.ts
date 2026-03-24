@@ -348,7 +348,7 @@ describe("SSS-138: market maker hooks", () => {
       .rpc({ commitment: "confirmed" });
 
     const mmConfig = await (program.account as any).marketMakerConfig.fetch(mmConfigPda);
-    expect(mmConfig.sssMin.toBase58()).to.equal(mintKp.publicKey.toBase58());
+    expect(mmConfig.sssMint.toBase58()).to.equal(mintKp.publicKey.toBase58());
     expect(mmConfig.mmMintLimitPerSlot.toNumber()).to.equal(1_000_000_000);
     expect(mmConfig.mmBurnLimitPerSlot.toNumber()).to.equal(500_000_000);
     expect(mmConfig.spreadBps).to.equal(50);
