@@ -141,19 +141,19 @@ pub struct StablecoinConfig {
     /// SSS-106: Auditor ElGamal pubkey for confidential transfers.
     /// All-zero if FLAG_CONFIDENTIAL_TRANSFERS is not enabled.
     pub auditor_elgamal_pubkey: [u8; 32],
-    /// SSS-119: Oracle type discriminant. 0=Pyth (default), 1=Switchboard, 2=Custom.
-    /// Set via `set_oracle_config` (authority-only).
-    pub oracle_type: u8,
-    /// SSS-119: Generic oracle feed account address used by the oracle abstraction layer.
-    /// For Pyth: the Pyth price feed account (overrides expected_pyth_feed when set).
-    /// For Custom: the CustomPriceFeed PDA address.
-    /// Pubkey::default() = validation deferred to expected_pyth_feed (backward compat).
-    pub oracle_feed: Pubkey,
+    /// SSS-119: Minimum reserve ratio (basis points) for ReserveBreach event.
+    /// 0 = no minimum enforced.  e.g. 10_000 = 100% fully backed required.
+    pub min_reserve_ratio_bps: u16,
+    /// SSS-119: Whitelisted custodian pubkeys allowed to submit reserve attestations.
+    /// Up to MAX_RESERVE_ATTESTORS entries; unused slots are Pubkey::default().
+    pub reserve_attestor_whitelist: [Pubkey; StablecoinConfig::MAX_RESERVE_ATTESTORS],
     pub bump: u8,
 }
 
 impl StablecoinConfig {
     pub const SEED: &'static [u8] = b"stablecoin-config";
+    /// Maximum number of whitelisted reserve attestors (custodians / Pyth publishers).
+    pub const MAX_RESERVE_ATTESTORS: usize = 4;
 
     /// Net circulating supply (total_minted - total_burned)
     pub fn net_supply(&self) -> u64 {
@@ -580,131 +580,76 @@ impl ConfidentialTransferConfig {
 }
 
 // ---------------------------------------------------------------------------
-// SSS-119: CustomPriceFeed — on-chain price maintained by the admin
+// SSS-123: Proof of Reserves — trustless on-chain PoR attestation
 // ---------------------------------------------------------------------------
 
-/// Custom oracle price feed PDA — one per SSS-3 stablecoin mint.
-/// Seeds: [b"custom-price-feed", sss_mint]
+/// ProofOfReserves PDA — one per stablecoin mint.
+/// Seeds: [b"proof-of-reserves", sss_mint]
 ///
-/// Only the stablecoin authority may update prices via `update_custom_price`.
-/// The `custom` oracle adapter verifies `feed.authority == config.authority`
-/// (admin signature verification) before trusting the stored price.
+/// Stores the latest reserve attestation submitted by a whitelisted attestor
+/// (authority, Pyth publisher, or custodian pubkey).
+/// `verify_reserve_ratio` computes reserve_amount / net_supply and emits events.
 #[account]
 #[derive(InitSpace)]
-pub struct CustomPriceFeed {
-    /// The authority (stablecoin config authority) who may update this feed.
-    pub authority: Pubkey,
-    /// Price value — same semantics as Pyth: raw integer, scaled by 10^expo.
-    pub price: i64,
-    /// Price exponent — typically negative (e.g. -8 means price in 10^-8 USD).
-    pub expo: i32,
-    /// Confidence half-interval in the same units as price.
-    pub conf: u64,
-    /// Slot at which the price was last updated (informational).
-    pub last_update_slot: u64,
-    /// Unix timestamp (seconds) at which the price was last updated.
-    /// Used by the custom oracle adapter to enforce max_oracle_age_secs staleness check.
-    pub last_update_unix_timestamp: i64,
+pub struct ProofOfReserves {
+    /// The SSS stablecoin mint this record belongs to.
+    pub sss_mint: Pubkey,
+    /// Last submitted reserve amount (in collateral token native units).
+    pub reserve_amount: u64,
+    /// 32-byte attestation hash (e.g. SHA-256 of off-chain audit report or Pyth price feed id).
+    pub attestation_hash: [u8; 32],
+    /// Pubkey of the entity that submitted the latest attestation.
+    pub attestor: Pubkey,
+    /// Solana slot at which the latest attestation was submitted.
+    pub last_attestation_slot: u64,
+    /// Last computed reserve ratio in basis points (set by verify_reserve_ratio).
+    pub last_verified_ratio_bps: u64,
     pub bump: u8,
 }
 
-impl CustomPriceFeed {
-    pub const SEED: &'static [u8] = b"custom-price-feed";
+impl ProofOfReserves {
+    pub const SEED: &'static [u8] = b"proof-of-reserves";
 }
 
 // ---------------------------------------------------------------------------
-// SSS-120: AuthorityRotationRequest PDA
-// ---------------------------------------------------------------------------
-/// Stores an in-flight authority rotation proposal.
-/// Seeds: [b"authority-rotation", mint.key().as_ref()]
-///
-/// Lifecycle:
-///   propose_authority_rotation → AuthorityRotationRequest created
-///   accept_authority_rotation  → PDA closed (after 48-hr timelock)
-///   emergency_recover_authority→ PDA closed (after 7-day window)
-///   cancel_authority_rotation  → PDA closed immediately (current authority only)
-#[account]
-pub struct AuthorityRotationRequest {
-    /// The stablecoin mint this rotation belongs to.
-    pub config_mint: Pubkey,
-    /// The authority at proposal time — must still match config.authority at accept/emergency/cancel.
-    pub current_authority: Pubkey,
-    /// The new authority that must sign `accept_authority_rotation`.
-    pub new_authority: Pubkey,
-    /// Fallback authority: can claim after `EMERGENCY_RECOVERY_SLOTS` if acceptance never happens.
-    pub backup_authority: Pubkey,
-    /// Slot at which the proposal was made.
-    pub proposed_slot: u64,
-    /// Slots that must elapse before `accept_authority_rotation` is valid (≈48 hr).
-    pub timelock_slots: u64,
-    /// PDA bump.
-    pub bump: u8,
-}
-
-impl AuthorityRotationRequest {
-    pub const SEED: &'static [u8] = b"authority-rotation";
-    /// Discriminator(8) + 3×Pubkey(96) + 2×u64(16) + u8(1) + padding(7) = 128
-    pub const SPACE: usize = 96 + 16 + 1 + 7;
-// SSS-121: Guardian Multisig Emergency Pause
+// SSS-124: Reserve Composition — on-chain breakdown of backing asset types
 // ---------------------------------------------------------------------------
 
-/// GuardianConfig PDA — one per stablecoin config.
-/// Seeds: [b"guardian-config", config_pubkey]
+/// ReserveComposition PDA — one per stablecoin mint.
+/// Seeds: [b"reserve-composition", sss_mint]
 ///
-/// Stores up to 7 guardian pubkeys and a threshold.  Guardians may only
-/// pause or unpause the mint — they cannot mint, burn, or alter fees.
+/// Stores the percentage breakdown of reserve backing assets in basis points.
+/// All four fields must sum to exactly 10_000 (100%).
+/// Updated by the stablecoin authority via `update_reserve_composition`.
 #[account]
 #[derive(InitSpace)]
-pub struct GuardianConfig {
-    /// The StablecoinConfig this guardian set governs.
-    pub config: Pubkey,
-    /// Registered guardian pubkeys (1–7).
-    #[max_len(7)]
-    pub guardians: Vec<Pubkey>,
-    /// Minimum votes required to execute a pause proposal.
-    pub threshold: u8,
-    /// Auto-incrementing ID assigned to the next PauseProposal.
-    pub next_proposal_id: u64,
-    /// Votes accumulated for lifting the current pause via full-quorum path.
-    /// Reset to empty when the pause is lifted.
-    #[max_len(7)]
-    pub pending_lift_votes: Vec<Pubkey>,
+pub struct ReserveComposition {
+    /// The SSS stablecoin mint this record belongs to.
+    pub sss_mint: Pubkey,
+    /// Cash and cash equivalents (basis points, 0–10000).
+    pub cash_bps: u16,
+    /// US Treasury Bills (basis points, 0–10000).
+    pub t_bills_bps: u16,
+    /// Crypto assets (basis points, 0–10000).
+    pub crypto_bps: u16,
+    /// Other assets (basis points, 0–10000).
+    pub other_bps: u16,
+    /// Solana slot at which composition was last updated.
+    pub last_updated_slot: u64,
+    /// Authority who last submitted the composition update.
+    pub last_updated_by: Pubkey,
     pub bump: u8,
 }
 
-impl GuardianConfig {
-    pub const SEED: &'static [u8] = b"guardian-config";
-    pub const MAX_GUARDIANS: usize = 7;
-}
+impl ReserveComposition {
+    pub const SEED: &'static [u8] = b"reserve-composition";
 
-/// PauseProposal PDA — one per proposal.
-/// Seeds: [b"pause-proposal", config_pubkey, proposal_id.to_le_bytes()]
-///
-/// Tracks YES votes on a pending emergency-pause proposal.
-/// Once `votes.len() >= threshold` the proposal is auto-executed and
-/// `executed` is set to `true`.
-#[account]
-#[derive(InitSpace)]
-pub struct PauseProposal {
-    /// The StablecoinConfig this proposal targets.
-    pub config: Pubkey,
-    /// Sequential ID matching the `GuardianConfig.next_proposal_id` at creation.
-    pub proposal_id: u64,
-    /// Guardian who opened the proposal (already counted as 1 vote).
-    pub proposer: Pubkey,
-    /// Freeform reason bytes (e.g. incident hash or ASCII string).
-    pub reason: [u8; 32],
-    /// Guardians who have voted YES (no duplicates).
-    #[max_len(7)]
-    pub votes: Vec<Pubkey>,
-    /// Voting threshold copied from GuardianConfig at proposal creation.
-    pub threshold: u8,
-    /// True when the threshold was reached and the pause was applied.
-    pub executed: bool,
-    pub bump: u8,
-}
-
-impl PauseProposal {
-    pub const SEED: &'static [u8] = b"pause-proposal";
-    pub const MAX_VOTES: usize = 7;
+    /// Validate that all four bps fields sum to exactly 10_000.
+    pub fn validate(&self) -> bool {
+        (self.cash_bps as u32)
+            .saturating_add(self.t_bills_bps as u32)
+            .saturating_add(self.crypto_bps as u32)
+            .saturating_add(self.other_bps as u32)
+            == 10_000
+    }
 }

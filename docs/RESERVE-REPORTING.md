@@ -113,91 +113,24 @@ Subscribe via the Anchor event listener API to receive real-time composition cha
 
 ## SDK Usage
 
-### TypeScript interface
-
-```typescript
-import { ReserveCompositionData } from '@sss/sdk';
-
-// ReserveCompositionData fields:
-// {
-//   ssssMint:        PublicKey   — stablecoin mint
-//   cashBps:         number      — cash & equivalents (0–10000)
-//   tBillsBps:       number      — US T-bills (0–10000)
-//   cryptoBps:       number      — crypto collateral (0–10000)
-//   otherBps:        number      — other assets (0–10000)
-//   lastUpdatedSlot: bigint      — Solana slot of last update
-//   lastUpdatedBy:   PublicKey   — authority that submitted the update
-// }
-```
-
-### Derive the PDA address
-
 ```typescript
 import { ReserveCompositionModule } from '@sss/sdk';
 import { Connection, PublicKey } from '@solana/web3.js';
 
 const connection = new Connection('https://api.mainnet-beta.solana.com');
-const programId  = new PublicKey('<SSS_PROGRAM_ID>');
-const mod        = new ReserveCompositionModule(connection, programId);
+const programId = new PublicKey('<SSS_PROGRAM_ID>');
 
-const [pdaAddress, bump] = mod.deriveReserveCompositionPda(mintPublicKey);
-console.log(`ReserveComposition PDA: ${pdaAddress.toBase58()} (bump ${bump})`);
-```
-
-Use `pdaAddress` when building on-chain CPIs or constructing the `get_reserve_composition` transaction manually.
-
-### Fetch the current breakdown
-
-```typescript
+const mod = new ReserveCompositionModule(connection, programId);
 const composition = await mod.fetchReserveComposition(mintPublicKey);
 
 if (composition) {
-  console.log(`Cash:    ${composition.cashBps    / 100}%`);
-  console.log(`T-Bills: ${composition.tBillsBps  / 100}%`);
-  console.log(`Crypto:  ${composition.cryptoBps  / 100}%`);
-  console.log(`Other:   ${composition.otherBps   / 100}%`);
-  console.log(`Updated at slot: ${composition.lastUpdatedSlot}`);
-  console.log(`Updated by:      ${composition.lastUpdatedBy.toBase58()}`);
+  console.log(`Cash:    ${composition.cashBps / 100}%`);
+  console.log(`T-Bills: ${composition.tBillsBps / 100}%`);
+  console.log(`Crypto:  ${composition.cryptoBps / 100}%`);
+  console.log(`Other:   ${composition.otherBps / 100}%`);
+  console.log(`Last updated slot: ${composition.lastUpdatedSlot}`);
 } else {
-  console.log('No composition record — issuer has not yet published breakdown.');
-}
-```
-
-Returns `null` if the PDA account does not exist (composition never published).
-
-### Combined PoR + composition workflow
-
-```typescript
-import { ProofOfReservesModule, ReserveCompositionModule } from '@sss/sdk';
-import { Connection, PublicKey } from '@solana/web3.js';
-
-const connection = new Connection('https://api.mainnet-beta.solana.com');
-const programId  = new PublicKey('<SSS_PROGRAM_ID>');
-
-const porMod   = new ProofOfReservesModule(connection, programId);
-const compMod  = new ReserveCompositionModule(connection, programId);
-
-// Fetch both in parallel
-const [por, composition] = await Promise.all([
-  porMod.fetchProofOfReserves(mintPublicKey),
-  compMod.fetchReserveComposition(mintPublicKey),
-]);
-
-if (por && composition) {
-  const totalReserves = por.reserveAmount;
-
-  // Approximate backing per category (in stablecoin units)
-  const cash   = (totalReserves * BigInt(composition.cashBps))   / 10_000n;
-  const tBills = (totalReserves * BigInt(composition.tBillsBps)) / 10_000n;
-  const crypto = (totalReserves * BigInt(composition.cryptoBps)) / 10_000n;
-  const other  = (totalReserves * BigInt(composition.otherBps))  / 10_000n;
-
-  console.log('Reserve Breakdown:');
-  console.log(`  Cash:    ${cash}`);
-  console.log(`  T-Bills: ${tBills}`);
-  console.log(`  Crypto:  ${crypto}`);
-  console.log(`  Other:   ${other}`);
-  console.log(`  Total:   ${totalReserves} (attested by ${por.attestorCount} attestors)`);
+  console.log('No composition record found — issuer has not yet published breakdown.');
 }
 ```
 
@@ -205,23 +138,22 @@ if (por && composition) {
 
 ## Error Reference
 
-| Error | Anchor code | Meaning |
+| Error | Code | Meaning |
 |---|---|---|
-| `InvalidCompositionBps` | 6xxx | `cash_bps + t_bills_bps + crypto_bps + other_bps ≠ 10 000` |
-| `Unauthorized` | 6xxx | Signer is not the stablecoin authority |
-| `InvalidVault` | 6xxx | PDA `sss_mint` field does not match `config.mint` |
+| `InvalidCompositionBps` | — | `cash_bps + t_bills_bps + crypto_bps + other_bps ≠ 10 000` |
+| `Unauthorized` | — | Signer is not the stablecoin authority |
+| `InvalidVault` | — | PDA `sss_mint` field does not match `config.mint` |
 
 ---
 
 ## Relationship to SSS-123
 
-| Feature | SSS-123 (Proof of Reserves) | SSS-124 (Reserve Composition) |
+| Feature | SSS-123 | SSS-124 |
 |---|---|---|
 | What it proves | Total reserve amount | Asset type breakdown |
 | Who can update | Authority + attestor whitelist | Authority only |
 | Validation | `reserve_amount > 0` | sum of bps == 10 000 |
 | Frequency | As often as needed | At least monthly |
-| PDA seeds | `[b"proof-of-reserves", mint]` | `[b"reserve-composition", mint]` |
-| Depends on | `StablecoinConfig` PDA | `StablecoinConfig` PDA (+ SSS-123) |
+| PDA | `proof-of-reserves` | `reserve-composition` |
 
-Both PDAs are optional. SSS-124 depends on SSS-123 (the `StablecoinConfig` is shared), but the `ReserveComposition` PDA is independent of the `ProofOfReserves` PDA.
+Both PDAs are optional. SSS-124 depends on SSS-123 (the `StablecoinConfig` is shared), but the `ReserveComposition` PDA is independent.

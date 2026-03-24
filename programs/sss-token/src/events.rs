@@ -265,66 +265,78 @@ pub struct ChannelForceClosed {
     pub amount_returned: u64,
 }
 
-// ─── SSS-120: Authority Rotation events ──────────────────────────────────────
+// ─── SSS-123: Proof of Reserves events ───────────────────────────────────────
 
-/// Emitted when an authority rotation is proposed.
+/// Emitted every time a reserve attestation is submitted or refreshed.
 #[event]
-pub struct AuthorityRotationProposed {
+pub struct ReserveAttestationSubmitted {
+    /// The SSS stablecoin mint.
     pub mint: Pubkey,
-    pub current_authority: Pubkey,
-    pub new_authority: Pubkey,
-    pub backup_authority: Pubkey,
-    pub proposed_slot: u64,
-    pub timelock_slots: u64,
+    /// The attestor that submitted the attestation (authority, Pyth, or custodian).
+    pub attestor: Pubkey,
+    /// Claimed on-chain reserve amount (in collateral token native units).
+    pub reserve_amount: u64,
+    /// 32-byte hash of the off-chain audit evidence or Pyth price feed id.
+    pub attestation_hash: [u8; 32],
+    /// Solana slot at submission.
+    pub slot: u64,
+    /// Previous reserve amount (for change tracking).
+    pub prev_reserve_amount: u64,
 }
 
-/// Emitted when the new_authority accepts the rotation after the timelock.
+/// Emitted by `verify_reserve_ratio` with the current computed ratio.
 #[event]
-pub struct AuthorityRotationCompleted {
+pub struct ReserveRatioEvent {
+    /// The SSS stablecoin mint.
     pub mint: Pubkey,
-    pub prev_authority: Pubkey,
-    pub new_authority: Pubkey,
+    /// Reserve amount used in computation.
+    pub reserve_amount: u64,
+    /// Net circulating supply at time of computation.
+    pub net_supply: u64,
+    /// Computed ratio: reserve_amount * 10_000 / net_supply (bps).
+    pub ratio_bps: u64,
+    /// Slot of the last submitted attestation.
+    pub last_attestation_slot: u64,
+    /// Attestor who last submitted the attestation.
+    pub attestor: Pubkey,
 }
 
-/// Emitted when the backup_authority claims authority via emergency recovery.
+/// Emitted when the reserve ratio drops below `config.min_reserve_ratio_bps`.
 #[event]
-pub struct AuthorityRotationEmergencyRecovered {
+pub struct ReserveBreach {
+    /// The SSS stablecoin mint.
     pub mint: Pubkey,
-    pub prev_authority: Pubkey,
-    pub backup_authority: Pubkey,
+    /// Current reserve amount.
+    pub reserve_amount: u64,
+    /// Current net circulating supply.
+    pub net_supply: u64,
+    /// Current ratio in basis points.
+    pub ratio_bps: u64,
+    /// Minimum ratio that triggered the breach check.
+    pub min_ratio_bps: u16,
+    /// Slot of the last attestation.
+    pub slot: u64,
 }
 
-/// Emitted when the current authority cancels an in-flight rotation proposal.
-#[event]
-pub struct AuthorityRotationCancelled {
-    pub mint: Pubkey,
-    pub authority: Pubkey,
-    pub cancelled_new_authority: Pubkey,
-// SSS-121: Guardian Multisig Emergency Pause
+// ---------------------------------------------------------------------------
+// SSS-124: Reserve Composition events
+// ---------------------------------------------------------------------------
 
-/// Emitted when a guardian opens a new pause proposal.
+/// Emitted when the reserve composition breakdown is created or updated.
 #[event]
-pub struct GuardianPauseProposed {
+pub struct ReserveCompositionUpdated {
+    /// The SSS stablecoin mint.
     pub mint: Pubkey,
-    pub proposer: Pubkey,
-    pub proposal_id: u64,
-    pub reason: [u8; 32],
-}
-
-/// Emitted when a guardian votes on an open pause proposal.
-#[event]
-pub struct GuardianPauseVoted {
-    pub mint: Pubkey,
-    pub guardian: Pubkey,
-    pub proposal_id: u64,
-    pub votes_so_far: u8,
-    pub threshold: u8,
-}
-
-/// Emitted when a guardian-imposed pause is lifted.
-#[event]
-pub struct GuardianPauseLifted {
-    pub mint: Pubkey,
-    pub lifted_by: Pubkey,
-    pub by_quorum: bool,
+    /// Authority who submitted the update.
+    pub updated_by: Pubkey,
+    /// Cash and cash equivalents (basis points).
+    pub cash_bps: u16,
+    /// US Treasury Bills (basis points).
+    pub t_bills_bps: u16,
+    /// Crypto assets (basis points).
+    pub crypto_bps: u16,
+    /// Other assets (basis points).
+    pub other_bps: u16,
+    /// Slot at which the composition was updated.
+    pub slot: u64,
 }

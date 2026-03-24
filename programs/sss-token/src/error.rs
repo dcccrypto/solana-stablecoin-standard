@@ -188,31 +188,12 @@ pub enum SssError {
     UseTimelockForAuthorityTransfer,
     #[msg("Caller is not authorized to trigger the backstop (authority only)")]
     UnauthorizedBackstopTrigger,
-    // SSS-119: Oracle abstraction layer
-    #[msg("Oracle adapter not configured — Switchboard V2 crate not yet integrated")]
-    OracleNotConfigured,
-    #[msg("oracle_type must be 0 (Pyth), 1 (Switchboard), or 2 (Custom)")]
-    InvalidOracleType,
-    // SSS-120: Authority rotation
-    #[msg("Rotation new_authority must differ from current authority")]
-    RotationNewAuthorityIsCurrent,
-    #[msg("Rotation backup_authority must differ from current authority")]
-    RotationBackupIsCurrent,
-    #[msg("Rotation backup_authority must differ from new_authority")]
-    RotationBackupEqualsNew,
-    #[msg("Rotation pubkeys must be non-zero")]
-    RotationZeroPubkey,
-    #[msg("Emergency recovery window has not elapsed (7 days required)")]
-    EmergencyRecoveryNotReady,
-    // SSS-121: Guardian Multisig Emergency Pause
-    #[msg("Caller is not a registered guardian")]
-    NotAGuardian,
-    #[msg("Guardian list cannot be empty")]
-    GuardianListEmpty,
-    #[msg("Guardian list is full (max 7)")]
-    GuardianListFull,
-    #[msg("Guardian threshold must be ≥1 and ≤ guardians.len()")]
-    InvalidGuardianThreshold,
-    #[msg("Duplicate guardian pubkey in list")]
-    DuplicateGuardian,
+    // SSS-123: Proof of Reserves
+    #[msg("Reserve attestation not yet initialized — submit_reserve_attestation first")]
+    ReserveNotInitialized,
+    #[msg("Reserve attestor whitelist is full (max 4 entries)")]
+    ReserveAttestorWhitelistFull,
+    // SSS-124: Reserve Composition
+    #[msg("Reserve composition basis points must sum to exactly 10000 (100%)")]
+    InvalidCompositionBps,
 }

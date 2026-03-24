@@ -536,72 +536,63 @@ pub mod sss_token {
         instructions::apc::force_close_handler(ctx, channel_id)
     }
 
-    // ─── SSS-120: Admin key rotation + recovery path ───────────────────────────
+    // ─── SSS-123: Proof of Reserves ───────────────────────────────────────────
 
-    /// Propose an authority rotation with a 48-hour timelock and a backup recovery key.
-    /// Only the current authority may call this.
-    pub fn propose_authority_rotation(
-        ctx: Context<ProposeAuthorityRotation>,
-        new_authority: Pubkey,
-        backup_authority: Pubkey,
+    /// Submit or refresh a reserve attestation.
+    ///
+    /// Stores `reserve_amount`, 32-byte `attestation_hash`, attestor pubkey,
+    /// and the current slot into the `ProofOfReserves` PDA.
+    /// Callable by: authority, Pyth publisher (expected_pyth_feed), or whitelisted custodian.
+    /// Emits `ReserveAttestationSubmitted`.
+    pub fn submit_reserve_attestation(
+        ctx: Context<SubmitReserveAttestation>,
+        reserve_amount: u64,
+        attestation_hash: [u8; 32],
     ) -> Result<()> {
-        instructions::authority_rotation::propose_authority_rotation_handler(
+        instructions::proof_of_reserves::submit_reserve_attestation_handler(
             ctx,
-            new_authority,
-            backup_authority,
+            reserve_amount,
+            attestation_hash,
         )
     }
 
-    /// Accept the pending rotation after the 48-hour timelock.
-    /// Must be signed by the rotation_request.new_authority.
-    pub fn accept_authority_rotation(ctx: Context<AcceptAuthorityRotation>) -> Result<()> {
-        instructions::authority_rotation::accept_authority_rotation_handler(ctx)
+    /// Compute the current reserve ratio and emit `ReserveRatioEvent`.
+    /// If ratio drops below `config.min_reserve_ratio_bps`, also emits `ReserveBreach`.
+    /// Callable by anyone (permissionless) — intended for keepers and monitoring.
+    pub fn verify_reserve_ratio(ctx: Context<VerifyReserveRatio>) -> Result<()> {
+        instructions::proof_of_reserves::verify_reserve_ratio_handler(ctx)
     }
 
-    /// Emergency recovery: backup_authority claims authority after 7 days of non-acceptance.
-    pub fn emergency_recover_authority(ctx: Context<EmergencyRecoverAuthority>) -> Result<()> {
-        instructions::authority_rotation::emergency_recover_authority_handler(ctx)
+    /// Read the current reserve status and emit a log summary.
+    /// Returns: reserve_amount, net_supply, ratio_bps, last_attestation_slot, attestor.
+    /// Read-only; callable by anyone.
+    pub fn get_reserve_status(ctx: Context<GetReserveStatus>) -> Result<()> {
+        instructions::proof_of_reserves::get_reserve_status_handler(ctx)
     }
 
-    /// Cancel an in-flight rotation proposal. Only the current authority may cancel.
-    pub fn cancel_authority_rotation(ctx: Context<CancelAuthorityRotation>) -> Result<()> {
-        instructions::authority_rotation::cancel_authority_rotation_handler(ctx)
-    // ── SSS-121: Guardian Multisig Emergency Pause ────────────────────────────
-
-    /// Initialise the guardian multisig for a stablecoin.
-    /// Registers 1–7 guardian pubkeys and a vote threshold.
-    /// Authority only; can only be called once.
-    pub fn init_guardian_config(
-        ctx: Context<InitGuardianConfig>,
-        guardians: Vec<Pubkey>,
-        threshold: u8,
+    /// Update the reserve attestor whitelist. Authority only.
+    /// Replaces the current whitelist with the provided `whitelist` (max 4 entries).
+    pub fn set_reserve_attestor_whitelist(
+        ctx: Context<SetReserveAttestorWhitelist>,
+        whitelist: Vec<Pubkey>,
     ) -> Result<()> {
-        instructions::guardian::init_guardian_config_handler(ctx, guardians, threshold)
+        instructions::proof_of_reserves::set_reserve_attestor_whitelist_handler(ctx, whitelist)
     }
 
-    /// Any registered guardian proposes an emergency pause.
-    /// Creates a PauseProposal PDA.  If threshold == 1 the pause is immediate.
-    pub fn guardian_propose_pause(
-        ctx: Context<GuardianProposePause>,
-        reason: [u8; 32],
+    // ─── SSS-124: Reserve Composition ────────────────────────────────────────
+
+    /// Create or update the on-chain reserve composition breakdown.
+    /// `params.cash_bps + params.t_bills_bps + params.crypto_bps + params.other_bps` must equal 10_000.
+    /// Authority only. Emits `ReserveCompositionUpdated`.
+    pub fn update_reserve_composition(
+        ctx: Context<UpdateReserveComposition>,
+        params: ReserveCompositionParams,
     ) -> Result<()> {
-        instructions::guardian::guardian_propose_pause_handler(ctx, reason)
+        instructions::reserve_composition::update_reserve_composition_handler(ctx, params)
     }
 
-    /// Cast a YES vote on an open pause proposal.
-    /// When votes >= threshold the mint is paused immediately.
-    pub fn guardian_vote_pause(
-        ctx: Context<GuardianVotePause>,
-        proposal_id: u64,
-    ) -> Result<()> {
-        instructions::guardian::guardian_vote_pause_handler(ctx, proposal_id)
-    }
-
-    /// Lift a guardian-imposed pause.
-    /// Authority can always lift.  Guardians may lift via full-quorum vote.
-    pub fn guardian_lift_pause(
-        ctx: Context<GuardianLiftPause>,
-    ) -> Result<()> {
-        instructions::guardian::guardian_lift_pause_handler(ctx)
+    /// Read and log the current reserve composition. Callable by anyone.
+    pub fn get_reserve_composition(ctx: Context<GetReserveComposition>) -> Result<()> {
+        instructions::reserve_composition::get_reserve_composition_handler(ctx)
     }
 }
