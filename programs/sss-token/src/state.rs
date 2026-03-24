@@ -610,3 +610,46 @@ pub struct ProofOfReserves {
 impl ProofOfReserves {
     pub const SEED: &'static [u8] = b"proof-of-reserves";
 }
+
+// ---------------------------------------------------------------------------
+// SSS-124: Reserve Composition — on-chain breakdown of backing asset types
+// ---------------------------------------------------------------------------
+
+/// ReserveComposition PDA — one per stablecoin mint.
+/// Seeds: [b"reserve-composition", sss_mint]
+///
+/// Stores the percentage breakdown of reserve backing assets in basis points.
+/// All four fields must sum to exactly 10_000 (100%).
+/// Updated by the stablecoin authority via `update_reserve_composition`.
+#[account]
+#[derive(InitSpace)]
+pub struct ReserveComposition {
+    /// The SSS stablecoin mint this record belongs to.
+    pub sss_mint: Pubkey,
+    /// Cash and cash equivalents (basis points, 0–10000).
+    pub cash_bps: u16,
+    /// US Treasury Bills (basis points, 0–10000).
+    pub t_bills_bps: u16,
+    /// Crypto assets (basis points, 0–10000).
+    pub crypto_bps: u16,
+    /// Other assets (basis points, 0–10000).
+    pub other_bps: u16,
+    /// Solana slot at which composition was last updated.
+    pub last_updated_slot: u64,
+    /// Authority who last submitted the composition update.
+    pub last_updated_by: Pubkey,
+    pub bump: u8,
+}
+
+impl ReserveComposition {
+    pub const SEED: &'static [u8] = b"reserve-composition";
+
+    /// Validate that all four bps fields sum to exactly 10_000.
+    pub fn validate(&self) -> bool {
+        (self.cash_bps as u32)
+            .saturating_add(self.t_bills_bps as u32)
+            .saturating_add(self.crypto_bps as u32)
+            .saturating_add(self.other_bps as u32)
+            == 10_000
+    }
+}

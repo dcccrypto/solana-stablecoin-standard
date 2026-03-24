@@ -544,4 +544,21 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::proof_of_reserves::set_reserve_attestor_whitelist_handler(ctx, whitelist)
     }
+
+    // ─── SSS-124: Reserve Composition ────────────────────────────────────────
+
+    /// Create or update the on-chain reserve composition breakdown.
+    /// `params.cash_bps + params.t_bills_bps + params.crypto_bps + params.other_bps` must equal 10_000.
+    /// Authority only. Emits `ReserveCompositionUpdated`.
+    pub fn update_reserve_composition(
+        ctx: Context<UpdateReserveComposition>,
+        params: ReserveCompositionParams,
+    ) -> Result<()> {
+        instructions::reserve_composition::update_reserve_composition_handler(ctx, params)
+    }
+
+    /// Read and log the current reserve composition. Callable by anyone.
+    pub fn get_reserve_composition(ctx: Context<GetReserveComposition>) -> Result<()> {
+        instructions::reserve_composition::get_reserve_composition_handler(ctx)
+    }
 }

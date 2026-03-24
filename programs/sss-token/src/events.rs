@@ -317,3 +317,26 @@ pub struct ReserveBreach {
     /// Slot of the last attestation.
     pub slot: u64,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-124: Reserve Composition events
+// ---------------------------------------------------------------------------
+
+/// Emitted when the reserve composition breakdown is created or updated.
+#[event]
+pub struct ReserveCompositionUpdated {
+    /// The SSS stablecoin mint.
+    pub mint: Pubkey,
+    /// Authority who submitted the update.
+    pub updated_by: Pubkey,
+    /// Cash and cash equivalents (basis points).
+    pub cash_bps: u16,
+    /// US Treasury Bills (basis points).
+    pub t_bills_bps: u16,
+    /// Crypto assets (basis points).
+    pub crypto_bps: u16,
+    /// Other assets (basis points).
+    pub other_bps: u16,
+    /// Slot at which the composition was updated.
+    pub slot: u64,
+}

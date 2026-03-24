@@ -193,4 +193,7 @@ pub enum SssError {
     ReserveNotInitialized,
     #[msg("Reserve attestor whitelist is full (max 4 entries)")]
     ReserveAttestorWhitelistFull,
+    // SSS-124: Reserve Composition
+    #[msg("Reserve composition basis points must sum to exactly 10000 (100%)")]
+    InvalidCompositionBps,
 }
