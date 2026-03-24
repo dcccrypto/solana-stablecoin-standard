@@ -1,5 +1,6 @@
 import { PublicKey, TransactionSignature } from '@solana/web3.js';
 import { AnchorProvider, BN } from '@coral-xyz/anchor';
+import { SSSError } from './error';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -156,10 +157,26 @@ export class AdminTimelockModule {
    * (default: {@link DEFAULT_ADMIN_TIMELOCK_DELAY}).
    *
    * @returns Transaction signature.
+   * @throws {SSSError} If `opKind` is `ADMIN_OP_NONE` (0) — a no-op proposal
+   *   locks out all admin operations for ~2 days without doing anything useful.
    * @throws If `opKind` is not one of the three valid operation kinds.
    */
   async proposeTimelockOp(params: ProposeTimelockOpParams): Promise<TransactionSignature> {
     const { mint, opKind, param, target } = params;
+
+    // F-2 guard: ADMIN_OP_NONE (0) must never be proposed. It creates a pending
+    // no-op that blocks all other admin operations for the full timelock delay
+    // (~2 days) without any observable effect. This is a denial-of-service
+    // vector — an attacker (or misconfigured caller) can grief the protocol by
+    // repeatedly proposing ADMIN_OP_NONE ops.
+    if (opKind === ADMIN_OP_NONE) {
+      throw new SSSError(
+        'proposeTimelockOp: opKind must not be ADMIN_OP_NONE (0). ' +
+        'Use ADMIN_OP_TRANSFER_AUTHORITY (1), ADMIN_OP_SET_FEATURE_FLAG (2), ' +
+        'or ADMIN_OP_CLEAR_FEATURE_FLAG (3).'
+      );
+    }
+
     return this.program.methods
       .proposeTimelockOp(opKind, new BN(param.toString()), target)
       .accounts({

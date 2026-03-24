@@ -8,6 +8,7 @@ import {
   ADMIN_OP_CLEAR_FEATURE_FLAG,
   DEFAULT_ADMIN_TIMELOCK_DELAY,
 } from './AdminTimelockModule';
+import { SSSError } from './error';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -111,6 +112,49 @@ describe('AdminTimelockModule.proposeTimelockOp', () => {
       expect.anything(), // BN(0x04)
       PublicKey.default,
     );
+  });
+
+  // ─── F-2 guard: ADMIN_OP_NONE must be rejected ────────────────────────────
+  it('throws SSSError when opKind is ADMIN_OP_NONE (0) — F-2 guard', async () => {
+    const mock = makeMockProgram();
+    const mod = new AdminTimelockModule(makeMockProvider(), mock);
+    await expect(
+      mod.proposeTimelockOp({
+        mint: MINT,
+        opKind: ADMIN_OP_NONE,
+        param: 0n,
+        target: PublicKey.default,
+      }),
+    ).rejects.toThrow(SSSError);
+  });
+
+  it('throws with descriptive message when opKind is ADMIN_OP_NONE', async () => {
+    const mock = makeMockProgram();
+    const mod = new AdminTimelockModule(makeMockProvider(), mock);
+    await expect(
+      mod.proposeTimelockOp({
+        mint: MINT,
+        opKind: ADMIN_OP_NONE,
+        param: 0n,
+        target: PublicKey.default,
+      }),
+    ).rejects.toThrow(/ADMIN_OP_NONE/);
+  });
+
+  it('does not call program.methods when opKind is ADMIN_OP_NONE', async () => {
+    const mock = makeMockProgram();
+    const mod = new AdminTimelockModule(makeMockProvider(), mock);
+    try {
+      await mod.proposeTimelockOp({
+        mint: MINT,
+        opKind: ADMIN_OP_NONE,
+        param: 0n,
+        target: PublicKey.default,
+      });
+    } catch (_) {
+      // expected
+    }
+    expect(mock._methodProxy).not.toHaveBeenCalled();
   });
 });
 

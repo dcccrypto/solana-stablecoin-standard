@@ -4,19 +4,40 @@ import { AnchorProvider, BN } from '@coral-xyz/anchor';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /**
- * Bit flag for the circuit-breaker feature.
+ * @deprecated **SECURITY BUG — do not use.**
  *
- * When this flag is set in `StablecoinConfig.feature_flags`, all
- * mint and burn operations are halted until the flag is cleared.
+ * `FLAG_CIRCUIT_BREAKER` is `1n << 7n` (0x80, bit 7) which does NOT match the
+ * on-chain constant. The Anchor program uses `FLAG_CIRCUIT_BREAKER_V2 = 0x01`
+ * (bit 0) for circuit-breaker enforcement. Calling
+ * `setFeatureFlag({ flag: FLAG_CIRCUIT_BREAKER })` sets bit 7, which the program
+ * ignores — the circuit breaker is **never actually triggered**.
  *
- * Matches `FLAG_CIRCUIT_BREAKER` in the Anchor program (bit 7 = 0x80).
+ * **Migration**: replace all usages with `FLAG_CIRCUIT_BREAKER_V2` from
+ * `CircuitBreakerModule`:
  *
- * @example
  * ```ts
- * const active = featureFlags.isFeatureFlagSet(mint, FLAG_CIRCUIT_BREAKER);
+ * // Before (broken):
+ * import { FLAG_CIRCUIT_BREAKER } from './FeatureFlagsModule';
+ *
+ * // After (correct):
+ * import { FLAG_CIRCUIT_BREAKER_V2 } from './CircuitBreakerModule';
+ * await ff.setFeatureFlag({ mint, flag: FLAG_CIRCUIT_BREAKER_V2 });
  * ```
+ *
+ * This constant is retained for backward compatibility only. It will be
+ * removed in the next major release.
  */
-export const FLAG_CIRCUIT_BREAKER = 1n << 7n; // 0x80
+export const FLAG_CIRCUIT_BREAKER = (() => {
+  if (typeof process !== 'undefined' && process.env['NODE_ENV'] !== 'test') {
+    console.warn(
+      '[SSS SDK] DEPRECATION WARNING: FLAG_CIRCUIT_BREAKER (0x80) is incorrect ' +
+      'and does NOT trigger the on-chain circuit breaker. ' +
+      'Use FLAG_CIRCUIT_BREAKER_V2 (0x01) from CircuitBreakerModule instead. ' +
+      'See AUDIT-F1 for details.'
+    );
+  }
+  return 1n << 7n; // 0x80 — WRONG VALUE, kept for backward-compat only
+})();
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

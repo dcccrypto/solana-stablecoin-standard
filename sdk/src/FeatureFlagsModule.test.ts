@@ -39,8 +39,20 @@ function makeMockProvider(accountData: Buffer | null = null) {
 // ─── FLAG_CIRCUIT_BREAKER constant ───────────────────────────────────────────
 
 describe('FLAG_CIRCUIT_BREAKER', () => {
-  it('equals 1n << 7n (0x80)', () => {
+  it('equals 1n << 7n (0x80) — DEPRECATED value retained for backward-compat (F-1)', () => {
+    // The value is preserved for backward compatibility but is WRONG.
+    // Correct constant is FLAG_CIRCUIT_BREAKER_V2 = 0x01 from CircuitBreakerModule.
     expect(FLAG_CIRCUIT_BREAKER).toBe(128n);
+  });
+
+  it('does NOT emit a console.warn in test environment (NODE_ENV=test)', () => {
+    // The IIFE only warns when NODE_ENV !== 'test', so no warning during tests.
+    const warnSpy = vi.spyOn(console, 'warn');
+    // Re-access the constant to confirm no extra warn fired after module load
+    const _val = FLAG_CIRCUIT_BREAKER;
+    void _val;
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
 
