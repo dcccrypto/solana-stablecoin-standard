@@ -868,4 +868,35 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::wallet_rate_limit::remove_wallet_rate_limit_handler(ctx, wallet)
     }
+
+    // -----------------------------------------------------------------------
+    // SSS-134: PRESET_INSTITUTIONAL — Squads V4 multisig native authority
+    // -----------------------------------------------------------------------
+
+    /// Transfer stablecoin authority to a Squads Protocol V4 multisig PDA.
+    ///
+    /// - Sets `config.authority` to the Squads multisig PDA (irreversible).
+    /// - Sets `FLAG_SQUADS_AUTHORITY` in `config.feature_flags`.
+    /// - Sets `config.preset = PRESET_INSTITUTIONAL (4)`.
+    /// - Creates a `SquadsMultisigConfig` PDA with threshold and member list.
+    ///
+    /// After calling this instruction, all authority-gated instructions must be
+    /// invoked via Squads CPI so the multisig PDA appears as a signer.
+    ///
+    /// Recommended for any issuer holding > $1 M in reserves.
+    pub fn init_squads_authority(
+        ctx: Context<InitSquadsAuthority>,
+        params: InitSquadsAuthorityParams,
+    ) -> Result<()> {
+        instructions::squads_authority::init_squads_authority_handler(ctx, params)
+    }
+
+    /// Verify that a signer is the registered Squads V4 multisig PDA for this
+    /// stablecoin.  Emits `SquadsAuthorityVerified`.  Read-only; no state mutation.
+    ///
+    /// Useful for integrators and SDK callers to confirm Squads configuration
+    /// before executing a multisig workflow.
+    pub fn verify_squads_authority(ctx: Context<VerifySquadsAuthority>) -> Result<()> {
+        instructions::squads_authority::verify_squads_authority_handler(ctx)
+    }
 }

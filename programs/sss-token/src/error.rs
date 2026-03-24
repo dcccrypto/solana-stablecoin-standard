@@ -290,4 +290,23 @@ pub enum SssError {
     InvalidRateLimitWindow,
     #[msg("WalletRateLimit: transfer exceeds per-wallet window allowance")]
     WalletRateLimitExceeded,
+    // SSS-134: Squads Protocol V4 multisig authority
+    #[msg("Squads multisig authority is not configured for this stablecoin")]
+    SquadsAuthorityNotSet,
+    #[msg("Squads multisig authority is already configured — cannot reinitialize")]
+    SquadsAuthorityAlreadySet,
+    #[msg("Squads multisig PDA is the zero pubkey — must be a valid Squads PDA")]
+    SquadsMultisigPdaInvalid,
+    #[msg("Squads signer does not match the registered multisig PDA")]
+    SquadsSignerMismatch,
+    #[msg("Squads threshold must be >= 1")]
+    SquadsThresholdZero,
+    #[msg("Squads threshold exceeds the number of provided members")]
+    SquadsThresholdExceedsMembers,
+    #[msg("Squads member list must not be empty")]
+    SquadsMembersEmpty,
+    #[msg("Squads member list exceeds maximum of 10 members")]
+    SquadsMembersTooMany,
+    #[msg("Duplicate pubkey in Squads member list")]
+    SquadsDuplicateMember,
 }

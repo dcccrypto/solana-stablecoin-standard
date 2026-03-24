@@ -85,6 +85,16 @@ pub const FLAG_PSM_DYNAMIC_FEES: u64 = 1 << 13;
 /// rolling window enforcement, useful for corporate treasury controls.
 pub const FLAG_WALLET_RATE_LIMITS: u64 = 1 << 14;
 
+// ---------------------------------------------------------------------------
+// SSS-134: Squads Protocol V4 multisig native authority
+// ---------------------------------------------------------------------------
+/// When set, all authority-gated instructions require the signer to be the
+/// registered Squads V4 multisig PDA.  Irreversible once set.
+pub const FLAG_SQUADS_AUTHORITY: u64 = 1 << 15;
+
+/// PRESET_INSTITUTIONAL (4): all SSS-3 features + Squads V4 multisig authority.
+/// Recommended for issuers holding > $1 M in reserves.
+pub const PRESET_INSTITUTIONAL: u8 = 4;
 
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
@@ -214,6 +224,10 @@ pub struct StablecoinConfig {
     /// For Custom: the CustomPriceFeed PDA pubkey.
     /// Pubkey::default() = feed address enforcement disabled.
     pub oracle_feed: Pubkey,
+    /// SSS-134: Squads Protocol V4 multisig PDA acting as program authority.
+    /// Pubkey::default() = Squads authority not configured.
+    /// Set by `init_squads_authority` (irreversible); also sets FLAG_SQUADS_AUTHORITY.
+    pub squads_multisig: Pubkey,
     pub bump: u8,
 }
 
@@ -1290,4 +1304,41 @@ pub struct WalletRateLimit {
 
 impl WalletRateLimit {
     pub const SEED: &'static [u8] = b"wallet-rate-limit";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-134: SquadsMultisigConfig PDA — threshold + member list for SDK use
+// ---------------------------------------------------------------------------
+
+/// Per-stablecoin metadata for the Squads V4 multisig authority.
+///
+/// Seeds: [b"squads-multisig-config", sss_mint]
+///
+/// Created atomically by `init_squads_authority`.
+/// Threshold and member list are informational — enforcement is delegated to
+/// the Squads on-chain program.  The PDA pubkey itself (`multisig_pda`) is the
+/// canonical signer that must be present for authority-gated instructions.
+#[account]
+pub struct SquadsMultisigConfig {
+    /// The SSS mint this multisig config belongs to.
+    pub sss_mint: Pubkey,
+    /// The Squads V4 multisig PDA — the account that must sign authority ops.
+    pub multisig_pda: Pubkey,
+    /// Approval threshold (m of n). Informational; enforced by Squads program.
+    pub threshold: u8,
+    /// Member pubkeys (up to MAX_MEMBERS = 10).
+    pub members: Vec<Pubkey>,
+    pub bump: u8,
+}
+
+impl SquadsMultisigConfig {
+    pub const SEED: &'static [u8] = b"squads-multisig-config";
+    pub const MAX_MEMBERS: usize = 10;
+
+    /// Returns account space for a given member count (excluding Anchor 8-byte discriminator).
+    pub fn space(member_count: usize) -> usize {
+        // sss_mint: 32, multisig_pda: 32, threshold: 1,
+        // members: 4 (vec len) + 32 * member_count, bump: 1
+        32 + 32 + 1 + 4 + 32 * member_count + 1
+    }
 }

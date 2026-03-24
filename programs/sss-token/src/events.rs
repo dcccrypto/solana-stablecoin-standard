@@ -720,3 +720,31 @@ pub struct WalletRateLimitEnforced {
     /// Whether the window was reset this tx (true = new window started).
     pub window_reset: bool,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-134: Squads Protocol V4 multisig authority
+// ---------------------------------------------------------------------------
+
+/// Emitted when `init_squads_authority` successfully transfers authority to the
+/// Squads V4 multisig PDA.  FLAG_SQUADS_AUTHORITY is set at this point.
+#[event]
+pub struct SquadsAuthorityInitialized {
+    pub mint: Pubkey,
+    /// The Squads V4 multisig PDA that is now the authority.
+    pub multisig_pda: Pubkey,
+    /// Approval threshold (m of n). Informational.
+    pub threshold: u8,
+    /// Number of members registered.
+    pub member_count: u8,
+    /// Previous authority (bare keypair) that authorized the transfer.
+    pub old_authority: Pubkey,
+}
+
+/// Emitted by `verify_squads_authority` when a signer is confirmed as the
+/// registered Squads multisig PDA.
+#[event]
+pub struct SquadsAuthorityVerified {
+    pub mint: Pubkey,
+    pub multisig_pda: Pubkey,
+    pub verified: bool,
+}
