@@ -126,6 +126,7 @@ Endpoints:
 | Feature | Description |
 |---------|-------------|
 | [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | Cryptographic supply commitments — fetch, verify, and manually reproduce Merkle proofs |
+| [Rust CPI Library (`sss-cpi`)](docs/SSS-CPI-LIBRARY.md) | Typed instruction builders, PDA helpers, feature flag constants, and interface version compatibility for programs composing with SSS via CPI (SSS-143) |
 
 ## Documentation
 
