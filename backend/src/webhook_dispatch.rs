@@ -1,17 +1,91 @@
-//! Fire-and-forget webhook dispatch for mint/burn events.
+//! Webhook dispatcher for SSS events — SSS-142 (HMAC signing) + SSS-145 (retry log).
 //!
-//! Uses the hyper HTTP client (already a transitive dependency) to avoid
-//! introducing additional TLS/OpenSSL build requirements.
+//! Each call to `dispatch()` writes a `webhook_delivery_log` row (status=pending)
+//! then spawns a background task for the initial delivery attempt.
+//!
+//! Backoff schedule (1-indexed attempt):
+//!   attempt 1 fails → next_retry_at = now + 1s  (status=failed)
+//!   attempt 2 fails → next_retry_at = now + 5s  (status=failed)
+//!   attempt 3 fails → permanently_failed + emit MetricsAlert
+//!
+//! The retry worker (`webhook_retry_worker`) handles subsequent attempts.
 
+use chrono::{Duration, Utc};
 use serde_json::Value;
+use std::sync::Arc;
 use tracing::{info, warn};
 
 use crate::db::Database;
+use crate::indexer_schema::hmac_sha256_hex;
+
+/// Backoff delay in seconds for attempt n (0-based index = attempt - 1).
+const BACKOFF_SECS: [i64; 2] = [1, 5];
+/// Maximum delivery attempts before permanently failing.
+const MAX_ATTEMPTS: i64 = 3;
+
+/// Compute the next_retry_at timestamp for a given attempt count (1-based).
+/// Returns None if attempt >= MAX_ATTEMPTS (no more retries).
+pub fn next_retry_after(attempt: i64) -> Option<String> {
+    if attempt >= MAX_ATTEMPTS {
+        return None;
+    }
+    let idx = (attempt - 1) as usize;
+    let secs = BACKOFF_SECS.get(idx).copied().unwrap_or(30);
+    Some((Utc::now() + Duration::seconds(secs)).to_rfc3339())
+}
+
+/// Execute one delivery attempt for the given delivery log row.
+/// Updates the log with delivered / failed / permanently_failed status.
+pub async fn execute_attempt(
+    db: &Arc<Database>,
+    delivery_id: &str,
+    attempt: i64,
+    url: &str,
+    body: &Value,
+    secret: Option<&str>,
+) {
+    match post_json(url, body, secret).await {
+        Ok(()) => {
+            info!(url = %url, delivery_id = %delivery_id, "Webhook delivered");
+            if let Err(e) = db.mark_webhook_delivery_delivered(delivery_id) {
+                warn!("Failed to mark delivery {delivery_id} delivered: {e}");
+            }
+        }
+        Err(e) => {
+            warn!(url = %url, attempt = attempt, error = %e, "Webhook delivery failed");
+            let next_retry = next_retry_after(attempt);
+            if next_retry.is_none() {
+                // Permanently fail and emit alert
+                if let Err(e2) = db.mark_webhook_delivery_failed(delivery_id, attempt, None) {
+                    warn!("Failed to mark delivery {delivery_id} permanently_failed: {e2}");
+                }
+                let _ = db.insert_event_log(
+                    "MetricsAlert",
+                    "webhook_retry",
+                    serde_json::json!({
+                        "delivery_id": delivery_id,
+                        "reason": "max_retries_exceeded",
+                        "url": url,
+                    }),
+                    None,
+                    None,
+                );
+            } else {
+                if let Err(e2) = db.mark_webhook_delivery_failed(
+                    delivery_id,
+                    attempt,
+                    next_retry.as_deref(),
+                ) {
+                    warn!("Failed to mark delivery {delivery_id} failed: {e2}");
+                }
+            }
+        }
+    }
+}
 
 /// Dispatch a webhook event to all registered listeners for the given event type.
-/// Each HTTP POST is spawned as a background tokio task; delivery failures are
-/// logged but do not affect the API response.
-pub fn dispatch(db: &Database, event_type: &str, payload: Value) {
+/// Accepts `&Arc<Database>` to allow async tasks to hold a clone.
+pub fn dispatch(db: &Arc<Database>, event_type: &str, payload: Value) {
     let webhooks = match db.list_webhooks() {
         Ok(w) => w,
         Err(e) => {
@@ -25,23 +99,35 @@ pub fn dispatch(db: &Database, event_type: &str, payload: Value) {
             continue;
         }
 
-        let url = wh.url.clone();
         let body = serde_json::json!({
             "event": event_type,
             "data": payload,
         });
+        let payload_str = body.to_string();
+
+        let delivery_id = match db.insert_webhook_delivery(&wh.id, event_type, &payload_str) {
+            Ok(id) => id,
+            Err(e) => {
+                warn!("webhook_dispatch: failed to log delivery for {}: {}", wh.id, e);
+                continue;
+            }
+        };
+
+        let db_clone = Arc::clone(db);
+        let url = wh.url.clone();
+        let secret = wh.secret_key.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = post_json(&url, &body).await {
-                warn!(url = %url, error = %e, "Webhook delivery failed");
-            } else {
-                info!(url = %url, "Webhook delivered");
-            }
+            execute_attempt(&db_clone, &delivery_id, 1, &url, &body, secret.as_deref()).await;
         });
     }
 }
 
-async fn post_json(url: &str, body: &Value) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn post_json(
+    url: &str,
+    body: &Value,
+    secret: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use hyper::body::Bytes;
     use hyper::{Method, Request};
     use hyper_util::client::legacy::Client;
@@ -49,13 +135,19 @@ async fn post_json(url: &str, body: &Value) -> Result<(), Box<dyn std::error::Er
     use http_body_util::Full;
 
     let json_bytes = serde_json::to_vec(body)?;
+    let json_str = std::str::from_utf8(&json_bytes)?;
 
-    let req = Request::builder()
+    let mut req_builder = Request::builder()
         .method(Method::POST)
         .uri(url)
-        .header("content-type", "application/json")
-        .body(Full::new(Bytes::from(json_bytes)))?;
+        .header("content-type", "application/json");
 
+    if let Some(sec) = secret {
+        let sig = hmac_sha256_hex(sec, json_str);
+        req_builder = req_builder.header("X-SSS-Signature", format!("sha256={}", sig));
+    }
+
+    let req = req_builder.body(Full::new(Bytes::from(json_bytes)))?;
     let client = Client::builder(TokioExecutor::new()).build_http::<Full<Bytes>>();
     let resp = client.request(req).await?;
     info!(status = %resp.status(), "Webhook HTTP response");

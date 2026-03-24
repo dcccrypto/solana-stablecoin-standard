@@ -84,6 +84,11 @@ pub struct AuditEntry {
 pub struct WebhookRequest {
     pub url: String,
     pub events: Vec<String>,
+    /// Optional HMAC-SHA256 secret for signing deliveries.
+    /// If provided, each webhook POST will include an
+    /// `X-SSS-Signature: sha256=<hex>` header.
+    #[serde(default)]
+    pub secret_key: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -91,6 +96,9 @@ pub struct WebhookEntry {
     pub id: String,
     pub url: String,
     pub events: Vec<String>,
+    /// Stored secret key (hashed before storage; returned as-is on registration only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret_key: Option<String>,
     pub created_at: String,
 }
 
@@ -294,4 +302,24 @@ pub struct LiquidationsQuery {
     pub limit: Option<u32>,
     /// Row offset for pagination (default: 0).
     pub offset: Option<u32>,
+}
+
+/// SSS-145: webhook delivery log entry.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WebhookDeliveryLog {
+    pub id: String,
+    pub webhook_id: String,
+    pub event_type: String,
+    pub payload: String,
+    pub status: String,
+    pub attempt_count: i64,
+    pub last_attempt_at: Option<String>,
+    pub next_retry_at: Option<String>,
+    pub created_at: String,
+}
+
+/// SSS-145: query params for GET /api/webhook-deliveries.
+#[derive(Debug, Deserialize)]
+pub struct WebhookDeliveriesQuery {
+    pub status: Option<String>,
 }
