@@ -128,6 +128,7 @@ Endpoints:
 | [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | On-chain PoR PDA (SSS-123): submit attestations, verify reserve ratio, breach events, Kani proofs |
 | [Reserve Composition](docs/RESERVE-REPORTING.md) | On-chain breakdown of backing asset types per mint (SSS-124): cash, T-bills, repo, other |
 | [Redemption Guarantee at Par](docs/REDEMPTION-GUARANTEE.md) | On-chain 1:1 redemption with SLA enforcement (SSS-125): ~3 min SLA, 10% penalty from insurance fund on breach |
+| [Instant Redemption Pool](docs/REDEMPTION-POOL.md) | Pre-funded on-chain liquidity pool for atomic instant redemption (SSS-137): 1:1 par, ≤5% fee, permissionless replenishment, falls back to SSS-125 SLA when pool is empty |
 | [Travel Rule Compliance](docs/TRAVEL-RULE.md) | FATF Travel Rule (SSS-127): TravelRuleRecord PDA, VASP-to-VASP encrypted payloads, backend indexer + REST API |
 | [Sanctions Oracle](docs/SANCTIONS-ORACLE.md) | Pluggable OFAC/sanctions screening (SSS-128): SanctionsRecord PDA, oracle registration, transfer hook enforcement, staleness window |
 | [ZK Credentials](docs/ZK-CREDENTIALS.md) | Selective-disclosure ZK compliance proofs (SSS-129): CredentialRegistry + CredentialRecord PDAs, Groth16 proofs, not_sanctioned / kyc_passed / accredited_investor types, backend REST API |
