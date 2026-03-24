@@ -281,4 +281,13 @@ pub enum SssError {
     PsmCurveConfigNotFound,
     #[msg("Swap output would be zero — amount too small for current fee")]
     PsmSwapOutputZero,
+    // SSS-133: Per-wallet rate limiting
+    #[msg("FLAG_WALLET_RATE_LIMITS is not enabled for this stablecoin")]
+    WalletRateLimitsNotEnabled,
+    #[msg("WalletRateLimit: max_transfer_per_window must be > 0")]
+    InvalidRateLimitAmount,
+    #[msg("WalletRateLimit: window_slots must be > 0")]
+    InvalidRateLimitWindow,
+    #[msg("WalletRateLimit: transfer exceeds per-wallet window allowance")]
+    WalletRateLimitExceeded,
 }

@@ -839,4 +839,33 @@ pub mod sss_token {
     pub fn get_psm_quote(ctx: Context<GetPsmQuote>, amount_in: u64) -> Result<()> {
         instructions::psm_amm_slippage::get_psm_quote_handler(ctx, amount_in)
     }
+
+    // -----------------------------------------------------------------------
+    // SSS-133: Per-wallet rate limiting — address-level spend controls
+    // -----------------------------------------------------------------------
+
+    /// Create or update a `WalletRateLimit` PDA for a specific wallet.
+    /// Authority-only.  FLAG_WALLET_RATE_LIMITS must be set.
+    ///
+    /// `params.wallet`: token account owner to rate-limit.
+    /// `params.max_transfer_per_window`: maximum tokens per rolling window.
+    /// `params.window_slots`: window duration in slots.
+    ///
+    /// Resets the current window counters on every call (allowing admins
+    /// to adjust limits without waiting for window expiry).
+    pub fn set_wallet_rate_limit(
+        ctx: Context<SetWalletRateLimit>,
+        params: SetWalletRateLimitParams,
+    ) -> Result<()> {
+        instructions::wallet_rate_limit::set_wallet_rate_limit_handler(ctx, params)
+    }
+
+    /// Remove a `WalletRateLimit` PDA for a specific wallet and reclaim rent.
+    /// Authority-only.  Removes all rate limiting for the given wallet address.
+    pub fn remove_wallet_rate_limit(
+        ctx: Context<RemoveWalletRateLimit>,
+        wallet: Pubkey,
+    ) -> Result<()> {
+        instructions::wallet_rate_limit::remove_wallet_rate_limit_handler(ctx, wallet)
+    }
 }

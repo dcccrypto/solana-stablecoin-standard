@@ -683,3 +683,40 @@ pub struct PsmQuoteEvent {
     /// Current vault amount at time of query.
     pub vault_amount: u64,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-133: Per-wallet rate limiting
+// ---------------------------------------------------------------------------
+
+/// Emitted when a `WalletRateLimit` PDA is created for a wallet.
+#[event]
+pub struct WalletRateLimitSet {
+    pub mint: Pubkey,
+    pub wallet: Pubkey,
+    pub max_transfer_per_window: u64,
+    pub window_slots: u64,
+    pub authority: Pubkey,
+}
+
+/// Emitted when a `WalletRateLimit` PDA is removed for a wallet.
+#[event]
+pub struct WalletRateLimitRemoved {
+    pub mint: Pubkey,
+    pub wallet: Pubkey,
+    pub authority: Pubkey,
+}
+
+/// Emitted when the transfer hook enforces a rate-limit window check.
+#[event]
+pub struct WalletRateLimitEnforced {
+    pub mint: Pubkey,
+    pub wallet: Pubkey,
+    /// Amount transferred in this tx.
+    pub amount: u64,
+    /// Total transferred in the current window after this tx.
+    pub transferred_this_window: u64,
+    /// Remaining allowance in this window.
+    pub remaining_allowance: u64,
+    /// Whether the window was reset this tx (true = new window started).
+    pub window_reset: bool,
+}
