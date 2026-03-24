@@ -237,4 +237,34 @@ pub enum SssError {
     InvalidZkProof,
     #[msg("Credential registry is not initialised for this mint (FLAG_ZK_CREDENTIALS not set)")]
     CredentialRegistryNotFound,
+    // SSS-120: Authority rotation errors
+    #[msg("Proposed new authority is the same as the current authority")]
+    RotationNewAuthorityIsCurrent,
+    #[msg("Backup authority is the same as the current authority")]
+    RotationBackupIsCurrent,
+    #[msg("Backup authority must be different from the new authority")]
+    RotationBackupEqualsNew,
+    #[msg("New or backup authority pubkey cannot be the default (zero) pubkey")]
+    RotationZeroPubkey,
+    #[msg("Emergency recovery window (7 days) has not elapsed since proposal")]
+    EmergencyRecoveryNotReady,
+    // SSS-121: Guardian config errors
+    #[msg("Guardian list is empty — at least one guardian is required")]
+    GuardianListEmpty,
+    #[msg("Guardian list is full — maximum 7 guardians allowed")]
+    GuardianListFull,
+    #[msg("Invalid guardian threshold — must be >= 1 and <= guardian count")]
+    InvalidGuardianThreshold,
+    #[msg("Duplicate guardian pubkey in guardian list")]
+    DuplicateGuardian,
+    #[msg("Caller is not a registered guardian for this stablecoin")]
+    NotAGuardian,
+    // SSS-119 / SSS-122: Config versioning
+    #[msg("Config version is too old — run upgrade_config before calling this instruction")]
+    ConfigVersionTooOld,
+    // SSS-119: Oracle errors
+    #[msg("Oracle feed is not configured on this stablecoin — call set_oracle_config first")]
+    OracleNotConfigured,
+    #[msg("Invalid oracle type — must be 0 (Pyth), 1 (Switchboard), or 2 (Custom)")]
+    InvalidOracleType,
 }

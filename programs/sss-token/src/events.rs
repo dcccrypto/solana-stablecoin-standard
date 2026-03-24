@@ -505,3 +505,74 @@ pub struct CredentialRevoked {
     pub holder: Pubkey,
     pub slot: u64,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-120: Authority rotation events
+// ---------------------------------------------------------------------------
+
+/// Emitted when an authority rotation proposal is submitted.
+#[event]
+pub struct AuthorityRotationProposed {
+    pub mint: Pubkey,
+    pub current_authority: Pubkey,
+    pub new_authority: Pubkey,
+    pub backup_authority: Pubkey,
+    pub proposed_slot: u64,
+    pub timelock_slots: u64,
+}
+
+/// Emitted when the new authority accepts the rotation within the timelock window.
+#[event]
+pub struct AuthorityRotationCompleted {
+    pub mint: Pubkey,
+    pub prev_authority: Pubkey,
+    pub new_authority: Pubkey,
+}
+
+/// Emitted when the backup authority emergency-recovers after the 7-day window.
+#[event]
+pub struct AuthorityRotationEmergencyRecovered {
+    pub mint: Pubkey,
+    pub prev_authority: Pubkey,
+    pub backup_authority: Pubkey,
+}
+
+/// Emitted when the current authority cancels a pending rotation proposal.
+#[event]
+pub struct AuthorityRotationCancelled {
+    pub mint: Pubkey,
+    pub authority: Pubkey,
+    pub cancelled_new_authority: Pubkey,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-121: Guardian pause events
+// ---------------------------------------------------------------------------
+
+/// Emitted when a guardian opens a new pause proposal.
+#[event]
+pub struct GuardianPauseProposed {
+    pub mint: Pubkey,
+    pub proposer: Pubkey,
+    pub proposal_id: u64,
+    pub reason: [u8; 32],
+}
+
+/// Emitted when a guardian casts a YES vote on a pause proposal.
+#[event]
+pub struct GuardianPauseVoted {
+    pub mint: Pubkey,
+    pub guardian: Pubkey,
+    pub proposal_id: u64,
+    pub votes_so_far: u8,
+    pub threshold: u8,
+}
+
+/// Emitted when a guardian pause is lifted (by authority or full quorum).
+#[event]
+pub struct GuardianPauseLifted {
+    pub mint: Pubkey,
+    pub lifted_by: Pubkey,
+    /// true if lifted by full guardian quorum, false if lifted by authority.
+    pub by_quorum: bool,
+}
