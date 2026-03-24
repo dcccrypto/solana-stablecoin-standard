@@ -270,4 +270,15 @@ pub enum SssError {
     // SSS-131: Graduated liquidation bonus errors
     #[msg("Invalid liquidation tier config — check threshold ordering and bonus bounds")]
     InvalidLiquidationTierConfig,
+    // SSS-132: PSM dynamic AMM-style slippage curves
+    #[msg("PSM dynamic fees not enabled — FLAG_PSM_DYNAMIC_FEES is not set")]
+    PsmDynamicFeesNotEnabled,
+    #[msg("PsmCurveConfig: base_fee_bps must be <= max_fee_bps")]
+    InvalidPsmCurveBaseFee,
+    #[msg("PsmCurveConfig: max_fee_bps exceeds ceiling of 2000 bps (20%)")]
+    InvalidPsmCurveMaxFee,
+    #[msg("PsmCurveConfig not found — init_psm_curve_config first")]
+    PsmCurveConfigNotFound,
+    #[msg("Swap output would be zero — amount too small for current fee")]
+    PsmSwapOutputZero,
 }

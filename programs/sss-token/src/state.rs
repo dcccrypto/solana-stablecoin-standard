@@ -71,6 +71,12 @@ pub const FLAG_PID_FEE_CONTROL: u64 = 1 << 11;
 /// the flat `CollateralConfig.liquidation_bonus_bps`.
 pub const FLAG_GRAD_LIQUIDATION_BONUS: u64 = 1 << 12;
 
+/// SSS-132: PSM dynamic AMM-style slippage flag (bit 13): when set, PSM redeem
+/// uses a depth-based fee curve from a `PsmCurveConfig` PDA rather than the flat
+/// `redemption_fee_bps` in `StablecoinConfig`.
+/// fee_bps = base_fee + k * (reserve_imbalance / total_reserves)^2
+pub const FLAG_PSM_DYNAMIC_FEES: u64 = 1 << 13;
+
 
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
@@ -1133,5 +1139,99 @@ impl LiquidationBonusConfig {
             self.tier1_bonus_bps
         };
         raw.min(self.max_bonus_bps)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SSS-132: PSM dynamic AMM-style slippage curves
+// ---------------------------------------------------------------------------
+
+/// PsmCurveConfig PDA — one per stablecoin mint when FLAG_PSM_DYNAMIC_FEES is set.
+/// Seeds: [b"psm-curve-config", sss_mint]
+///
+/// Replaces the flat `redemption_fee_bps` with a depth-based AMM fee curve:
+///
+///   fee_bps = base_fee_bps + k * (imbalance / total_reserves)^2
+///
+/// where imbalance = |vault_amount - ideal_balance|, ideal_balance = total_reserves / 2,
+/// and k = `curve_k` (the "steepness" amplifier).  The result is clamped to [0, max_fee_bps].
+///
+/// When the PSM pool is perfectly balanced (50/50), the fee equals `base_fee_bps`.
+/// As the pool becomes one-sided, fees increase quadratically up to `max_fee_bps`.
+///
+/// The `get_psm_quote` read-only instruction uses this PDA to return a fee estimate
+/// for frontends without executing a swap.
+#[account]
+#[derive(InitSpace)]
+pub struct PsmCurveConfig {
+    /// The SSS stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// Authority that may update this config (= StablecoinConfig.authority).
+    pub authority: Pubkey,
+    /// Base fee in basis points when the pool is perfectly balanced (e.g. 5 = 0.05%).
+    /// Must be ≤ max_fee_bps.
+    pub base_fee_bps: u16,
+    /// Curve steepness amplifier (k).  Fee delta = k * (imbalance_ratio)^2 in bps.
+    /// Stored scaled by 1_000_000 so fractional k values are representable.
+    /// e.g. k=500_000 means at 100% imbalance, delta = 500_000 * 1 / 1_000_000 = 0.5 bps.
+    /// A k of 10_000_000_000 at full imbalance adds 10_000 bps (100%) — clamped to max.
+    pub curve_k: u64,
+    /// Maximum fee in basis points (ceiling clamping, e.g. 500 = 5%).
+    /// Must be ≤ MAX_PSM_CURVE_FEE_BPS (2000 = 20%).
+    pub max_fee_bps: u16,
+    pub bump: u8,
+}
+
+impl PsmCurveConfig {
+    pub const SEED: &'static [u8] = b"psm-curve-config";
+    /// Absolute ceiling on PSM dynamic fees: 20% (2000 bps).
+    pub const MAX_FEE_BPS: u16 = 2_000;
+
+    /// Compute the dynamic PSM fee for a given vault state.
+    ///
+    /// `vault_amount`:   current collateral held in the PSM reserve vault (native units).
+    /// `total_reserves`: total collateral including all sources (used as denominator).
+    ///
+    /// Returns fee_bps clamped to [base_fee_bps, max_fee_bps].
+    ///
+    /// If `total_reserves` == 0, returns `base_fee_bps` (no imbalance can be computed).
+    pub fn compute_fee(&self, vault_amount: u64, total_reserves: u64) -> u16 {
+        if total_reserves == 0 {
+            return self.base_fee_bps;
+        }
+
+        // ideal_balance = total_reserves / 2 (perfect 50/50 balance point)
+        let ideal: u128 = total_reserves as u128 / 2;
+        let vault: u128 = vault_amount as u128;
+
+        // imbalance = |vault - ideal| in [0, total_reserves/2]
+        let imbalance: u128 = if vault > ideal {
+            vault - ideal
+        } else {
+            ideal - vault
+        };
+
+        // imbalance_ratio = imbalance / total_reserves  in [0, 1], scaled as u128 * 1e12
+        // imbalance_ratio^2 = imbalance^2 / total_reserves^2, scaled as u128 * 1e12
+        // To avoid overflow: we compute (imbalance * 1_000_000)^2 / total_reserves^2
+        // but that can overflow. Use 32-bit precision: ratio_1e6 = imbalance * 1_000_000 / total_reserves
+        let ratio_1e6: u128 = imbalance
+            .saturating_mul(1_000_000)
+            .checked_div(total_reserves as u128)
+            .unwrap_or(0);
+
+        // ratio_squared_1e12 = ratio_1e6^2 (dimensionless, 1e12 scale)
+        let ratio_sq_1e12: u128 = ratio_1e6.saturating_mul(ratio_1e6);
+
+        // fee_delta_bps = curve_k * ratio_sq / 1e12
+        // curve_k already encodes the desired bps delta at full imbalance
+        let fee_delta_bps: u128 = (self.curve_k as u128)
+            .saturating_mul(ratio_sq_1e12)
+            .checked_div(1_000_000_000_000u128)
+            .unwrap_or(0);
+
+        let raw_fee = (self.base_fee_bps as u128).saturating_add(fee_delta_bps);
+        let clamped = raw_fee.min(self.max_fee_bps as u128) as u16;
+        clamped
     }
 }

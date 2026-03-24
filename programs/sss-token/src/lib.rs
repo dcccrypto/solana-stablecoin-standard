@@ -802,4 +802,41 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::liquidation_bonus::update_liquidation_bonus_config_handler(ctx, params)
     }
+
+    // -----------------------------------------------------------------------
+    // SSS-132: PSM dynamic AMM-style slippage curves
+    // -----------------------------------------------------------------------
+
+    /// Initialise a `PsmCurveConfig` PDA and enable FLAG_PSM_DYNAMIC_FEES.
+    /// Authority-only.  SSS-3 only.
+    /// Sets base_fee_bps, curve_k (steepness), and max_fee_bps.
+    /// After init, `psm_dynamic_swap` replaces `redeem` for dynamic-fee PSM ops.
+    pub fn init_psm_curve_config(
+        ctx: Context<InitPsmCurveConfig>,
+        params: InitPsmCurveConfigParams,
+    ) -> Result<()> {
+        instructions::psm_amm_slippage::init_psm_curve_config_handler(ctx, params)
+    }
+
+    /// Update curve parameters on an existing `PsmCurveConfig`.
+    /// Authority-only.
+    pub fn update_psm_curve_config(
+        ctx: Context<UpdatePsmCurveConfig>,
+        params: UpdatePsmCurveConfigParams,
+    ) -> Result<()> {
+        instructions::psm_amm_slippage::update_psm_curve_config_handler(ctx, params)
+    }
+
+    /// PSM swap with dynamic AMM-style fee.
+    /// Burns `amount` SSS tokens; releases `amount - dynamic_fee` collateral.
+    /// FLAG_PSM_DYNAMIC_FEES must be set; uses `PsmCurveConfig` for fee computation.
+    pub fn psm_dynamic_swap(ctx: Context<PsmDynamicSwap>, amount: u64) -> Result<()> {
+        instructions::psm_amm_slippage::psm_dynamic_swap_handler(ctx, amount)
+    }
+
+    /// Read-only PSM fee preview — emits `PsmQuoteEvent` with expected output and fee.
+    /// Use with `simulateTransaction` — no state is mutated.
+    pub fn get_psm_quote(ctx: Context<GetPsmQuote>, amount_in: u64) -> Result<()> {
+        instructions::psm_amm_slippage::get_psm_quote_handler(ctx, amount_in)
+    }
 }
