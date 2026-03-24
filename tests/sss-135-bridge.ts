@@ -79,7 +79,7 @@ async function sendTxWithRetry(
   throw lastErr;
 }
 
-const FLAG_BRIDGE_ENABLED = new BN(1).shln(17); // 1 << 17
+const FLAG_BRIDGE_ENABLED = new BN(1).shln(13); // 1 << 13
 const FLAG_CIRCUIT_BREAKER = new BN(1); // 1 << 0
 const BRIDGE_TYPE_WORMHOLE = 1;
 const BRIDGE_TYPE_LAYERZERO = 2;

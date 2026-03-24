@@ -1,6 +1,6 @@
 //! SSS cross-chain bridge hooks — Wormhole + LayerZero integration.
 //!
-//! Implements `FLAG_BRIDGE_ENABLED` (bit 17).
+//! Implements `FLAG_BRIDGE_ENABLED` (bit 13).
 //!
 //! Architecture:
 //! - `BridgeConfig` PDA: per-mint bridge configuration (bridge type, program, limits, fee).
@@ -305,7 +305,7 @@ pub fn bridge_in_handler(
     recipient: Pubkey,
 ) -> Result<()> {
     let config = &ctx.accounts.config;
-    let _bc = &ctx.accounts.bridge_config;
+    let bc = &ctx.accounts.bridge_config;
 
     // Prerequisite checks
     require!(amount > 0, SssError::ZeroAmount);
