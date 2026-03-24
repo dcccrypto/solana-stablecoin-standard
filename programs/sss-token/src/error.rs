@@ -214,4 +214,11 @@ pub enum SssError {
     TravelRuleRecordInvalid,
     #[msg("Travel Rule threshold must be greater than zero when FLAG_TRAVEL_RULE is set")]
     TravelRuleThresholdNotSet,
+    // SSS-128: Sanctions oracle
+    #[msg("Transfer rejected: sender is on the sanctions list")]
+    SanctionedAddress,
+    #[msg("Sanctions record is stale — oracle has not updated within sanctions_max_staleness_slots")]
+    SanctionsRecordStale,
+    #[msg("Sanctions oracle is not configured on this stablecoin (sanctions_oracle is default)")]
+    SanctionsOracleNotConfigured,
 }

@@ -635,4 +635,45 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::travel_rule::close_travel_rule_record_handler(ctx, nonce)
     }
+
+    // -------------------------------------------------------------------------
+    // SSS-128: Sanctions screening oracle
+    // -------------------------------------------------------------------------
+
+    /// Register a sanctions oracle signer on this stablecoin config.
+    /// Sets `sanctions_oracle`, `sanctions_max_staleness_slots`, and enables
+    /// FLAG_SANCTIONS_ORACLE.  Authority only.
+    pub fn set_sanctions_oracle(
+        ctx: Context<SetSanctionsOracle>,
+        oracle: Pubkey,
+        max_staleness_slots: u64,
+    ) -> Result<()> {
+        instructions::sanctions_oracle::set_sanctions_oracle_handler(ctx, oracle, max_staleness_slots)
+    }
+
+    /// Deregister the sanctions oracle and disable FLAG_SANCTIONS_ORACLE.
+    /// Authority only.
+    pub fn clear_sanctions_oracle(ctx: Context<ClearSanctionsOracle>) -> Result<()> {
+        instructions::sanctions_oracle::clear_sanctions_oracle_handler(ctx)
+    }
+
+    /// Create or update a `SanctionsRecord` PDA for a given wallet.
+    /// Caller must sign as the registered `config.sanctions_oracle`.
+    /// Used by compliance providers (Chainalysis, Elliptic, TRM, etc.) to flag wallets.
+    pub fn update_sanctions_record(
+        ctx: Context<UpdateSanctionsRecord>,
+        wallet: Pubkey,
+        is_sanctioned: bool,
+    ) -> Result<()> {
+        instructions::sanctions_oracle::update_sanctions_record_handler(ctx, wallet, is_sanctioned)
+    }
+
+    /// Close a `SanctionsRecord` PDA and reclaim rent.
+    /// Caller must sign as the registered `config.sanctions_oracle`.
+    pub fn close_sanctions_record(
+        ctx: Context<CloseSanctionsRecord>,
+        wallet: Pubkey,
+    ) -> Result<()> {
+        instructions::sanctions_oracle::close_sanctions_record_handler(ctx, wallet)
+    }
 }
