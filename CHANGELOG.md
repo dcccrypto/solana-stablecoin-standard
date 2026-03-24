@@ -13,6 +13,16 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 - `docs/SSS-2.md` — compliant preset specification
 - `docs/SSS-3.md` — trustless collateral-backed preset reference design
 
+### SSS-135 — Squads Signer Enforcement Across All Authority-Gated Instructions
+
+- `docs/SSS-4-INSTITUTIONAL.md` — added SSS-135 section documenting the enforcement gap closure:
+  `verify_squads_signer` guard added to all 31 authority-gated instruction handlers across 26 files.
+  Prior to this commit, enabling SSS-4 (`FLAG_SQUADS_AUTHORITY`) still allowed the bare keypair to
+  invoke legacy authority paths. Now all authority-gated instructions reject non-Squads-PDA signers
+  when the flag is active. Includes full table of guarded instructions and two intentional exceptions
+  (`update_stability_fee_pid`, `rotate_credential_root`).
+- `CHANGELOG.md` — updated [Unreleased] with SSS-135 entry
+
 ---
 
 ## [0.4.0] — 2026-03-16 (Sprint: Mainnet Readiness + Liquidation Analytics)
