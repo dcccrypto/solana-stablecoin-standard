@@ -1086,6 +1086,8 @@ mod proofs {
         if accept_ready && !emergency_ready {
             assert!(!emergency_ready);
         }
+    }
+
     // ── SSS-121: Guardian Multisig Emergency Pause ────────────────────────────
 
     /// WHAT: A guardian can never mint tokens.
