@@ -750,20 +750,54 @@ pub struct SquadsAuthorityVerified {
 }
 
 // ---------------------------------------------------------------------------
-// SSS-145: Supply cap enforcement + PoR mint halt
+// SSS-135: Cross-chain bridge events
 // ---------------------------------------------------------------------------
 
-/// Emitted when a mint attempt is rejected because FLAG_POR_HALT_ON_BREACH is
-/// active and the latest PoR attestation shows a reserve breach.
+/// Emitted when tokens are bridged out of Solana.
 #[event]
-pub struct MintHaltedByPoRBreach {
-    pub mint: Pubkey,
-    /// Current reserve ratio from the PoR PDA (basis points).
-    pub current_ratio_bps: u64,
-    /// Minimum acceptable ratio (from StablecoinConfig).
-    pub min_ratio_bps: u64,
-    /// Slot of the last PoR attestation.
-    pub last_attestation_slot: u64,
-    /// Amount that was attempted.
-    pub attempted_amount: u64,
+pub struct BridgeOut {
+    /// The SSS stablecoin mint.
+    pub sss_mint: Pubkey,
+    /// The sender who initiated the bridge-out.
+    pub sender: Pubkey,
+    /// Net tokens burned (after fee deduction).
+    pub amount: u64,
+    /// Fee burned (in native token units, 0 if bridge_fee_bps == 0).
+    pub fee_amount: u64,
+    /// Target chain ID (Wormhole chain ID or LayerZero chain ID).
+    pub target_chain: u16,
+    /// Recipient address on the target chain (32-byte universal address).
+    pub recipient_address: [u8; 32],
+    /// Bridge type: 1 = Wormhole, 2 = LayerZero.
+    pub bridge_type: u8,
+}
+
+/// Emitted when tokens are bridged into Solana.
+#[event]
+pub struct BridgeIn {
+    /// The SSS stablecoin mint.
+    pub sss_mint: Pubkey,
+    /// The recipient who received the minted tokens.
+    pub recipient: Pubkey,
+    /// Tokens minted.
+    pub amount: u64,
+    /// Source chain ID.
+    pub source_chain: u16,
+    /// Bridge type: 1 = Wormhole, 2 = LayerZero.
+    pub bridge_type: u8,
+}
+
+/// Emitted when bridge config is initialized.
+#[event]
+pub struct BridgeConfigInitialized {
+    /// The SSS stablecoin mint.
+    pub sss_mint: Pubkey,
+    /// Bridge type.
+    pub bridge_type: u8,
+    /// Bridge program address.
+    pub bridge_program: Pubkey,
+    /// Max bridge amount per tx (0 = unlimited).
+    pub max_bridge_amount_per_tx: u64,
+    /// Fee in basis points.
+    pub bridge_fee_bps: u16,
 }

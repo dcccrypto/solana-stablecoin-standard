@@ -866,4 +866,49 @@ pub mod sss_token {
     pub fn verify_squads_authority(ctx: Context<VerifySquadsAuthority>) -> Result<()> {
         instructions::squads_authority::verify_squads_authority_handler(ctx)
     }
+
+    // ─── SSS-135: Cross-Chain Bridge ─────────────────────────────────────────
+
+    /// Initialize the bridge config for a mint.  Authority-only.
+    /// Enables FLAG_BRIDGE_ENABLED separately via set_feature_flag (timelock guarded).
+    pub fn init_bridge_config(
+        ctx: Context<InitBridgeConfig>,
+        bridge_type: u8,
+        bridge_program: Pubkey,
+        max_bridge_amount_per_tx: u64,
+        bridge_fee_bps: u16,
+        fee_vault: Pubkey,
+    ) -> Result<()> {
+        instructions::bridge::init_bridge_config_handler(
+            ctx,
+            bridge_type,
+            bridge_program,
+            max_bridge_amount_per_tx,
+            bridge_fee_bps,
+            fee_vault,
+        )
+    }
+
+    /// Bridge tokens out: burns `amount` from sender's token account,
+    /// emits BridgeOut event for off-chain relayer to process.
+    /// Respects paused, circuit breaker, max_bridge_amount_per_tx, fee.
+    pub fn bridge_out(
+        ctx: Context<BridgeTokensOut>,
+        amount: u64,
+        target_chain: u16,
+        recipient_address: [u8; 32],
+    ) -> Result<()> {
+        instructions::bridge::bridge_out_handler(ctx, amount, target_chain, recipient_address)
+    }
+
+    /// Bridge tokens in: verifies bridge proof, mints `amount` to recipient.
+    /// Respects paused, circuit breaker, max_supply.
+    pub fn bridge_in(
+        ctx: Context<BridgeTokensIn>,
+        proof: BridgeProof,
+        amount: u64,
+        recipient: Pubkey,
+    ) -> Result<()> {
+        instructions::bridge::bridge_in_handler(ctx, proof, amount, recipient)
+    }
 }

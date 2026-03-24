@@ -92,6 +92,15 @@ pub const FLAG_WALLET_RATE_LIMITS: u64 = 1 << 14;
 /// registered Squads V4 multisig PDA.  Irreversible once set.
 pub const FLAG_SQUADS_AUTHORITY: u64 = 1 << 15;
 
+/// SSS-145: PoR halt on breach flag (bit 16): when set, minting is halted if the
+/// PoR attestation shows a reserve breach.
+pub const FLAG_POR_HALT_ON_BREACH: u64 = 1 << 16;
+
+/// SSS-135: Cross-chain bridge flag (bit 17): when set, `bridge_out` and `bridge_in`
+/// instructions are enabled.  Requires a `BridgeConfig` PDA to be initialized
+/// via `init_bridge_config`.  See docs/CROSS-CHAIN-BRIDGE.md for details.
+pub const FLAG_BRIDGE_ENABLED: u64 = 1 << 17;
+
 /// PRESET_INSTITUTIONAL (4): all SSS-3 features + Squads V4 multisig authority.
 /// Recommended for issuers holding > $1 M in reserves.
 pub const PRESET_INSTITUTIONAL: u8 = 4;
@@ -1352,4 +1361,46 @@ impl SquadsMultisigConfig {
         // members: 4 (vec len) + 32 * member_count, bump: 1
         32 + 32 + 1 + 4 + 32 * member_count + 1
     }
+}
+
+// ---------------------------------------------------------------------------
+// SSS-135: Cross-Chain Bridge — BridgeConfig PDA
+// ---------------------------------------------------------------------------
+
+/// Cross-chain bridge configuration PDA — one per stablecoin mint.
+/// Seeds: [b"bridge-config", sss_mint]
+///
+/// Stores bridge type, bridge program address, per-tx limits and fee.
+/// Created by `init_bridge_config`; activated by enabling FLAG_BRIDGE_ENABLED
+/// via `set_feature_flag` (subject to admin timelock).
+#[account]
+#[derive(InitSpace)]
+pub struct BridgeConfig {
+    /// The SSS stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// Bridge type: 1 = Wormhole, 2 = LayerZero.
+    pub bridge_type: u8,
+    /// Address of the bridge program (Wormhole core bridge or LayerZero endpoint).
+    /// `bridge_in` verifies proofs by CPI to this program in production.
+    pub bridge_program: Pubkey,
+    /// Maximum tokens per bridge_out transaction (0 = unlimited).
+    pub max_bridge_amount_per_tx: u64,
+    /// Bridge fee in basis points (e.g. 10 = 0.1%). Max 1000 bps (10%).
+    /// Deducted from bridge_out amount; fee is burned (deflationary).
+    pub bridge_fee_bps: u16,
+    /// Protocol fee vault token account address (receives fee tokens).
+    pub fee_vault: Pubkey,
+    /// Running total of tokens bridged out (net of fees).
+    pub total_bridged_out: u64,
+    /// Running total of tokens bridged in.
+    pub total_bridged_in: u64,
+    pub bump: u8,
+}
+
+impl BridgeConfig {
+    pub const SEED: &'static [u8] = b"bridge-config";
+    /// Bridge type: Wormhole
+    pub const BRIDGE_TYPE_WORMHOLE: u8 = 1;
+    /// Bridge type: LayerZero
+    pub const BRIDGE_TYPE_LAYERZERO: u8 = 2;
 }
