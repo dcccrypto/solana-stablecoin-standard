@@ -152,9 +152,60 @@ const [squadsConfigPda] = PublicKey.findProgramAddressSync(
 
 ---
 
+## SSS-135: Squads Signer Enforcement Across All Authority-Gated Instructions
+
+**Commit:** `1e4967e` — `feat(sss-135): enforce verify_squads_signer in all authority-gated instructions`
+
+SSS-134 introduced `verify_squads_signer` and `FLAG_SQUADS_AUTHORITY`, but the guard was only applied to the `init_squads_authority` bootstrap path.  A bare keypair could still invoke all other authority-gated instructions after SSS-4 activation by calling the legacy authority path.
+
+SSS-135 closes this enforcement gap.  Every authority-gated handler now opens with:
+
+```rust
+if ctx.accounts.config.feature_flags & FLAG_SQUADS_AUTHORITY != 0 {
+    verify_squads_signer(&ctx.accounts.config, &ctx.accounts.authority.key())?;
+}
+```
+
+### Guarded Instructions (31 handlers, 26 files)
+
+| Category | Instructions |
+|---|---|
+| Governance | `pause`, `set_feature_flag`, `clear_feature_flag` |
+| Minter management | `revoke_minter`, `update_minter` |
+| Oracle | `set_oracle_config`, `init_custom_price_feed`, `update_custom_price` |
+| Fees | `set_stability_fee`, `set_psm_fee`, `init_pid_config` |
+| Velocity limits | `set_mint_velocity_limit` |
+| PSM | `init_psm_curve_config`, `update_psm_curve_config` |
+| Liquidation | `init_liquidation_bonus_config`, `update_liquidation_bonus_config` |
+| Wallet rate limits | `set_wallet_rate_limit`, `remove_wallet_rate_limit` |
+| Yield collateral | `init_yield_collateral`, `add_yield_collateral` |
+| Spend policy | `set_spend_limit`, `clear_spend_limit` |
+| Compliance | `set_sanctions_oracle`, `clear_sanctions_oracle`, `set_travel_rule_threshold`, `init_zk_compliance`, `init_credential_registry` |
+| Reserve | `register_collateral_config`, `update_collateral_config`, `update_reserve_composition`, `set_reserve_attestor_whitelist` |
+| CPI | `init_interface_version`, `update_interface_version` |
+| Redemption | `register_redemption_pool` |
+| DAO | `init_dao_committee` |
+| Guardian | `init_guardian_config` |
+| Backstop | `set_backstop_params` |
+| Upgrade | `migrate_config` |
+
+**Not guarded (intentional — different signer roles):**
+
+| Instruction | Reason |
+|---|---|
+| `update_stability_fee_pid` | Permissionless keeper call; no authority check |
+| `rotate_credential_root` | Signer is `registry.issuer`, not `config.authority` |
+
+### Impact
+
+Before SSS-135, an issuer that had initialized SSS-4 (`FLAG_SQUADS_AUTHORITY` set) still had a vulnerability: the bare authority keypair could call any instruction except the ones explicitly added in SSS-134.  After SSS-135, **all 31 authority-gated instruction paths** reject any signer that is not the registered Squads multisig PDA once the flag is active.
+
+---
+
 ## Security Properties
 
 - **No unilateral authority after init**: The bare keypair loses authority atomically in the same tx that configures Squads.
+- **Full surface coverage (SSS-135)**: All 31 authority-gated instruction handlers enforce `verify_squads_signer` — no legacy keypair bypass is possible once `FLAG_SQUADS_AUTHORITY` is set.
 - **Threshold enforcement is on-chain**: Squads V4 validates m-of-n approvals on-chain before the multisig PDA signs any CPI.
 - **Irreversibility**: `FLAG_SQUADS_AUTHORITY` cannot be cleared via `set_feature_flags`. Once set, the program will always require the Squads PDA as the authority signer.
 - **PDA-only signer**: SSS validates only the PDA address — member management, key rotation, and threshold changes remain under Squads governance.
