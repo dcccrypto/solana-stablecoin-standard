@@ -544,3 +544,46 @@ pub struct RegistryQuery {
     pub mint: Option<String>,
     pub credential_type: Option<String>,
 }
+
+/// SSS-139: Parsed event log entry with `data` as serde_json::Value (for monitor queries).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedEventLogEntry {
+    pub id: String,
+    pub event_type: String,
+    pub address: String,
+    pub data: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot: Option<i64>,
+    pub created_at: String,
+}
+
+/// SSS-145: Webhook delivery log entry (for operator inspection).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebhookDeliveryLog {
+    pub id: String,
+    pub webhook_id: String,
+    pub event_type: String,
+    pub payload: String,
+    pub status: String,
+    pub attempt_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_retry_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// SSS-145: Query params for GET /api/webhook-deliveries.
+#[derive(Debug, Deserialize)]
+pub struct WebhookDeliveriesQuery {
+    pub status: Option<String>,
+}
+
+/// SSS-139: Request body for POST /api/alerts.
+#[derive(Debug, Deserialize)]
+pub struct PostAlertRequest {
+    pub invariant: String,
+    pub detail: String,
+    pub severity: Option<String>,
+}

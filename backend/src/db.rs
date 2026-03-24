@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, CredentialRecord, CredentialRegistry, EventLogEntry, LiquidationHistoryEntry, MintEvent, TravelRuleRecord, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, CredentialRecord, CredentialRegistry, EventLogEntry, LiquidationHistoryEntry, MintEvent, ParsedEventLogEntry, TravelRuleRecord, WebhookDeliveryLog, WebhookEntry};
 use crate::routes::analytics::{CdpHealthResponse, HealthBucket};
 
 pub struct Database {
@@ -494,6 +494,176 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let rows = conn.execute("DELETE FROM webhooks WHERE id = ?1", params![id])?;
         Ok(rows > 0)
+    }
+
+    /// SSS-145: Look up a single webhook by id.
+    pub fn get_webhook_by_id(&self, id: &str) -> Result<Option<WebhookEntry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let result = conn.query_row(
+            "SELECT id, url, events, secret_key, created_at FROM webhooks WHERE id = ?1",
+            params![id],
+            |row| {
+                let events_json: String = row.get(2)?;
+                let events: Vec<String> =
+                    serde_json::from_str(&events_json).unwrap_or_default();
+                Ok(WebhookEntry {
+                    id: row.get(0)?,
+                    url: row.get(1)?,
+                    events,
+                    secret_key: row.get(3)?,
+                    created_at: row.get(4)?,
+                })
+            },
+        );
+        match result {
+            Ok(wh) => Ok(Some(wh)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Internal(e.to_string())),
+        }
+    }
+
+    /// SSS-145: Insert a webhook delivery log row (status=pending).
+    /// Returns the new delivery id.
+    pub fn insert_webhook_delivery(
+        &self,
+        webhook_id: &str,
+        event_type: &str,
+        payload: &str,
+    ) -> Result<String, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS webhook_delivery_log (
+                id TEXT PRIMARY KEY,
+                webhook_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                next_retry_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );"
+        )?;
+        conn.execute(
+            "INSERT INTO webhook_delivery_log \
+             (id, webhook_id, event_type, payload, status, attempt_count, next_retry_at, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, 'pending', 0, NULL, ?5, ?5)",
+            params![id, webhook_id, event_type, payload, now],
+        )?;
+        Ok(id)
+    }
+
+    /// SSS-145: Mark a delivery as successfully delivered.
+    pub fn mark_webhook_delivery_delivered(&self, delivery_id: &str) -> Result<(), AppError> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "UPDATE webhook_delivery_log SET status='delivered', updated_at=?1 WHERE id=?2",
+            params![now, delivery_id],
+        )?;
+        Ok(())
+    }
+
+    /// SSS-145: Mark a delivery attempt as failed. If next_retry_at is None, status = 'permanently_failed'.
+    pub fn mark_webhook_delivery_failed(
+        &self,
+        delivery_id: &str,
+        attempt_count: i64,
+        next_retry_at: Option<&str>,
+    ) -> Result<(), AppError> {
+        let now = Utc::now().to_rfc3339();
+        let status = if next_retry_at.is_some() { "failed" } else { "permanently_failed" };
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "UPDATE webhook_delivery_log \
+             SET status=?1, attempt_count=?2, next_retry_at=?3, updated_at=?4 WHERE id=?5",
+            params![status, attempt_count, next_retry_at, now, delivery_id],
+        )?;
+        Ok(())
+    }
+
+    /// SSS-145: Fetch pending/failed deliveries whose next_retry_at <= now.
+    pub fn get_pending_webhook_deliveries(
+        &self,
+        now: &str,
+    ) -> Result<Vec<WebhookDeliveryLog>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        // Ensure table exists (idempotent).
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS webhook_delivery_log (
+                id TEXT PRIMARY KEY,
+                webhook_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                next_retry_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );"
+        )?;
+        let mut stmt = conn.prepare(
+            "SELECT id, webhook_id, event_type, payload, status, attempt_count, next_retry_at, created_at, updated_at \
+             FROM webhook_delivery_log \
+             WHERE (status='pending' OR (status='failed' AND next_retry_at <= ?1)) \
+             ORDER BY created_at ASC LIMIT 100",
+        )?;
+        let rows = stmt.query_map(params![now], |row| {
+            Ok(WebhookDeliveryLog {
+                id: row.get(0)?,
+                webhook_id: row.get(1)?,
+                event_type: row.get(2)?,
+                payload: row.get(3)?,
+                status: row.get(4)?,
+                attempt_count: row.get(5)?,
+                next_retry_at: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    /// SSS-145: List permanently_failed deliveries for the operator dashboard.
+    pub fn list_failed_webhook_deliveries(&self) -> Result<Vec<WebhookDeliveryLog>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS webhook_delivery_log (
+                id TEXT PRIMARY KEY,
+                webhook_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                next_retry_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );"
+        )?;
+        let mut stmt = conn.prepare(
+            "SELECT id, webhook_id, event_type, payload, status, attempt_count, next_retry_at, created_at, updated_at \
+             FROM webhook_delivery_log \
+             WHERE status IN ('permanently_failed', 'failed') \
+             ORDER BY updated_at DESC LIMIT 500",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(WebhookDeliveryLog {
+                id: row.get(0)?,
+                webhook_id: row.get(1)?,
+                event_type: row.get(2)?,
+                payload: row.get(3)?,
+                status: row.get(4)?,
+                attempt_count: row.get(5)?,
+                next_retry_at: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Internal(e.to_string()))
     }
 
     // ─── API key management ─────────────────────────────────────────────────

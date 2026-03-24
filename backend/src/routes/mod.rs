@@ -1,3 +1,4 @@
+pub mod alerts;
 pub mod analytics;
 pub mod apikeys;
 pub mod burn;
@@ -12,10 +13,12 @@ pub mod cpi;
 pub mod events;
 pub mod health;
 pub mod liquidations;
+pub mod metrics;
 pub mod mint;
 pub mod reserves;
 pub mod supply;
 pub mod travel_rule;
+pub mod webhook_deliveries;
 pub mod webhooks;
 pub mod ws_events;
 pub mod zk_credentials;
