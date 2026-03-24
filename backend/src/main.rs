@@ -163,7 +163,7 @@ mod tests {
     fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
         // Pre-create an API key for tests
-        let key_entry = db.create_api_key("test").expect("Failed to create test API key");
+        let key_entry = db.create_api_key("test", "admin").expect("Failed to create test API key");
         let test_key = key_entry.key.clone();
 
         let state = AppState::new(db);
@@ -210,7 +210,7 @@ mod tests {
     /// can exercise the 429 path without hammering the default 60-token bucket.
     fn build_app_with_capacity(capacity: u32) -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        let key_entry = db.create_api_key("rl-test").expect("Failed to create test API key");
+        let key_entry = db.create_api_key("rl-test", "admin").expect("Failed to create test API key");
         let test_key = key_entry.key.clone();
 
         let state = AppState::with_limiter(db, RateLimiter::new(capacity, 0.0));
@@ -436,7 +436,7 @@ mod tests {
             Some(12350),
         ).unwrap();
 
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         let state = AppState::new(db);
         let app = Router::new()
@@ -583,7 +583,7 @@ mod tests {
         use tower::Service;
 
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("ra-test").expect("api key");
+        let key_entry = db.create_api_key("ra-test", "admin").expect("api key");
         let test_key = key_entry.key.clone();
 
         // capacity=1, rps=2.0 → Retry-After = ceil((1-0)/2.0) = 1 sec
@@ -650,7 +650,7 @@ mod qa_tests {
 
     fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        let key_entry = db.create_api_key("qa-test").expect("create key");
+        let key_entry = db.create_api_key("qa-test", "admin").expect("create key");
         let test_key = key_entry.key.clone();
         let state = AppState::new(db);
         let app = Router::new()
@@ -1237,7 +1237,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_insert_and_list() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         // Seed two liquidation entries.
         db.insert_liquidation(
@@ -1283,7 +1283,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_filter_by_cdp_address() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         db.insert_liquidation("CDP_A", "MintX", 100, 50, "Liq1", None, None).unwrap();
         db.insert_liquidation("CDP_B", "MintX", 200, 100, "Liq2", None, None).unwrap();
@@ -1312,7 +1312,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_filter_by_collateral_mint() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         db.insert_liquidation("CDP1", "MintSOL", 100, 50, "LiqA", None, None).unwrap();
         db.insert_liquidation("CDP2", "MintUSDC", 200, 100, "LiqB", None, None).unwrap();
@@ -1339,7 +1339,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_pagination_limit_offset() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         for i in 0..5u64 {
             db.insert_liquidation(
@@ -1411,7 +1411,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_response_fields() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         db.insert_liquidation(
             "CDP_FIELD_TEST",
@@ -1552,7 +1552,7 @@ mod qa_tests {
 
     fn build_analytics_app() -> (axum::Router, String) {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("analytics-test").unwrap();
+        let key_entry = db.create_api_key("analytics-test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         let state = AppState::new(db);
         let app = Router::new()
@@ -1577,7 +1577,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_analytics_liquidations_with_data() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         // Insert 3 liquidations.
         for i in 0..3u64 {
@@ -1636,7 +1636,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_analytics_cdp_health_with_events() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test").unwrap();
+        let key_entry = db.create_api_key("test", "admin").unwrap();
         let test_key = key_entry.key.clone();
         // Healthy CDP: 5000 collateral, 1000 debt → hf=5.0
         db.insert_event_log("cdp_deposit", "CDP_A",

@@ -17,7 +17,18 @@ impl Database {
             conn: Mutex::new(conn),
         };
         db.init_schema()?;
+        db.migrate_api_keys_role()?;
         Ok(db)
+    }
+
+    /// E-2: Add role column to api_keys if it doesn't exist yet (idempotent migration).
+    fn migrate_api_keys_role(&self) -> Result<(), AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        // SQLite returns an error if the column already exists; ignore it.
+        let _ = conn.execute_batch(
+            "ALTER TABLE api_keys ADD COLUMN role TEXT NOT NULL DEFAULT 'read';"
+        );
+        Ok(())
     }
 
     fn init_schema(&self) -> Result<(), AppError> {
@@ -62,8 +73,12 @@ impl Database {
                 id TEXT PRIMARY KEY,
                 key TEXT NOT NULL UNIQUE,
                 label TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'read',
                 created_at TEXT NOT NULL
             );
+            -- E-2: migrate existing rows that predate the role column
+            -- (ALTER TABLE ... ADD COLUMN is idempotent-safe via try-in-code)
+
             CREATE TABLE IF NOT EXISTS event_log (
                 id TEXT PRIMARY KEY,
                 event_type TEXT NOT NULL,
@@ -443,42 +458,59 @@ impl Database {
 
     // ─── API key management ─────────────────────────────────────────────────
 
-    /// Generate a new API key with the given label.
-    pub fn create_api_key(&self, label: &str) -> Result<ApiKeyEntry, AppError> {
+    /// Generate a new API key with the given label and role.
+    /// Valid roles: "read", "write", "admin".
+    pub fn create_api_key(&self, label: &str, role: &str) -> Result<ApiKeyEntry, AppError> {
+        if !["read", "write", "admin"].contains(&role) {
+            return Err(AppError::BadRequest(format!(
+                "Invalid role '{}'. Must be one of: read, write, admin", role
+            )));
+        }
         let id = Uuid::new_v4().to_string();
         let key = format!("sss_{}", Uuid::new_v4().to_string().replace('-', ""));
         let created_at = Utc::now().to_rfc3339();
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         conn.execute(
-            "INSERT INTO api_keys (id, key, label, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![id, key, label, created_at],
+            "INSERT INTO api_keys (id, key, label, role, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, key, label, role, created_at],
         )?;
-        Ok(ApiKeyEntry { id, key, label: label.to_string(), created_at })
+        Ok(ApiKeyEntry { id, key, label: label.to_string(), role: role.to_string(), created_at })
     }
 
-    /// Validate that the given key exists.
-    pub fn validate_api_key(&self, key: &str) -> Result<bool, AppError> {
+    /// Validate that the given key exists and return its role.
+    /// Returns None if key not found.
+    pub fn get_api_key_role(&self, key: &str) -> Result<Option<String>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM api_keys WHERE key = ?1",
+        let result = conn.query_row(
+            "SELECT role FROM api_keys WHERE key = ?1",
             params![key],
-            |row| row.get(0),
-        )?;
-        Ok(count > 0)
+            |row| row.get::<_, String>(0),
+        );
+        match result {
+            Ok(role) => Ok(Some(role)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Internal(e.to_string())),
+        }
+    }
+
+    /// Validate that the given key exists (any role).
+    pub fn validate_api_key(&self, key: &str) -> Result<bool, AppError> {
+        Ok(self.get_api_key_role(key)?.is_some())
     }
 
     /// List all API keys (full key included — redaction happens at route level).
     pub fn list_api_keys(&self) -> Result<Vec<ApiKeyEntry>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let mut stmt = conn.prepare(
-            "SELECT id, key, label, created_at FROM api_keys ORDER BY created_at DESC",
+            "SELECT id, key, label, role, created_at FROM api_keys ORDER BY created_at DESC",
         )?;
         let entries = stmt.query_map([], |row| {
             Ok(ApiKeyEntry {
                 id: row.get(0)?,
                 key: row.get(1)?,
                 label: row.get(2)?,
-                created_at: row.get(3)?,
+                role: row.get(3)?,
+                created_at: row.get(4)?,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(entries)
