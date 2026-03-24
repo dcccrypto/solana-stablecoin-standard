@@ -92,6 +92,10 @@ const EVENT_PATTERNS: &[EventPattern] = &[
         anchor_name: "CollateralConfigUpdated",
         event_type: "collateral_config_updated",
     },
+    EventPattern {
+        anchor_name: "TravelRuleRecordSubmitted",
+        event_type: "travel_rule_record",
+    },
 ];
 
 /// Spawn the indexer as a background tokio task.
@@ -294,6 +298,10 @@ async fn fetch_and_index_tx(
             if event_type == "collateral_registered" || event_type == "collateral_config_updated" {
                 maybe_upsert_collateral_config(db, &data, Some(signature));
             }
+            // SSS-127: side-effect — index TravelRuleRecord into dedicated table.
+            if event_type == "travel_rule_record" {
+                maybe_insert_travel_rule_record(db, &data, Some(signature), Some(slot));
+            }
             db.insert_event_log(&event_type, &address, data.clone(), Some(signature), Some(slot))
                 .map_err(|e| format!("insert_event_log: {e}"))?;
             // SSS-105: broadcast event to WebSocket subscribers.
@@ -487,5 +495,66 @@ mod tests {
         let (event_type, address, _data) = result.unwrap();
         assert_eq!(event_type, "cdp_liquidate");
         assert_eq!(address, "PosABC");
+    }
+}
+
+
+/// SSS-127: Try to extract TravelRuleRecord fields from a TravelRuleRecordSubmitted event
+/// and insert into the local `travel_rule_records` table.
+///
+/// Expected fields in `data` JSON:
+///   mint, nonce, originator_vasp, beneficiary_vasp, transfer_amount, encrypted_payload (optional)
+fn maybe_insert_travel_rule_record(
+    db: &crate::db::Database,
+    data: &serde_json::Value,
+    tx_signature: Option<&str>,
+    slot: Option<i64>,
+) {
+    let mint = match data.get("mint").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => {
+            warn!("SSS-127: TravelRuleRecordSubmitted missing `mint` field");
+            return;
+        }
+    };
+    let nonce = match data.get("nonce").and_then(|v| v.as_i64()) {
+        Some(n) => n,
+        None => {
+            warn!("SSS-127: TravelRuleRecordSubmitted missing `nonce` field");
+            return;
+        }
+    };
+    let originator_vasp = match data.get("originator_vasp").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => {
+            warn!("SSS-127: TravelRuleRecordSubmitted missing `originator_vasp`");
+            return;
+        }
+    };
+    let beneficiary_vasp = match data.get("beneficiary_vasp").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => {
+            warn!("SSS-127: TravelRuleRecordSubmitted missing `beneficiary_vasp`");
+            return;
+        }
+    };
+    let transfer_amount = data.get("transfer_amount").and_then(|v| v.as_i64()).unwrap_or(0);
+    let encrypted_payload = data.get("encrypted_payload").and_then(|v| v.as_str());
+
+    match db.insert_travel_rule_record(
+        &mint,
+        nonce,
+        &originator_vasp,
+        &beneficiary_vasp,
+        transfer_amount,
+        slot,
+        encrypted_payload,
+        tx_signature,
+    ) {
+        Ok(_) => info!(
+            "SSS-127: indexed TravelRuleRecord mint={} nonce={}",
+            mint, nonce
+        ),
+        Err(e) => warn!("SSS-127: failed to insert travel_rule_record: {e}"),
     }
 }

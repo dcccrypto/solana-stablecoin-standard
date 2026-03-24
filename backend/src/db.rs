@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, LiquidationHistoryEntry, MintEvent, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, LiquidationHistoryEntry, MintEvent, TravelRuleRecord, WebhookEntry};
 use crate::routes::analytics::{CdpHealthResponse, HealthBucket};
 
 pub struct Database {
@@ -104,6 +104,22 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_liq_history_cdp ON liquidation_history(cdp_address);
             CREATE INDEX IF NOT EXISTS idx_liq_history_collateral ON liquidation_history(collateral_mint);
             CREATE INDEX IF NOT EXISTS idx_liq_history_created ON liquidation_history(created_at DESC);
+            CREATE TABLE IF NOT EXISTS travel_rule_records (
+                id TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                nonce INTEGER NOT NULL,
+                originator_vasp TEXT NOT NULL,
+                beneficiary_vasp TEXT NOT NULL,
+                transfer_amount INTEGER NOT NULL,
+                slot INTEGER,
+                encrypted_payload TEXT,
+                tx_signature TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_trr_originator ON travel_rule_records(originator_vasp);
+            CREATE INDEX IF NOT EXISTS idx_trr_beneficiary ON travel_rule_records(beneficiary_vasp);
+            CREATE INDEX IF NOT EXISTS idx_trr_mint ON travel_rule_records(mint);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_trr_mint_nonce ON travel_rule_records(mint, nonce);
         ")?;
         Ok(())
     }
@@ -1286,8 +1302,110 @@ impl Database {
             active_collateral_types,
         })
     }
-}
 
+    // ─── SSS-127: Travel Rule records ─────────────────────────────────────────
+
+    /// Insert (or ignore duplicate) a TravelRuleRecord.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_travel_rule_record(
+        &self,
+        mint: &str,
+        nonce: i64,
+        originator_vasp: &str,
+        beneficiary_vasp: &str,
+        transfer_amount: i64,
+        slot: Option<i64>,
+        encrypted_payload: Option<&str>,
+        tx_signature: Option<&str>,
+    ) -> Result<TravelRuleRecord, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let created_at = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT OR IGNORE INTO travel_rule_records \
+             (id, mint, nonce, originator_vasp, beneficiary_vasp, transfer_amount, slot, encrypted_payload, tx_signature, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                id,
+                mint,
+                nonce,
+                originator_vasp,
+                beneficiary_vasp,
+                transfer_amount,
+                slot,
+                encrypted_payload,
+                tx_signature,
+                created_at,
+            ],
+        )?;
+        Ok(TravelRuleRecord {
+            id,
+            mint: mint.to_string(),
+            nonce,
+            originator_vasp: originator_vasp.to_string(),
+            beneficiary_vasp: beneficiary_vasp.to_string(),
+            transfer_amount,
+            slot,
+            encrypted_payload: encrypted_payload.map(str::to_string),
+            tx_signature: tx_signature.map(str::to_string),
+            created_at,
+        })
+    }
+
+    /// List TravelRuleRecords with optional wallet / mint filters.
+    pub fn list_travel_rule_records(
+        &self,
+        wallet: Option<&str>,
+        mint: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<TravelRuleRecord>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = String::from(
+            "SELECT id, mint, nonce, originator_vasp, beneficiary_vasp, transfer_amount, \
+             slot, encrypted_payload, tx_signature, created_at \
+             FROM travel_rule_records WHERE 1=1",
+        );
+        let mut binds: Vec<String> = Vec::new();
+
+        if let Some(w) = wallet {
+            binds.push(w.to_string());
+            let idx = binds.len();
+            binds.push(w.to_string());
+            sql.push_str(&format!(
+                " AND (originator_vasp = ?{} OR beneficiary_vasp = ?{})",
+                idx,
+                idx + 1
+            ));
+        }
+        if let Some(m) = mint {
+            binds.push(m.to_string());
+            sql.push_str(&format!(" AND mint = ?{}", binds.len()));
+        }
+        binds.push(limit.to_string());
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", binds.len()));
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(binds.iter()),
+            |row| {
+                Ok(TravelRuleRecord {
+                    id: row.get(0)?,
+                    mint: row.get(1)?,
+                    nonce: row.get(2)?,
+                    originator_vasp: row.get(3)?,
+                    beneficiary_vasp: row.get(4)?,
+                    transfer_amount: row.get(5)?,
+                    slot: row.get(6)?,
+                    encrypted_payload: row.get(7)?,
+                    tx_signature: row.get(8)?,
+                    created_at: row.get(9)?,
+                })
+            },
+        )?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+}
 
 /// Raw stats returned by `Db::liquidation_analytics`.
 #[allow(dead_code)]
