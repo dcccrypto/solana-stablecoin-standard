@@ -7,7 +7,7 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 ## [Unreleased]
 
 ### Added
-- `docs/PYTHON-SDK.md` — Python SDK (`SSSClient`, `FeatureFlags`, PDA helpers, `sss-cli`, pandas analytics) (SSS-144) [PR #223]
+- `docs/REDEMPTION-POOL.md` — instant on-chain redemption pool (SSS-137): pre-funded liquidity pool for atomic 1:1 par redemption, permissionless replenishment, ≤5% fee cap, falls back to SSS-125 SLA path when empty
 - `docs/compliance-module.md` — full SDK reference for `ComplianceModule` (SSS-017) [PR #73]
 - `docs/ARCHITECTURE.md` — three-layer architecture reference
 - `docs/SSS-1.md` — minimal preset specification
