@@ -324,7 +324,6 @@ Both programs deployed to Solana devnet:
 
 ### SSS-001 — Initial Specification
 
-- Project created for Superteam Brazil Solana Stablecoin Standard bounty
 - SSS-1 (Minimal) and SSS-2 (Compliant) presets specified
 - Architecture: three-layer model (on-chain → SDK → application)
 <!-- heartbeat 17:20 UTC 2026-03-14 -->
