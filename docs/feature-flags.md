@@ -34,8 +34,24 @@ corresponding behaviour; clearing it deactivates it.
 
 ### `FLAG_CIRCUIT_BREAKER`
 
+> **⚠️ SDK DEPRECATION — AUDIT-F1 (HIGH):** The `FLAG_CIRCUIT_BREAKER` constant exported from `FeatureFlagsModule` was historically `1n << 7n` (0x80, bit 7) — which does **not** match the on-chain value. Passing that constant to `setFeatureFlag` / `clearFeatureFlag` / `isFeatureFlagSet` set the wrong bit and **never triggered the on-chain circuit breaker**.
+>
+> **Fix (sdk@3e4cddf):** `FLAG_CIRCUIT_BREAKER` in `FeatureFlagsModule.ts` now emits a runtime `console.warn` deprecation and retains the old value for backward-compat only. The **correct constant is `FLAG_CIRCUIT_BREAKER_V2` (0x01) from `CircuitBreakerModule`**.
+>
+> **Migration:**
+> ```typescript
+> // ❌ Before (broken — wrong bit, circuit breaker never fires):
+> import { FLAG_CIRCUIT_BREAKER } from '@sss/sdk';
+>
+> // ✅ After (correct):
+> import { FLAG_CIRCUIT_BREAKER_V2 } from '@sss/sdk'; // from CircuitBreakerModule
+> await ff.setFeatureFlag({ mint, flag: FLAG_CIRCUIT_BREAKER_V2 });
+> ```
+
+**On-chain constant (correct):**
 ```typescript
-export const FLAG_CIRCUIT_BREAKER = 1n << 0n; // 0x01
+// CircuitBreakerModule — bit 0
+export const FLAG_CIRCUIT_BREAKER_V2 = 1n << 0n; // 0x01
 ```
 
 **Anchor constant:**
@@ -389,7 +405,8 @@ Seeds: `["ct-config", mint]`
 ```typescript
 import {
   FeatureFlagsModule,
-  FLAG_CIRCUIT_BREAKER,
+  // FLAG_CIRCUIT_BREAKER,  // ⚠️ DEPRECATED (AUDIT-F1) — wrong bit (0x80). Use FLAG_CIRCUIT_BREAKER_V2 below.
+  FLAG_CIRCUIT_BREAKER_V2, // ✅ Correct (0x01) — from CircuitBreakerModule
   FLAG_SPEND_POLICY,
   FLAG_DAO_COMMITTEE,
   FLAG_YIELD_COLLATERAL,
@@ -400,7 +417,8 @@ import {
 // or, from the SDK source directly:
 import {
   FeatureFlagsModule,
-  FLAG_CIRCUIT_BREAKER,
+  // FLAG_CIRCUIT_BREAKER,  // ⚠️ DEPRECATED (AUDIT-F1) — wrong bit (0x80). Use FLAG_CIRCUIT_BREAKER_V2 below.
+  FLAG_CIRCUIT_BREAKER_V2, // ✅ Correct (0x01) — from CircuitBreakerModule
   FLAG_SPEND_POLICY,
   FLAG_DAO_COMMITTEE,
   FLAG_YIELD_COLLATERAL,
@@ -586,21 +604,23 @@ await program.methods
 
 ## Circuit-Breaker Workflow
 
+> **⚠️ Use `FLAG_CIRCUIT_BREAKER_V2` from `CircuitBreakerModule`** — not `FLAG_CIRCUIT_BREAKER` from `FeatureFlagsModule`. See [AUDIT-F1](#flag_circuit_breaker) above.
+
 ### Activating the circuit breaker
 
 ```typescript
-import { FeatureFlagsModule, FLAG_CIRCUIT_BREAKER } from '@sss/sdk';
+import { FeatureFlagsModule, FLAG_CIRCUIT_BREAKER_V2 } from '@sss/sdk';
 import { AnchorProvider } from '@coral-xyz/anchor';
 
 // Provider wallet = admin authority
 const ff = new FeatureFlagsModule(provider, programId);
 
-// 1. Halt all minting/burning
-const sig = await ff.setFeatureFlag({ mint, flag: FLAG_CIRCUIT_BREAKER });
+// 1. Halt all minting/burning (use FLAG_CIRCUIT_BREAKER_V2, not FLAG_CIRCUIT_BREAKER)
+const sig = await ff.setFeatureFlag({ mint, flag: FLAG_CIRCUIT_BREAKER_V2 });
 console.log('Circuit breaker set:', sig);
 
 // 2. Confirm it is active
-const active = await ff.isFeatureFlagSet(mint, FLAG_CIRCUIT_BREAKER);
+const active = await ff.isFeatureFlagSet(mint, FLAG_CIRCUIT_BREAKER_V2);
 console.assert(active === true);
 ```
 
@@ -608,10 +628,10 @@ console.assert(active === true);
 
 ```typescript
 // After incident resolution
-const sig = await ff.clearFeatureFlag({ mint, flag: FLAG_CIRCUIT_BREAKER });
+const sig = await ff.clearFeatureFlag({ mint, flag: FLAG_CIRCUIT_BREAKER_V2 });
 console.log('Circuit breaker cleared:', sig);
 
-const active = await ff.isFeatureFlagSet(mint, FLAG_CIRCUIT_BREAKER);
+const active = await ff.isFeatureFlagSet(mint, FLAG_CIRCUIT_BREAKER_V2);
 console.assert(active === false);
 ```
 

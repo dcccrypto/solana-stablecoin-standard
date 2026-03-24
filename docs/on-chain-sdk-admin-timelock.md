@@ -107,6 +107,7 @@ Propose a timelocked admin operation. Only one operation may be pending at a tim
 **Returns:** `Promise<TransactionSignature>`
 
 **Throws:**
+- `SSSError` if `opKind` is `ADMIN_OP_NONE` (0) — passing a no-op kind locks out all admin operations for the full timelock delay (~2 days) without effect. See [AUDIT-F2 fix](#security-notes) and [audit finding](#audit-findings).
 - If `opKind` is not one of the three valid operation kinds.
 
 **Example — propose an authority transfer:**
@@ -330,3 +331,23 @@ waitAndExecute();
 - **`setPythFeed` is immediate.** Unlike the three timelocked ops, `setPythFeed` takes effect the moment the transaction lands. Set this at protocol initialisation and monitor for unexpected changes.
 - **Delay is configurable.** `config.admin_timelock_delay` can be changed via protocol governance. The default is `DEFAULT_ADMIN_TIMELOCK_DELAY` (432 000 slots ≈ 2 days).
 - **Key rotation fallback.** If the admin key is lost before a pending authority transfer executes, the protocol is locked. Maintain a secure backup key and test the rotation flow on devnet before mainnet.
+
+---
+
+## Audit Findings
+
+### AUDIT-F2 (HIGH) — `ADMIN_OP_NONE` Denial-of-Service via `proposeTimelockOp`
+
+**Fixed in:** `sdk@3e4cddf` (2026-03-24)
+
+**Description:** Prior to this fix, `proposeTimelockOp` accepted `opKind = ADMIN_OP_NONE` (0). A no-op proposal stores a pending op with a full `mature_slot` 2 days in the future. Because only **one** op can be pending at a time, any subsequent legitimate proposal (`ADMIN_OP_TRANSFER_AUTHORITY`, `ADMIN_OP_SET_FEATURE_FLAG`, `ADMIN_OP_CLEAR_FEATURE_FLAG`) either overwrites or is blocked until the no-op's delay expires. A misconfigured caller — or an attacker who can invoke the authority — can repeatedly submit no-op proposals to grief admin operations indefinitely.
+
+**Fix:** `proposeTimelockOp` now throws `SSSError` synchronously before making any RPC call if `opKind === ADMIN_OP_NONE`:
+
+```typescript
+// Throws — never reaches the program:
+await timelock.proposeTimelockOp({ mint, opKind: ADMIN_OP_NONE, param: 0n, target: PublicKey.default });
+// SSSError: proposeTimelockOp: opKind must not be ADMIN_OP_NONE (0). Use ADMIN_OP_TRANSFER_AUTHORITY (1), ...
+```
+
+**Upgrade action:** No migration required for callers that already pass a valid `opKind`. Callers that previously relied on `ADMIN_OP_NONE` (likely by accident) will now get a clear error message at the SDK layer.
