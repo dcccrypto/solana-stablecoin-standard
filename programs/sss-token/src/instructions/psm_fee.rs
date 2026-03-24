@@ -33,6 +33,14 @@ pub struct SetPsmFee<'info> {
 /// Set the PSM redemption fee (basis points).  Authority-only.
 /// `fee_bps` = 0 disables the fee.  Max = 1000 bps (10%).
 pub fn set_psm_fee_handler(ctx: Context<SetPsmFee>, fee_bps: u16) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     require!(fee_bps <= MAX_PSM_FEE_BPS, SssError::InvalidPsmFee);
 
     let config = &mut ctx.accounts.config;
@@ -87,6 +95,14 @@ pub fn set_mint_velocity_limit_handler(
     ctx: Context<SetMintVelocityLimit>,
     max_mint_per_epoch: u64,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     ctx.accounts.minter_info.max_mint_per_epoch = max_mint_per_epoch;
 
     emit!(MintVelocityUpdated {

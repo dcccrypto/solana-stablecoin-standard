@@ -45,6 +45,14 @@ pub fn set_backstop_params_handler(
     insurance_fund_pubkey: Pubkey,
     max_backstop_bps: u16,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     require!(max_backstop_bps <= 10_000, SssError::InvalidBackstopBps);
 
     let config = &mut ctx.accounts.config;

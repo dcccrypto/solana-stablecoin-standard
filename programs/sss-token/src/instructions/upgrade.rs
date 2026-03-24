@@ -21,6 +21,14 @@ pub const MIN_SUPPORTED_VERSION: u8 = 1;
 /// Token-2022 mint accounts are NOT touched — only the config PDA is updated.
 /// Existing CDPs, vaults, minter records, and ATAs continue working unchanged.
 pub fn migrate_config_handler(ctx: Context<MigrateConfig>) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let config = &mut ctx.accounts.config;
 
     // If already current, no-op.

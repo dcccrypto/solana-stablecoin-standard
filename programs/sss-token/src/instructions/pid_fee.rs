@@ -75,6 +75,14 @@ pub fn init_pid_config_handler(
     ctx: Context<InitPidConfig>,
     params: InitPidConfigParams,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     require!(
         params.min_fee_bps <= params.max_fee_bps,
         SssError::InvalidPidFeeRange,

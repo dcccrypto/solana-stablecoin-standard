@@ -30,6 +30,14 @@ pub fn set_feature_flag_handler(
     ctx: Context<UpdateFeatureFlag>,
     flag: u64,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let config = &mut ctx.accounts.config;
     // When FLAG_DAO_COMMITTEE is active, feature-flag changes must go through
     // a passed DAO proposal — direct authority calls are blocked.
@@ -51,6 +59,14 @@ pub fn clear_feature_flag_handler(
     ctx: Context<UpdateFeatureFlag>,
     flag: u64,
 ) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let config = &mut ctx.accounts.config;
     // Same guard: DAO committee is active → must use the proposal flow.
     require!(
