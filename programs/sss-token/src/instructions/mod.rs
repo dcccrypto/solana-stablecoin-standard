@@ -34,6 +34,7 @@ pub mod thaw;
 pub mod update_minter;
 pub mod update_roles;
 pub mod yield_collateral;
+pub mod pid_fee;
 pub mod zk_compliance;
 pub mod zk_credential;
 
@@ -73,6 +74,7 @@ pub use thaw::*;
 pub use update_minter::*;
 pub use update_roles::*;
 pub use yield_collateral::*;
+pub use pid_fee::*;
 pub use zk_compliance::*;
 pub use zk_credential::*;
 

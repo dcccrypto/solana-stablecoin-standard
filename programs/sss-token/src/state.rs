@@ -61,6 +61,11 @@ pub const FLAG_SANCTIONS_ORACLE: u64 = 1 << 9;
 /// `revoke_credential` instructions.
 pub const FLAG_ZK_CREDENTIALS: u64 = 1 << 10;
 
+/// SSS-130: PID fee control flag (bit 11): when set, `stability_fee_bps` is
+/// managed by the `PidConfig` controller rather than manual `set_stability_fee`.
+/// Enables `init_pid_config` / `update_stability_fee_pid` instructions.
+pub const FLAG_PID_FEE_CONTROL: u64 = 1 << 11;
+
 
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
@@ -876,4 +881,44 @@ impl CredentialRecord {
         }
         true
     }
+}
+
+// ---------------------------------------------------------------------------
+// SSS-130: Stability fee PID auto-adjustment
+// ---------------------------------------------------------------------------
+
+/// PidConfig PDA — one per stablecoin mint when FLAG_PID_FEE_CONTROL is set.
+/// Seeds: [b"pid-config", sss_mint]
+///
+/// Stores PID gains and state.  `update_stability_fee_pid` is permissionless:
+/// any keeper can call it to push a fresh oracle price and have the controller
+/// adjust `stability_fee_bps` in `StablecoinConfig` automatically.
+#[account]
+#[derive(InitSpace)]
+pub struct PidConfig {
+    /// The SSS stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// Proportional gain (scaled by 1_000_000; e.g. 0.001 → 1_000)
+    pub kp: i64,
+    /// Integral gain (scaled by 1_000_000)
+    pub ki: i64,
+    /// Derivative gain (scaled by 1_000_000)
+    pub kd: i64,
+    /// Target peg price in oracle units (e.g. 1_000_000 for $1.00 with 6 dec)
+    pub target_price: u64,
+    /// Minimum stability fee in bps (floor clamping)
+    pub min_fee_bps: u16,
+    /// Maximum stability fee in bps (ceiling clamping)
+    pub max_fee_bps: u16,
+    /// Last error value (target - observed), carried for derivative term
+    pub last_error: i64,
+    /// Running integral of error (clamped to ±1e9 for anti-windup)
+    pub integral: i64,
+    /// Slot at which update_stability_fee_pid was last called
+    pub last_update_slot: u64,
+    pub bump: u8,
+}
+
+impl PidConfig {
+    pub const SEED: &'static [u8] = b"pid-config";
 }
