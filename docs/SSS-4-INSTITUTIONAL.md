@@ -16,7 +16,7 @@ This means minting, burning, blacklisting, pausing, and all governance operation
 
 ## Architecture
 
-```
+```text
 Issuer keypair A ──┐
 Issuer keypair B ──┼──► Squads V4 Multisig PDA ──► SSS StablecoinConfig.authority
 Custodian keypair ─┘

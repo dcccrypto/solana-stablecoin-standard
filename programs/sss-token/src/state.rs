@@ -1163,16 +1163,26 @@ impl LiquidationBonusConfig {
 
     /// Compute the graduated bonus for a given collateral ratio.
     ///
-    /// Returns the appropriate tier bonus (clamped to `max_bonus_bps`).
-    /// Falls back to `tier1_bonus_bps` if ratio is below tier1 but above tier2.
+    /// Tier thresholds define upper bounds of distress ranges:
+    ///   ratio < tier3_threshold         → tier3 (most distressed, highest bonus)
+    ///   tier3 <= ratio < tier2_threshold → tier2 (medium distress)
+    ///   tier2 <= ratio < tier1_threshold → tier1 (mild distress, smallest bonus)
+    ///   ratio >= tier1_threshold         → 0 (fully collateralized, no bonus)
+    ///
+    /// The original code returned tier1_bonus for ALL ratios >= tier2_threshold,
+    /// including fully-collateralized positions. This fix adds the tier1_threshold
+    /// upper bound to return 0 when the position is not in a distressed range.
     #[inline]
     pub fn bonus_for_ratio(&self, ratio_bps: u128) -> u16 {
         let raw = if ratio_bps < self.tier3_threshold_bps as u128 {
             self.tier3_bonus_bps
         } else if ratio_bps < self.tier2_threshold_bps as u128 {
             self.tier2_bonus_bps
-        } else {
+        } else if ratio_bps < self.tier1_threshold_bps as u128 {
             self.tier1_bonus_bps
+        } else {
+            // Above tier1 threshold — fully collateralized, no graduated bonus
+            0
         };
         raw.min(self.max_bonus_bps)
     }
@@ -1380,10 +1390,13 @@ pub struct BridgeConfig {
     /// Maximum tokens per bridge_out transaction (0 = unlimited).
     pub max_bridge_amount_per_tx: u64,
     /// Bridge fee in basis points (e.g. 10 = 0.1%). Max 1000 bps (10%).
-    /// Deducted from bridge_out amount; fee is burned (deflationary).
+    /// Deducted from bridge_out amount; fee is sent to fee_vault.
     pub bridge_fee_bps: u16,
     /// Protocol fee vault token account address (receives fee tokens).
     pub fee_vault: Pubkey,
+    /// Authorized relayer pubkey — the only signer allowed to call `bridge_in`.
+    /// Set to the bridge program's expected relayer / crank authority.
+    pub authority: Pubkey,
     /// Running total of tokens bridged out (net of fees).
     pub total_bridged_out: u64,
     /// Running total of tokens bridged in.
@@ -1397,6 +1410,25 @@ impl BridgeConfig {
     pub const BRIDGE_TYPE_WORMHOLE: u8 = 1;
     /// Bridge type: LayerZero
     pub const BRIDGE_TYPE_LAYERZERO: u8 = 2;
+}
+
+/// Replay-protection PDA — one per consumed cross-chain message ID.
+/// Seeds: [b"consumed-message", sss_mint, message_id (32 bytes)]
+///
+/// Existence of this account means the message has been processed.
+/// Created atomically when `bridge_in` mints tokens; prevents double-spend.
+#[account]
+#[derive(InitSpace)]
+pub struct ConsumedMessageId {
+    /// The bridge message ID (opaque 32-byte identifier from the source chain).
+    pub message_id: [u8; 32],
+    /// The stablecoin mint this message was bridged into.
+    pub sss_mint: Pubkey,
+    pub bump: u8,
+}
+
+impl ConsumedMessageId {
+    pub const SEED: &'static [u8] = b"consumed-message";
 }
 
 // ---------------------------------------------------------------------------

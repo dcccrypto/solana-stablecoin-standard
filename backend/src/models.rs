@@ -96,9 +96,11 @@ pub struct WebhookEntry {
     pub id: String,
     pub url: String,
     pub events: Vec<String>,
-    /// Stored secret key (hashed before storage; returned as-is on registration only).
+    /// Stored hashed secret. This is the HMAC key stored in the DB as a hash;
+    /// callers must NOT use this directly for HMAC signing — it is stored hashed.
+    /// For dispatch, retrieve the plaintext secret from registration and use it there.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub secret_key: Option<String>,
+    pub hashed_secret: Option<String>,
     pub created_at: String,
 }
 
@@ -372,6 +374,7 @@ pub enum CredentialType {
 }
 
 impl CredentialType {
+    #[allow(dead_code)]
     pub fn from_u8(v: u8) -> Option<Self> {
         match v {
             0 => Some(Self::NotSanctioned),
@@ -381,6 +384,7 @@ impl CredentialType {
         }
     }
 
+    #[allow(dead_code)]
     pub fn to_u8(&self) -> u8 {
         match self {
             Self::NotSanctioned => 0,
@@ -472,6 +476,7 @@ pub struct SubmitCredentialRequest {
     pub proof_data: String,
     /// ABI-encoded public inputs (base64-encoded, 64 bytes max).
     #[serde(default)]
+    #[allow(dead_code)]
     pub public_inputs: Option<String>,
     /// Proof validity window in seconds (default 2592000 = 30 days).
     #[serde(default)]
@@ -581,6 +586,7 @@ pub struct WebhookDeliveriesQuery {
 }
 
 /// SSS-139: Request body for POST /api/alerts.
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct PostAlertRequest {
     pub invariant: String,

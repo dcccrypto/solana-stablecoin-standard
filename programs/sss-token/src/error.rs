@@ -345,4 +345,12 @@ pub enum SssError {
     OraclePriceOutsideSpread,
     #[msg("Market maker already registered")]
     MarketMakerAlreadyRegistered,
+    #[msg("Fee vault account does not match bridge_config.fee_vault")]
+    FeeVaultMismatch,
+    #[msg("Bridge relayer is not authorized — must be bridge_config.authority")]
+    BridgeRelayerUnauthorized,
+    #[msg("Bridge message ID has already been consumed (replay protection)")]
+    BridgeMessageAlreadyConsumed,
+    #[msg("Market maker hooks are not enabled — set FLAG_MARKET_MAKER_HOOKS first")]
+    MarketMakerHooksDisabled,
 }

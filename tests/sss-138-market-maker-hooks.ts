@@ -531,24 +531,39 @@ describe("SSS-138: market maker hooks", () => {
   // Test 8: mm_mint fails when slot limit exceeded
   // -------------------------------------------------------------------------
   it("8. mm_mint: fails when slot mint limit exceeded in same slot", async () => {
-    // Reset the mm_config by noting current state — we need to exhaust the limit.
-    // The limit is 1_000_000_000 (1000 tokens). We minted 100 in test 6.
-    // Mint 900 more to hit the limit exactly.
-    await program.methods
-      .mmMint(new BN(900_000_000)) // 900 tokens — should bring total to 1000
-      .accounts({
-        marketMaker: mmKp.publicKey,
-        config: configPda,
-        mint: mintKp.publicKey,
-        mmConfig: mmConfigPda,
-        mmTokenAccount: mmAta,
-        oracleFeed: fakeOracleFeed,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      } as any)
-      .signers([mmKp])
-      .rpc({ commitment: "confirmed" });
+    // Fetch current mm_config state to determine how much we've minted this slot.
+    const mmConfigBefore = await program.account.marketMakerConfig.fetch(mmConfigPda);
+    const mintedThisSlot: bigint = BigInt(mmConfigBefore.mmMintedThisSlot.toString());
+    const limitPerSlot: bigint = BigInt(mmConfigBefore.mmMintLimitPerSlot.toString());
 
-    // Now try to mint 1 more — should fail
+    // Calculate how much more we can mint to exactly exhaust the limit.
+    const remaining = limitPerSlot - mintedThisSlot;
+
+    if (remaining > 0n) {
+      // Mint exactly up to the limit
+      await program.methods
+        .mmMint(new BN(remaining.toString()))
+        .accounts({
+          marketMaker: mmKp.publicKey,
+          config: configPda,
+          mint: mintKp.publicKey,
+          mmConfig: mmConfigPda,
+          mmTokenAccount: mmAta,
+          oracleFeed: fakeOracleFeed,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        } as any)
+        .signers([mmKp])
+        .rpc({ commitment: "confirmed" });
+    }
+
+    // Verify that the counter now equals the limit before attempting the failing mint.
+    const mmConfigAfterFirst = await program.account.marketMakerConfig.fetch(mmConfigPda);
+    expect(mmConfigAfterFirst.mmMintedThisSlot.toString()).to.equal(
+      mmConfigAfterFirst.mmMintLimitPerSlot.toString(),
+      "mm_minted_this_slot should equal mm_mint_limit_per_slot after exhausting limit"
+    );
+
+    // Now try to mint 1 more — should fail with MmMintLimitExceeded
     await assertError(
       () =>
         program.methods

@@ -16,7 +16,7 @@ keeping incentives proportionate for healthier ones.
 
 ## Tier Logic
 
-```
+```text
 ratio < tier3_threshold  →  tier3_bonus  (e.g. <80% CR → 12%)
 ratio < tier2_threshold  →  tier2_bonus  (e.g. <90% CR →  8%)
 ratio < tier1_threshold  →  tier1_bonus  (e.g. <100% CR → 5%)
@@ -27,7 +27,7 @@ Tiers are evaluated most-distressed first. The applied bonus is always clamped t
 ### Example Configuration
 
 | Tier | Collateral-Ratio Range | Bonus |
-|------|------------------------|-------|
+| ---- | ---------------------- | ----- |
 | 1    | 90–100% (9000–10000 bps) | 5% (500 bps)  |
 | 2    | 80–90%  (8000–9000 bps)  | 8% (800 bps)  |
 | 3    | <80%    (<8000 bps)      | 12% (1200 bps)|

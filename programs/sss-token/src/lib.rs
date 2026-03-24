@@ -869,6 +869,18 @@ pub mod sss_token {
         instructions::wallet_rate_limit::remove_wallet_rate_limit_handler(ctx, wallet)
     }
 
+    /// Update WalletRateLimit counters — called via CPI from the transfer-hook program.
+    /// The transfer-hook cannot write directly to WalletRateLimit PDAs owned by sss-token;
+    /// it must CPI to this instruction which has authority over its own PDAs.
+    ///
+    /// Caller must be the registered `transfer_hook_program` on the config, or the authority.
+    pub fn update_wallet_rate_limit(
+        ctx: Context<UpdateWalletRateLimit>,
+        params: UpdateWalletRateLimitParams,
+    ) -> Result<()> {
+        instructions::wallet_rate_limit::update_wallet_rate_limit_handler(ctx, params)
+    }
+
     // -----------------------------------------------------------------------
     // SSS-134: PRESET_INSTITUTIONAL — Squads V4 multisig native authority
     // -----------------------------------------------------------------------
@@ -898,6 +910,52 @@ pub mod sss_token {
     /// before executing a multisig workflow.
     pub fn verify_squads_authority(ctx: Context<VerifySquadsAuthority>) -> Result<()> {
         instructions::squads_authority::verify_squads_authority_handler(ctx)
+    }
+
+    // -----------------------------------------------------------------------
+    // SSS-121: Guardian Multisig Emergency Pause
+    // -----------------------------------------------------------------------
+
+    /// Initialise the guardian multisig for a stablecoin config.
+    /// Registers 1–7 guardian pubkeys and a threshold (≥1, ≤len).
+    /// Authority only; can only be called once.
+    pub fn init_guardian_config(
+        ctx: Context<InitGuardianConfig>,
+        guardians: Vec<Pubkey>,
+        threshold: u8,
+    ) -> Result<()> {
+        instructions::guardian::init_guardian_config_handler(ctx, guardians, threshold)
+    }
+
+    /// Open a new PauseProposal PDA. Any registered guardian may call this.
+    pub fn guardian_propose_pause(
+        ctx: Context<GuardianProposePause>,
+        reason: [u8; 32],
+    ) -> Result<()> {
+        instructions::guardian::guardian_propose_pause_handler(ctx, reason)
+    }
+
+    /// Cast a vote on an open PauseProposal. Once votes ≥ threshold, auto-executes pause.
+    pub fn guardian_vote_pause(
+        ctx: Context<GuardianVotePause>,
+        proposal_id: u64,
+    ) -> Result<()> {
+        instructions::guardian::guardian_vote_pause_handler(ctx, proposal_id)
+    }
+
+    /// Lift a guardian-initiated pause. Requires authority OR full guardian quorum.
+    pub fn guardian_lift_pause(ctx: Context<GuardianLiftPause>) -> Result<()> {
+        instructions::guardian::guardian_lift_pause_handler(ctx)
+    }
+
+    // -----------------------------------------------------------------------
+    // SSS-122: Config upgrade path / migrate_config
+    // -----------------------------------------------------------------------
+
+    /// Migrate StablecoinConfig from v0 to the current version.
+    /// Resizes the PDA if needed and initialises new fields to safe defaults.
+    pub fn migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
+        instructions::upgrade::migrate_config_handler(ctx)
     }
 
     // ─── SSS-135: Cross-Chain Bridge ─────────────────────────────────────────
@@ -936,19 +994,24 @@ pub mod sss_token {
 
     /// Bridge tokens in: verifies bridge proof, mints `amount` to recipient.
     /// Respects paused, circuit breaker, max_supply.
+    /// `message_id` is the unique cross-chain message identifier used for replay protection.
     pub fn bridge_in(
         ctx: Context<BridgeTokensIn>,
         proof: BridgeProof,
         amount: u64,
         recipient: Pubkey,
+        message_id: [u8; 32],
     ) -> Result<()> {
-        instructions::bridge::bridge_in_handler(ctx, proof, amount, recipient)
+        instructions::bridge::bridge_in_handler(ctx, proof, amount, recipient, message_id)
     }
 
     // -----------------------------------------------------------------------
     // SSS-138: Market Maker Hooks
     // -----------------------------------------------------------------------
 
+    /// Initialize the MarketMakerConfig PDA for a mint.
+    /// Authority-only. Sets per-slot mint/burn limits and spread tolerance.
+    /// Requires FLAG_MARKET_MAKER_HOOKS to be set on the stablecoin config.
     pub fn init_market_maker_config(
         ctx: Context<InitMarketMakerConfig>,
         params: InitMarketMakerConfigParams,
@@ -956,6 +1019,8 @@ pub mod sss_token {
         instructions::market_maker::init_market_maker_config_handler(ctx, params)
     }
 
+    /// Register a market maker pubkey on the whitelist.
+    /// Authority-only. Requires FLAG_MARKET_MAKER_HOOKS to be active.
     pub fn register_market_maker(
         ctx: Context<RegisterMarketMaker>,
         mm_pubkey: Pubkey,
@@ -963,14 +1028,21 @@ pub mod sss_token {
         instructions::market_maker::register_market_maker_handler(ctx, mm_pubkey)
     }
 
+    /// Mint tokens as a whitelisted market maker.
+    /// Bypasses stability fees; subject to per-slot rate limit and oracle spread check.
+    /// Enforces max_supply and updates StablecoinConfig.total_minted.
     pub fn mm_mint(ctx: Context<MmMintAccounts>, amount: u64) -> Result<()> {
         instructions::market_maker::mm_mint_handler(ctx, amount)
     }
 
+    /// Burn tokens as a whitelisted market maker.
+    /// Bypasses stability fees; subject to per-slot rate limit and oracle spread check.
+    /// Updates StablecoinConfig.total_burned.
     pub fn mm_burn(ctx: Context<MmBurnAccounts>, amount: u64) -> Result<()> {
         instructions::market_maker::mm_burn_handler(ctx, amount)
     }
 
+    /// Read-only: returns the current per-slot MM mint/burn capacity remaining.
     pub fn get_mm_capacity(ctx: Context<GetMmCapacity>) -> Result<()> {
         instructions::market_maker::get_mm_capacity_handler(ctx)
     }

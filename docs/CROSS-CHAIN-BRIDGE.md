@@ -25,7 +25,7 @@ Enable via `set_feature_flag` (subject to admin timelock):
 
 ```typescript
 await program.methods
-  .setFeatureFlag(new BN(1).shln(13))
+  .setFeatureFlag(new BN(1).shln(17))
   .accounts({ authority, config })
   .rpc();
 ```

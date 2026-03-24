@@ -63,3 +63,5 @@ IDENTITY.md
 PROJECT.md
 *.heartbeat
 .heartbeat/
+sdk-python/sss/__pycache__/
+sdk-python/tests/__pycache__/

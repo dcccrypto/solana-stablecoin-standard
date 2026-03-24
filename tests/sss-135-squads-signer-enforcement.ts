@@ -384,6 +384,9 @@ describe("SSS-135: squads signer enforcement", () => {
       "zk_credential::init_credential_registry_handler",
       // upgrade.rs
       "upgrade::migrate_config_handler",
+      // market_maker.rs
+      "market_maker::init_market_maker_config_handler",
+      "market_maker::register_market_maker_handler",
     ];
 
     assert.isAtLeast(

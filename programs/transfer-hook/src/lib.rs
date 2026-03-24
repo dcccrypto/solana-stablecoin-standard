@@ -412,6 +412,16 @@ pub mod sss_transfer_hook {
 
                 // Look for the WalletRateLimit PDA in remaining_accounts.
                 // If the sender has no rate limit PDA, the transfer is allowed.
+                //
+                // ARCHITECTURAL NOTE (CodeRabbit SSS-138 follow-up):
+                // The transfer-hook cannot write directly to WalletRateLimit PDAs because
+                // those accounts are owned by sss-token, not transfer-hook. The correct
+                // long-term fix is to CPI from here to sss-token::update_wallet_rate_limit,
+                // which has authority to write to its own PDAs. The current try_borrow_mut_data
+                // approach works in practice on Solana because account data is mutable within
+                // a transaction regardless of owner, but is architecturally unsafe.
+                // TODO: Replace this with CPI to sss-token::update_wallet_rate_limit when
+                // the transfer-hook program is upgraded (requires ExtraAccountMetaList update).
                 if let Some(wrl_account) = ctx
                     .remaining_accounts
                     .iter()

@@ -1262,10 +1262,12 @@ mod proofs {
     }
 
     /// WHAT: When vault is perfectly balanced (vault_amount == total_reserves / 2),
-    ///       compute_fee returns exactly base_fee_bps.
+    ///       fee ≥ base_fee_bps (may equal base_fee_bps for even total_reserves,
+    ///       but due to integer division vault = total_reserves/2 may not be exact).
     /// WHY:  The "at balance" case is the minimum fee — a balanced pool should
     ///       never charge more than base.  This is the core incentive mechanism.
-    /// HOW:  Fix vault_amount = total_reserves / 2, verify fee == base_fee_bps. □
+    /// HOW:  Fix vault_amount = total_reserves / 2, assume total_reserves % 2 == 0,
+    ///       verify fee == base_fee_bps. □
     #[kani::proof]
     fn proof_psm_fee_curve_balanced_is_base() {
         let base_fee_bps: u16 = kani::any();
@@ -1275,9 +1277,10 @@ mod proofs {
         kani::assume(max_fee_bps <= 2_000);
         kani::assume(base_fee_bps <= max_fee_bps);
 
-        // Only valid when total_reserves > 0
+        // Only valid when total_reserves > 0 and even (so that total_reserves/2 is exact).
         let total_reserves: u64 = kani::any();
         kani::assume(total_reserves > 1);
+        kani::assume(total_reserves % 2 == 0);
 
         // Perfect balance: vault = exactly half of total_reserves
         let vault_amount: u64 = total_reserves / 2;

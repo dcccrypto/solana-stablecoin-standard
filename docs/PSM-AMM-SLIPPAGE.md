@@ -16,7 +16,7 @@ Solana PSM accounting.
 
 ## Fee Curve Formula
 
-```
+```text
 fee_bps = base_fee_bps + curve_k * (imbalance / total_reserves)²
 ```
 

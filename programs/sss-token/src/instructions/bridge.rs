@@ -29,7 +29,7 @@ use anchor_spl::token_interface::{
 
 use crate::error::SssError;
 use crate::events::{BridgeConfigInitialized, BridgeIn, BridgeOut};
-use crate::state::{BridgeConfig, StablecoinConfig, FLAG_BRIDGE_ENABLED, FLAG_CIRCUIT_BREAKER};
+use crate::state::{BridgeConfig, ConsumedMessageId, StablecoinConfig, FLAG_BRIDGE_ENABLED, FLAG_CIRCUIT_BREAKER};
 
 // ---------------------------------------------------------------------------
 // init_bridge_config
@@ -86,6 +86,8 @@ pub fn init_bridge_config_handler(
     bc.max_bridge_amount_per_tx = max_bridge_amount_per_tx;
     bc.bridge_fee_bps = bridge_fee_bps;
     bc.fee_vault = fee_vault;
+    // Default relayer authority to the stablecoin authority (can be updated).
+    bc.authority = ctx.accounts.config.authority;
     bc.total_bridged_out = 0;
     bc.total_bridged_in = 0;
     bc.bump = ctx.bumps.bridge_config;
@@ -116,6 +118,7 @@ pub struct BridgeTokensOut<'info> {
     pub config: Account<'info, StablecoinConfig>,
 
     #[account(
+        mut,
         seeds = [BridgeConfig::SEED, mint.key().as_ref()],
         bump = bridge_config.bump,
         constraint = bridge_config.sss_mint == mint.key() @ SssError::BridgeConfigMintMismatch,
@@ -136,10 +139,10 @@ pub struct BridgeTokensOut<'info> {
     )]
     pub sender_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// Fee vault token account (receives bridge fee deduction). May be the
-    /// same as sender_token_account when bridge_fee_bps == 0.
+    /// Fee vault token account (receives bridge fee). Must match bridge_config.fee_vault.
     #[account(
         mut,
+        constraint = fee_vault.key() == bridge_config.fee_vault @ SssError::FeeVaultMismatch,
         constraint = fee_vault.mint == mint.key() @ SssError::TokenAccountMintMismatch,
     )]
     pub fee_vault: InterfaceAccount<'info, TokenAccount>,
@@ -188,20 +191,34 @@ pub fn bridge_out_handler(
     let burn_amount = amount.checked_sub(fee_amount).unwrap();
     require!(burn_amount > 0, SssError::ZeroAmount);
 
-    // Transfer fee from sender to fee vault (burn fee via separate burn, or keep as collateral).
-    // Here we treat the fee as protocol revenue: burn it too (deflationary model).
-    // Authority can update to transfer to fee_vault account instead.
-    let total_burn = amount; // burn full amount; fee logic documented for integrators
-
-    // Burn tokens from sender — authority is the config PDA (mint authority)
+    // Transfer fee tokens from sender to fee vault (protocol revenue, not burned).
     let mint_key = ctx.accounts.mint.key();
+    let config_bump = ctx.accounts.config.bump;
     let seeds = &[
         StablecoinConfig::SEED,
         mint_key.as_ref(),
-        &[config.bump],
+        &[config_bump],
     ];
     let signer_seeds = &[&seeds[..]];
 
+    if fee_amount > 0 {
+        anchor_spl::token_interface::transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                anchor_spl::token_interface::TransferChecked {
+                    from: ctx.accounts.sender_token_account.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.fee_vault.to_account_info(),
+                    authority: ctx.accounts.config.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            fee_amount,
+            ctx.accounts.mint.decimals,
+        )?;
+    }
+
+    // Burn only the net amount (amount - fee) from sender.
     burn(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
@@ -212,12 +229,12 @@ pub fn bridge_out_handler(
             },
             signer_seeds,
         ),
-        total_burn,
+        burn_amount,
     )?;
 
     // Update accounting
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(total_burn).unwrap();
+    config.total_burned = config.total_burned.checked_add(burn_amount).unwrap();
 
     let bc = &mut ctx.accounts.bridge_config;
     bc.total_bridged_out = bc.total_bridged_out.checked_add(burn_amount).unwrap();
@@ -250,22 +267,25 @@ pub fn bridge_out_handler(
 /// For Wormhole: this is the VAA bytes.  For LayerZero: the LZ proof bytes.
 /// On-chain verification of the actual proof requires CPI to the bridge program.
 /// This struct carries the raw bytes; a production deployment would CPI to
-/// the bridge program to validate.  Tests inject verified=true via a mock.
+/// the bridge program to validate.
+/// The `message_id` for replay protection is passed as a separate instruction argument
+/// so it can be used in account seeds via `#[instruction(...)]`.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct BridgeProof {
     /// Raw proof bytes (VAA for Wormhole, LZ proof for LayerZero). Max 1024 bytes.
     pub proof_bytes: Vec<u8>,
     /// Source chain ID
     pub source_chain: u16,
-    /// Whether the proof has been externally verified (used in mocked tests).
-    /// In production, this is always re-verified via CPI to bridge_program.
-    pub verified: bool,
 }
 
 #[derive(Accounts)]
+#[instruction(proof: BridgeProof, amount: u64, recipient: Pubkey, message_id: [u8; 32])]
 pub struct BridgeTokensIn<'info> {
-    /// The relayer / bridge crank calling this instruction.
-    /// Must match bridge_config.bridge_program's expected signer OR be authority.
+    /// The authorized relayer — must match bridge_config.authority.
+    #[account(
+        mut,
+        constraint = relayer.key() == bridge_config.authority @ SssError::BridgeRelayerUnauthorized,
+    )]
     pub relayer: Signer<'info>,
 
     #[account(
@@ -276,11 +296,23 @@ pub struct BridgeTokensIn<'info> {
     pub config: Account<'info, StablecoinConfig>,
 
     #[account(
+        mut,
         seeds = [BridgeConfig::SEED, mint.key().as_ref()],
         bump = bridge_config.bump,
         constraint = bridge_config.sss_mint == mint.key() @ SssError::BridgeConfigMintMismatch,
     )]
     pub bridge_config: Account<'info, BridgeConfig>,
+
+    /// Replay-protection PDA for this message_id.
+    /// Init fails if already exists, preventing double-spend.
+    #[account(
+        init,
+        payer = relayer,
+        space = 8 + ConsumedMessageId::INIT_SPACE,
+        seeds = [ConsumedMessageId::SEED, mint.key().as_ref(), message_id.as_ref()],
+        bump,
+    )]
+    pub consumed_message: Account<'info, ConsumedMessageId>,
 
     #[account(
         mut,
@@ -295,17 +327,22 @@ pub struct BridgeTokensIn<'info> {
     pub recipient_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,
+    pub system_program: Program<'info, System>,
 }
 
 /// Bridge tokens in: verify bridge proof, mint `amount` to recipient.
+/// Security:
+///   - Relayer must be bridge_config.authority (enforced in account constraints).
+///   - `verified` flag is ignored — only proof_bytes and message_id matter.
+///   - Each message_id may only be consumed once (ConsumedMessageId PDA init).
 pub fn bridge_in_handler(
     ctx: Context<BridgeTokensIn>,
     proof: BridgeProof,
     amount: u64,
     recipient: Pubkey,
+    message_id: [u8; 32],
 ) -> Result<()> {
     let config = &ctx.accounts.config;
-    let _bc = &ctx.accounts.bridge_config;
 
     // Prerequisite checks
     require!(amount > 0, SssError::ZeroAmount);
@@ -324,11 +361,9 @@ pub fn bridge_in_handler(
         SssError::BridgeRecipientMismatch
     );
 
-    // Proof verification:
-    // In production: CPI to bridge_config.bridge_program to validate the VAA/proof.
-    // In tests: proof.verified == true (mock bridge program sets this).
+    // Proof sanity: ensure proof_bytes are non-empty.
+    // Full on-chain verification: CPI to bridge_config.bridge_program in production.
     require!(!proof.proof_bytes.is_empty(), SssError::BridgeProofEmpty);
-    require!(proof.verified, SssError::BridgeProofInvalid);
 
     // Supply cap check (respects max_supply)
     if config.max_supply > 0 {
@@ -338,12 +373,20 @@ pub fn bridge_in_handler(
         );
     }
 
+    // Mark message_id as consumed (PDA already init'd in account constraints — init
+    // fails if the PDA already exists, providing replay protection atomically).
+    let consumed = &mut ctx.accounts.consumed_message;
+    consumed.message_id = message_id;
+    consumed.sss_mint = ctx.accounts.mint.key();
+    consumed.bump = ctx.bumps.consumed_message;
+
     // Mint tokens to recipient
     let mint_key = ctx.accounts.mint.key();
+    let config_bump = ctx.accounts.config.bump;
     let seeds = &[
         StablecoinConfig::SEED,
         mint_key.as_ref(),
-        &[config.bump],
+        &[config_bump],
     ];
     let signer_seeds = &[&seeds[..]];
 

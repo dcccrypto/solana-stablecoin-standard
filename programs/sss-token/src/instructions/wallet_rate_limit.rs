@@ -180,3 +180,93 @@ pub fn remove_wallet_rate_limit_handler(
     );
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// update_wallet_rate_limit — called via CPI from transfer-hook to update counters
+// ---------------------------------------------------------------------------
+//
+// The transfer-hook program (program-owned by sss-token) cannot write directly
+// to WalletRateLimit accounts owned by sss-token.  Instead, the hook CPIs to
+// this instruction in sss-token, which has write authority over its own PDAs.
+//
+// Security: The caller must be the registered transfer_hook_program on the mint.
+//           Only the transfer amount and slot tracking fields are updated.
+// ---------------------------------------------------------------------------
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct UpdateWalletRateLimitParams {
+    /// The wallet whose rate limit window is being updated.
+    pub wallet: Pubkey,
+    /// Amount being transferred in this operation.
+    pub transfer_amount: u64,
+    /// Current slot (from Clock).
+    pub current_slot: u64,
+}
+
+#[derive(Accounts)]
+#[instruction(params: UpdateWalletRateLimitParams)]
+pub struct UpdateWalletRateLimit<'info> {
+    /// Must be the transfer-hook program or the sss-token authority.
+    /// In practice the transfer-hook CPI uses its own program signing.
+    pub caller: Signer<'info>,
+
+    #[account(
+        seeds = [StablecoinConfig::SEED, mint.key().as_ref()],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, StablecoinConfig>,
+
+    #[account(constraint = mint.key() == config.mint)]
+    pub mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        mut,
+        seeds = [WalletRateLimit::SEED, mint.key().as_ref(), params.wallet.as_ref()],
+        bump = wallet_rate_limit.bump,
+    )]
+    pub wallet_rate_limit: Account<'info, WalletRateLimit>,
+
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
+pub fn update_wallet_rate_limit_handler(
+    ctx: Context<UpdateWalletRateLimit>,
+    params: UpdateWalletRateLimitParams,
+) -> Result<()> {
+    // Enforce: caller must be the registered transfer_hook_program on the config,
+    // OR be the authority (for testing/emergency override).
+    require!(
+        ctx.accounts.caller.key() == ctx.accounts.config.transfer_hook_program
+            || ctx.accounts.caller.key() == ctx.accounts.config.authority,
+        SssError::Unauthorized
+    );
+
+    let wrl = &mut ctx.accounts.wallet_rate_limit;
+    let current_slot = params.current_slot;
+
+    // Reset window if elapsed
+    if current_slot >= wrl.window_start_slot.saturating_add(wrl.window_slots) {
+        wrl.transferred_this_window = 0;
+        wrl.window_start_slot = current_slot;
+    }
+
+    let new_total = wrl
+        .transferred_this_window
+        .checked_add(params.transfer_amount)
+        .ok_or(error!(SssError::WalletRateLimitExceeded))?;
+
+    require!(
+        new_total <= wrl.max_transfer_per_window,
+        SssError::WalletRateLimitExceeded
+    );
+
+    wrl.transferred_this_window = new_total;
+
+    msg!(
+        "WalletRateLimit UPDATE: wallet={} transferred={} window_total={}",
+        params.wallet,
+        params.transfer_amount,
+        new_total
+    );
+    Ok(())
+}

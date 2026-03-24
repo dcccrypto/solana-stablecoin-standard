@@ -20,6 +20,9 @@ pub const MIN_SUPPORTED_VERSION: u8 = 1;
 /// Idempotent: calling it on an already-migrated config is a no-op (returns Ok).
 /// Token-2022 mint accounts are NOT touched — only the config PDA is updated.
 /// Existing CDPs, vaults, minter records, and ATAs continue working unchanged.
+///
+/// Resizes the PDA if it is smaller than the current `InitSpace` allocation
+/// (i.e. was created by a v0 build that had fewer fields).
 pub fn migrate_config_handler(ctx: Context<MigrateConfig>) -> Result<()> {
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
@@ -27,6 +30,26 @@ pub fn migrate_config_handler(ctx: Context<MigrateConfig>) -> Result<()> {
             &ctx.accounts.config,
             &ctx.accounts.authority.key(),
         )?;
+    }
+
+    // Realloc to current InitSpace if the account is undersized (v0 → v1).
+    let target_space = 8 + StablecoinConfig::INIT_SPACE;
+    let account_info = ctx.accounts.config.to_account_info();
+    let current_len = account_info.data_len();
+
+    if current_len < target_space {
+        account_info.resize(target_space)?;
+
+        // Fund any additional rent from the authority wallet.
+        let rent = Rent::get()?;
+        let needed = rent.minimum_balance(target_space);
+        let current_lamports = account_info.lamports();
+        if current_lamports < needed {
+            let diff = needed - current_lamports;
+            let authority_info = ctx.accounts.authority.to_account_info();
+            **authority_info.try_borrow_mut_lamports()? -= diff;
+            **account_info.try_borrow_mut_lamports()? += diff;
+        }
     }
 
     let config = &mut ctx.accounts.config;
@@ -75,6 +98,8 @@ pub struct MigrateConfig<'info> {
         constraint = config.authority == authority.key() @ SssError::Unauthorized,
     )]
     pub config: Account<'info, StablecoinConfig>,
+
+    pub system_program: Program<'info, System>,
 }
 
 // ---------------------------------------------------------------------------

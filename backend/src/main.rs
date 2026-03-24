@@ -133,6 +133,7 @@ async fn main() {
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
         .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+        .route("/api/alerts", get(get_alerts).post(post_alert))
         .route("/api/travel-rule/records", get(get_travel_rule_records))
         .route("/api/pid-config", get(get_pid_config))
         .route("/api/zk-credentials/records", get(list_credential_records))
