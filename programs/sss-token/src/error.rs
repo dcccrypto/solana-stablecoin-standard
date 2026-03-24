@@ -267,4 +267,7 @@ pub enum SssError {
     OracleNotConfigured,
     #[msg("Invalid oracle type — must be 0 (Pyth), 1 (Switchboard), or 2 (Custom)")]
     InvalidOracleType,
+    // SSS-131: Graduated liquidation bonus errors
+    #[msg("Invalid liquidation tier config — check threshold ordering and bonus bounds")]
+    InvalidLiquidationTierConfig,
 }

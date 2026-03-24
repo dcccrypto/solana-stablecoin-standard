@@ -780,4 +780,26 @@ pub mod sss_token {
     pub fn close_credential_record(ctx: Context<CloseCredentialRecord>) -> Result<()> {
         instructions::zk_credential::close_credential_record_handler(ctx)
     }
+
+    // -----------------------------------------------------------------------
+    // SSS-131: Graduated liquidation bonuses
+    // -----------------------------------------------------------------------
+
+    /// Initialise a `LiquidationBonusConfig` PDA and enable FLAG_GRAD_LIQUIDATION_BONUS.
+    /// Authority-only. Defines three tiers of graduated bonuses based on CDP collateral ratio.
+    pub fn init_liquidation_bonus_config(
+        ctx: Context<InitLiquidationBonusConfig>,
+        params: InitLiquidationBonusConfigParams,
+    ) -> Result<()> {
+        instructions::liquidation_bonus::init_liquidation_bonus_config_handler(ctx, params)
+    }
+
+    /// Update the tier thresholds and bonus rates in an existing `LiquidationBonusConfig`.
+    /// Authority-only.
+    pub fn update_liquidation_bonus_config(
+        ctx: Context<UpdateLiquidationBonusConfig>,
+        params: UpdateLiquidationBonusConfigParams,
+    ) -> Result<()> {
+        instructions::liquidation_bonus::update_liquidation_bonus_config_handler(ctx, params)
+    }
 }

@@ -7,7 +7,8 @@ use anchor_spl::token_interface::{
 use crate::error::SssError;
 use crate::events::{CdpLiquidated, CollateralLiquidated};
 use crate::oracle;
-use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
+use crate::state::{CdpPosition, CollateralConfig, CollateralVault, LiquidationBonusConfig, StablecoinConfig, FLAG_CIRCUIT_BREAKER, FLAG_GRAD_LIQUIDATION_BONUS};
+use crate::events::GraduatedLiquidationBonusApplied;
 
 /// Global fallback liquidation bonus (5%) when no CollateralConfig is provided.
 const DEFAULT_LIQUIDATION_BONUS_BPS: u16 = 500;
@@ -127,6 +128,20 @@ pub struct CdpLiquidate<'info> {
     )]
     pub collateral_config: Option<Box<Account<'info, CollateralConfig>>>,
 
+    /// SSS-131: Optional graduated liquidation bonus config PDA.
+    /// When provided (and FLAG_GRAD_LIQUIDATION_BONUS is set on config), the bonus is
+    /// computed from the tier schedule rather than the flat CollateralConfig value.
+    /// Seeds: [b"liquidation-bonus-config", sss_mint]
+    #[account(
+        seeds = [
+            LiquidationBonusConfig::SEED,
+            sss_mint.key().as_ref(),
+        ],
+        bump = liquidation_bonus_config.bump,
+        constraint = liquidation_bonus_config.sss_mint == sss_mint.key() @ SssError::Unauthorized,
+    )]
+    pub liquidation_bonus_config: Option<Box<Account<'info, LiquidationBonusConfig>>>,
+
     /// Token program for SSS-3 (Token-2022)
     pub sss_token_program: Interface<'info, TokenInterface>,
 
@@ -190,7 +205,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
 
     // SSS-100: Use per-collateral threshold from CollateralConfig when available,
     // otherwise fall back to global CdpPosition::LIQUIDATION_THRESHOLD_BPS.
-    let (liquidation_threshold_bps, bonus_bps) = if let Some(cc) = &ctx.accounts.collateral_config {
+    let (liquidation_threshold_bps, flat_bonus_bps) = if let Some(cc) = &ctx.accounts.collateral_config {
         (cc.liquidation_threshold_bps as u128, cc.liquidation_bonus_bps)
     } else {
         (
@@ -203,6 +218,36 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         ratio_bps < liquidation_threshold_bps,
         SssError::CdpNotLiquidatable
     );
+
+    // SSS-131: Graduated liquidation bonus — use tiered schedule when FLAG_GRAD_LIQUIDATION_BONUS
+    // is set AND the LiquidationBonusConfig account is provided; otherwise use flat bonus.
+    let (bonus_bps, tier_applied) = if ctx.accounts.config.feature_flags & FLAG_GRAD_LIQUIDATION_BONUS != 0 {
+        if let Some(lbc) = &ctx.accounts.liquidation_bonus_config {
+            let tier = if ratio_bps < lbc.tier3_threshold_bps as u128 {
+                3u8
+            } else if ratio_bps < lbc.tier2_threshold_bps as u128 {
+                2u8
+            } else {
+                1u8
+            };
+            (lbc.bonus_for_ratio(ratio_bps), tier)
+        } else {
+            (flat_bonus_bps, 0u8)
+        }
+    } else {
+        (flat_bonus_bps, 0u8)
+    };
+
+    // Emit graduated bonus event if flag is set
+    if tier_applied > 0 {
+        emit!(GraduatedLiquidationBonusApplied {
+            mint: ctx.accounts.sss_mint.key(),
+            cdp_owner: ctx.accounts.cdp_owner.key(),
+            ratio_bps: ratio_bps as u64,
+            tier_applied,
+            bonus_bps,
+        });
+    }
 
     // 4. Determine debt to burn and collateral to seize.
     //
