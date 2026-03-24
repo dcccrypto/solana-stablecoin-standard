@@ -29,7 +29,7 @@ pub mod sss_token {
     }
 
     /// Mint tokens to a recipient. Caller must be a registered minter.
-    pub fn mint(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
+    pub fn mint<'info>(ctx: Context<'_, '_, 'info, 'info, MintTokens<'info>>, amount: u64) -> Result<()> {
         instructions::mint::handler(ctx, amount)
     }
 

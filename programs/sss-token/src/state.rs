@@ -97,6 +97,17 @@ pub const FLAG_SQUADS_AUTHORITY: u64 = 1 << 15;
 pub const PRESET_INSTITUTIONAL: u8 = 4;
 
 // ---------------------------------------------------------------------------
+// SSS-145: Supply cap enforcement + PoR mint halt
+// ---------------------------------------------------------------------------
+/// When set, the mint instruction checks the latest on-chain PoR attestation
+/// ratio (`ProofOfReserves.last_verified_ratio_bps`) against
+/// `config.min_reserve_ratio_bps`.  If the ratio is below threshold (i.e. a
+/// reserve breach is active), minting is rejected with `PoRBreachHaltsMinting`.
+/// Requires: SSS-123 `ProofOfReserves` PDA to exist and have been verified at
+/// least once (`last_attestation_slot > 0`).
+pub const FLAG_POR_HALT_ON_BREACH: u64 = 1 << 16;
+
+// ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
 // ---------------------------------------------------------------------------
 /// No pending operation.

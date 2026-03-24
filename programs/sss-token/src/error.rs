@@ -314,4 +314,11 @@ pub enum SssError {
     SquadsMembersTooMany,
     #[msg("Duplicate pubkey in Squads member list")]
     SquadsDuplicateMember,
+    // SSS-145: Supply cap enforcement + PoR mint halt
+    #[msg("Supply cap and minter cap are both zero — at least one must be set to prevent uncapped minting")]
+    SupplyCapAndMinterCapBothZero,
+    #[msg("FLAG_POR_HALT_ON_BREACH is set but no PoR attestation has been submitted yet")]
+    PoRNotAttested,
+    #[msg("Minting halted: PoR attestation shows reserve breach (ratio below min_reserve_ratio_bps)")]
+    PoRBreachHaltsMinting,
 }
