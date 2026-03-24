@@ -49,6 +49,27 @@ const FLAG_SANCTIONS_ORACLE: u64 = 1 << 9;
 /// FLAG_ZK_CREDENTIALS bit in feature_flags (bit 10 = 1 << 10).
 const FLAG_ZK_CREDENTIALS: u64 = 1 << 10;
 
+/// FLAG_WALLET_RATE_LIMITS bit in feature_flags (bit 14 = 1 << 14).
+const FLAG_WALLET_RATE_LIMITS: u64 = 1 << 14;
+
+/// PDA seed for WalletRateLimit in the sss-token program.
+const WALLET_RATE_LIMIT_SEED: &[u8] = b"wallet-rate-limit";
+
+/// Byte offsets within WalletRateLimit account data (Borsh layout):
+///   discriminator                8  @ 0
+///   sss_mint         Pubkey     32  @ 8
+///   wallet           Pubkey     32  @ 40
+///   max_transfer_per_window u64  8  @ 72
+///   window_slots             u64  8  @ 80
+///   transferred_this_window  u64  8  @ 88
+///   window_start_slot        u64  8  @ 96
+///   bump             u8           1  @ 104
+const WRL_MAX_TRANSFER_OFFSET: usize = 72;
+const WRL_WINDOW_SLOTS_OFFSET: usize = 80;
+const WRL_TRANSFERRED_OFFSET: usize = 88;
+const WRL_WINDOW_START_OFFSET: usize = 96;
+const WRL_MIN_SIZE: usize = 104;
+
 /// PDA seed for CredentialRecord in the sss-token program.
 const CREDENTIAL_RECORD_SEED: &[u8] = b"credential-record";
 
@@ -373,6 +394,104 @@ pub mod sss_transfer_hook {
                     return Err(error!(HookError::CredentialRequired));
                 }
             }
+
+            // --- Per-wallet rate limit check ---
+            // If FLAG_WALLET_RATE_LIMITS is set, look for a WalletRateLimit PDA
+            // for the sender in remaining_accounts.  If found, enforce the rolling
+            // window limit and update the window counters atomically.
+            // Seeds: [b"wallet-rate-limit", mint, src_owner]  in sss-token program.
+            if feature_flags & FLAG_WALLET_RATE_LIMITS != 0 {
+                let (expected_wrl_pda, _bump) = Pubkey::find_program_address(
+                    &[
+                        WALLET_RATE_LIMIT_SEED,
+                        ctx.accounts.mint.key().as_ref(),
+                        src_owner.as_ref(),
+                    ],
+                    &sss_token_program::ID,
+                );
+
+                // Look for the WalletRateLimit PDA in remaining_accounts.
+                // If the sender has no rate limit PDA, the transfer is allowed.
+                if let Some(wrl_account) = ctx
+                    .remaining_accounts
+                    .iter()
+                    .find(|a| a.key() == expected_wrl_pda)
+                {
+                    require!(
+                        wrl_account.is_writable,
+                        HookError::WalletRateLimitAccountNotWritable
+                    );
+
+                    let mut wrl_data = wrl_account.try_borrow_mut_data()?;
+                    require!(
+                        wrl_data.len() >= WRL_MIN_SIZE,
+                        HookError::WalletRateLimitAccountNotWritable
+                    );
+
+                    // Read current state
+                    let max_transfer = u64::from_le_bytes(
+                        wrl_data[WRL_MAX_TRANSFER_OFFSET..WRL_MAX_TRANSFER_OFFSET + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let window_slots = u64::from_le_bytes(
+                        wrl_data[WRL_WINDOW_SLOTS_OFFSET..WRL_WINDOW_SLOTS_OFFSET + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let transferred = u64::from_le_bytes(
+                        wrl_data[WRL_TRANSFERRED_OFFSET..WRL_TRANSFERRED_OFFSET + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let window_start = u64::from_le_bytes(
+                        wrl_data[WRL_WINDOW_START_OFFSET..WRL_WINDOW_START_OFFSET + 8]
+                            .try_into()
+                            .unwrap(),
+                    );
+
+                    let clock = Clock::get()?;
+                    let current_slot = clock.slot;
+
+                    // Determine if we are in the same window or need to reset
+                    let window_elapsed = window_start == 0
+                        || current_slot >= window_start.saturating_add(window_slots);
+
+                    let new_transferred: u64;
+                    let new_window_start: u64;
+
+                    if window_elapsed {
+                        // New window — reset counter, start fresh
+                        new_window_start = current_slot;
+                        new_transferred = amount;
+                    } else {
+                        // Same window — accumulate
+                        new_window_start = window_start;
+                        new_transferred = transferred.saturating_add(amount);
+                    }
+
+                    // Enforce the cap
+                    require!(
+                        new_transferred <= max_transfer,
+                        HookError::WalletRateLimitExceeded
+                    );
+
+                    // Write updated state back
+                    wrl_data[WRL_TRANSFERRED_OFFSET..WRL_TRANSFERRED_OFFSET + 8]
+                        .copy_from_slice(&new_transferred.to_le_bytes());
+                    wrl_data[WRL_WINDOW_START_OFFSET..WRL_WINDOW_START_OFFSET + 8]
+                        .copy_from_slice(&new_window_start.to_le_bytes());
+
+                    msg!(
+                        "WalletRateLimit OK: wallet={} transferred={}/{} window_reset={}",
+                        src_owner,
+                        new_transferred,
+                        max_transfer,
+                        window_elapsed
+                    );
+                }
+                // No WalletRateLimit PDA for this sender = unrestricted.
+            }
         }
 
         msg!("Transfer hook: {} tokens OK", amount);
@@ -619,6 +738,10 @@ pub enum HookError {
     CredentialExpired,
     #[msg("ZK credentials: sender's CredentialRecord has been revoked")]
     CredentialRevoked,
+    #[msg("Per-wallet rate limit exceeded: sender has transferred too much in this window")]
+    WalletRateLimitExceeded,
+    #[msg("WalletRateLimit account must be passed as writable")]
+    WalletRateLimitAccountNotWritable,
 }
 
 /// Blacklist state PDA for a given mint.

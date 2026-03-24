@@ -77,6 +77,14 @@ pub const FLAG_GRAD_LIQUIDATION_BONUS: u64 = 1 << 12;
 /// fee_bps = base_fee + k * (reserve_imbalance / total_reserves)^2
 pub const FLAG_PSM_DYNAMIC_FEES: u64 = 1 << 13;
 
+/// SSS-133: Per-wallet rate limiting flag (bit 14): when set, the transfer hook
+/// checks a `WalletRateLimit` PDA for the sender.  If the PDA exists, the sender's
+/// outbound transfers are capped to `max_transfer_per_window` tokens within
+/// `window_slots` slots (rolling window reset).
+/// Distinct from FLAG_SPEND_POLICY (global per-tx cap) — this is per-address
+/// rolling window enforcement, useful for corporate treasury controls.
+pub const FLAG_WALLET_RATE_LIMITS: u64 = 1 << 14;
+
 
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
@@ -1234,4 +1242,52 @@ impl PsmCurveConfig {
         let clamped = raw_fee.min(self.max_fee_bps as u128) as u16;
         clamped
     }
+}
+
+// ---------------------------------------------------------------------------
+// SSS-133: Per-wallet rate limiting — WalletRateLimit PDA
+// ---------------------------------------------------------------------------
+
+/// Per-wallet rolling-window transfer rate limit.
+///
+/// Seeds: [b"wallet-rate-limit", sss_mint, wallet]
+///
+/// Created by `set_wallet_rate_limit` (authority-only).
+/// Closed by `remove_wallet_rate_limit` (authority-only).
+///
+/// When FLAG_WALLET_RATE_LIMITS is set and a `WalletRateLimit` PDA exists for
+/// the sender, the transfer hook enforces:
+///
+///   if current_slot < window_start_slot + window_slots:
+///       # still in same window
+///       require transferred_this_window + amount <= max_transfer_per_window
+///       transferred_this_window += amount
+///   else:
+///       # window elapsed — reset
+///       window_start_slot = current_slot
+///       transferred_this_window = amount
+///       require transferred_this_window <= max_transfer_per_window
+///
+/// The `transferred_this_window` and `window_start_slot` fields are updated
+/// **in the transfer hook** (account must be passed as writable).
+#[account]
+#[derive(InitSpace)]
+pub struct WalletRateLimit {
+    /// The SSS mint this limit applies to.
+    pub sss_mint: Pubkey,
+    /// The wallet (token account owner) being rate-limited.
+    pub wallet: Pubkey,
+    /// Maximum tokens allowed to transfer per window.
+    pub max_transfer_per_window: u64,
+    /// Window duration in slots.
+    pub window_slots: u64,
+    /// Tokens transferred in the current window (reset when window elapses).
+    pub transferred_this_window: u64,
+    /// Slot at which the current window started.
+    pub window_start_slot: u64,
+    pub bump: u8,
+}
+
+impl WalletRateLimit {
+    pub const SEED: &'static [u8] = b"wallet-rate-limit";
 }
