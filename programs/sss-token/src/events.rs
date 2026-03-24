@@ -801,3 +801,52 @@ pub struct BridgeConfigInitialized {
     /// Fee in basis points.
     pub bridge_fee_bps: u16,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-138: Market maker hook events
+// ---------------------------------------------------------------------------
+
+/// Emitted on a successful `mm_mint`.
+#[event]
+pub struct MmMint {
+    pub mint: Pubkey,
+    pub market_maker: Pubkey,
+    pub amount: u64,
+    pub slot: u64,
+}
+
+/// Emitted on a successful `mm_burn`.
+#[event]
+pub struct MmBurn {
+    pub mint: Pubkey,
+    pub market_maker: Pubkey,
+    pub amount: u64,
+    pub slot: u64,
+}
+
+/// Emitted by `get_mm_capacity` — reports remaining per-slot limits.
+#[event]
+pub struct MmCapacity {
+    pub mint: Pubkey,
+    pub mint_remaining: u64,
+    pub burn_remaining: u64,
+    pub slot: u64,
+}
+
+/// Emitted when MarketMakerConfig is initialised.
+#[event]
+pub struct MarketMakerConfigInitialized {
+    pub mint: Pubkey,
+    pub mm_mint_limit_per_slot: u64,
+    pub mm_burn_limit_per_slot: u64,
+    pub spread_bps: u16,
+    pub authority: Pubkey,
+}
+
+/// Emitted when a market maker is registered or removed.
+#[event]
+pub struct MarketMakerRegistered {
+    pub mint: Pubkey,
+    pub market_maker: Pubkey,
+    pub authority: Pubkey,
+}

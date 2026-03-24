@@ -944,4 +944,34 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::bridge::bridge_in_handler(ctx, proof, amount, recipient)
     }
+
+    // -----------------------------------------------------------------------
+    // SSS-138: Market Maker Hooks
+    // -----------------------------------------------------------------------
+
+    pub fn init_market_maker_config(
+        ctx: Context<InitMarketMakerConfig>,
+        params: InitMarketMakerConfigParams,
+    ) -> Result<()> {
+        instructions::market_maker::init_market_maker_config_handler(ctx, params)
+    }
+
+    pub fn register_market_maker(
+        ctx: Context<RegisterMarketMaker>,
+        mm_pubkey: Pubkey,
+    ) -> Result<()> {
+        instructions::market_maker::register_market_maker_handler(ctx, mm_pubkey)
+    }
+
+    pub fn mm_mint(ctx: Context<MmMintAccounts>, amount: u64) -> Result<()> {
+        instructions::market_maker::mm_mint_handler(ctx, amount)
+    }
+
+    pub fn mm_burn(ctx: Context<MmBurnAccounts>, amount: u64) -> Result<()> {
+        instructions::market_maker::mm_burn_handler(ctx, amount)
+    }
+
+    pub fn get_mm_capacity(ctx: Context<GetMmCapacity>) -> Result<()> {
+        instructions::market_maker::get_mm_capacity_handler(ctx)
+    }
 }

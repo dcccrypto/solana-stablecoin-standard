@@ -330,4 +330,19 @@ pub enum SssError {
     BridgeProofEmpty,
     #[msg("Bridge proof verification failed")]
     BridgeProofInvalid,
+    // SSS-138: Market maker errors
+    #[msg("Market maker hooks not enabled — set FLAG_MARKET_MAKER_HOOKS first")]
+    MarketMakerHooksNotEnabled,
+    #[msg("Caller is not a whitelisted market maker")]
+    NotWhitelistedMarketMaker,
+    #[msg("Market maker whitelist is full (max 10)")]
+    MarketMakerListFull,
+    #[msg("Market maker mint limit exceeded for this slot")]
+    MmMintLimitExceeded,
+    #[msg("Market maker burn limit exceeded for this slot")]
+    MmBurnLimitExceeded,
+    #[msg("Oracle price is outside the market maker spread tolerance")]
+    OraclePriceOutsideSpread,
+    #[msg("Market maker already registered")]
+    MarketMakerAlreadyRegistered,
 }

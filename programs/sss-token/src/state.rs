@@ -101,6 +101,11 @@ pub const FLAG_POR_HALT_ON_BREACH: u64 = 1 << 16;
 /// via `init_bridge_config`.  See docs/CROSS-CHAIN-BRIDGE.md for details.
 pub const FLAG_BRIDGE_ENABLED: u64 = 1 << 17;
 
+/// SSS-138: Market maker hooks flag (bit 18): when set, `mm_mint` and `mm_burn`
+/// instructions are available to whitelisted market makers for programmatic peg
+/// spread management.  Requires a `MarketMakerConfig` PDA via `init_market_maker_config`.
+pub const FLAG_MARKET_MAKER_HOOKS: u64 = 1 << 18;
+
 /// PRESET_INSTITUTIONAL (4): all SSS-3 features + Squads V4 multisig authority.
 /// Recommended for issuers holding > $1 M in reserves.
 pub const PRESET_INSTITUTIONAL: u8 = 4;
@@ -1392,4 +1397,47 @@ impl BridgeConfig {
     pub const BRIDGE_TYPE_WORMHOLE: u8 = 1;
     /// Bridge type: LayerZero
     pub const BRIDGE_TYPE_LAYERZERO: u8 = 2;
+}
+
+// ---------------------------------------------------------------------------
+// SSS-138: MarketMakerConfig PDA
+// ---------------------------------------------------------------------------
+
+/// MarketMakerConfig PDA — one per stablecoin mint when FLAG_MARKET_MAKER_HOOKS is set.
+///
+/// Whitelisted market makers may call `mm_mint` and `mm_burn` to tighten the peg
+/// spread programmatically.  Both instructions:
+///   - bypass stability fees
+///   - are rate-limited per slot (mm_mint_limit_per_slot / mm_burn_limit_per_slot)
+///   - require oracle price within spread_bps of the $1 peg
+///
+/// Seeds: [b"mm-config", sss_mint]
+#[account]
+#[derive(InitSpace)]
+pub struct MarketMakerConfig {
+    /// The SSS stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// Up to 10 whitelisted market maker pubkeys.
+    #[max_len(10)]
+    pub whitelisted_mms: Vec<Pubkey>,
+    /// Maximum tokens any MM may mint across all MMs per slot.
+    pub mm_mint_limit_per_slot: u64,
+    /// Maximum tokens any MM may burn across all MMs per slot.
+    pub mm_burn_limit_per_slot: u64,
+    /// Oracle spread tolerance in basis points (e.g. 50 = 0.5%).
+    /// MM ops require |oracle_price - peg| <= spread_bps * 10 (price in µUSD).
+    pub spread_bps: u16,
+    /// Slot when mm_minted_this_slot was last updated (resets counter on new slot).
+    pub last_mint_slot: u64,
+    /// Running total of tokens minted by all MMs in last_mint_slot.
+    pub mm_minted_this_slot: u64,
+    /// Slot when mm_burned_this_slot was last updated (resets counter on new slot).
+    pub last_burn_slot: u64,
+    /// Running total of tokens burned by all MMs in last_burn_slot.
+    pub mm_burned_this_slot: u64,
+    pub bump: u8,
+}
+
+impl MarketMakerConfig {
+    pub const SEED: &'static [u8] = b"mm-config";
 }
