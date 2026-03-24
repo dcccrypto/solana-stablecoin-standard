@@ -36,6 +36,11 @@ pub const FLAG_ZK_COMPLIANCE: u64 = 1 << 4;
 /// See docs/confidential-transfers.md for the full compliance model.
 pub const FLAG_CONFIDENTIAL_TRANSFERS: u64 = 1 << 5;
 
+/// Cross-chain bridge flag (bit 13): when set, `bridge_out` and `bridge_in`
+/// instructions are enabled.  Requires a `BridgeConfig` PDA to be initialized
+/// via `init_bridge_config`.  See docs/CROSS-CHAIN-BRIDGE.md for details.
+pub const FLAG_BRIDGE_ENABLED: u64 = 1 << 13;
+
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
 // ---------------------------------------------------------------------------
@@ -561,4 +566,46 @@ pub struct ConfidentialTransferConfig {
 
 impl ConfidentialTransferConfig {
     pub const SEED: &'static [u8] = b"ct-config";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-135: Cross-Chain Bridge — BridgeConfig PDA
+// ---------------------------------------------------------------------------
+
+/// Cross-chain bridge configuration PDA — one per stablecoin mint.
+/// Seeds: [b"bridge-config", sss_mint]
+///
+/// Stores bridge type, bridge program address, per-tx limits and fee.
+/// Created by `init_bridge_config`; activated by enabling FLAG_BRIDGE_ENABLED
+/// via `set_feature_flag` (subject to admin timelock).
+#[account]
+#[derive(InitSpace)]
+pub struct BridgeConfig {
+    /// The SSS stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// Bridge type: 1 = Wormhole, 2 = LayerZero.
+    pub bridge_type: u8,
+    /// Address of the bridge program (Wormhole core bridge or LayerZero endpoint).
+    /// `bridge_in` verifies proofs by CPI to this program in production.
+    pub bridge_program: Pubkey,
+    /// Maximum tokens per bridge_out transaction (0 = unlimited).
+    pub max_bridge_amount_per_tx: u64,
+    /// Bridge fee in basis points (e.g. 10 = 0.1%). Max 1000 bps (10%).
+    /// Deducted from bridge_out amount; fee is burned (deflationary).
+    pub bridge_fee_bps: u16,
+    /// Protocol fee vault token account address (receives fee tokens).
+    pub fee_vault: Pubkey,
+    /// Running total of tokens bridged out (net of fees).
+    pub total_bridged_out: u64,
+    /// Running total of tokens bridged in.
+    pub total_bridged_in: u64,
+    pub bump: u8,
+}
+
+impl BridgeConfig {
+    pub const SEED: &'static [u8] = b"bridge-config";
+    /// Bridge type: Wormhole
+    pub const BRIDGE_TYPE_WORMHOLE: u8 = 1;
+    /// Bridge type: LayerZero
+    pub const BRIDGE_TYPE_LAYERZERO: u8 = 2;
 }
