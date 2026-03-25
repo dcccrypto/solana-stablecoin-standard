@@ -73,6 +73,10 @@ const WRL_MIN_SIZE: usize = 104;
 /// PDA seed for CredentialRecord in the sss-token program.
 const CREDENTIAL_RECORD_SEED: &[u8] = b"credential-record";
 
+/// Program ID of the sss-token program that owns CredentialRecord PDAs.
+/// CredentialRecord PDAs are derived against THIS program, not the transfer-hook.
+const SSS_TOKEN_PROGRAM_ID: &str = "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat";
+
 /// PDA seed for VerificationRecord in the sss-token program.
 const ZK_VERIFICATION_SEED: &[u8] = b"zk-verification";
 
@@ -350,9 +354,12 @@ pub mod sss_transfer_hook {
                 // CredentialRecord is passed as the last remaining_account
                 // (after sanctions_record when both flags are active).
                 // Find it by deriving the expected PDA and matching.
+                // BUG-002 fix: CredentialRecord lives in sss-token, not transfer-hook.
+                // Using crate::ID (transfer-hook) would derive the wrong PDA address.
+                let sss_token_pid: Pubkey = SSS_TOKEN_PROGRAM_ID.parse().unwrap();
                 let (expected_cr_pda, _bump) = Pubkey::find_program_address(
                     &[CREDENTIAL_RECORD_SEED, ctx.accounts.mint.key().as_ref(), src_owner.as_ref()],
-                    &crate::ID, // sss-token program — resolved at build time via cross-program ref
+                    &sss_token_pid,
                 );
                 // Walk remaining_accounts looking for the CredentialRecord PDA.
                 let cr_account_opt = ctx.remaining_accounts.iter().find(|a| a.key() == expected_cr_pda);
