@@ -14,7 +14,9 @@
     "test:backend": "cd backend && cargo test",
     "lint": "yarn workspace @stbr/sss-token lint",
     "deploy:devnet": "bash scripts/deploy-devnet.sh",
-    "smoke:devnet": "npx ts-node scripts/smoke-test-devnet.ts"
+    "smoke:devnet": "npx ts-node scripts/smoke-test-devnet.ts",
+    "wizard": "npx ts-node scripts/deploy-wizard.ts",
+    "check-deployment": "npx ts-node scripts/check-deployment.ts"
   },
   "devDependencies": {
     "@coral-xyz/anchor": "^0.32.0",
