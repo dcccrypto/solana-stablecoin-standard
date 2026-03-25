@@ -10,13 +10,25 @@ use serde_json::json;
 
 use crate::state::AppState;
 
+// ─── Extension types ──────────────────────────────────────────────────────────
+
+/// Request extension set by `require_api_key` once a key is validated.
+/// Downstream middleware (e.g. `require_admin`) reads this to check role.
+#[derive(Clone)]
+pub struct ApiKeyInfo {
+    pub is_admin: bool,
+}
+
+// ─── Middleware: require_api_key ──────────────────────────────────────────────
+
 /// Axum middleware that validates the `X-Api-Key` header against the database
 /// and enforces per-key rate limiting.
 ///
 /// The `/api/health` endpoint is exempt (public, not rate-limited).
+/// On success, inserts an `ApiKeyInfo` extension into the request for downstream use.
 pub async fn require_api_key(
     State(state): State<AppState>,
-    req: Request<Body>,
+    mut req: Request<Body>,
     next: Next,
 ) -> Response {
     // Health check is public
@@ -44,17 +56,20 @@ pub async fn require_api_key(
             };
 
             match state.db.validate_api_key(&key_str) {
-                Ok(true) => {
+                Ok(Some(is_admin)) => {
                     // Key is valid — check rate limit before proceeding.
                     match state.rate_limiter.check(&key_str) {
-                        Ok(()) => next.run(req).await,
+                        Ok(()) => {
+                            // Attach key info as a request extension for downstream middleware.
+                            req.extensions_mut().insert(ApiKeyInfo { is_admin });
+                            next.run(req).await
+                        }
                         Err(retry_after_secs) => {
                             let mut resp = (
                                 StatusCode::TOO_MANY_REQUESTS,
                                 Json(json!({"success": false, "error": "Rate limit exceeded"})),
                             )
                                 .into_response();
-                            // Emit Retry-After only when we have a meaningful value.
                             if retry_after_secs < u64::MAX {
                                 if let Ok(val) = HeaderValue::from_str(&retry_after_secs.to_string()) {
                                     resp.headers_mut().insert("Retry-After", val);
@@ -64,7 +79,7 @@ pub async fn require_api_key(
                         }
                     }
                 }
-                Ok(false) => (
+                Ok(None) => (
                     StatusCode::UNAUTHORIZED,
                     Json(json!({"success": false, "error": "Invalid API key"})),
                 )
@@ -78,6 +93,36 @@ pub async fn require_api_key(
                         .into_response()
                 }
             }
+        }
+    }
+}
+
+// ─── Middleware: require_admin ────────────────────────────────────────────────
+
+/// Middleware that gates routes to admin-role API keys only.
+///
+/// Must be layered **after** `require_api_key` (i.e. inner layer) so that
+/// `ApiKeyInfo` is already populated in request extensions.
+///
+/// Returns `403 Forbidden` when the key is valid but not admin.
+pub async fn require_admin(
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    match req.extensions().get::<ApiKeyInfo>() {
+        Some(info) if info.is_admin => next.run(req).await,
+        Some(_) => (
+            StatusCode::FORBIDDEN,
+            Json(json!({"success": false, "error": "Admin role required"})),
+        )
+            .into_response(),
+        None => {
+            // require_api_key wasn't run first — shouldn't happen in normal config
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"success": false, "error": "Authentication required"})),
+            )
+                .into_response()
         }
     }
 }

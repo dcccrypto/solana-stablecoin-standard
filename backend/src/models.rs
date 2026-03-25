@@ -99,6 +99,8 @@ pub struct ApiKeyEntry {
     pub id: String,
     pub key: String,
     pub label: String,
+    /// Whether this key has admin privileges (can reach /api/admin/* routes).
+    pub is_admin: bool,
     pub created_at: String,
 }
 

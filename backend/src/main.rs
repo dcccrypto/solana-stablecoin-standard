@@ -19,7 +19,7 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use auth::require_api_key;
+use auth::{require_api_key, require_admin};
 use db::Database;
 use routes::{
     analytics::{get_cdp_health, get_liquidation_analytics, get_protocol_stats},
@@ -60,15 +60,17 @@ async fn main() {
     let db = Database::new(&db_path).expect("Failed to initialize database");
 
     // Bootstrap API key from environment (useful for first-run and testing).
+    // The bootstrap key is always created with is_admin=1 so that initial
+    // administrative setup (creating further keys, etc.) is possible.
     if let Ok(seed_key) = std::env::var("BOOTSTRAP_API_KEY") {
         if !seed_key.is_empty() {
             match db.validate_api_key(&seed_key) {
-                Ok(true) => info!("Bootstrap API key already exists"),
+                Ok(Some(_)) => info!("Bootstrap API key already exists"),
                 _ => {
-                    // Insert the seed key directly
+                    // Insert the seed key directly with admin role.
                     let conn = db.conn.lock().expect("db lock");
                     conn.execute(
-                        "INSERT OR IGNORE INTO api_keys (id, key, label, created_at) VALUES (?1, ?2, ?3, ?4)",
+                        "INSERT OR IGNORE INTO api_keys (id, key, label, is_admin, created_at) VALUES (?1, ?2, ?3, 1, ?4)",
                         rusqlite::params![
                             uuid::Uuid::new_v4().to_string(),
                             seed_key,
@@ -91,6 +93,14 @@ async fn main() {
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
+
+    // Admin sub-router — all routes here additionally require is_admin=true on the key.
+    let admin_routes = Router::new()
+        .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
+        .route("/api/admin/keys/:id", delete(delete_api_key))
+        .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+        .layer(middleware::from_fn(require_admin))
+        .with_state(state.clone());
 
     // Build router
     let app = Router::new()
@@ -117,10 +127,8 @@ async fn main() {
         .route("/api/confidential/transfer", post(initiate_confidential_transfer))
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
         .route("/api/webhooks/:id", delete(delete_webhook))
-        .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
-        .route("/api/admin/keys/:id", delete(delete_api_key))
-        .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
         .route("/api/ws/events", get(ws_events_handler))
+        .merge(admin_routes)
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
@@ -162,8 +170,8 @@ mod tests {
 
     fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        // Pre-create an API key for tests
-        let key_entry = db.create_api_key("test").expect("Failed to create test API key");
+        // Pre-create an admin API key for tests so admin routes are reachable.
+        let key_entry = db.create_api_key_with_role("test", true).expect("Failed to create test API key");
         let test_key = key_entry.key.clone();
 
         let state = AppState::new(db);
@@ -172,6 +180,12 @@ mod tests {
             .allow_origin(Any)
             .allow_methods(Any)
             .allow_headers(Any);
+
+        let admin_routes = Router::new()
+            .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
+            .route("/api/admin/keys/:id", delete(delete_api_key))
+            .layer(middleware::from_fn(require_admin))
+            .with_state(state.clone());
 
         let app = Router::new()
             .route("/api/health", get(health))
@@ -192,13 +206,12 @@ mod tests {
             .route("/api/cdp/position/:wallet", get(get_cdp_position))
             .route("/api/cdp/collateral-types", get(get_collateral_types))
             .route("/api/cdp/simulate", post(post_cdp_simulate))
-        .route("/api/cdp/collateral-configs", get(get_collateral_configs))
+            .route("/api/cdp/collateral-configs", get(get_collateral_configs))
             .route("/api/cpi/interface", get(get_cpi_interface))
             .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
             .route("/api/webhooks/:id", delete(delete_webhook))
-            .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
-            .route("/api/admin/keys/:id", delete(delete_api_key))
+            .merge(admin_routes)
             .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
             .layer(cors)
             .with_state(state);
@@ -633,6 +646,145 @@ mod tests {
     }
 }
 
+// ─── BUG-033: Admin role separation tests ─────────────────────────────────────
+#[cfg(test)]
+mod admin_role_tests {
+    use super::*;
+    use axum::{
+        body::Body,
+        http::{Method, Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    /// Build a minimal app with admin routes protected by require_admin.
+    fn build_app_with_keys() -> (Router<()>, String /* admin */, String /* non-admin */) {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let admin_entry = db.create_api_key_with_role("admin", true).expect("admin key");
+        let user_entry = db.create_api_key_with_role("user", false).expect("user key");
+        let admin_key = admin_entry.key.clone();
+        let user_key = user_entry.key.clone();
+
+        let state = AppState::new(db);
+
+        let admin_routes = Router::new()
+            .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
+            .route("/api/admin/keys/:id", delete(delete_api_key))
+            .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+            .layer(middleware::from_fn(require_admin))
+            .with_state(state.clone());
+
+        let app = Router::new()
+            .route("/api/supply", get(supply))
+            .merge(admin_routes)
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .with_state(state);
+
+        (app, admin_key, user_key)
+    }
+
+    /// Admin key can reach /api/admin/keys.
+    #[tokio::test]
+    async fn test_admin_key_can_reach_admin_routes() {
+        let (app, admin_key, _) = build_app_with_keys();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/admin/keys")
+                    .header("X-Api-Key", &admin_key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "admin key must reach /api/admin/keys");
+    }
+
+    /// Non-admin key is rejected with 403 on admin routes.
+    #[tokio::test]
+    async fn test_non_admin_key_forbidden_on_admin_routes() {
+        let (app, _, user_key) = build_app_with_keys();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/admin/keys")
+                    .header("X-Api-Key", &user_key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::FORBIDDEN,
+            "non-admin key must be forbidden on /api/admin/keys"
+        );
+    }
+
+    /// Non-admin key can still reach non-admin routes.
+    #[tokio::test]
+    async fn test_non_admin_key_can_reach_regular_routes() {
+        let (app, _, user_key) = build_app_with_keys();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/supply")
+                    .header("X-Api-Key", &user_key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "non-admin key must reach /api/supply");
+    }
+
+    /// Invalid key is rejected with 401 (not 403) on admin routes.
+    #[tokio::test]
+    async fn test_invalid_key_is_unauthorized_not_forbidden() {
+        let (app, _, _) = build_app_with_keys();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/admin/keys")
+                    .header("X-Api-Key", "sss_notarealkey0000000000000000000000000000")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::UNAUTHORIZED,
+            "invalid key must be 401, not 403"
+        );
+    }
+
+    /// Newly created key via admin endpoint defaults to non-admin.
+    #[tokio::test]
+    async fn test_created_key_defaults_to_non_admin() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key_with_role("user", false).unwrap();
+        match db.validate_api_key(&key_entry.key).unwrap() {
+            Some(is_admin) => assert!(!is_admin, "new key should default to non-admin"),
+            None => panic!("key should exist"),
+        }
+    }
+
+    /// Admin key created with is_admin=true has is_admin=true in validate.
+    #[tokio::test]
+    async fn test_admin_key_has_admin_flag() {
+        let db = Database::new(":memory:").expect("in-memory db");
+        let key_entry = db.create_api_key_with_role("admin", true).unwrap();
+        match db.validate_api_key(&key_entry.key).unwrap() {
+            Some(is_admin) => assert!(is_admin, "admin key should have is_admin=true"),
+            None => panic!("key should exist"),
+        }
+    }
+}
+
 // ─── QA Integration Tests ─────────────────────────────────────────────────────
 #[cfg(test)]
 mod qa_tests {
@@ -650,9 +802,17 @@ mod qa_tests {
 
     fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        let key_entry = db.create_api_key("qa-test").expect("create key");
+        // Admin key so tests that hit /api/admin/* don't get 403.
+        let key_entry = db.create_api_key_with_role("qa-test", true).expect("create key");
         let test_key = key_entry.key.clone();
         let state = AppState::new(db);
+
+        let admin_routes = Router::new()
+            .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
+            .route("/api/admin/keys/:id", delete(delete_api_key))
+            .layer(middleware::from_fn(require_admin))
+            .with_state(state.clone());
+
         let app = Router::new()
             .route("/api/health", get(health))
             .route("/api/mint", post(mint))
@@ -671,13 +831,12 @@ mod qa_tests {
             .route("/api/cdp/position/:wallet", get(get_cdp_position))
             .route("/api/cdp/collateral-types", get(get_collateral_types))
             .route("/api/cdp/simulate", post(post_cdp_simulate))
-        .route("/api/cdp/collateral-configs", get(get_collateral_configs))
+            .route("/api/cdp/collateral-configs", get(get_collateral_configs))
             .route("/api/cpi/interface", get(get_cpi_interface))
             .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
             .route("/api/webhooks/:id", delete(delete_webhook))
-            .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
-            .route("/api/admin/keys/:id", delete(delete_api_key))
+            .merge(admin_routes)
             .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
             .with_state(state);
         (app, test_key)
