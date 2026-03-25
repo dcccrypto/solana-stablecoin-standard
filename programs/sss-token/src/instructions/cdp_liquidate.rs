@@ -6,11 +6,8 @@ use anchor_spl::token_interface::{
 
 use crate::error::SssError;
 use crate::events::{CdpLiquidated, CollateralLiquidated};
+use crate::oracle;
 use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
-
-/// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
-/// Overridden by `StablecoinConfig.max_oracle_age_secs` when non-zero.
-const DEFAULT_MAX_PRICE_AGE_SECS: u64 = 60;
 
 /// Global fallback liquidation bonus (5%) when no CollateralConfig is provided.
 const DEFAULT_LIQUIDATION_BONUS_BPS: u16 = 500;
@@ -156,24 +153,6 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         );
     }
 
-    // 1. Fetch Pyth price
-    let clock = Clock::get()?;
-    let price_feed = SolanaPriceAccount::account_info_to_feed(
-        &ctx.accounts.pyth_price_feed,
-    )
-    .map_err(|_| error!(SssError::InvalidPriceFeed))?;
-
-    // SSS-090: Use configurable max age (falls back to DEFAULT_MAX_PRICE_AGE_SECS when 0)
-    let max_age_secs = if ctx.accounts.config.max_oracle_age_secs > 0 {
-        ctx.accounts.config.max_oracle_age_secs as u64
-    } else {
-        DEFAULT_MAX_PRICE_AGE_SECS
-    };
-
-    let price = price_feed
-        .get_price_no_older_than(clock.unix_timestamp, max_age_secs)
-        .ok_or(error!(SssError::StalePriceFeed))?;
-
     // SSS-119: Oracle abstraction — dispatch to the configured adapter.
     let clock = Clock::get()?;
     let oracle_price = oracle::get_oracle_price(
@@ -181,19 +160,6 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         &ctx.accounts.config,
         &clock,
     )?;
-
-    // SSS-090: Confidence interval check — reject liquidations with uncertain prices.
-    let conf_bps_limit = ctx.accounts.config.max_oracle_conf_bps;
-    if conf_bps_limit > 0 {
-        let conf_ratio_bps = price
-            .conf
-            .saturating_mul(10_000)
-            / price.price as u64;
-        require!(
-            conf_ratio_bps <= conf_bps_limit as u64,
-            SssError::OracleConfidenceTooWide
-        );
-    }
 
     // 2. Compute collateral value (USD, 6dp scaled)
     let deposited = ctx.accounts.collateral_vault.deposited_amount;
@@ -218,16 +184,17 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
     require!(effective_debt > 0, SssError::InsufficientDebt);
 
     let sss_decimals = ctx.accounts.sss_mint.decimals as u32;
-    let debt_usd_e6: u128 = (debt as u128)
+    // BUG-012 fix: use effective_debt (debt + accrued_fees) for all ratio/health calculations
+    let effective_debt_usd_e6: u128 = (effective_debt as u128)
         .checked_mul(1_000_000u128)
         .unwrap()
         / 10u128.pow(sss_decimals);
 
-    // ratio_bps = collateral_value / debt * 10000
+    // ratio_bps = collateral_value / effective_debt * 10000
     let ratio_bps: u128 = collateral_value_usd_e6
         .checked_mul(10_000)
         .ok_or(error!(SssError::InvalidPrice))?
-        / debt_usd_e6;
+        / effective_debt_usd_e6;
 
     // SSS-100: Use per-collateral threshold from CollateralConfig when available,
     // otherwise fall back to global CdpPosition::LIQUIDATION_THRESHOLD_BPS.
@@ -280,9 +247,11 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         let coll_to_seize = coll_amount_raw.min(deposited as u128) as u64;
 
         // Verify the remaining position would be healthy (>= 12000 bps = 120%).
-        // If remaining_debt == 0 treat as full liquidation path.
+        // If remaining_effective_debt == 0 treat as full liquidation path.
+        // BUG-012 fix: remaining effective debt includes accrued_fees (fees survive partial repay)
         let remaining_debt = debt.saturating_sub(repay);
-        if remaining_debt > 0 {
+        let remaining_effective_debt = remaining_debt.checked_add(accrued_fees).unwrap_or(remaining_debt);
+        if remaining_effective_debt > 0 {
             let remaining_collateral = deposited.saturating_sub(coll_to_seize);
             let remaining_coll_value: u128 = (remaining_collateral as u128)
                 .checked_mul(price_val)
@@ -292,7 +261,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
                 / 10u128.pow(price_expo_abs)
                 / 10u128.pow(collateral_decimals);
 
-            let remaining_debt_usd_e6: u128 = (remaining_debt as u128)
+            let remaining_debt_usd_e6: u128 = (remaining_effective_debt as u128)
                 .checked_mul(1_000_000u128)
                 .unwrap()
                 / 10u128.pow(sss_decimals);

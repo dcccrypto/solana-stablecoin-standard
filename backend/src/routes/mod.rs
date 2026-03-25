@@ -21,3 +21,4 @@ pub mod travel_rule;
 pub mod webhook_deliveries;
 pub mod webhooks;
 pub mod ws_events;
+pub mod zk_credentials;
