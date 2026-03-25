@@ -85,18 +85,10 @@ pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> 
         SssError::CircuitBreakerActive
     );
 
-    // SSS-085 Fix 1: Validate Pyth feed Pubkey — reject unknown/spoofed price feeds.
-    // If expected_pyth_feed is set (non-default), the provided account must match exactly.
-    let expected_feed = ctx.accounts.config.expected_pyth_feed;
-    if expected_feed != Pubkey::default() {
-        require!(
-            ctx.accounts.pyth_price_feed.key() == expected_feed,
-            SssError::UnexpectedPriceFeed
-        );
-    }
-
     // SSS-119: Oracle abstraction — dispatch to the configured adapter (Pyth/Switchboard/Custom).
     // Feed key validation, staleness check, and confidence check are all inside get_oracle_price.
+    // Note: legacy expected_pyth_feed pre-check removed — oracle::get_oracle_price handles
+    // feed validation internally, avoiding duplicate checks that could diverge.
     let clock = Clock::get()?;
     let oracle_price = oracle::get_oracle_price(
         &ctx.accounts.pyth_price_feed,

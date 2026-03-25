@@ -184,16 +184,17 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
     require!(effective_debt > 0, SssError::InsufficientDebt);
 
     let sss_decimals = ctx.accounts.sss_mint.decimals as u32;
-    let debt_usd_e6: u128 = (debt as u128)
+    // BUG-012 fix: use effective_debt (debt + accrued_fees) for all ratio/health calculations
+    let effective_debt_usd_e6: u128 = (effective_debt as u128)
         .checked_mul(1_000_000u128)
         .unwrap()
         / 10u128.pow(sss_decimals);
 
-    // ratio_bps = collateral_value / debt * 10000
+    // ratio_bps = collateral_value / effective_debt * 10000
     let ratio_bps: u128 = collateral_value_usd_e6
         .checked_mul(10_000)
         .ok_or(error!(SssError::InvalidPrice))?
-        / debt_usd_e6;
+        / effective_debt_usd_e6;
 
     // SSS-100: Use per-collateral threshold from CollateralConfig when available,
     // otherwise fall back to global CdpPosition::LIQUIDATION_THRESHOLD_BPS.
@@ -246,9 +247,11 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         let coll_to_seize = coll_amount_raw.min(deposited as u128) as u64;
 
         // Verify the remaining position would be healthy (>= 12000 bps = 120%).
-        // If remaining_debt == 0 treat as full liquidation path.
+        // If remaining_effective_debt == 0 treat as full liquidation path.
+        // BUG-012 fix: remaining effective debt includes accrued_fees (fees survive partial repay)
         let remaining_debt = debt.saturating_sub(repay);
-        if remaining_debt > 0 {
+        let remaining_effective_debt = remaining_debt.checked_add(accrued_fees).unwrap_or(remaining_debt);
+        if remaining_effective_debt > 0 {
             let remaining_collateral = deposited.saturating_sub(coll_to_seize);
             let remaining_coll_value: u128 = (remaining_collateral as u128)
                 .checked_mul(price_val)
@@ -258,7 +261,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
                 / 10u128.pow(price_expo_abs)
                 / 10u128.pow(collateral_decimals);
 
-            let remaining_debt_usd_e6: u128 = (remaining_debt as u128)
+            let remaining_debt_usd_e6: u128 = (remaining_effective_debt as u128)
                 .checked_mul(1_000_000u128)
                 .unwrap()
                 / 10u128.pow(sss_decimals);
