@@ -1,4 +1,5 @@
 pub mod analytics;
+pub mod onchain;
 pub mod apikeys;
 pub mod burn;
 pub mod cdp;

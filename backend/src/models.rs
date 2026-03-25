@@ -12,7 +12,8 @@ pub struct MintRequest {
     pub token_mint: String,
     pub amount: u64,
     pub recipient: String,
-    pub tx_signature: Option<String>,
+    /// BUG-035 / E-4: required, verified on-chain before recording.
+    pub tx_signature: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,7 +21,8 @@ pub struct BurnRequest {
     pub token_mint: String,
     pub amount: u64,
     pub source: String,
-    pub tx_signature: Option<String>,
+    /// BUG-035 / E-4: required, verified on-chain before recording.
+    pub tx_signature: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

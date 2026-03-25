@@ -161,6 +161,9 @@ mod tests {
     use crate::rate_limit::RateLimiter;
 
     fn build_app() -> (Router<()>, String) {
+        // BUG-035: skip on-chain RPC verification in unit tests (no live RPC)
+        std::env::set_var("SOLANA_TX_VERIFY_SKIP", "1");
+
         let db = Database::new(":memory:").expect("Failed to create test DB");
         // Pre-create an API key for tests
         let key_entry = db.create_api_key("test").expect("Failed to create test API key");
@@ -649,6 +652,9 @@ mod qa_tests {
     use serde_json::Value;
 
     fn build_app() -> (Router<()>, String) {
+        // BUG-035: skip on-chain RPC verification in unit tests (no live RPC)
+        std::env::set_var("SOLANA_TX_VERIFY_SKIP", "1");
+
         let db = Database::new(":memory:").expect("Failed to create test DB");
         let key_entry = db.create_api_key("qa-test").expect("create key");
         let test_key = key_entry.key.clone();
@@ -771,7 +777,8 @@ mod qa_tests {
         let body = serde_json::json!({
             "token_mint": "So11111111111111111111111111111111111111112",
             "amount": 0u64,
-            "recipient": "RecipientAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            "recipient": "RecipientAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "tx_signature": "SigZeroAmountAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
         });
         let (status, _) = post_json(app, "/api/mint", &key, body).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "zero amount should be rejected");
@@ -794,7 +801,8 @@ mod qa_tests {
         let mint_body = serde_json::json!({
             "token_mint": "So11111111111111111111111111111111111111112",
             "amount": 100u64,
-            "recipient": blocked
+            "recipient": blocked,
+            "tx_signature": "SigBlacklistCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
         });
         let (mint_status, mint_json) = post_json(app.clone(), "/api/mint", &key, mint_body).await;
         assert_eq!(mint_status, StatusCode::BAD_REQUEST, "mint to blacklisted address must be rejected");
@@ -834,13 +842,15 @@ mod qa_tests {
 
         let mint_body = serde_json::json!({
             "token_mint": token, "amount": 1000u64,
-            "recipient": "RecipEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
+            "recipient": "RecipEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+            "tx_signature": "SigMintEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
         });
         post_json(app.clone(), "/api/mint", &key, mint_body).await;
 
         let burn_body = serde_json::json!({
             "token_mint": token, "amount": 300u64,
-            "source": "RecipEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
+            "source": "RecipEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+            "tx_signature": "SigBurnEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
         });
         post_json(app.clone(), "/api/burn", &key, burn_body).await;
 
@@ -896,7 +906,8 @@ mod qa_tests {
         let mint_body = serde_json::json!({
             "token_mint": "WebhookMintFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
             "amount": 42u64,
-            "recipient": "RecipFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+            "recipient": "RecipFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "tx_signature": "SigWebhookMintFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
         });
         let (mint_status, _) = post_json(app.clone(), "/api/mint", &key, mint_body).await;
         assert_eq!(mint_status, StatusCode::OK, "mint should succeed");
@@ -950,7 +961,8 @@ mod qa_tests {
         let burn_body = serde_json::json!({
             "token_mint": "WebhookBurnGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
             "amount": 99u64,
-            "source": "SourceGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"
+            "source": "SourceGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+            "tx_signature": "SigWebhookBurnGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"
         });
         let (burn_status, _) = post_json(app.clone(), "/api/burn", &key, burn_body).await;
         assert_eq!(burn_status, StatusCode::OK);
@@ -998,7 +1010,8 @@ mod qa_tests {
         let mint_body = serde_json::json!({
             "token_mint": "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHh",
             "amount": 1u64,
-            "recipient": "RecipHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH"
+            "recipient": "RecipHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH",
+            "tx_signature": "SigHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH"
         });
         post_json(app.clone(), "/api/mint", &key, mint_body).await;
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -1080,7 +1093,8 @@ mod qa_tests {
             serde_json::json!({
                 "token_mint": "DateMintAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 "amount": 1000,
-                "recipient": "RecipAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                "recipient": "RecipAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "tx_signature": "SigDateMintAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
             }),
         )
         .await;
@@ -1127,7 +1141,8 @@ mod qa_tests {
             serde_json::json!({
                 "token_mint": "DateBurnAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 "amount": 500,
-                "source": "SrcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                "source": "SrcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "tx_signature": "SigDateBurnAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
             }),
         )
         .await;
@@ -1174,7 +1189,8 @@ mod qa_tests {
             serde_json::json!({
                 "token_mint": "RangeMintAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 "amount": 250,
-                "recipient": "RecipAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                "recipient": "RecipAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "tx_signature": "SigRangeMintAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
             }),
         )
         .await;
