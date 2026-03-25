@@ -7,6 +7,7 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 ## [Unreleased]
 
 ### Added
+- `docs/MULTI-ORACLE-CONSENSUS.md` — Multi-Oracle Consensus reference (SSS-153): OracleConsensus PDA, FLAG_MULTI_ORACLE_CONSENSUS (bit 22), median/TWAP aggregation across up to 5 sources (Pyth/Switchboard/Custom), outlier rejection, per-source staleness guards, 3 events, 7 errors, keeper runbook [PR #258]
 - `docs/MARKET-MAKER-HOOKS.md` — Market Maker Hooks reference (SSS-138): MarketMakerConfig PDA, FLAG_MARKET_MAKER_HOOKS (bit 18), mm_mint/mm_burn/register_market_maker/get_mm_capacity instructions, per-slot rate limits, oracle spread check, events, errors, TypeScript example [PR #230]
 - `docs/compliance-module.md` — full SDK reference for `ComplianceModule` (SSS-017) [PR #73]
 - `docs/ARCHITECTURE.md` — three-layer architecture reference

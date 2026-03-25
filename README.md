@@ -127,6 +127,7 @@ Endpoints:
 |---------|-------------|
 | [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | Cryptographic supply commitments — fetch, verify, and manually reproduce Merkle proofs |
 | [Trust Model](docs/TRUST-MODEL.md) | Real trust assumptions per SSS tier — what is/isn't trustless in v1; v1 stubs and mitigations |
+| [Multi-Oracle Consensus](docs/MULTI-ORACLE-CONSENSUS.md) | Median/TWAP price aggregation across up to 5 oracle sources with outlier rejection and staleness guards (SSS-153) |
 
 ## Documentation
 
