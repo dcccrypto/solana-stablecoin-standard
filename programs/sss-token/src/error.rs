@@ -370,4 +370,13 @@ pub enum SssError {
     // Oracle
     #[msg("Oracle not configured — set oracle_type and oracle_feed first")]
     OracleNotConfigured,
+    // SSS-150: Upgrade authority guard
+    #[msg("Upgrade authority guard already set — cannot change after initialization")]
+    UpgradeAuthorityGuardAlreadySet,
+    #[msg("Upgrade authority guard not set — call set_upgrade_authority_guard first")]
+    UpgradeAuthorityGuardNotSet,
+    #[msg("Provided upgrade authority does not match the expected upgrade authority guard")]
+    UpgradeAuthorityMismatch,
+    #[msg("Upgrade authority guard must be a non-default Squads multisig pubkey")]
+    UpgradeAuthorityGuardInvalidKey,
 }

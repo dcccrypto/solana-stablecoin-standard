@@ -9,7 +9,7 @@ This guide covers end-to-end deployment of the Solana Stablecoin Standard (SSS) 
 > - **Cross-chain bridge** (`bridge.rs`): The bridge is a **CPI stub** that emits events but does not enforce cross-chain collateral state. Bridge minting is not collateral-verified end-to-end.
 > - **Reserve attestation**: `reserve_amount` is admin-submitted by a whitelisted keypair; the program does not independently verify vault balances. See [TRUST-MODEL.md](./TRUST-MODEL.md).
 > - **`max_supply = 0` means uncapped**: Always set an explicit `max_supply` for production deployments.
-> - **Upgrade authority**: Transfer BPF upgrade authority to a DAO multisig before accepting real TVL (see Section 6). MAINNET-CHECKLIST items for this are currently unchecked.
+> - **Upgrade authority**: Transfer BPF upgrade authority to a Squads multisig before accepting real TVL (see Section 6 — BLOCKING). Use `scripts/transfer-upgrade-authority.ts` then call `set_upgrade_authority_guard` (SSS-150) to record expected authority on-chain for continuous monitoring.
 
 ---
 
@@ -360,42 +360,86 @@ npm run smoke:mainnet
 
 ---
 
-## 6. Program Upgrade Authority Transfer to DAO Multisig
+## 6. Program Upgrade Authority Transfer to Squads Multisig
 
-The deployer keypair must not remain as upgrade authority on mainnet. Transfer to a DAO multisig before accepting real liquidity.
+> **🚨 BLOCKING — must complete before accepting any TVL on mainnet.**
+> The deployer keypair must not remain as upgrade authority. A single compromised key can replace the entire program binary.
 
-> **⚠️ Audit finding H-1 — No on-chain upgrade timelock.** Solana's BPF loader does not enforce a timelock on program upgrades. Once the multisig approves an upgrade proposal, the program is replaced immediately with no on-chain delay. The timelock configured in Section 5f applies only to `admin` instruction calls via the SSS timelock PDA — it does **not** cover BPF loader upgrades. Relying on the multisig threshold (≥3-of-5) is the only on-chain safeguard against an instantaneous malicious upgrade. This is a known platform limitation. Mitigations: (a) use a high threshold (4-of-5 or 5-of-5 for upgrade proposals), (b) consider marking programs immutable (`--final`) once the protocol is stable, or (c) adopt a DAO governance layer with a separate timelock proposal type for upgrades. See also: [SSS-4 issuers](#immutable-recommendation).
+> **⚠️ Audit finding H-1 — No on-chain upgrade timelock.** Solana's BPF loader does not enforce a timelock on program upgrades. Once the multisig approves an upgrade proposal in Squads, the program is replaced immediately with no on-chain delay. The SSS admin timelock (Section 5f) applies only to `admin` instruction calls — it does **not** block BPF loader upgrades. Mitigations: (a) use a high threshold (4-of-5 or 5-of-5 for the upgrade vault), (b) set Squads execution delay ≥ 7 days for upgrade proposals, (c) record the expected upgrade authority on-chain via `set_upgrade_authority_guard` (SSS-150) and monitor for drift. See also: [SSS-4 issuers](#immutable-recommendation).
 
-### 6a. Create a Squads v4 Multisig
+### 6a. Create a Squads v4 Multisig (Upgrade Vault)
 
 1. Go to [app.squads.so](https://app.squads.so) (or use the Squads CLI)
-2. Create a new multisig with ≥3 signers (5 recommended for mainnet)
-3. Set threshold to ≥3-of-5
-4. Record the multisig PDA address: `<SQUADS_MULTISIG_PUBKEY>`
+2. Create a **dedicated upgrade multisig** separate from the operational multisig
+3. Set threshold to 4-of-5 or 5-of-5 (higher than operational threshold)
+4. Set Squads execution delay to ≥ 7 days (604800 seconds) for upgrade proposals
+5. Record the multisig PDA address: `<SQUADS_MULTISIG_PUBKEY>`
 
-### 6b. Transfer Program Upgrade Authority
+### 6b. Transfer Program Upgrade Authority (Automated Script)
+
+Use the provided script which validates the Squads account exists before transferring:
 
 ```bash
-# Transfer sss-token upgrade authority to multisig
-solana program set-upgrade-authority <SSS_TOKEN_PROGRAM_ID> \
-  --new-upgrade-authority <SQUADS_MULTISIG_PUBKEY> \
-  --keypair ~/.config/solana/id.json
+# SSS-150: Use transfer-upgrade-authority.ts (validates Squads PDA, dry-run support)
 
-# Transfer sss-transfer-hook upgrade authority
-solana program set-upgrade-authority <SSS_TRANSFER_HOOK_PROGRAM_ID> \
-  --new-upgrade-authority <SQUADS_MULTISIG_PUBKEY> \
-  --keypair ~/.config/solana/id.json
+# Always run dry-run first
+npx ts-node scripts/transfer-upgrade-authority.ts \
+  --program <SSS_TOKEN_PROGRAM_ID> \
+  --new-authority <SQUADS_MULTISIG_PUBKEY> \
+  --keypair ~/.config/solana/deployer.json \
+  --cluster mainnet-beta \
+  --dry-run
 
-# Transfer cpi-caller upgrade authority
-solana program set-upgrade-authority <CPI_CALLER_PROGRAM_ID> \
-  --new-upgrade-authority <SQUADS_MULTISIG_PUBKEY> \
-  --keypair ~/.config/solana/id.json
+# Execute after dry-run confirms expected output
+npx ts-node scripts/transfer-upgrade-authority.ts \
+  --program <SSS_TOKEN_PROGRAM_ID> \
+  --new-authority <SQUADS_MULTISIG_PUBKEY> \
+  --keypair ~/.config/solana/deployer.json \
+  --cluster mainnet-beta
 
-# Verify — should show SQUADS_MULTISIG_PUBKEY as upgrade authority
+# Repeat for transfer hook
+npx ts-node scripts/transfer-upgrade-authority.ts \
+  --program <TRANSFER_HOOK_PROGRAM_ID> \
+  --new-authority <SQUADS_MULTISIG_PUBKEY> \
+  --keypair ~/.config/solana/deployer.json \
+  --cluster mainnet-beta
+
+# Verify — must show SQUADS_MULTISIG_PUBKEY as upgrade authority for both
 solana program show <SSS_TOKEN_PROGRAM_ID>
+solana program show <TRANSFER_HOOK_PROGRAM_ID>
 ```
 
 > ⚠️ If you want an **immutable** deployment (no future upgrades), use `--final` instead of `--new-upgrade-authority`. This is irreversible.
+
+### 6c. Record Upgrade Authority Guard On-Chain (SSS-150)
+
+After transferring and calling `init_squads_authority`, call `set_upgrade_authority_guard` to record the expected upgrade authority in the config PDA. This enables continuous on-chain monitoring:
+
+```typescript
+// Call set_upgrade_authority_guard (authority must sign; FLAG_SQUADS_AUTHORITY must be set)
+// upgrade_authority must equal config.squads_multisig
+await program.methods
+  .setUpgradeAuthorityGuard(new PublicKey("<SQUADS_MULTISIG_PUBKEY>"))
+  .accounts({
+    authority: wallet.publicKey,
+    config: configPda,
+  })
+  .rpc();
+
+// Verify the guard works — callable by anyone
+await program.methods
+  .verifyUpgradeAuthority(new PublicKey("<SQUADS_MULTISIG_PUBKEY>"))
+  .accounts({ config: configPda })
+  .rpc();
+// Returns UpgradeAuthorityMismatch if drift detected — add to monitoring pipeline
+```
+
+### 6d. Monitoring
+
+Set up an on-chain monitor that:
+1. Calls `verify_upgrade_authority(current_bpf_upgrade_authority)` every epoch
+2. Alerts immediately on `UpgradeAuthorityMismatch` error
+3. Alerts on any `UpgradeAuthorityGuardSet` event that was not authorized
 
 > <a name="immutable-recommendation"></a>**Recommendation for regulated / SSS-4 issuers:** If your stablecoin is targeting regulated use (e.g. e-money, payment token under MiCA, or any context where token holders rely on the program being unalterable), strongly consider making the program immutable at mainnet launch. This eliminates upgrade risk entirely at the cost of requiring a migration if critical bugs are found. Document this decision explicitly in your issuer disclosures.
 
