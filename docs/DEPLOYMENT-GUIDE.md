@@ -443,7 +443,7 @@ Set up an on-chain monitor that:
 
 > <a name="immutable-recommendation"></a>**Recommendation for regulated / SSS-4 issuers:** If your stablecoin is targeting regulated use (e.g. e-money, payment token under MiCA, or any context where token holders rely on the program being unalterable), strongly consider making the program immutable at mainnet launch. This eliminates upgrade risk entirely at the cost of requiring a migration if critical bugs are found. Document this decision explicitly in your issuer disclosures.
 
-### 6c. Transfer Stablecoin Config Authority
+### 6e. Transfer Stablecoin Config Authority
 
 The `authority` and `compliance_authority` fields in the on-chain `StablecoinConfig` PDA must also be transferred. This is a **two-step** process requiring a CPI call to `update_roles` followed by `accept_authority` from the new authority.
 

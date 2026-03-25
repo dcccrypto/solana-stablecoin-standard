@@ -193,10 +193,12 @@ async function main() {
   // 5. Execute the transfer
   // ------------------------------------------------------------------
   console.log("\nTransferring upgrade authority...");
+  // Shell-safe: wrap keypairPath in single quotes and escape any embedded single quotes.
+  const safeKeypairPath = keypairPath.replace(/'/g, "'\\''");
   runCommand(
     `solana program set-upgrade-authority ${programId} ` +
     `--new-upgrade-authority ${newAuthority} ` +
-    `--keypair ${keypairPath} ` +
+    `--keypair '${safeKeypairPath}' ` +
     `${clusterFlag}`
   );
 
