@@ -230,9 +230,21 @@ await stablecoin.redeem({
 
 **SSS-1** gives Solana projects a clean, minimal way to issue tokens.
 **SSS-2** gives regulated issuers a compliant path.
-**SSS-3** gives DeFi protocols a trustless, privacy-preserving stablecoin that doesn't require trusting any issuer, oracle, or off-chain system.
+**SSS-3** gives DeFi protocols a trustless, privacy-preserving stablecoin where the collateral ratio is enforced on-chain — no oracle, no off-chain step, no way for the issuer to mint beyond the collateral. The ratio math is in the Anchor instruction; it cannot be disabled.
 
 This is the arc: from centralized trust (USDC) → algorithmic (Terra, broken) → trustless on-chain collateral with ZK privacy (SSS-3). Solana has the throughput, the ZK infrastructure (Token-2022 confidential transfers), and the composability to make this work. SSS-3 is the blueprint.
+
+> **What "trustless" means here (and what it doesn't):**
+>
+> - ✅ **Collateral ratio enforcement is trustless** — the `mint` instruction checks on-chain state; the math cannot be bypassed.
+> - ✅ **Authority actions on critical operations use timelocks** — `admin_timelock.rs` enforces delay on key admin operations.
+> - ✅ **Guardian multisig provides emergency controls** — pause/unpause requires multisig approval.
+> - ⚠️ **Reserve attestation is trust-minimized, not fully trustless (v1)** — `reserve_amount` is submitted by a whitelisted, on-chain-verifiable attestor keypair. The attestor is permissioned, not a direct vault-balance read. Future versions will move to direct vault verification.
+> - ⚠️ **You must trust the authority key for non-timelocked ops** — specifically `set_reserve_attestor_whitelist` (not yet timelocked in v1). Attestor changes take effect immediately.
+> - ⚠️ **v1 stubs:** ZK credential verification and cross-chain bridge collateral checks are not fully implemented. Do not rely on them for production compliance.
+> - ⚠️ **`max_supply = 0` means uncapped** — always set explicitly for production deployments.
+>
+> See [TRUST-MODEL.md](./TRUST-MODEL.md) for the complete per-tier trust-assumption breakdown.
 
 ---
 

@@ -125,16 +125,8 @@ Endpoints:
 
 | Feature | Description |
 |---------|-------------|
-| [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | On-chain PoR PDA (SSS-123): submit attestations, verify reserve ratio, breach events, Kani proofs |
-| [Reserve Composition](docs/RESERVE-REPORTING.md) | On-chain breakdown of backing asset types per mint (SSS-124): cash, T-bills, repo, other |
-| [Redemption Guarantee at Par](docs/REDEMPTION-GUARANTEE.md) | On-chain 1:1 redemption with SLA enforcement (SSS-125): ~3 min SLA, 10% penalty from insurance fund on breach |
-| [Instant Redemption Pool](docs/REDEMPTION-POOL.md) | Pre-funded on-chain liquidity pool for atomic instant redemption (SSS-137): 1:1 par, ≤5% fee, permissionless replenishment, falls back to SSS-125 SLA when pool is empty |
-| [Travel Rule Compliance](docs/TRAVEL-RULE.md) | FATF Travel Rule (SSS-127): TravelRuleRecord PDA, VASP-to-VASP encrypted payloads, backend indexer + REST API |
-| [Sanctions Oracle](docs/SANCTIONS-ORACLE.md) | Pluggable OFAC/sanctions screening (SSS-128): SanctionsRecord PDA, oracle registration, transfer hook enforcement, staleness window |
-| [ZK Credentials](docs/ZK-CREDENTIALS.md) | Selective-disclosure ZK compliance proofs (SSS-129): CredentialRegistry + CredentialRecord PDAs, Groth16 proofs, not_sanctioned / kyc_passed / accredited_investor types, backend REST API |
-| [Stability Fee PID](docs/STABILITY-FEE-PID.md) | Automatic peg-stabilisation via PID controller (SSS-130): PidConfig PDA, permissionless keeper updates, anti-windup integral clamp, PidConfigInitialised + PidFeeUpdated events |
-| [Graduated Liquidation Bonus](docs/GRADUATED-LIQUIDATION-BONUS.md) | Dynamic three-tier liquidation incentives (SSS-131): LiquidationBonusConfig PDA, FLAG_GRAD_LIQUIDATION_BONUS, tier-based bonus schedule, GraduatedLiquidationBonusApplied event, Kani proof |
-| [Market Maker Hooks](docs/MARKET-MAKER-HOOKS.md) | Whitelisted MM mint/burn for programmatic peg maintenance (SSS-138): MarketMakerConfig PDA, FLAG_MARKET_MAKER_HOOKS (bit 18), per-slot rate limits, oracle spread check, fee-free MM ops |
+| [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | Cryptographic supply commitments — fetch, verify, and manually reproduce Merkle proofs |
+| [Trust Model](docs/TRUST-MODEL.md) | Real trust assumptions per SSS tier — what is/isn't trustless in v1; v1 stubs and mitigations |
 
 ## Documentation
 
