@@ -23,6 +23,18 @@ pub struct Pause<'info> {
 }
 
 pub fn handler(ctx: Context<Pause>, paused: bool) -> Result<()> {
+    // BUG-010: block direct pause/unpause when timelock is active.
+    // Use propose_timelocked_op (op_kind=16 for pause, 17 for unpause) + execute.
+    let op_kind = if paused {
+        crate::state::ADMIN_OP_PAUSE
+    } else {
+        crate::state::ADMIN_OP_UNPAUSE
+    };
+    crate::instructions::admin_timelock::require_timelock_executed(
+        &ctx.accounts.config,
+        op_kind,
+    )?;
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(
@@ -36,6 +48,6 @@ pub fn handler(ctx: Context<Pause>, paused: bool) -> Result<()> {
         SssError::DaoCommitteeRequired
     );
     ctx.accounts.config.paused = paused;
-    msg!("Mint {} paused={}", ctx.accounts.mint.key(), paused);
+    msg!("Mint {} paused={} (no-timelock path)", ctx.accounts.mint.key(), paused);
     Ok(())
 }

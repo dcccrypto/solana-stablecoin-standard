@@ -40,11 +40,20 @@ pub struct SetBackstopParams<'info> {
 
 /// Set or update the insurance fund pubkey and max backstop draw cap.
 /// Pass `Pubkey::default()` for `insurance_fund_pubkey` to disable the backstop.
+///
+/// BUG-010: When `admin_timelock_delay > 0` this direct call is blocked.
+/// Use `propose_timelocked_op` (op_kind=8, target=vault, param=max_bps) + execute.
 pub fn set_backstop_params_handler(
     ctx: Context<SetBackstopParams>,
     insurance_fund_pubkey: Pubkey,
     max_backstop_bps: u16,
 ) -> Result<()> {
+    // BUG-010: block direct call when timelock is active.
+    crate::instructions::admin_timelock::require_timelock_executed(
+        &ctx.accounts.config,
+        crate::state::ADMIN_OP_SET_BACKSTOP_PARAMS,
+    )?;
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(

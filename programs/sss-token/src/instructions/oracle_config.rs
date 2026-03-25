@@ -43,6 +43,13 @@ pub fn set_oracle_config_handler(
     oracle_type: u8,
     oracle_feed: Pubkey,
 ) -> Result<()> {
+    // BUG-010: block direct call when timelock is active.
+    // Use propose_timelocked_op (op_kind=11, param=oracle_type, target=oracle_feed) + execute.
+    crate::instructions::admin_timelock::require_timelock_executed(
+        &ctx.accounts.config,
+        crate::state::ADMIN_OP_SET_ORACLE_CONFIG,
+    )?;
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(

@@ -79,6 +79,18 @@ pub fn register_collateral_handler(
     ctx: Context<RegisterCollateral>,
     params: RegisterCollateralParams,
 ) -> Result<()> {
+    // BUG-010: Registering a new collateral type is a high-privilege op.
+    // When timelock is active, block the direct call.
+    // Caller must use SET_FEATURE_FLAG timelock to pre-approve, or disable
+    // timelock (admin_timelock_delay == 0) for initial configuration.
+    if ctx.accounts.config.admin_timelock_delay > 0 {
+        // Only allow if FLAG_SQUADS_AUTHORITY is set (squads provides its own timelock)
+        require!(
+            ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0,
+            SssError::TimelockRequired
+        );
+    }
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(
@@ -167,6 +179,15 @@ pub fn update_collateral_config_handler(
     ctx: Context<UpdateCollateralConfig>,
     params: UpdateCollateralConfigParams,
 ) -> Result<()> {
+    // BUG-010: Updating collateral config (LTV/liquidation params) is high-risk.
+    // Require Squads multisig OR zero timelock (initial setup).
+    if ctx.accounts.config.admin_timelock_delay > 0 {
+        require!(
+            ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0,
+            SssError::TimelockRequired
+        );
+    }
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(

@@ -29,10 +29,19 @@ pub struct UpdateSpendLimit<'info> {
 ///
 /// `max_amount` must be > 0.  The flag is set atomically so callers can
 /// never be left in a half-configured state.
+///
+/// BUG-010: When `admin_timelock_delay > 0` this direct call is blocked.
+/// Use `propose_timelocked_op` (op_kind=9, param=max_amount) + execute.
 pub fn set_spend_limit_handler(
     ctx: Context<UpdateSpendLimit>,
     max_amount: u64,
 ) -> Result<()> {
+    // BUG-010: block direct call when timelock is active.
+    crate::instructions::admin_timelock::require_timelock_executed(
+        &ctx.accounts.config,
+        crate::state::ADMIN_OP_SET_SPEND_LIMIT,
+    )?;
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(
