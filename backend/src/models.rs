@@ -109,9 +109,8 @@ pub struct ApiKeyEntry {
     pub id: String,
     pub key: String,
     pub label: String,
-    /// Role for this key: "read", "write", or "admin".
-    /// E-2 fix: keys now carry explicit role; admin routes enforce admin role.
-    pub role: String,
+    /// Whether this key has admin privileges (can reach /api/admin/* routes).
+    pub is_admin: bool,
     pub created_at: String,
 }
 

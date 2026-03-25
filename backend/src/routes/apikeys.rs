@@ -23,12 +23,17 @@ pub async fn create_api_key(
         .unwrap_or("read")
         .to_string();
 
-    match state.db.create_api_key(&label, &role) {
+    let is_admin = body
+        .get("is_admin")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    match state.db.create_api_key_with_role(&label, is_admin) {
         Ok(entry) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "id": entry.id,
             "key": entry.key,
             "label": entry.label,
-            "role": entry.role,
+            "is_admin": entry.is_admin,
             "created_at": entry.created_at
         })))),
         Err(crate::error::AppError::BadRequest(msg)) => {
@@ -55,6 +60,7 @@ pub async fn list_api_keys(
                         "label": k.label,
                         "role": k.role,
                         "key_prefix": &k.key[..8],
+                        "is_admin": k.is_admin,
                         "created_at": k.created_at
                     })
                 })

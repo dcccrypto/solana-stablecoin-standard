@@ -75,7 +75,7 @@ impl Database {
                 id TEXT PRIMARY KEY,
                 key TEXT NOT NULL UNIQUE,
                 label TEXT NOT NULL,
-                role TEXT NOT NULL DEFAULT 'read',
+                is_admin INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             );
             -- E-2: migrate existing rows that predate the role column
@@ -641,58 +641,55 @@ impl Database {
 
     // ─── API key management ─────────────────────────────────────────────────
 
-    /// Generate a new API key with the given label and role.
-    /// Valid roles: "read", "write", "admin".
-    pub fn create_api_key(&self, label: &str, role: &str) -> Result<ApiKeyEntry, AppError> {
-        if !["read", "write", "admin"].contains(&role) {
-            return Err(AppError::BadRequest(format!(
-                "Invalid role '{}'. Must be one of: read, write, admin", role
-            )));
-        }
+    /// Generate a new API key with the given label (non-admin by default).
+    /// Set `is_admin = true` to grant access to `/api/admin/*` routes.
+    #[allow(dead_code)]
+    pub fn create_api_key(&self, label: &str) -> Result<ApiKeyEntry, AppError> {
+        self.create_api_key_with_role(label, false)
+    }
+
+    /// Generate a new API key with explicit admin role.
+    pub fn create_api_key_with_role(&self, label: &str, is_admin: bool) -> Result<ApiKeyEntry, AppError> {
         let id = Uuid::new_v4().to_string();
         let key = format!("sss_{}", Uuid::new_v4().to_string().replace('-', ""));
         let created_at = Utc::now().to_rfc3339();
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         conn.execute(
-            "INSERT INTO api_keys (id, key, label, role, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![id, key, label, role, created_at],
+            "INSERT INTO api_keys (id, key, label, is_admin, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, key, label, is_admin as i64, created_at],
         )?;
-        Ok(ApiKeyEntry { id, key, label: label.to_string(), role: role.to_string(), created_at })
+        Ok(ApiKeyEntry { id, key, label: label.to_string(), is_admin, created_at })
     }
 
-    /// Validate that the given key exists and return its role.
-    /// Returns None if key not found.
-    pub fn get_api_key_role(&self, key: &str) -> Result<Option<String>, AppError> {
+    /// Validate the given key and return its admin status.
+    /// Returns `Ok(None)` if the key does not exist, `Ok(Some(is_admin))` if valid.
+    pub fn validate_api_key(&self, key: &str) -> Result<Option<bool>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
-        let result = conn.query_row(
-            "SELECT role FROM api_keys WHERE key = ?1",
-            params![key],
-            |row| row.get::<_, String>(0),
-        );
-        match result {
-            Ok(role) => Ok(Some(role)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(AppError::Internal(e.to_string())),
+        let mut stmt = conn.prepare(
+            "SELECT is_admin FROM api_keys WHERE key = ?1 LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![key])?;
+        if let Some(row) = rows.next()? {
+            let is_admin: i64 = row.get(0)?;
+            Ok(Some(is_admin != 0))
+        } else {
+            Ok(None)
         }
-    }
-
-    /// Validate that the given key exists (any role).
-    pub fn validate_api_key(&self, key: &str) -> Result<bool, AppError> {
-        Ok(self.get_api_key_role(key)?.is_some())
     }
 
     /// List all API keys (full key included — redaction happens at route level).
     pub fn list_api_keys(&self) -> Result<Vec<ApiKeyEntry>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let mut stmt = conn.prepare(
-            "SELECT id, key, label, role, created_at FROM api_keys ORDER BY created_at DESC",
+            "SELECT id, key, label, is_admin, created_at FROM api_keys ORDER BY created_at DESC",
         )?;
         let entries = stmt.query_map([], |row| {
+            let is_admin: i64 = row.get(3)?;
             Ok(ApiKeyEntry {
                 id: row.get(0)?,
                 key: row.get(1)?,
                 label: row.get(2)?,
-                role: row.get(3)?,
+                is_admin: is_admin != 0,
                 created_at: row.get(4)?,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
