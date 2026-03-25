@@ -1082,6 +1082,21 @@ impl Database {
             active_collateral_types,
         })
     }
+    /// SSS-BUG-026: Return all distinct token mints seen in mint_events or burn_events.
+    pub fn list_token_mints(&self) -> Result<Vec<String>, AppError> {
+        let conn = self.conn.lock().map_err(|_| AppError::Internal("db lock".into()))?;
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT token_mint FROM mint_events
+             UNION
+             SELECT DISTINCT token_mint FROM burn_events
+             ORDER BY 1"
+        )?;
+        let mints = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(mints)
+    }
 }
 
 // ─── Analytics result types ───────────────────────────────────────────────────

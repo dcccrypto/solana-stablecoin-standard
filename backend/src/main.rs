@@ -14,6 +14,7 @@ use axum::{
     Router,
 };
 use std::net::SocketAddr;
+use http::HeaderValue;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -39,6 +40,7 @@ use routes::{
     burn::burn,
     reserves::get_reserves_proof,
     supply::supply,
+    supply_verify::supply_verify,
     webhooks::{delete_webhook, list_webhooks, register_webhook},
     ws_events::ws_events_handler,
 };
@@ -86,11 +88,52 @@ async fn main() {
     // Build shared application state (DB + rate limiter)
     let state = AppState::new(db);
 
-    // Build CORS layer
-    let cors = CorsLayer::new()
+    // SSS-BUG-027: Split CORS policy — public routes allow any origin,
+    // admin routes restrict to known frontend origins only.
+    //
+    // Allowed admin origins are read from SSS_ADMIN_ORIGINS (comma-separated).
+    // Example: SSS_ADMIN_ORIGINS=https://admin.sss.finance,https://localhost:3000
+    // If unset, admin CORS falls back to localhost:3000 (development default).
+    let admin_origins: Vec<HeaderValue> = std::env::var("SSS_ADMIN_ORIGINS")
+        .unwrap_or_else(|_| "http://localhost:3000".to_string())
+        .split(',')
+        .filter_map(|s| {
+            let s = s.trim();
+            if s.is_empty() {
+                None
+            } else {
+                s.parse::<HeaderValue>().ok()
+            }
+        })
+        .collect();
+
+    let public_cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
+
+    let admin_cors = CorsLayer::new()
+        .allow_origin(admin_origins)
+        .allow_methods([
+            http::Method::GET,
+            http::Method::POST,
+            http::Method::DELETE,
+            http::Method::OPTIONS,
+        ])
+        .allow_headers([
+            http::header::AUTHORIZATION,
+            http::header::CONTENT_TYPE,
+            http::header::HeaderName::from_static("x-api-key"),
+        ])
+        .allow_credentials(false);
+
+    // Admin sub-router with strict CORS
+    let admin_router = Router::new()
+        .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
+        .route("/api/admin/keys/:id", delete(delete_api_key))
+        .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+        .layer(admin_cors)
+        .with_state(state.clone());
 
     // Build router
     let app = Router::new()
@@ -98,6 +141,7 @@ async fn main() {
         .route("/api/mint", post(mint))
         .route("/api/burn", post(burn))
         .route("/api/supply", get(supply))
+        .route("/api/supply/verify", get(supply_verify))
         .route("/api/events", get(events))
         .route("/api/chain-events", get(chain_events))
         .route("/api/liquidations", get(get_liquidations))
@@ -117,13 +161,11 @@ async fn main() {
         .route("/api/confidential/transfer", post(initiate_confidential_transfer))
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
         .route("/api/webhooks/:id", delete(delete_webhook))
-        .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
-        .route("/api/admin/keys/:id", delete(delete_api_key))
-        .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
         .route("/api/ws/events", get(ws_events_handler))
+        .merge(admin_router)
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
-        .layer(cors)
+        .layer(public_cors)
         .with_state(state.clone());
 
     // Determine port
@@ -142,6 +184,10 @@ async fn main() {
     // Spawn the on-chain event indexer (SSS-095).
     // Reads SOLANA_RPC_URL env var (default: devnet).
     indexer::spawn_indexer(state.clone());
+
+    // SSS-BUG-026: periodic on-chain supply reconciliation worker.
+    // Reads SSS_RECONCILE_INTERVAL_SECS (default 300) and SSS_SUPPLY_MISMATCH_THRESHOLD.
+    tokio::spawn(routes::supply_verify::start_reconciliation_worker(state.clone()));
 
     axum::serve(listener, app)
         .await
