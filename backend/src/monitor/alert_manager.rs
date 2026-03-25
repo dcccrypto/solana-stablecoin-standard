@@ -4,6 +4,7 @@ use tracing::{error, info, warn};
 use serde_json::json;
 use crate::state::AppState;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum AlertSeverity {
     Info,

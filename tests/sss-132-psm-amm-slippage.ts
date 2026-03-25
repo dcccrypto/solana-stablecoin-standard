@@ -146,24 +146,24 @@ describe("SSS-132: PSM Dynamic AMM-Style Slippage Curves", () => {
     assert.isAtLeast(fee, defaultCurve.baseFee, "25% skew fee should be >= base");
   });
 
-  it("6. 75% skew gives higher fee than 25% skew", () => {
+  it("6. 50% skew gives higher fee than 25% skew", () => {
     // Pool: total_reserves=2_000_000, ideal=1_000_000
-    // 25% skew: vault=1_500_000, imbalance=500_000
+    // 25% imbalance: vault=1_500_000, imbalance=500_000 (25% of total_reserves)
     //   ratio_1e6 = 500_000*1e6/2_000_000 = 250_000
     //   ratio_sq_1e12 = 250_000^2 = 6.25e10
     //   delta = 800 * 6.25e10 / 1e12 = 50 bps
-    // 50% skew: vault=2_000_000, imbalance=1_000_000
-    //   ratio_1e6 = 500_000; ratio_sq_1e12 = 2.5e11
+    // 50% imbalance: vault=2_000_000, imbalance=1_000_000 (50% of total_reserves)
+    //   ratio_1e6 = 1_000_000*1e6/2_000_000 = 500_000; ratio_sq_1e12 = 2.5e11
     //   delta = 800 * 2.5e11 / 1e12 = 200 bps
     const totalReserves = 2_000_000n;
     const k = 800n;
     const maxFee = 2_000;
     const base = 5;
 
-    const fee25 = computePsmFee(base, k, maxFee, 1_500_000n, totalReserves); // 25% skew → ~55 bps
-    const fee50 = computePsmFee(base, k, maxFee, 2_000_000n, totalReserves); // 50% skew → ~205 bps
+    const fee25 = computePsmFee(base, k, maxFee, 1_500_000n, totalReserves); // 25% imbalance → ~55 bps
+    const fee50 = computePsmFee(base, k, maxFee, 2_000_000n, totalReserves); // 50% imbalance → ~205 bps
 
-    assert.isAbove(fee50, fee25, "Higher imbalance (50% skew) should produce higher fee than 25% skew");
+    assert.isAbove(fee50, fee25, "Higher imbalance (50%) should produce higher fee than 25% imbalance");
   });
 
   it("7. k=0: fee always equals base_fee_bps regardless of imbalance", () => {

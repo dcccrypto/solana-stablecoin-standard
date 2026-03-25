@@ -96,9 +96,11 @@ pub struct WebhookEntry {
     pub id: String,
     pub url: String,
     pub events: Vec<String>,
-    /// Stored secret key (hashed before storage; returned as-is on registration only).
+    /// Stored hashed secret. This is the HMAC key stored in the DB as a hash;
+    /// callers must NOT use this directly for HMAC signing — it is stored hashed.
+    /// For dispatch, retrieve the plaintext secret from registration and use it there.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub secret_key: Option<String>,
+    pub hashed_secret: Option<String>,
     pub created_at: String,
 }
 
@@ -352,18 +354,36 @@ pub struct PidConfigResponse {
 
 // ─── SSS-145: Webhook Deliveries ─────────────────────────────────────────────
 
-/// A single webhook delivery log entry.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct WebhookDeliveryLog {
-    pub id: String,
-    pub webhook_id: String,
-    pub event_type: String,
-    pub payload: String,
-    pub status: String,
-    pub attempt_count: i64,
-    pub last_error: Option<String>,
-    pub next_retry_at: Option<String>,
-    pub created_at: String,
+/// Credential type for a ZK compliance proof.
+/// Mirrors on-chain CredentialType enum (u8).
+#[allow(dead_code)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialType {
+    NotSanctioned,
+    KycPassed,
+    AccreditedInvestor,
+}
+
+impl CredentialType {
+    #[allow(dead_code)]
+    pub fn from_u8(v: u8) -> Option<Self> {
+        match v {
+            0 => Some(Self::NotSanctioned),
+            1 => Some(Self::KycPassed),
+            2 => Some(Self::AccreditedInvestor),
+            _ => None,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn to_u8(&self) -> u8 {
+        match self {
+            Self::NotSanctioned => 0,
+            Self::KycPassed => 1,
+            Self::AccreditedInvestor => 2,
+        }
+    }
 }
 
 /// GET /api/webhook-deliveries query params.
@@ -415,6 +435,12 @@ pub struct SubmitCredentialRequest {
     pub credential_type: String,
     pub issuer_pubkey: String,
     pub proof_data: String,
+    /// ABI-encoded public inputs (base64-encoded, 64 bytes max).
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub public_inputs: Option<String>,
+    /// Proof validity window in seconds (default 2592000 = 30 days).
+    #[serde(default)]
     pub proof_expiry_seconds: Option<u64>,
     pub tx_signature: Option<String>,
     pub slot: Option<i64>,
@@ -457,4 +483,71 @@ pub struct CredentialRegistry {
     pub proof_expiry_seconds: i64,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// Request body for POST /api/zk-credentials/registry
+#[derive(Debug, Deserialize)]
+pub struct UpsertRegistryRequest {
+    /// SSS stablecoin mint (base58).
+    pub mint: String,
+    /// Credential type.
+    pub credential_type: String,
+    /// Issuer pubkey (base58).
+    pub issuer_pubkey: String,
+    /// Merkle root (hex-encoded 32 bytes).
+    pub merkle_root: String,
+    /// Proof expiry seconds (default 2592000).
+    #[serde(default)]
+    pub proof_expiry_seconds: Option<i64>,
+}
+
+/// Query params for GET /api/zk-credentials/registry
+#[derive(Debug, Deserialize)]
+pub struct RegistryQuery {
+    pub mint: Option<String>,
+    pub credential_type: Option<String>,
+}
+
+/// SSS-139: Parsed event log entry with `data` as serde_json::Value (for monitor queries).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedEventLogEntry {
+    pub id: String,
+    pub event_type: String,
+    pub address: String,
+    pub data: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slot: Option<i64>,
+    pub created_at: String,
+}
+
+/// SSS-145: Webhook delivery log entry (for operator inspection).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebhookDeliveryLog {
+    pub id: String,
+    pub webhook_id: String,
+    pub event_type: String,
+    pub payload: String,
+    pub status: String,
+    pub attempt_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_retry_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// SSS-145: Query params for GET /api/webhook-deliveries.
+#[derive(Debug, Deserialize)]
+pub struct WebhookDeliveriesQuery {
+    pub status: Option<String>,
+}
+
+/// SSS-139: Request body for POST /api/alerts.
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+pub struct PostAlertRequest {
+    pub invariant: String,
+    pub detail: String,
+    pub severity: Option<String>,
 }

@@ -75,7 +75,7 @@ pub async fn run_once(state: &AppState) {
             attempt,
             &webhook.url,
             &body,
-            webhook.secret_key.as_deref(),
+            webhook.hashed_secret.as_deref(),
         )
         .await;
     }

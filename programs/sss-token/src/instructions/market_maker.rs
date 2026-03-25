@@ -70,9 +70,9 @@ fn check_oracle_spread(
         }
     };
 
-    // |oracle_price_µUSD - peg| <= spread_bps * 10 µUSD
-    // (spread_bps 50 → 500 µUSD = 0.05 cents tolerance)
-    let tolerance = (spread_bps as i64).saturating_mul(10);
+    // |oracle_price_µUSD - peg| <= spread_bps * 100 µUSD
+    // (spread_bps 50 → 5000 µUSD = 0.5 cents tolerance at $1 peg)
+    let tolerance = (spread_bps as i64).saturating_mul(100);
     let deviation = (price_in_micro_usd - PEG_PRICE_MICRO_USD).abs();
 
     require!(deviation <= tolerance, SssError::OraclePriceOutsideSpread);
@@ -196,6 +196,12 @@ pub fn register_market_maker_handler(
     ctx: Context<RegisterMarketMaker>,
     mm_pubkey: Pubkey,
 ) -> Result<()> {
+    // SSS-138: FLAG_MARKET_MAKER_HOOKS must be active
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_MARKET_MAKER_HOOKS != 0,
+        SssError::MarketMakerHooksDisabled
+    );
+
     // SSS-135: Squads check
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(
@@ -239,6 +245,7 @@ pub struct MmMintAccounts<'info> {
     pub market_maker: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [StablecoinConfig::SEED, mint.key().as_ref()],
         bump = config.bump,
         constraint = !config.paused @ SssError::MintPaused,
@@ -275,6 +282,12 @@ pub struct MmMintAccounts<'info> {
 
 pub fn mm_mint_handler(ctx: Context<MmMintAccounts>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
+
+    // 0. FLAG_MARKET_MAKER_HOOKS must be enabled
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_MARKET_MAKER_HOOKS != 0,
+        SssError::MarketMakerHooksDisabled
+    );
 
     // 1. Whitelist check
     let mm_key = ctx.accounts.market_maker.key();
@@ -313,7 +326,18 @@ pub fn mm_mint_handler(ctx: Context<MmMintAccounts>, amount: u64) -> Result<()> 
 
     mm_config.mm_minted_this_slot = new_total;
 
-    // 4. Mint tokens (bypass stability fee — MM ops are fee-free)
+    // 4. Max supply check
+    {
+        let config = &ctx.accounts.config;
+        if config.max_supply > 0 {
+            require!(
+                config.net_supply().checked_add(amount).unwrap_or(u64::MAX) <= config.max_supply,
+                SssError::MaxSupplyExceeded
+            );
+        }
+    }
+
+    // 5. Mint tokens (bypass stability fee — MM ops are fee-free)
     let config_key = ctx.accounts.config.mint;
     let bump = ctx.accounts.config.bump;
     let seeds: &[&[u8]] = &[StablecoinConfig::SEED, config_key.as_ref(), &[bump]];
@@ -331,6 +355,10 @@ pub fn mm_mint_handler(ctx: Context<MmMintAccounts>, amount: u64) -> Result<()> 
         ),
         amount,
     )?;
+
+    // 6. Update StablecoinConfig supply totals
+    let config = &mut ctx.accounts.config;
+    config.total_minted = config.total_minted.checked_add(amount).unwrap();
 
     emit!(MmMint {
         mint: ctx.accounts.mint.key(),
@@ -353,6 +381,7 @@ pub struct MmBurnAccounts<'info> {
     pub market_maker: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [StablecoinConfig::SEED, mint.key().as_ref()],
         bump = config.bump,
         constraint = !config.paused @ SssError::MintPaused,
@@ -388,6 +417,12 @@ pub struct MmBurnAccounts<'info> {
 
 pub fn mm_burn_handler(ctx: Context<MmBurnAccounts>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
+
+    // 0. FLAG_MARKET_MAKER_HOOKS must be enabled
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_MARKET_MAKER_HOOKS != 0,
+        SssError::MarketMakerHooksDisabled
+    );
 
     // 1. Whitelist check
     let mm_key = ctx.accounts.market_maker.key();
@@ -438,6 +473,10 @@ pub fn mm_burn_handler(ctx: Context<MmBurnAccounts>, amount: u64) -> Result<()> 
         ),
         amount,
     )?;
+
+    // 5. Update StablecoinConfig supply totals
+    let config = &mut ctx.accounts.config;
+    config.total_burned = config.total_burned.checked_add(amount).unwrap();
 
     emit!(MmBurn {
         mint: ctx.accounts.mint.key(),

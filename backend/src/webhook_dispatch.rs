@@ -35,7 +35,8 @@ pub fn next_retry_after(attempt: i64) -> Option<String> {
 }
 
 /// Execute one delivery attempt for the given delivery log row.
-/// Updates the log with delivered / failed / permanently_failed status.
+/// Claims the row as 'in-progress' BEFORE the HTTP POST to prevent race conditions,
+/// then updates to 'delivered' / 'failed' / 'permanently_failed' after.
 pub async fn execute_attempt(
     db: &Arc<Database>,
     delivery_id: &str,
@@ -44,6 +45,21 @@ pub async fn execute_attempt(
     body: &Value,
     secret: Option<&str>,
 ) {
+    // Claim the row atomically before HTTP POST (race-free via DB constraint).
+    match db.claim_webhook_delivery(delivery_id) {
+        Ok(false) => {
+            // Row already claimed by another worker — skip.
+            warn!("Delivery {delivery_id} already in-progress, skipping duplicate attempt");
+            return;
+        }
+        Err(e) => {
+            warn!("Failed to claim delivery {delivery_id}: {e}");
+            return;
+        }
+        Ok(true) => {}
+    }
+
+    // Now perform the HTTP POST.
     match post_json(url, body, secret).await {
         Ok(()) => {
             info!(url = %url, delivery_id = %delivery_id, "Webhook delivered");
@@ -115,7 +131,7 @@ pub fn dispatch(db: &Arc<Database>, event_type: &str, payload: Value) {
 
         let db_clone = Arc::clone(db);
         let url = wh.url.clone();
-        let secret = wh.secret_key.clone();
+        let secret = wh.hashed_secret.clone();
 
         tokio::spawn(async move {
             execute_attempt(&db_clone, &delivery_id, 1, &url, &body, secret.as_deref()).await;

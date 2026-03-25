@@ -345,7 +345,9 @@ pub fn guardian_lift_pause_handler(ctx: Context<GuardianLiftPause>) -> Result<()
     let is_authority = cfg.authority == caller;
     let is_guardian = gc.guardians.contains(&caller);
 
-    // Authority can always lift
+    // INTENTIONAL: emergency bypass — authority can lift pause without Squads multisig
+    // for rapid incident response. This allows the authority key to immediately restore
+    // operations during an outage without waiting for multisig quorum.
     if is_authority {
         cfg.paused = false;
         gc.pending_lift_votes.clear();

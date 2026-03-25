@@ -130,6 +130,13 @@ async fn main() {
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
         .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+        .route("/api/alerts", get(get_alerts).post(post_alert))
+        .route("/api/travel-rule/records", get(get_travel_rule_records))
+        .route("/api/pid-config", get(get_pid_config))
+        .route("/api/zk-credentials/records", get(list_credential_records))
+        .route("/api/zk-credentials/submit", post(submit_credential))
+        .route("/api/zk-credentials/verify", post(verify_credential))
+        .route("/api/zk-credentials/registry", get(list_registries).post(upsert_registry))
         .route("/api/ws/events", get(ws_events_handler))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         // Prometheus metrics — unauthenticated scrape endpoint

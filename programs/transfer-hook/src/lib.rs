@@ -396,10 +396,22 @@ pub mod sss_transfer_hook {
             }
 
             // --- Per-wallet rate limit check ---
-            // If FLAG_WALLET_RATE_LIMITS is set, look for a WalletRateLimit PDA
+            //
+            // When FLAG_WALLET_RATE_LIMITS is set, look for a WalletRateLimit PDA
             // for the sender in remaining_accounts.  If found, enforce the rolling
             // window limit and update the window counters atomically.
             // Seeds: [b"wallet-rate-limit", mint, src_owner]  in sss-token program.
+            //
+            // SECURITY: if FLAG_WALLET_RATE_LIMITS is set and the WRL PDA is NOT
+            // present in remaining_accounts, the transfer is REJECTED.  Omitting
+            // the PDA is not a bypass — callers must provide the WRL PDA or the
+            // admin must disable FLAG_WALLET_RATE_LIMITS for this mint.
+            //
+            // NOTE (architectural): The write-back uses try_borrow_mut_data on a
+            // sss-token-owned account.  This works correctly on Solana (account
+            // data is mutable within a transaction regardless of owner) but the
+            // long-term fix is CPI to sss-token::update_wallet_rate_limit
+            // (requires ExtraAccountMetaList update + transfer-hook program upgrade).
             if feature_flags & FLAG_WALLET_RATE_LIMITS != 0 {
                 let (expected_wrl_pda, _bump) = Pubkey::find_program_address(
                     &[
@@ -411,86 +423,85 @@ pub mod sss_transfer_hook {
                 );
 
                 // Look for the WalletRateLimit PDA in remaining_accounts.
-                // If the sender has no rate limit PDA, the transfer is allowed.
-                if let Some(wrl_account) = ctx
+                // SECURITY FIX: if not found, REJECT the transfer.
+                let wrl_account = ctx
                     .remaining_accounts
                     .iter()
                     .find(|a| a.key() == expected_wrl_pda)
-                {
-                    require!(
-                        wrl_account.is_writable,
-                        HookError::WalletRateLimitAccountNotWritable
-                    );
+                    .ok_or(error!(HookError::WalletRateLimitAccountNotWritable))?;
 
-                    let mut wrl_data = wrl_account.try_borrow_mut_data()?;
-                    require!(
-                        wrl_data.len() >= WRL_MIN_SIZE,
-                        HookError::WalletRateLimitAccountNotWritable
-                    );
+                require!(
+                    wrl_account.is_writable,
+                    HookError::WalletRateLimitAccountNotWritable
+                );
 
-                    // Read current state
-                    let max_transfer = u64::from_le_bytes(
-                        wrl_data[WRL_MAX_TRANSFER_OFFSET..WRL_MAX_TRANSFER_OFFSET + 8]
-                            .try_into()
-                            .unwrap(),
-                    );
-                    let window_slots = u64::from_le_bytes(
-                        wrl_data[WRL_WINDOW_SLOTS_OFFSET..WRL_WINDOW_SLOTS_OFFSET + 8]
-                            .try_into()
-                            .unwrap(),
-                    );
-                    let transferred = u64::from_le_bytes(
-                        wrl_data[WRL_TRANSFERRED_OFFSET..WRL_TRANSFERRED_OFFSET + 8]
-                            .try_into()
-                            .unwrap(),
-                    );
-                    let window_start = u64::from_le_bytes(
-                        wrl_data[WRL_WINDOW_START_OFFSET..WRL_WINDOW_START_OFFSET + 8]
-                            .try_into()
-                            .unwrap(),
-                    );
+                let mut wrl_data = wrl_account.try_borrow_mut_data()?;
+                require!(
+                    wrl_data.len() >= WRL_MIN_SIZE,
+                    HookError::WalletRateLimitAccountNotWritable
+                );
 
-                    let clock = Clock::get()?;
-                    let current_slot = clock.slot;
-
-                    // Determine if we are in the same window or need to reset
-                    let window_elapsed = window_start == 0
-                        || current_slot >= window_start.saturating_add(window_slots);
-
-                    let new_transferred: u64;
-                    let new_window_start: u64;
-
-                    if window_elapsed {
-                        // New window — reset counter, start fresh
-                        new_window_start = current_slot;
-                        new_transferred = amount;
-                    } else {
-                        // Same window — accumulate
-                        new_window_start = window_start;
-                        new_transferred = transferred.saturating_add(amount);
-                    }
-
-                    // Enforce the cap
-                    require!(
-                        new_transferred <= max_transfer,
-                        HookError::WalletRateLimitExceeded
-                    );
-
-                    // Write updated state back
+                // Read current state
+                let max_transfer = u64::from_le_bytes(
+                    wrl_data[WRL_MAX_TRANSFER_OFFSET..WRL_MAX_TRANSFER_OFFSET + 8]
+                        .try_into()
+                        .unwrap(),
+                );
+                let window_slots = u64::from_le_bytes(
+                    wrl_data[WRL_WINDOW_SLOTS_OFFSET..WRL_WINDOW_SLOTS_OFFSET + 8]
+                        .try_into()
+                        .unwrap(),
+                );
+                let transferred = u64::from_le_bytes(
                     wrl_data[WRL_TRANSFERRED_OFFSET..WRL_TRANSFERRED_OFFSET + 8]
-                        .copy_from_slice(&new_transferred.to_le_bytes());
+                        .try_into()
+                        .unwrap(),
+                );
+                let window_start = u64::from_le_bytes(
                     wrl_data[WRL_WINDOW_START_OFFSET..WRL_WINDOW_START_OFFSET + 8]
-                        .copy_from_slice(&new_window_start.to_le_bytes());
+                        .try_into()
+                        .unwrap(),
+                );
 
-                    msg!(
-                        "WalletRateLimit OK: wallet={} transferred={}/{} window_reset={}",
-                        src_owner,
-                        new_transferred,
-                        max_transfer,
-                        window_elapsed
-                    );
+                let clock = Clock::get()?;
+                let current_slot = clock.slot;
+
+                // Determine if we are in the same window or need to reset
+                let window_elapsed = window_start == 0
+                    || current_slot >= window_start.saturating_add(window_slots);
+
+                let new_transferred: u64;
+                let new_window_start: u64;
+
+                if window_elapsed {
+                    // New window — reset counter, start fresh
+                    new_window_start = current_slot;
+                    new_transferred = amount;
+                } else {
+                    // Same window — accumulate
+                    new_window_start = window_start;
+                    new_transferred = transferred.saturating_add(amount);
                 }
-                // No WalletRateLimit PDA for this sender = unrestricted.
+
+                // Enforce the cap
+                require!(
+                    new_transferred <= max_transfer,
+                    HookError::WalletRateLimitExceeded
+                );
+
+                // Write updated state back
+                wrl_data[WRL_TRANSFERRED_OFFSET..WRL_TRANSFERRED_OFFSET + 8]
+                    .copy_from_slice(&new_transferred.to_le_bytes());
+                wrl_data[WRL_WINDOW_START_OFFSET..WRL_WINDOW_START_OFFSET + 8]
+                    .copy_from_slice(&new_window_start.to_le_bytes());
+
+                msg!(
+                    "WalletRateLimit OK: wallet={} transferred={}/{} window_reset={}",
+                    src_owner,
+                    new_transferred,
+                    max_transfer,
+                    window_elapsed
+                );
             }
         }
 

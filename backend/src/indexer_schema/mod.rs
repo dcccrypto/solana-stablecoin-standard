@@ -1,4 +1,5 @@
 //! SSS Event Schema v1 — IDL-to-webhook transformer.
+#![allow(dead_code)]
 //!
 //! Parses on-chain Anchor program log lines and emits structured JSON events
 //! for Helius, Shyft, Triton and any SSS-compatible indexer.
@@ -109,7 +110,7 @@ pub fn parse_log_line(line: &str) -> Option<SssEvent> {
     let body = line.strip_prefix("Program log: ")?;
 
     // Find event name (up to first space or '{')
-    let sep = body.find(|c| c == ' ' || c == '{').unwrap_or(body.len());
+    let sep = body.find([' ', '{']).unwrap_or(body.len());
     let event_name = &body[..sep];
 
     // Check it's a known event

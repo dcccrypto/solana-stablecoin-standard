@@ -218,6 +218,14 @@ pub struct CloseVerificationRecord<'info> {
 /// Fails if the record has not yet expired (`Clock::slot < expires_at_slot`).
 /// This prevents authority from forcibly invalidating live records.
 pub fn close_verification_record_handler(ctx: Context<CloseVerificationRecord>) -> Result<()> {
+    // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let clock = Clock::get()?;
     require!(
         clock.slot >= ctx.accounts.verification_record.expires_at_slot,

@@ -4,7 +4,8 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, CredentialRecord, CredentialRegistry, EventLogEntry, LiquidationHistoryEntry, MintEvent, TravelRuleRecord, WebhookDeliveryLog, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, CredentialRecord, CredentialRegistry, EventLogEntry, LiquidationHistoryEntry, MintEvent, ParsedEventLogEntry, TravelRuleRecord, WebhookDeliveryLog, WebhookEntry};
+use crate::routes::analytics::{CdpHealthResponse, HealthBucket};
 
 pub struct Database {
     pub conn: Mutex<Connection>,
@@ -120,6 +121,30 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_liq_history_collateral ON liquidation_history(collateral_mint);
             CREATE INDEX IF NOT EXISTS idx_liq_history_created ON liquidation_history(created_at DESC);
         ")?;
+        Self::ensure_webhook_delivery_log_schema(&conn)?;
+        Ok(())
+    }
+
+    /// SSS-145: Centralized DDL for webhook_delivery_log — called from init_schema
+    /// and ensures indexes are present.  Idempotent.
+    fn ensure_webhook_delivery_log_schema(conn: &rusqlite::Connection) -> Result<(), AppError> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS webhook_delivery_log (
+                id TEXT PRIMARY KEY,
+                webhook_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                next_retry_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_webhook_delivery_retry
+                ON webhook_delivery_log(status, next_retry_at, created_at);
+            CREATE INDEX IF NOT EXISTS idx_webhook_delivery_updated
+                ON webhook_delivery_log(status, updated_at DESC);",
+        )?;
         Ok(())
     }
 
@@ -430,7 +455,7 @@ impl Database {
             id,
             url: url.to_string(),
             events: events.to_vec(),
-            secret_key: secret_key.map(|s| s.to_string()),
+            hashed_secret: secret_key.map(|s| s.to_string()),
             created_at,
         })
     }
@@ -454,7 +479,7 @@ impl Database {
         entries.into_iter().map(|(id, url, events_str, secret_key, created_at)| {
             let events: Vec<String> = serde_json::from_str(&events_str)
                 .unwrap_or_default();
-            Ok(WebhookEntry { id, url, events, secret_key, created_at })
+            Ok(WebhookEntry { id, url, events, hashed_secret: secret_key, created_at })
         }).collect()
     }
 
@@ -462,6 +487,156 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let rows = conn.execute("DELETE FROM webhooks WHERE id = ?1", params![id])?;
         Ok(rows > 0)
+    }
+
+    /// SSS-145: Look up a single webhook by id.
+    pub fn get_webhook_by_id(&self, id: &str) -> Result<Option<WebhookEntry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let result = conn.query_row(
+            "SELECT id, url, events, secret_key, created_at FROM webhooks WHERE id = ?1",
+            params![id],
+            |row| {
+                let events_json: String = row.get(2)?;
+                let events: Vec<String> =
+                    serde_json::from_str(&events_json).unwrap_or_default();
+                Ok(WebhookEntry {
+                    id: row.get(0)?,
+                    url: row.get(1)?,
+                    events,
+                    hashed_secret: row.get(3)?,
+                    created_at: row.get(4)?,
+                })
+            },
+        );
+        match result {
+            Ok(wh) => Ok(Some(wh)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(AppError::Internal(e.to_string())),
+        }
+    }
+
+    /// SSS-145: Insert a webhook delivery log row (status=pending).
+    /// Returns the new delivery id.
+    pub fn insert_webhook_delivery(
+        &self,
+        webhook_id: &str,
+        event_type: &str,
+        payload: &str,
+    ) -> Result<String, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO webhook_delivery_log \
+             (id, webhook_id, event_type, payload, status, attempt_count, next_retry_at, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, 'pending', 0, NULL, ?5, ?5)",
+            params![id, webhook_id, event_type, payload, now],
+        )?;
+        Ok(id)
+    }
+
+    /// SSS-145: Mark a delivery as successfully delivered.
+    pub fn mark_webhook_delivery_delivered(&self, delivery_id: &str) -> Result<(), AppError> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let updated = conn.execute(
+            "UPDATE webhook_delivery_log SET status='delivered', updated_at=?1 WHERE id=?2",
+            params![now, delivery_id],
+        )?;
+        if updated == 0 {
+            return Err(AppError::NotFound(format!("webhook delivery {} not found", delivery_id)));
+        }
+        Ok(())
+    }
+
+    /// SSS-145: Mark a delivery attempt as failed. If next_retry_at is None, status = 'permanently_failed'.
+    pub fn mark_webhook_delivery_failed(
+        &self,
+        delivery_id: &str,
+        attempt_count: i64,
+        next_retry_at: Option<&str>,
+    ) -> Result<(), AppError> {
+        let now = Utc::now().to_rfc3339();
+        let status = if next_retry_at.is_some() { "failed" } else { "permanently_failed" };
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let updated = conn.execute(
+            "UPDATE webhook_delivery_log \
+             SET status=?1, attempt_count=?2, next_retry_at=?3, updated_at=?4 WHERE id=?5",
+            params![status, attempt_count, next_retry_at, now, delivery_id],
+        )?;
+        if updated == 0 {
+            return Err(AppError::NotFound(format!("webhook delivery {} not found", delivery_id)));
+        }
+        Ok(())
+    }
+
+    /// SSS-145: Claim a delivery row by setting status='in-progress' before HTTP POST.
+    /// Returns false if the row is already claimed (race-free).
+    pub fn claim_webhook_delivery(&self, delivery_id: &str) -> Result<bool, AppError> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let updated = conn.execute(
+            "UPDATE webhook_delivery_log SET status='in-progress', updated_at=?1 \
+             WHERE id=?2 AND status IN ('pending', 'failed')",
+            params![now, delivery_id],
+        )?;
+        Ok(updated > 0)
+    }
+
+    /// SSS-145: Fetch pending/failed deliveries whose next_retry_at <= now.
+    /// Excludes 'in-progress' rows to prevent concurrent re-dispatch.
+    pub fn get_pending_webhook_deliveries(
+        &self,
+        now: &str,
+    ) -> Result<Vec<WebhookDeliveryLog>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, webhook_id, event_type, payload, status, attempt_count, next_retry_at, created_at, updated_at \
+             FROM webhook_delivery_log \
+             WHERE (status='pending' OR (status='failed' AND next_retry_at <= ?1)) \
+             ORDER BY created_at ASC LIMIT 100",
+        )?;
+        let rows = stmt.query_map(params![now], |row| {
+            Ok(WebhookDeliveryLog {
+                id: row.get(0)?,
+                webhook_id: row.get(1)?,
+                event_type: row.get(2)?,
+                payload: row.get(3)?,
+                status: row.get(4)?,
+                attempt_count: row.get(5)?,
+                next_retry_at: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    /// SSS-145: List permanently_failed deliveries for the operator dashboard.
+    pub fn list_failed_webhook_deliveries(&self) -> Result<Vec<WebhookDeliveryLog>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, webhook_id, event_type, payload, status, attempt_count, next_retry_at, created_at, updated_at \
+             FROM webhook_delivery_log \
+             WHERE status IN ('permanently_failed', 'failed') \
+             ORDER BY updated_at DESC LIMIT 500",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(WebhookDeliveryLog {
+                id: row.get(0)?,
+                webhook_id: row.get(1)?,
+                event_type: row.get(2)?,
+                payload: row.get(3)?,
+                status: row.get(4)?,
+                attempt_count: row.get(5)?,
+                next_retry_at: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| AppError::Internal(e.to_string()))
     }
 
     // ─── API key management ─────────────────────────────────────────────────
@@ -1405,6 +1580,8 @@ impl Database {
         ).map_err(|e| AppError::Internal(e.to_string()))
     }
 
+    /// Insert or refresh a CredentialRecord (user submitted valid ZK proof).
+    #[allow(clippy::too_many_arguments)]
     pub fn upsert_credential_record(
         &self,
         mint: &str,
