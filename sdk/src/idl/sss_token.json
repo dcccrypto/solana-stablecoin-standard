@@ -10838,8 +10838,8 @@
             "name": "is_compliance",
             "type": "bool"
           }
-        }
-      ]
+        ]
+      }
     },
     {
       "name": "vote_action",
