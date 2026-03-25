@@ -97,10 +97,13 @@ mod proofs {
     ///       a decrease would indicate corrupted state or a re-entrancy bug.
     /// HOW:  Invariant: total_minted' > total_minted.  Holds before (any u64 value),
     ///       proved it holds after by checked_add with amount > 0.
+    // BUG-004 fix: the original duplicate named `proof_minter_cap_inductive` here
+    // was broken — it referenced undeclared variable `total_minted` in a
+    // find_program_address call that shadowed the declared `minted` binding, and
+    // would not compile under Kani.  Renamed to its actual intent and fixed.
     #[kani::proof]
-    fn proof_minter_cap_inductive() {
-        let cap: u64 = kani::any();
-        let minted: u64 = kani::any();
+    fn proof_total_minted_strictly_increases() {
+        let total_minted: u64 = kani::any();
         let amount: u64 = kani::any();
         kani::assume(amount > 0);
         if let Some(new_total) = total_minted.checked_add(amount) {
