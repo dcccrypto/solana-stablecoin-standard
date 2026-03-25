@@ -171,7 +171,14 @@ export class SolanaStablecoin {
 
     await program.methods
       .initialize(initParams)
-      .accounts(accounts)
+      .accounts({
+        payer,
+        mint,
+        config: configPda,
+        tokenProgram: new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'),
+        systemProgram: new PublicKey('11111111111111111111111111111111'),
+        rent: new PublicKey('SysvarRent111111111111111111111111111111111'),
+      })
       .signers([mintKeypair])
       .rpc({ commitment: 'confirmed' });
 

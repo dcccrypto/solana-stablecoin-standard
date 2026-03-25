@@ -173,7 +173,8 @@ export class AdminTimelockModule {
       throw new SSSError(
         'proposeTimelockOp: opKind must not be ADMIN_OP_NONE (0). ' +
         'Use ADMIN_OP_TRANSFER_AUTHORITY (1), ADMIN_OP_SET_FEATURE_FLAG (2), ' +
-        'or ADMIN_OP_CLEAR_FEATURE_FLAG (3).'
+        'or ADMIN_OP_CLEAR_FEATURE_FLAG (3).',
+        400
       );
     }
 
