@@ -50,7 +50,7 @@ source for CDP, circuit breaker, and any instruction that reads oracle price.
 **Authority only.** Creates the `OracleConsensus` PDA and sets
 `FLAG_MULTI_ORACLE_CONSENSUS` on the config.
 
-```
+```text
 Args:
   min_oracles           u8    — minimum accepted sources (1–5)
   outlier_threshold_bps u16   — rejection threshold in bps (1–5000)
@@ -60,7 +60,7 @@ Args:
 ### `set_oracle_source`
 **Authority only.** Adds or updates a source slot.
 
-```
+```text
 Args:
   slot_index   u8     — which slot to write (0–4)
   oracle_type  u8     — 0=Pyth, 1=Switchboard, 2=Custom
@@ -70,7 +70,7 @@ Args:
 ### `remove_oracle_source`
 **Authority only.** Zeros out a source slot (sets `feed = Pubkey::default()`).
 
-```
+```text
 Args:
   slot_index   u8     — which slot to clear (0–4)
 ```
@@ -85,7 +85,7 @@ updates TWAP, and emits events.
 > entries. Passing fewer or more returns `OracleRemainingAccountsMismatch`.
 > Use `SystemProgram id` (`11111111111111111111111111111111`) for unconfigured slots.
 
-```
+```text
 remaining_accounts: [feed_0, feed_1, feed_2, feed_3, feed_4]
   Length must be exactly 5. Use SystemProgram id for empty/unconfigured slots.
 ```
@@ -94,7 +94,7 @@ remaining_accounts: [feed_0, feed_1, feed_2, feed_3, feed_4]
 
 ## Consensus Algorithm
 
-```
+```text
 0. Guard: if FLAG_MULTI_ORACLE_CONSENSUS set but config_is_set() == false
    → err OracleNoSourcesConfigured                         [M-2, QA fix]
 

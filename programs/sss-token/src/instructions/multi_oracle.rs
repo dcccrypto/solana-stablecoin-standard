@@ -28,6 +28,7 @@ pub struct InitOracleConsensus<'info> {
     pub authority: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [StablecoinConfig::SEED, sss_mint.key().as_ref()],
         bump = config.bump,
         constraint = config.authority == authority.key() @ SssError::Unauthorized,
@@ -148,8 +149,14 @@ pub fn set_oracle_source_handler(
         feed: feed_pubkey,
     };
     if was_empty && feed_pubkey != Pubkey::default() {
+        // Slot was empty, now filled → increment.
         oc.source_count = oc.source_count.saturating_add(1).min(OracleConsensus::MAX_SOURCES as u8);
+    } else if !was_empty && feed_pubkey == Pubkey::default() {
+        // Slot was filled, now cleared → decrement.
+        oc.source_count = oc.source_count.saturating_sub(1);
     }
+    // Overwriting a filled slot with another feed (was_empty=false, feed_pubkey≠default)
+    // leaves source_count unchanged — count stays the same.
     msg!(
         "SSS-153: source[{}] type={} feed={}",
         slot_index, oracle_type, feed_pubkey
