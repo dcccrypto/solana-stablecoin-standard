@@ -23,7 +23,7 @@ hyper = { version = "1", features = ["http1", "client"] }
 hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "tokio"] }
 http-body-util = "0.1"
 sha2 = "0.10"
-hmac = "0.12"
+hmac = "0.12.1"
 hex = "0.4"
 base64 = "0.22"
 hyper-rustls = { version = "0.27", features = ["webpki-tokio"] }
@@ -34,7 +34,6 @@ axum-extra = { version = "0.9", features = [] }
 futures = "0.3"
 tokio-tungstenite = "0.21"
 http = "1.4.0"
-hmac = "0.12.1"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

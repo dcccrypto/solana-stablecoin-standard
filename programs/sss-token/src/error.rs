@@ -370,4 +370,9 @@ pub enum SssError {
     // Oracle
     #[msg("Oracle not configured — set oracle_type and oracle_feed first")]
     OracleNotConfigured,
+    // BUG-011: DAO governance
+    #[msg("Not authorized to propose: caller must be authority or a committee member")]
+    NotAuthorizedToPropose,
+    #[msg("DAO flag protected: FLAG_DAO_COMMITTEE cannot be cleared via admin ops; requires DAO vote")]
+    DaoFlagProtected,
 }

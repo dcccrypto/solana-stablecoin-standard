@@ -124,7 +124,6 @@ pub struct ProposeAction<'info> {
     #[account(
         seeds = [StablecoinConfig::SEED, mint.key().as_ref()],
         bump = config.bump,
-        constraint = config.authority == proposer.key() @ SssError::Unauthorized,
     )]
     pub config: Account<'info, StablecoinConfig>,
 
@@ -153,8 +152,8 @@ pub struct ProposeAction<'info> {
 
 /// Open a new governance proposal.
 ///
-/// Only the current authority can propose.  Proposals are uniquely identified
-/// by `proposal_id` which is auto-incremented from `committee.next_proposal_id`.
+/// Any committee member OR the current authority may propose. This ensures
+/// the DAO committee is not authority-captured (BUG-011 fix).
 pub fn propose_action_handler(
     ctx: Context<ProposeAction>,
     action: ProposalAction,
@@ -165,6 +164,20 @@ pub fn propose_action_handler(
     require!(
         ctx.accounts.config.feature_flags & FLAG_DAO_COMMITTEE != 0,
         SssError::DaoCommitteeRequired
+    );
+
+    // BUG-011: allow any committee member OR authority to propose
+    let proposer_key = ctx.accounts.proposer.key();
+    let is_authority = ctx.accounts.config.authority == proposer_key;
+    let is_member = ctx
+        .accounts
+        .committee
+        .members
+        .iter()
+        .any(|m| *m == proposer_key);
+    require!(
+        is_authority || is_member,
+        SssError::NotAuthorizedToPropose
     );
 
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
