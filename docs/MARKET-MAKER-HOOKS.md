@@ -115,16 +115,21 @@ Whitelisted MM mints tokens. Bypasses stability fee. Subject to per-slot rate li
 | Account | Writable | Signer | Description |
 |---|---|---|---|
 | `market_maker` | — | ✓ | Whitelisted MM wallet |
-| `config` | — | — | StablecoinConfig PDA |
+| `config` | ✓ | — | StablecoinConfig PDA (updated: total_minted) |
 | `mint` | ✓ | — | Stablecoin mint |
 | `mm_config` | ✓ | — | MarketMakerConfig PDA |
 | `mm_token_account` | ✓ | — | MM's token account (receives minted tokens) |
 | `oracle_feed` | — | — | Oracle price feed (pass default pubkey if unconfigured) |
 | `token_program` | — | — | Token-2022 program |
 
+**Behaviour notes:**
+- Checks `FLAG_MARKET_MAKER_HOOKS` at runtime — fails with `MarketMakerHooksDisabled` if unset.
+- Enforces `max_supply`: reverts with `SupplyCapExceeded` if `total_supply + amount > config.max_supply`.
+- Increments `config.total_minted` on success.
+
 **Events:** `MmMint { mint, market_maker, amount, slot }`
 
-**Errors:** `ZeroAmount`, `NotWhitelistedMarketMaker`, `OraclePriceOutsideSpread`, `MmMintLimitExceeded`, `MintPaused`
+**Errors:** `ZeroAmount`, `MarketMakerHooksDisabled`, `NotWhitelistedMarketMaker`, `OraclePriceOutsideSpread`, `MmMintLimitExceeded`, `SupplyCapExceeded`, `MintPaused`
 
 ---
 
@@ -139,16 +144,20 @@ Whitelisted MM burns tokens. Subject to per-slot rate limit and oracle spread ch
 | Account | Writable | Signer | Description |
 |---|---|---|---|
 | `market_maker` | — | ✓ | Whitelisted MM wallet |
-| `config` | — | — | StablecoinConfig PDA |
+| `config` | ✓ | — | StablecoinConfig PDA (updated: total_burned) |
 | `mint` | ✓ | — | Stablecoin mint |
 | `mm_config` | ✓ | — | MarketMakerConfig PDA |
 | `mm_token_account` | ✓ | — | MM's token account (tokens burned from here) |
 | `oracle_feed` | — | — | Oracle price feed |
 | `token_program` | — | — | Token-2022 program |
 
+**Behaviour notes:**
+- Checks `FLAG_MARKET_MAKER_HOOKS` at runtime — fails with `MarketMakerHooksDisabled` if unset.
+- Increments `config.total_burned` on success. `config` must be passed as writable.
+
 **Events:** `MmBurn { mint, market_maker, amount, slot }`
 
-**Errors:** `ZeroAmount`, `NotWhitelistedMarketMaker`, `OraclePriceOutsideSpread`, `MmBurnLimitExceeded`, `MintPaused`
+**Errors:** `ZeroAmount`, `MarketMakerHooksDisabled`, `NotWhitelistedMarketMaker`, `OraclePriceOutsideSpread`, `MmBurnLimitExceeded`, `MintPaused`
 
 ---
 
@@ -173,7 +182,7 @@ The oracle spread check runs on every `mm_mint` and `mm_burn` call:
 
 1. Reads oracle price in µUSD (6 decimal places) via the SSS oracle abstraction layer.
 2. Computes deviation from peg: `|oracle_price_µUSD − 1_000_000|`.
-3. Tolerates up to `spread_bps × 10` µUSD deviation (e.g. `spread_bps=50` → 500 µUSD = $0.0005).
+3. Tolerates up to `spread_bps × 100` µUSD deviation (e.g. `spread_bps=50` → 5 000 µUSD = $0.005).
 4. **Skipped** if `oracle_feed == Pubkey::default()` — useful for tests; always configure a feed on mainnet.
 
 ---
@@ -204,13 +213,15 @@ Limits apply **collectively** across all registered MMs:
 
 | Error | Instruction | Meaning |
 |---|---|---|
-| `MarketMakerHooksNotEnabled` | `init_market_maker_config` | `FLAG_MARKET_MAKER_HOOKS` (bit 18) not set |
+| `MarketMakerHooksNotEnabled` | `init_market_maker_config` | `FLAG_MARKET_MAKER_HOOKS` (bit 18) not set at init time |
+| `MarketMakerHooksDisabled` | `mm_mint`, `mm_burn` | `FLAG_MARKET_MAKER_HOOKS` runtime check failed (flag cleared after init) |
 | `NotWhitelistedMarketMaker` | `mm_mint`, `mm_burn` | Signer not in whitelist |
 | `MarketMakerAlreadyRegistered` | `register_market_maker` | Pubkey already in whitelist |
 | `MarketMakerListFull` | `register_market_maker` | Whitelist at 10-entry capacity |
 | `MmMintLimitExceeded` | `mm_mint` | Slot mint limit reached |
 | `MmBurnLimitExceeded` | `mm_burn` | Slot burn limit reached |
 | `OraclePriceOutsideSpread` | `mm_mint`, `mm_burn` | Oracle price too far from $1 peg |
+| `SupplyCapExceeded` | `mm_mint` | Mint would exceed `config.max_supply` |
 
 ---
 
