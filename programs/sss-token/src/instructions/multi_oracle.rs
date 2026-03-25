@@ -255,9 +255,20 @@ pub fn update_oracle_consensus_handler<'info>(
     let remaining = ctx.remaining_accounts;
 
     require!(
-        oc.config_is_set() && ctx.accounts.config.feature_flags & FLAG_MULTI_ORACLE_CONSENSUS != 0,
+        ctx.accounts.config.feature_flags & FLAG_MULTI_ORACLE_CONSENSUS != 0,
         SssError::MultiOracleNotEnabled
     );
+
+    // H-2: Enforce that caller always passes exactly MAX_SOURCES remaining_accounts
+    // (use Pubkey::default() placeholder for empty slots).  This prevents wrong-feed
+    // binding caused by a caller omitting trailing placeholder accounts.
+    require!(
+        remaining.len() == OracleConsensus::MAX_SOURCES,
+        SssError::OracleRemainingAccountsMismatch
+    );
+
+    // M-2: Return a clear error when the flag is set but no sources are configured.
+    require!(oc.config_is_set(), SssError::OracleNoSourcesConfigured);
 
     let max_age = oc.max_age_slots;
     let outlier_bps = oc.outlier_threshold_bps as u64;
@@ -416,22 +427,20 @@ fn read_source_price(
 ) -> Result<Option<(u64, u64)>> {
     match oracle_type {
         ORACLE_PYTH => {
-            use crate::oracle::pyth;
-            let max_age = if config.max_oracle_age_secs > 0 {
-                config.max_oracle_age_secs as u64
-            } else {
-                60
-            };
-            match pyth::get_price(feed_acct, max_age, clock.unix_timestamp) {
-                Ok(op) if op.price > 0 => {
-                    // Use slot approximation: Pyth gives a unix_timestamp; convert to slot
-                    // via clock.slot - (clock.unix_timestamp - last_ts) * 2.5
-                    // For simplicity, use the current slot — the staleness check in
-                    // update_oracle_consensus is based on Pyth's own max_oracle_age_secs guard.
-                    Ok(Some((op.price as u64, clock.slot)))
-                }
-                _ => Ok(None),
+            // H-1: Read the actual Pyth publish slot (agg.pub_slot) instead of
+            // clock.slot, so the per-source max_age_slots staleness check in
+            // update_oracle_consensus is meaningful for Pyth feeds.
+            use pyth_sdk_solana::state::load_price_account;
+            let data = feed_acct.try_borrow_data()?;
+            let price_acct = load_price_account::<32, ()>(&data)
+                .map_err(|_| error!(SssError::InvalidPriceFeed))?;
+            let actual_slot = price_acct.agg.pub_slot;
+            let price = price_acct.agg.price;
+            drop(data);
+            if price <= 0 {
+                return Ok(None);
             }
+            Ok(Some((price as u64, actual_slot)))
         }
         ORACLE_SWITCHBOARD => {
             use crate::oracle::switchboard;
@@ -499,12 +508,21 @@ fn median_of(sorted: &[u64]) -> u64 {
     }
 }
 
-/// Update TWAP as EMA: twap = twap * 7/8 + new_price * 1/8.
+/// Update TWAP as EMA: twap = (twap * 7 + new_price) / 8.
+///
+/// M-1 fix: compute the full product before dividing to avoid precision loss
+/// from the previous `twap/8*7 + new/8` form (which discarded up to 14 ULP
+/// per update step).
 fn update_twap(oc: &mut OracleConsensus, new_price: u64, slot: u64) {
     if oc.twap_price == 0 {
         oc.twap_price = new_price;
     } else {
-        oc.twap_price = oc.twap_price / 8 * 7 + new_price / 8;
+        // Use u128 intermediary to avoid overflow before division.
+        let next = (oc.twap_price as u128)
+            .saturating_mul(7)
+            .saturating_add(new_price as u128)
+            / 8;
+        oc.twap_price = next.min(u64::MAX as u128) as u64;
     }
     oc.twap_last_slot = slot;
 }

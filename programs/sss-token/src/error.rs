@@ -385,4 +385,10 @@ pub enum SssError {
     InvalidOracleConsensusConfig,
     #[msg("Invalid oracle source index — must be < MAX_SOURCES (5)")]
     InvalidOracleSourceIndex,
+    /// H-2: remaining_accounts must have exactly MAX_SOURCES entries.
+    #[msg("remaining_accounts count must equal MAX_SOURCES (5) — use Pubkey::default() placeholders for empty slots")]
+    OracleRemainingAccountsMismatch,
+    /// M-2: FLAG_MULTI_ORACLE_CONSENSUS set but no sources configured.
+    #[msg("FLAG_MULTI_ORACLE_CONSENSUS is set but no oracle sources are configured")]
+    OracleNoSourcesConfigured,
 }
