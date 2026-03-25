@@ -361,9 +361,23 @@ pub fn bridge_in_handler(
         SssError::BridgeRecipientMismatch
     );
 
-    // Proof sanity: ensure proof_bytes are non-empty.
-    // Full on-chain verification: CPI to bridge_config.bridge_program in production.
-    require!(!proof.proof_bytes.is_empty(), SssError::BridgeProofEmpty);
+    // Proof sanity: require at least 32 bytes (Wormhole VAAs are typically 200+ bytes;
+    // LayerZero proofs similar).  A 1-byte proof is trivially forgeable and indicates
+    // an improperly integrated relayer.
+    require!(proof.proof_bytes.len() >= 32, SssError::BridgeProofEmpty);
+
+    // Full on-chain proof verification via CPI to bridge_config.bridge_program.
+    // For Wormhole: CPI to core bridge parseAndVerifyVM.
+    // For LayerZero: CPI to LZ endpoint verifyPacket.
+    // This MUST be implemented in the bridge_program CPI call below for production.
+    // Currently: enforcement relies on bridge_config.authority being a trusted
+    // off-chain relayer that has already verified the proof before submitting.
+    //
+    // SECURITY NOTE: Without on-chain proof verification, bridge_in security is
+    // equivalent to trusting bridge_config.authority fully.  The authority MUST be
+    // a hardware-secured multisig or HSM key.  Admin must rotate bridge_config.authority
+    // to a Squads multisig before mainnet deployment.
+    require!(ctx.accounts.bridge_config.authority != Pubkey::default(), SssError::Unauthorized);
 
     // Supply cap check (respects max_supply)
     if config.max_supply > 0 {
