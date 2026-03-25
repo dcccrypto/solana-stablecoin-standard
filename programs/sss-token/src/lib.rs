@@ -401,6 +401,50 @@ pub mod sss_token {
         instructions::bad_debt_backstop::trigger_backstop_handler(ctx, shortfall_amount)
     }
 
+    // ─── SSS-151: First-loss Insurance Vault ─────────────────────────────────
+
+    /// Authority-only: initialise the InsuranceVault PDA and set
+    /// FLAG_INSURANCE_VAULT_REQUIRED.  Minting is blocked until the vault is
+    /// adequately seeded.
+    pub fn init_insurance_vault(
+        ctx: Context<InitInsuranceVault>,
+        min_seed_bps: u16,
+        max_draw_per_event_bps: u16,
+    ) -> Result<()> {
+        instructions::insurance_vault::init_insurance_vault_handler(
+            ctx,
+            min_seed_bps,
+            max_draw_per_event_bps,
+        )
+    }
+
+    /// Deposit collateral into the insurance vault (anyone may seed; issuer must
+    /// hit min_seed_bps before minting is unlocked).
+    pub fn seed_insurance_vault(
+        ctx: Context<SeedInsuranceVault>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::insurance_vault::seed_insurance_vault_handler(ctx, amount)
+    }
+
+    /// Governance-controlled: draw from the insurance vault to cover protocol losses.
+    /// Requires authority (+ DAO quorum when FLAG_DAO_COMMITTEE is set).
+    pub fn draw_insurance(
+        ctx: Context<DrawInsurance>,
+        amount: u64,
+        reason_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::insurance_vault::draw_insurance_handler(ctx, amount, reason_hash)
+    }
+
+    /// Permissionless: anyone may replenish the insurance vault after a draw.
+    pub fn replenish_insurance_vault(
+        ctx: Context<ReplenishInsuranceVault>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::insurance_vault::replenish_insurance_vault_handler(ctx, amount)
+    }
+
     // ─── SSS-098: CollateralConfig PDA ───────────────────────────────────────
 
     /// Register a new collateral type with per-collateral params (SSS-3, authority-only).

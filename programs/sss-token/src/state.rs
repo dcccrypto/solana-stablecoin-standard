@@ -68,6 +68,10 @@ pub const FLAG_MARKET_MAKER_HOOKS: u64 = 1 << 18;
 pub const FLAG_AGENT_PAYMENT_CHANNEL: u64 = 1 << 19;
 /// Probabilistic money market (future).
 pub const FLAG_PROBABILISTIC_MONEY: u64 = 1 << 20;
+/// SSS-151: Insurance vault required flag (bit 21): when set, minting is blocked
+/// until the InsuranceVault PDA is adequately seeded (balance >= min_seed_bps of net_supply).
+/// Set by `init_insurance_vault`; cleared only via timelock.
+pub const FLAG_INSURANCE_VAULT_REQUIRED: u64 = 1 << 21;
 
 /// PRESET_INSTITUTIONAL (4): all SSS-3 features + Squads V4 multisig authority.
 /// Recommended for issuers holding > $1 M in reserves.
@@ -1800,4 +1804,49 @@ pub struct CredentialRecord {
 impl CredentialRecord {
     pub const SEED: &'static [u8] = b"credential-record";
     pub const INIT_SPACE: usize = 32 + 32 + 8 + 8 + 1 + 1;
+}
+
+// ── InsuranceVault ────────────────────────────────────────────────────────
+/// SSS-151: First-loss insurance vault PDA — protocol-level reserve for
+/// liquidation cascades.  One per stablecoin mint when
+/// FLAG_INSURANCE_VAULT_REQUIRED is set.
+///
+/// Seeds: [b"insurance-vault", sss_mint]
+///
+/// Distinct from `insurance_fund_pubkey` (bad-debt backstop): this vault is
+/// seeded at initialisation by the issuer and covers liquidation cascades;
+/// the backstop is invoked only after individual liquidations leave bad debt.
+#[account]
+#[derive(InitSpace)]
+pub struct InsuranceVault {
+    /// The stablecoin config this vault is associated with.
+    pub sss_mint: Pubkey,
+    /// Collateral token account that holds the vault reserves (PDA-owned).
+    pub vault_token_account: Pubkey,
+    /// Minimum seed required, in basis points of net_supply at seed time
+    /// (e.g. 500 = 5% of net_supply).  0 = no minimum enforced.
+    pub min_seed_bps: u16,
+    /// Mirrored vault balance (ground truth is on-chain token account).
+    pub current_balance: u64,
+    /// Cumulative collateral drawn since vault creation.
+    pub total_drawn: u64,
+    /// Per-event draw cap in bps of net_supply (0 = no per-event cap).
+    pub max_draw_per_event_bps: u16,
+    /// True when current_balance >= required seed amount.
+    pub adequately_seeded: bool,
+    pub bump: u8,
+}
+
+impl InsuranceVault {
+    pub const SEED: &'static [u8] = b"insurance-vault";
+
+    /// Compute the minimum required balance given net_supply.
+    pub fn required_seed_amount(&self, net_supply: u64) -> u64 {
+        if self.min_seed_bps == 0 {
+            return 0;
+        }
+        ((net_supply as u128)
+            .saturating_mul(self.min_seed_bps as u128)
+            / 10_000u128) as u64
+    }
 }
