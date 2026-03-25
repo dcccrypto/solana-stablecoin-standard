@@ -92,7 +92,16 @@ Extends SSS-1 with on-chain transfer enforcement via the Token-2022 Transfer Hoo
 
 **Preset discriminant:** `3`
 
-Extends SSS-2 with on-chain collateral reserve enforcement. SSS-3 is the reference design for a collateral-backed, over-collateralized stablecoin. **Note:** reserve attestation is performed by a permissioned attestor keypair, not a trustless on-chain vault verification. See [TRUST-MODEL.md](./TRUST-MODEL.md) for the full trust-assumption breakdown.
+Extends SSS-2 with on-chain collateral reserve enforcement. SSS-3 is the reference design for a trustlessly over-collateralized stablecoin: the collateral ratio is enforced inside the `mint` instruction itself, with no oracle and no off-chain step the issuer can bypass.
+
+**Trust model (v1 accuracy):**
+- **Collateral ratio enforcement is trustless** — the on-chain math cannot be circumvented.
+- **Reserve attestation is trust-minimized** — `reserve_amount` is submitted by an on-chain-verifiable whitelisted attestor keypair, not read directly from a vault. The attestor is auditable but permissioned.
+- **Authority actions use timelocks** for critical operations; guardian multisig controls emergency pause.
+- **You must trust the authority key** for `set_reserve_attestor_whitelist` (no timelock in v1) and for non-timelocked admin ops.
+- ZK credentials and cross-chain bridge collateral are v1 stubs.
+
+See [TRUST-MODEL.md](./TRUST-MODEL.md) for the full per-tier breakdown.
 
 **Additional features beyond SSS-2:**
 - A `reserve_vault` token account holds collateral; its balance is read by `sss-token` inside the `mint` instruction

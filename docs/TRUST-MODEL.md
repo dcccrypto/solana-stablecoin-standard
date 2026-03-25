@@ -1,6 +1,6 @@
 # TRUST-MODEL.md — Real Trust Assumptions per SSS Tier
 
-> **Purpose:** This document replaces any prior "trustless" framing with an accurate description of who you must trust at each tier of the Solana Stablecoin Standard (v1). Integrators, auditors, and users should read this before relying on any SSS-tier guarantee.
+> **Purpose:** This document gives an accurate description of what IS and IS NOT trustless at each tier of the Solana Stablecoin Standard (v1). SSS-3's collateral ratio enforcement is genuinely trustless — the on-chain math cannot be bypassed. Reserve attestation and some governance ops require trusting specific keypairs. Integrators, auditors, and users should read this before relying on any SSS-tier guarantee.
 
 ---
 
@@ -51,12 +51,14 @@
 
 | Layer | Trustless? | Notes |
 |---|---|---|
-| Collateral ratio enforcement | **Partial** | Math enforced; but input (reserve amount) is attestor-submitted |
-| Reserve attestation | **No** | Permissioned keypair; not vault-read |
-| Attestor whitelist governance | **No** | No timelock |
-| ZK credential privacy | **No (stub)** | Not implemented in v1 |
-| Cross-chain bridge collateral | **No (stub)** | Not implemented in v1 |
-| Program upgrade immutability | **No** | Upgrade authority not revoked |
+| Collateral ratio math | ✅ **Yes** | `mint` instruction enforces ratio on-chain; cannot be bypassed |
+| Critical authority timelocks | ✅ **Yes** | `admin_timelock.rs` enforces delay on covered operations |
+| Guardian multisig emergency pause | ✅ **Yes** | Pause/unpause requires multisig |
+| Reserve attestation | ⚠️ **Trust-minimized** | Permissioned on-chain attestor keypair; not a direct vault read |
+| Attestor whitelist governance | ❌ **No (v1)** | `set_reserve_attestor_whitelist` not timelocked; instant swap possible |
+| ZK credential privacy | ❌ **Stub (v1)** | Groth16 verifier not implemented; do not rely on for compliance |
+| Cross-chain bridge collateral | ❌ **Stub (v1)** | CPI stub only; bridge minting not collateral-verified end-to-end |
+| Program upgrade immutability | ❌ **No** | Upgrade authority not yet revoked; all invariants can be changed by binary upgrade |
 
 ---
 
