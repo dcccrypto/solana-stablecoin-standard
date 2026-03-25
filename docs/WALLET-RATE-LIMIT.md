@@ -109,7 +109,8 @@ When `FLAG_WALLET_RATE_LIMITS` is set and a transfer fires, the transfer hook:
 
 1. Inspects `remaining_accounts` for a writable PDA matching
    `[b"wallet-rate-limit", sss_mint, sender_wallet]`.
-2. If **no PDA found** → transfer proceeds without rate-limit check.
+2. If **no PDA found** → transfer is **rejected** (`WalletRateLimitAccountMissing`).
+   Omitting the PDA is not a bypass — the hook enforces its presence when the flag is set.
 3. If **PDA found (not writable)** → returns `WalletRateLimitAccountNotWritable`.
 4. If **PDA found (writable)**:
    - Evaluates the rolling-window check (see logic above).
@@ -117,9 +118,14 @@ When `FLAG_WALLET_RATE_LIMITS` is set and a transfer fires, the transfer hook:
    - Otherwise → updates `transferred_this_window` and `window_start_slot` in place,
      emits `WalletRateLimitEnforced`.
 
-**Client responsibility:** Any client transferring from a rate-limited wallet must
+**Client responsibility:** Any client transferring from a rate-limited wallet **must**
 include the `WalletRateLimit` PDA as a writable account in `remaining_accounts`.
+Omitting it will cause the transfer to fail.
 The SDK helper (see below) handles this automatically.
+
+> **Security note (v1):** The hook currently reads/writes the WRL PDA via direct
+> `try_borrow_mut_data`. A future upgrade will migrate to a CPI-based write path
+> to avoid the sss-token program ownership assumption on the PDA data.
 
 ---
 

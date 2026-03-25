@@ -317,7 +317,9 @@ These items from GAPS-ANALYSIS-ANCHOR.md are **not** blocking launch if debt cei
 | GAP-003: No surplus buffer on-chain | Bad debt with no coverage | $1M TVL |
 | GAP-005: Full liquidation only (no partial) | Borrower UX, liquidation efficiency | $5M TVL |
 | Blacklist 100-entry cap | Compliance scaling | When > 80 addresses blacklisted |
+| Bridge: no on-chain proof CPI | bridge_in trusts authority key; `verified` flag ignored | Before bridge TVL > $0 on mainnet |
+| WRL: WRL PDA write via direct borrow (not CPI) | Architectural coupling; future upgrade needed | Before WRL feature enabled at scale |
 
 ---
 
-_Last updated: 2026-03-16 by sss-docs_
+_Last updated: 2026-03-25 by sss-docs_
