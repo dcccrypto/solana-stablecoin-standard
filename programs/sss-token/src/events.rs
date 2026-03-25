@@ -740,3 +740,42 @@ pub struct OracleOutlierRejected {
     pub deviation_bps: u64,
     pub slot: u64,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-154: Redemption Queue events
+// ---------------------------------------------------------------------------
+
+/// Emitted when a user enqueues a redemption.
+#[event]
+pub struct RedemptionQueued {
+    pub sss_mint: Pubkey,
+    pub owner: Pubkey,
+    pub queue_index: u64,
+    pub amount: u64,
+    pub enqueue_slot: u64,
+    pub slot_hash_seed: [u8; 8],
+    pub earliest_process_slot: u64,
+}
+
+/// Emitted when a keeper processes (fulfils) a queued redemption.
+#[event]
+pub struct RedemptionFulfilledQueued {
+    pub sss_mint: Pubkey,
+    pub owner: Pubkey,
+    pub queue_index: u64,
+    pub amount: u64,
+    pub enqueue_slot: u64,
+    pub fulfilled_slot: u64,
+    pub keeper: Pubkey,
+    pub keeper_reward_lamports: u64,
+}
+
+/// Emitted when a user cancels a queued redemption.
+#[event]
+pub struct RedemptionCancelled {
+    pub sss_mint: Pubkey,
+    pub owner: Pubkey,
+    pub queue_index: u64,
+    pub amount: u64,
+    pub cancel_slot: u64,
+}

@@ -36,7 +36,7 @@ pub struct CollectStabilityFee<'info> {
         constraint = config.preset == 3 @ SssError::InvalidPreset,
         constraint = !config.paused @ SssError::MintPaused,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     #[account(
         mut,
@@ -152,7 +152,7 @@ pub struct SetStabilityFee<'info> {
         constraint = config.authority == authority.key() @ SssError::Unauthorized,
         constraint = config.preset == 3 @ SssError::InvalidPreset,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 }
 
 pub fn set_stability_fee_handler(ctx: Context<SetStabilityFee>, fee_bps: u16) -> Result<()> {

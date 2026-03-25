@@ -74,6 +74,10 @@ pub const FLAG_PROBABILISTIC_MONEY: u64 = 1 << 20;
 /// reads oracle price.  Requires an `OracleConsensus` PDA via `init_oracle_consensus`.
 pub const FLAG_MULTI_ORACLE_CONSENSUS: u64 = 1 << 22;
 
+/// SSS-154: Redemption queue flag (bit 23): when set, the stablecoin supports
+/// front-run-protected FIFO redemption queues via `RedemptionQueue` PDA.
+pub const FLAG_REDEMPTION_QUEUE: u64 = 1 << 23;
+
 /// PRESET_INSTITUTIONAL (4): all SSS-3 features + Squads V4 multisig authority.
 /// Recommended for issuers holding > $1 M in reserves.
 pub const PRESET_INSTITUTIONAL: u8 = 4;
@@ -1473,343 +1477,7 @@ impl MarketMakerConfig {
     pub const SEED: &'static [u8] = b"mm-config";
 }
 
-// ── GuardianConfig ─────────────────────────────────────────────────────────
-/// Guardian multisig config — stores guardian pubkeys and threshold.
-/// Created by `init_guardian_config`. Seeds: [b"guardian-config", config_pda].
-#[account]
-pub struct GuardianConfig {
-    pub guardians: Vec<Pubkey>,         // up to 7
-    pub threshold: u8,
-    pub next_proposal_id: u64,
-    pub pending_lift_votes: Vec<Pubkey>, // votes to lift guardian pause
-}
-impl GuardianConfig {
-    pub const SEED: &'static [u8] = b"guardian-config";
-    pub const MAX_GUARDIANS: usize = 7;
-    // space: 4+7*32 + 1 + 8 + 4+7*32 = 4+224+1+8+4+224 = 465
-    pub const INIT_SPACE: usize = 4 + 32 * 7 + 1 + 8 + 4 + 32 * 7;
-}
-
-// ── PauseProposal ──────────────────────────────────────────────────────────
-/// Guardian pause proposal PDA. Seeds: [b"pause-proposal", config_pda, proposal_id.to_le_bytes()].
-#[account]
-pub struct PauseProposal {
-    pub proposal_id: u64,
-    pub reason: [u8; 32],
-    pub threshold: u8,
-    pub votes: Vec<Pubkey>,             // guardians who voted yes
-}
-impl PauseProposal {
-    pub const SEED: &'static [u8] = b"pause-proposal";
-    pub const MAX_VOTES: usize = 7;
-    // space: 8 + 32 + 1 + 4+7*32 = 8+32+1+4+224 = 269
-    pub const INIT_SPACE: usize = 8 + 32 + 1 + 4 + 32 * 7;
-}
-
-// ── SquadsMultisigConfig ───────────────────────────────────────────────────
-/// Squads V4 multisig config PDA — stores multisig details for SDK.
-/// Seeds: [b"squads-multisig-config", mint].
-#[account]
-pub struct SquadsMultisigConfig {
-    pub sss_mint: Pubkey,
-    pub multisig_pda: Pubkey,
-    pub threshold: u8,
-    pub members: Vec<Pubkey>,           // up to 20
-    pub bump: u8,
-}
-impl SquadsMultisigConfig {
-    pub const SEED: &'static [u8] = b"squads-multisig-config";
-    pub const MAX_MEMBERS: usize = 20;
-    pub fn space(member_count: usize) -> usize {
-        8 + 32 + 32 + 1 + 4 + 32 * member_count + 1
-    }
-}
-
-// ── ProofOfReserves ────────────────────────────────────────────────────────
-/// Proof-of-Reserves attestation PDA. Seeds: [b"proof-of-reserves", mint].
-#[account]
-pub struct ProofOfReserves {
-    pub sss_mint: Pubkey,
-    pub reserve_amount: u64,
-    pub attestation_hash: [u8; 32],
-    pub attestor: Pubkey,
-    pub last_attestation_slot: u64,
-    pub last_verified_ratio_bps: u64,
-    pub bump: u8,
-}
-impl ProofOfReserves {
-    pub const SEED: &'static [u8] = b"proof-of-reserves";
-    // space: 32+8+32+32+8+8+1 = 121
-    pub const INIT_SPACE: usize = 32 + 8 + 32 + 32 + 8 + 8 + 1;
-}
-
-// ── TravelRuleRecord ───────────────────────────────────────────────────────
-/// Per-transfer travel rule record. Seeds: [b"travel-rule", mint, nonce].
-#[account]
-pub struct TravelRuleRecord {
-    pub sss_mint: Pubkey,
-    pub nonce: u64,
-    pub encrypted_payload: [u8; 256],   // 256-byte VASP payload
-    pub originator_vasp: Pubkey,
-    pub beneficiary_vasp: Pubkey,
-    pub transfer_amount: u64,
-    pub slot: u64,
-    pub bump: u8,
-}
-impl TravelRuleRecord {
-    pub const SEED: &'static [u8] = b"travel-rule";
-    // space: 32+8+256+32+32+8+8+1 = 377
-    pub const INIT_SPACE: usize = 32 + 8 + 256 + 32 + 32 + 8 + 8 + 1;
-}
-
-// ── SanctionsRecord ────────────────────────────────────────────────────────
-/// Sanctions screening record for a wallet. Seeds: [b"sanctions-record", mint, wallet].
-#[account]
-pub struct SanctionsRecord {
-    pub is_sanctioned: bool,
-    pub updated_slot: u64,
-    pub bump: u8,
-}
-impl SanctionsRecord {
-    pub const SEED: &'static [u8] = b"sanctions-record";
-    pub const INIT_SPACE: usize = 1 + 8 + 1;
-}
-
-// ── WalletRateLimit ────────────────────────────────────────────────────────
-/// Per-wallet rate limit PDA. Seeds: [b"wallet-rate-limit", mint, wallet].
-#[account]
-pub struct WalletRateLimit {
-    pub sss_mint: Pubkey,
-    pub wallet: Pubkey,
-    pub max_transfer_per_window: u64,
-    pub window_slots: u64,
-    pub window_start_slot: u64,
-    pub transferred_this_window: u64,
-    pub bump: u8,
-}
-impl WalletRateLimit {
-    pub const SEED: &'static [u8] = b"wallet-rate-limit";
-    pub const INIT_SPACE: usize = 32 + 32 + 8 + 8 + 8 + 8 + 1;
-}
-
-// ── PidConfig ─────────────────────────────────────────────────────────────
-/// PID controller config for dynamic stability fee (SSS-130).
-/// Seeds: [b"pid-config", mint].
-#[account]
-pub struct PidConfig {
-    pub sss_mint: Pubkey,
-    pub kp: i64,
-    pub ki: i64,
-    pub kd: i64,
-    pub target_price: u64,
-    pub min_fee_bps: u16,
-    pub max_fee_bps: u16,
-    pub last_error: i64,
-    pub integral: i64,
-    pub last_update_slot: u64,
-    pub bump: u8,
-}
-impl PidConfig {
-    pub const SEED: &'static [u8] = b"pid-config";
-    pub const INIT_SPACE: usize = 32 + 8 + 8 + 8 + 8 + 2 + 2 + 8 + 8 + 8 + 1;
-}
-
-// ── LiquidationBonusConfig ────────────────────────────────────────────────
-/// Graduated liquidation bonus tiers (SSS-131). Seeds: [b"liquidation-bonus-config", mint].
-#[account]
-pub struct LiquidationBonusConfig {
-    pub sss_mint: Pubkey,
-    pub authority: Pubkey,
-    pub tier1_threshold_bps: u16,
-    pub tier1_bonus_bps: u16,
-    pub tier2_threshold_bps: u16,
-    pub tier2_bonus_bps: u16,
-    pub tier3_threshold_bps: u16,
-    pub tier3_bonus_bps: u16,
-    pub max_bonus_bps: u16,
-    pub bump: u8,
-}
-impl LiquidationBonusConfig {
-    pub const SEED: &'static [u8] = b"liquidation-bonus-config";
-    // space: 32+32+2+2+2+2+2+2+2+1 = 79
-    pub const INIT_SPACE: usize = 32 + 32 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 1;
-}
-
-// ── PsmCurveConfig ────────────────────────────────────────────────────────
-/// PSM dynamic fee curve config (SSS-132). Seeds: [b"psm-curve-config", mint].
-#[account]
-pub struct PsmCurveConfig {
-    pub sss_mint: Pubkey,
-    pub authority: Pubkey,
-    pub base_fee_bps: u16,
-    pub curve_k: u64,
-    pub max_fee_bps: u16,
-    pub bump: u8,
-}
-impl PsmCurveConfig {
-    pub const SEED: &'static [u8] = b"psm-curve-config";
-    pub const MAX_FEE_BPS: u16 = 1000;
-    pub const INIT_SPACE: usize = 32 + 32 + 2 + 8 + 2 + 1;
-
-    /// Linear fee curve: fee_bps = base_fee + k * (vault / total_reserves).
-    /// Returns fee in basis points, clamped to max_fee_bps.
-    pub fn compute_fee(&self, vault_amount: u64, total_reserves: u64) -> u16 {
-        if total_reserves == 0 {
-            return self.base_fee_bps;
-        }
-        let ratio = (vault_amount as u128)
-            .saturating_mul(10_000)
-            / total_reserves as u128;
-        let dynamic = (self.curve_k as u128)
-            .saturating_mul(ratio)
-            / 10_000;
-        let fee = (self.base_fee_bps as u128).saturating_add(dynamic);
-        fee.min(self.max_fee_bps as u128) as u16
-    }
-}
-
-// ── RedemptionPool ────────────────────────────────────────────────────────
-/// Instant redemption pool (SSS-137). Seeds: [b"redemption-pool", mint].
-#[account]
-pub struct RedemptionPool {
-    pub sss_mint: Pubkey,
-    pub reserve_vault: Pubkey,
-    pub total_seeded: u64,
-    pub total_replenished: u64,
-    pub total_redeemed: u64,
-    pub current_liquidity: u64,
-    pub max_pool_size: u64,
-    pub instant_redemption_fee_bps: u16,
-    pub utilization_bps: u16,
-    pub bump: u8,
-}
-impl RedemptionPool {
-    pub const SEED: &'static [u8] = b"redemption-pool";
-    pub const MAX_FEE_BPS: u16 = 1000;
-    pub const INIT_SPACE: usize = 32 + 32 + 8 + 8 + 8 + 8 + 8 + 2 + 2 + 1;
-}
-
-// ── RedemptionRequest ─────────────────────────────────────────────────────
-/// Scheduled redemption request. Seeds: [b"redemption-request", mint, user].
-#[account]
-pub struct RedemptionRequest {
-    pub sss_mint: Pubkey,
-    pub user: Pubkey,
-    pub amount: u64,
-    pub requested_slot: u64,
-    pub expiry_slot: u64,
-    pub fulfilled: bool,
-    pub sla_breached: bool,
-    pub bump: u8,
-}
-impl RedemptionRequest {
-    pub const SEED: &'static [u8] = b"redemption-request";
-    pub const INIT_SPACE: usize = 32 + 32 + 8 + 8 + 8 + 1 + 1 + 1;
-}
-
-// ── RedemptionGuarantee ───────────────────────────────────────────────────
-/// Redemption SLA guarantee config. Seeds: [b"redemption-guarantee", mint].
-#[account]
-pub struct RedemptionGuarantee {
-    pub sss_mint: Pubkey,
-    pub reserve_vault: Pubkey,
-    pub max_daily_redemption: u64,
-    pub daily_redeemed: u64,
-    pub day_start_slot: u64,
-    pub sla_slots: u64,
-    pub last_updated_slot: u64,
-    pub bump: u8,
-}
-impl RedemptionGuarantee {
-    pub const SEED: &'static [u8] = b"redemption-guarantee";
-    pub const INIT_SPACE: usize = 32 + 32 + 8 + 8 + 8 + 8 + 8 + 1;
-}
-
-// ── ReserveComposition ────────────────────────────────────────────────────
-/// Reserve composition enforcement config. Seeds: [b"reserve-composition", mint].
-#[account]
-pub struct ReserveComposition {
-    pub sss_mint: Pubkey,
-    pub cash_bps: u16,
-    pub t_bills_bps: u16,
-    pub crypto_bps: u16,
-    pub other_bps: u16,
-    pub last_updated_slot: u64,
-    pub last_updated_by: Pubkey,
-    pub bump: u8,
-}
-impl ReserveComposition {
-    pub const SEED: &'static [u8] = b"reserve-composition";
-    pub const INIT_SPACE: usize = 32 + 2 + 2 + 2 + 2 + 8 + 32 + 1;
-}
-
-// ── AuthorityRotationRequest ───────────────────────────────────────────────
-/// Pending authority rotation request. Seeds: [b"authority-rotation", mint].
-#[account]
-pub struct AuthorityRotationRequest {
-    pub new_authority: Pubkey,
-    pub backup_authority: Pubkey,
-    pub requested_slot: u64,
-    pub bump: u8,
-}
-impl AuthorityRotationRequest {
-    pub const SEED: &'static [u8] = b"authority-rotation";
-    pub const INIT_SPACE: usize = 32 + 32 + 8 + 1;
-}
-
-// ── CustomPriceFeed ────────────────────────────────────────────────────────
-/// On-chain custom price feed PDA (SSS-119). Seeds: [b"custom-price-feed", mint].
-#[account]
-pub struct CustomPriceFeed {
-    pub price: i64,
-    pub conf: u64,
-    pub expo: i32,
-    pub updated_slot: u64,
-    pub last_update_slot: u64,
-    pub last_update_unix_timestamp: i64,
-    pub authority: Pubkey,
-    pub bump: u8,
-}
-impl CustomPriceFeed {
-    pub const SEED: &'static [u8] = b"custom-price-feed";
-    pub const INIT_SPACE: usize = 8 + 8 + 4 + 8 + 8 + 8 + 32 + 1;
-}
-
-// ── CredentialRegistry ────────────────────────────────────────────────────
-/// ZK credential registry (SSS-129). Seeds: [b"credential-registry", mint].
-#[account]
-pub struct CredentialRegistry {
-    pub sss_mint: Pubkey,
-    pub issuer: Pubkey,
-    pub merkle_root: [u8; 32],
-    pub credential_ttl_slots: u64,
-    pub updated_slot: u64,
-    pub bump: u8,
-}
-impl CredentialRegistry {
-    pub const SEED: &'static [u8] = b"credential-registry";
-    pub const INIT_SPACE: usize = 32 + 32 + 32 + 8 + 8 + 1;
-}
-
-// ── CredentialRecord ──────────────────────────────────────────────────────
-/// Per-holder credential record (SSS-129). Seeds: [b"credential-record", mint, holder].
-#[account]
-pub struct CredentialRecord {
-    pub sss_mint: Pubkey,
-    pub holder: Pubkey,
-    pub issued_slot: u64,
-    pub expires_slot: u64,
-    pub revoked: bool,
-    pub bump: u8,
-}
-impl CredentialRecord {
-    pub const SEED: &'static [u8] = b"credential-record";
-    pub const INIT_SPACE: usize = 32 + 32 + 8 + 8 + 1 + 1;
-}
-
-// ── SSS-153: Multi-oracle consensus ─────────────────────────────────────────
-
-/// A single oracle source entry stored in OracleConsensus.
+/// OracleSource — one entry in an OracleConsensus sources array.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
 pub struct OracleSource {
     /// Oracle type: 0=Pyth, 1=Switchboard, 2=Custom.
@@ -1861,4 +1529,95 @@ impl OracleConsensus {
     pub fn config_is_set(&self) -> bool {
         self.sources.iter().any(|s| s.feed != Pubkey::default())
     }
+}
+
+// ---------------------------------------------------------------------------
+// SSS-137: Instant Redemption Pool
+// ---------------------------------------------------------------------------
+
+/// RedemptionPool PDA — instant redemption pool (SSS-137).
+/// Seeds: [b"redemption-pool", mint]
+#[account]
+pub struct RedemptionPool {
+    pub sss_mint: Pubkey,
+    pub reserve_vault: Pubkey,
+    pub total_seeded: u64,
+    pub total_replenished: u64,
+    pub total_redeemed: u64,
+    pub current_liquidity: u64,
+    pub max_pool_size: u64,
+    pub instant_redemption_fee_bps: u16,
+    pub utilization_bps: u16,
+    pub bump: u8,
+}
+
+impl RedemptionPool {
+    pub const SEED: &'static [u8] = b"redemption-pool";
+    pub const MAX_FEE_BPS: u16 = 1000;
+    pub const INIT_SPACE: usize = 32 + 32 + 8 + 8 + 8 + 8 + 8 + 2 + 2 + 1;
+}
+
+// ---------------------------------------------------------------------------
+// SSS-154: Redemption Queue + Front-Run Protection
+// ---------------------------------------------------------------------------
+
+/// RedemptionQueue PDA — FIFO queue for slot-delayed, front-run-protected
+/// stablecoin redemptions.
+/// Seeds: [b"redemption_queue", sss_mint]
+#[account]
+#[derive(InitSpace)]
+pub struct RedemptionQueue {
+    pub bump: u8,
+    /// The stablecoin mint this queue belongs to.
+    pub sss_mint: Pubkey,
+    /// Index of the oldest unfulfilled entry (inclusive).
+    pub queue_head: u64,
+    /// Index of the next entry to be created (exclusive).
+    pub queue_tail: u64,
+    /// Minimum slot delay between enqueue and process (front-run protection).
+    pub min_delay_slots: u64,
+    /// Maximum number of simultaneous pending entries.
+    pub max_queue_depth: u64,
+    /// Per-slot redemption cap as a fraction of total supply (basis points).
+    pub max_redemption_per_slot_bps: u16,
+    /// Slot at which slot_redemption_total was last reset.
+    pub last_slot_processed: u64,
+    /// Running total of tokens redeemed in last_slot_processed.
+    pub slot_redemption_total: u64,
+    /// Lamport reward paid to the keeper on each fulfilled entry.
+    pub keeper_reward_lamports: u64,
+}
+
+impl RedemptionQueue {
+    pub const SEED: &'static [u8] = b"redemption_queue";
+    pub const DEFAULT_MIN_DELAY_SLOTS: u64 = 50;
+    pub const DEFAULT_MAX_QUEUE_DEPTH: u64 = 100;
+    pub const DEFAULT_MAX_REDEMPTION_PER_SLOT_BPS: u16 = 500;
+    pub const DEFAULT_KEEPER_REWARD_LAMPORTS: u64 = 5_000;
+}
+
+/// RedemptionEntry PDA — one per queued redemption request.
+/// Seeds: [b"redemption_entry", sss_mint, queue_index_le_bytes]
+#[account]
+#[derive(InitSpace)]
+pub struct RedemptionEntry {
+    pub bump: u8,
+    /// Position in the global queue (monotonically increasing).
+    pub queue_index: u64,
+    /// Wallet that submitted this redemption.
+    pub owner: Pubkey,
+    /// Number of stablecoin base units to redeem.
+    pub amount: u64,
+    /// Slot at which this entry was created (for delay enforcement).
+    pub enqueue_slot: u64,
+    /// First 8 bytes of the SlotHashes sysvar at enqueue time (randomness seed).
+    pub slot_hash_seed: [u8; 8],
+    /// True once process_redemption has completed successfully.
+    pub fulfilled: bool,
+    /// True once cancel_redemption has been called.
+    pub cancelled: bool,
+}
+
+impl RedemptionEntry {
+    pub const SEED: &'static [u8] = b"redemption_entry";
 }

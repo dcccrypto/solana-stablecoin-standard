@@ -101,5 +101,11 @@ pub use multi_oracle::*;
 pub mod upgrade;
 pub use upgrade::*;
 
+pub mod guardian;
+pub use guardian::*;
+
+pub mod redemption_queue;
+pub use redemption_queue::*;
+
 // Re-export param types from state
 pub use crate::state::{InitializeParams, UpdateRolesParams};

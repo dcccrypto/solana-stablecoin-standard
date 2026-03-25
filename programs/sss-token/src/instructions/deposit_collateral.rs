@@ -17,7 +17,7 @@ pub struct DepositCollateralCtx<'info> {
         bump = config.bump,
         constraint = config.preset == 3 @ SssError::InvalidPreset,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     /// The SSS stablecoin mint (identifies which config to update)
     pub sss_mint: InterfaceAccount<'info, Mint>,

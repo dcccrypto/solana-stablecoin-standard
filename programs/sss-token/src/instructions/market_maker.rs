@@ -102,7 +102,7 @@ pub struct InitMarketMakerConfig<'info> {
         bump = config.bump,
         constraint = config.authority == authority.key() @ SssError::Unauthorized,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     #[account(constraint = mint.key() == config.mint)]
     pub mint: InterfaceAccount<'info, Mint>,
@@ -114,7 +114,7 @@ pub struct InitMarketMakerConfig<'info> {
         seeds = [MarketMakerConfig::SEED, mint.key().as_ref()],
         bump,
     )]
-    pub mm_config: Account<'info, MarketMakerConfig>,
+    pub mm_config: Box<Account<'info, MarketMakerConfig>>,
 
     pub system_program: Program<'info, System>,
 }
@@ -179,7 +179,7 @@ pub struct RegisterMarketMaker<'info> {
         bump = config.bump,
         constraint = config.authority == authority.key() @ SssError::Unauthorized,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     #[account(constraint = mint.key() == config.mint)]
     pub mint: InterfaceAccount<'info, Mint>,
@@ -189,7 +189,7 @@ pub struct RegisterMarketMaker<'info> {
         seeds = [MarketMakerConfig::SEED, mint.key().as_ref()],
         bump = mm_config.bump,
     )]
-    pub mm_config: Account<'info, MarketMakerConfig>,
+    pub mm_config: Box<Account<'info, MarketMakerConfig>>,
 }
 
 pub fn register_market_maker_handler(
@@ -250,7 +250,7 @@ pub struct MmMintAccounts<'info> {
         bump = config.bump,
         constraint = !config.paused @ SssError::MintPaused,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     #[account(
         mut,
@@ -263,7 +263,7 @@ pub struct MmMintAccounts<'info> {
         seeds = [MarketMakerConfig::SEED, mint.key().as_ref()],
         bump = mm_config.bump,
     )]
-    pub mm_config: Account<'info, MarketMakerConfig>,
+    pub mm_config: Box<Account<'info, MarketMakerConfig>>,
 
     /// Token account to receive minted tokens (owned by market_maker).
     #[account(
@@ -386,7 +386,7 @@ pub struct MmBurnAccounts<'info> {
         bump = config.bump,
         constraint = !config.paused @ SssError::MintPaused,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     #[account(
         mut,
@@ -399,7 +399,7 @@ pub struct MmBurnAccounts<'info> {
         seeds = [MarketMakerConfig::SEED, mint.key().as_ref()],
         bump = mm_config.bump,
     )]
-    pub mm_config: Account<'info, MarketMakerConfig>,
+    pub mm_config: Box<Account<'info, MarketMakerConfig>>,
 
     /// Token account to burn from (owned by market_maker).
     #[account(
@@ -499,7 +499,7 @@ pub struct GetMmCapacity<'info> {
         seeds = [MarketMakerConfig::SEED, mint.key().as_ref()],
         bump = mm_config.bump,
     )]
-    pub mm_config: Account<'info, MarketMakerConfig>,
+    pub mm_config: Box<Account<'info, MarketMakerConfig>>,
 
     pub mint: InterfaceAccount<'info, Mint>,
 }

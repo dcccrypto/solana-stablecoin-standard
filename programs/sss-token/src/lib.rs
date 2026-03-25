@@ -1059,4 +1059,48 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::multi_oracle::update_oracle_consensus_handler(ctx)
     }
+
+    // ── SSS-154: Redemption Queue + Front-Run Protection ─────────────────────
+
+    /// Initialise the RedemptionQueue PDA for a stablecoin mint.
+    /// Requires FLAG_REDEMPTION_QUEUE in feature_flags. Authority-only.
+    pub fn init_redemption_queue(ctx: Context<InitRedemptionQueue>) -> Result<()> {
+        instructions::redemption_queue::init_redemption_queue_handler(ctx)
+    }
+
+    /// Enqueue a redemption request. Transfers stable tokens to per-entry escrow.
+    /// Returns the queue_index assigned to this entry.
+    pub fn enqueue_redemption(ctx: Context<EnqueueRedemption>, amount: u64) -> Result<()> {
+        instructions::redemption_queue::enqueue_redemption_handler(ctx, amount)
+    }
+
+    /// Keeper crank: process a queued redemption after min_delay_slots have elapsed.
+    /// Burns escrowed stable tokens and releases collateral from reserve vault.
+    pub fn process_redemption(ctx: Context<ProcessRedemption>, queue_index: u64) -> Result<()> {
+        instructions::redemption_queue::process_redemption_handler(ctx, queue_index)
+    }
+
+    /// Cancel a queued redemption before it is processed. Owner-only.
+    /// Returns escrowed stable tokens to the user.
+    pub fn cancel_redemption(ctx: Context<CancelRedemption>, queue_index: u64) -> Result<()> {
+        instructions::redemption_queue::cancel_redemption_handler(ctx, queue_index)
+    }
+
+    /// Update RedemptionQueue parameters. Authority-only.
+    /// All params are optional — omit to leave unchanged.
+    pub fn update_redemption_queue(
+        ctx: Context<UpdateRedemptionQueue>,
+        min_delay_slots: Option<u64>,
+        max_queue_depth: Option<u64>,
+        max_redemption_per_slot_bps: Option<u16>,
+        keeper_reward_lamports: Option<u64>,
+    ) -> Result<()> {
+        instructions::redemption_queue::update_redemption_queue_handler(
+            ctx,
+            min_delay_slots,
+            max_queue_depth,
+            max_redemption_per_slot_bps,
+            keeper_reward_lamports,
+        )
+    }
 }

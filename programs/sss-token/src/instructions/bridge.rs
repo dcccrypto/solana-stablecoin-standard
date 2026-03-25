@@ -45,7 +45,7 @@ pub struct InitBridgeConfig<'info> {
         bump = config.bump,
         constraint = config.authority == authority.key() @ SssError::Unauthorized,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     pub mint: InterfaceAccount<'info, Mint>,
 
@@ -56,7 +56,7 @@ pub struct InitBridgeConfig<'info> {
         seeds = [BridgeConfig::SEED, mint.key().as_ref()],
         bump,
     )]
-    pub bridge_config: Account<'info, BridgeConfig>,
+    pub bridge_config: Box<Account<'info, BridgeConfig>>,
 
     pub system_program: Program<'info, System>,
 }
@@ -115,7 +115,7 @@ pub struct BridgeTokensOut<'info> {
         seeds = [StablecoinConfig::SEED, mint.key().as_ref()],
         bump = config.bump,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     #[account(
         mut,
@@ -123,7 +123,7 @@ pub struct BridgeTokensOut<'info> {
         bump = bridge_config.bump,
         constraint = bridge_config.sss_mint == mint.key() @ SssError::BridgeConfigMintMismatch,
     )]
-    pub bridge_config: Account<'info, BridgeConfig>,
+    pub bridge_config: Box<Account<'info, BridgeConfig>>,
 
     #[account(
         mut,
@@ -293,7 +293,7 @@ pub struct BridgeTokensIn<'info> {
         seeds = [StablecoinConfig::SEED, mint.key().as_ref()],
         bump = config.bump,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     #[account(
         mut,
@@ -301,7 +301,7 @@ pub struct BridgeTokensIn<'info> {
         bump = bridge_config.bump,
         constraint = bridge_config.sss_mint == mint.key() @ SssError::BridgeConfigMintMismatch,
     )]
-    pub bridge_config: Account<'info, BridgeConfig>,
+    pub bridge_config: Box<Account<'info, BridgeConfig>>,
 
     /// Replay-protection PDA for this message_id.
     /// Init fails if already exists, preventing double-spend.
