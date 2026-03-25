@@ -370,4 +370,19 @@ pub enum SssError {
     // Oracle
     #[msg("Oracle not configured — set oracle_type and oracle_feed first")]
     OracleNotConfigured,
+    // SSS-153: Multi-oracle consensus
+    #[msg("Multi-oracle consensus not enabled — set FLAG_MULTI_ORACLE_CONSENSUS first")]
+    MultiOracleNotEnabled,
+    #[msg("OracleConsensus PDA not found for this mint")]
+    OracleConsensusNotFound,
+    #[msg("Insufficient oracle sources passed staleness and outlier checks")]
+    InsufficientOracles,
+    #[msg("Oracle price deviates beyond outlier_threshold_bps from the median")]
+    OraclePriceDeviation,
+    #[msg("Oracle feed is stale — age exceeds max_age_slots")]
+    OracleStaleFeed,
+    #[msg("Invalid OracleConsensus config — check min_oracles, outlier_threshold_bps, max_age_slots")]
+    InvalidOracleConsensusConfig,
+    #[msg("Invalid oracle source index — must be < MAX_SOURCES (5)")]
+    InvalidOracleSourceIndex,
 }

@@ -703,3 +703,40 @@ pub struct ProbabilisticCommitmentResolved {
     pub amount_released: u64,
     pub partial: bool,
 }
+
+// ── SSS-153: Multi-Oracle Consensus Events ──────────────────────────────────
+
+/// Emitted when update_oracle_consensus successfully computes (or falls back to TWAP for) a price.
+#[event]
+pub struct OracleConsensusUpdated {
+    pub mint: Pubkey,
+    /// Consensus price (raw, same scale as the oracle adapters).
+    pub consensus_price: u64,
+    /// Number of sources that passed both staleness and outlier checks.
+    pub source_count: u8,
+    /// True when fewer than min_oracles sources qualified and TWAP fallback was used.
+    pub used_twap: bool,
+    pub slot: u64,
+}
+
+/// Emitted when a source's last price age exceeds max_age_slots.
+#[event]
+pub struct OracleStalenessDetected {
+    pub mint: Pubkey,
+    pub source_index: u8,
+    pub feed: Pubkey,
+    pub last_slot: u64,
+    pub current_slot: u64,
+}
+
+/// Emitted when a source's price deviates beyond outlier_threshold_bps from the median.
+#[event]
+pub struct OracleOutlierRejected {
+    pub mint: Pubkey,
+    pub source_index: u8,
+    pub feed: Pubkey,
+    pub price: u64,
+    pub median: u64,
+    pub deviation_bps: u64,
+    pub slot: u64,
+}

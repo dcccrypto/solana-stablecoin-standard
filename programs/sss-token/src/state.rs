@@ -69,6 +69,11 @@ pub const FLAG_AGENT_PAYMENT_CHANNEL: u64 = 1 << 19;
 /// Probabilistic money market (future).
 pub const FLAG_PROBABILISTIC_MONEY: u64 = 1 << 20;
 
+/// SSS-153: Multi-oracle consensus flag (bit 22): when set, `update_oracle_consensus`
+/// is the canonical price source for CDP, circuit breaker, and any instruction that
+/// reads oracle price.  Requires an `OracleConsensus` PDA via `init_oracle_consensus`.
+pub const FLAG_MULTI_ORACLE_CONSENSUS: u64 = 1 << 22;
+
 /// PRESET_INSTITUTIONAL (4): all SSS-3 features + Squads V4 multisig authority.
 /// Recommended for issuers holding > $1 M in reserves.
 pub const PRESET_INSTITUTIONAL: u8 = 4;
@@ -1800,4 +1805,60 @@ pub struct CredentialRecord {
 impl CredentialRecord {
     pub const SEED: &'static [u8] = b"credential-record";
     pub const INIT_SPACE: usize = 32 + 32 + 8 + 8 + 1 + 1;
+}
+
+// ── SSS-153: Multi-oracle consensus ─────────────────────────────────────────
+
+/// A single oracle source entry stored in OracleConsensus.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct OracleSource {
+    /// Oracle type: 0=Pyth, 1=Switchboard, 2=Custom.
+    pub oracle_type: u8,
+    /// Price feed account address.
+    pub feed: Pubkey,
+}
+
+/// OracleConsensus PDA — aggregates N oracle sources into a consensus price.
+/// Seeds: [b"oracle-consensus", sss_mint].
+#[account]
+pub struct OracleConsensus {
+    /// The stablecoin mint this consensus config belongs to.
+    pub mint: Pubkey,
+    /// Minimum number of non-outlier, fresh sources needed for consensus.
+    pub min_oracles: u8,
+    /// Maximum deviation from median (bps) before a source is rejected as outlier.
+    pub outlier_threshold_bps: u16,
+    /// Maximum source age in slots.
+    pub max_age_slots: u64,
+    /// Number of configured source slots (for informational display; real truth = sources[].feed != default).
+    pub source_count: u8,
+    /// Up to MAX_SOURCES oracle source slots.
+    pub sources: [OracleSource; OracleConsensus::MAX_SOURCES],
+    /// Last computed consensus price (same units as OraclePrice.price, expo from source).
+    pub last_consensus_price: u64,
+    /// Slot when last_consensus_price was written.
+    pub last_consensus_slot: u64,
+    /// TWAP price (EMA, alpha=1/8).
+    pub twap_price: u64,
+    /// Slot when TWAP was last updated.
+    pub twap_last_slot: u64,
+    pub bump: u8,
+}
+
+impl OracleConsensus {
+    pub const SEED: &'static [u8] = b"oracle-consensus";
+    /// Maximum number of oracle sources supported.
+    pub const MAX_SOURCES: usize = 5;
+
+    // Layout:
+    //   mint(32) + min_oracles(1) + outlier_threshold_bps(2) + max_age_slots(8)
+    //   + source_count(1) + sources(5 * (1+32)=165) + last_consensus_price(8)
+    //   + last_consensus_slot(8) + twap_price(8) + twap_last_slot(8) + bump(1)
+    //   = 32+1+2+8+1+165+8+8+8+8+1 = 242
+    pub const INIT_SPACE: usize = 242;
+
+    /// Returns true if at least one source is configured.
+    pub fn config_is_set(&self) -> bool {
+        self.sources.iter().any(|s| s.feed != Pubkey::default())
+    }
 }
