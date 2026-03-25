@@ -202,4 +202,159 @@ pub enum SssError {
     OraclePriceOutsideSpread,
     #[msg("Market maker already registered")]
     MarketMakerAlreadyRegistered,
+    // Travel Rule (SSS-127)
+    #[msg("Travel Rule: missing TravelRuleRecord PDA for this transfer")]
+    TravelRuleRequired,
+    #[msg("Travel Rule: record amount does not match transfer amount")]
+    TravelRuleRecordInvalid,
+    #[msg("Travel Rule: threshold not configured — call set_travel_rule_threshold first")]
+    TravelRuleThresholdNotSet,
+    // Sanctions Oracle (SSS-128)
+    #[msg("Sanctions oracle: SanctionsRecord PDA is required when FLAG_SANCTIONS_ORACLE is set")]
+    SanctionsRecordMissing,
+    #[msg("Sanctions oracle: wallet is sanctioned — transfer blocked")]
+    SanctionedAddress,
+    #[msg("Sanctions oracle: SanctionsRecord is stale — update before transfer")]
+    SanctionsRecordStale,
+    // Guardian Pause (SSS-121)
+    #[msg("Guardian: caller is not a registered guardian")]
+    NotAGuardian,
+    #[msg("Guardian: caller is already in the guardian list")]
+    DuplicateGuardian,
+    #[msg("Guardian: guardian list is full (max 7)")]
+    GuardianListFull,
+    #[msg("Guardian: guardian list is empty")]
+    GuardianListEmpty,
+    #[msg("Guardian: threshold must be >= 1 and <= guardian count")]
+    InvalidGuardianThreshold,
+    // Squads Authority (SSS-134)
+    #[msg("Squads: FLAG_SQUADS_AUTHORITY already set — irreversible")]
+    SquadsAuthorityAlreadySet,
+    #[msg("Squads: FLAG_SQUADS_AUTHORITY not set")]
+    SquadsAuthorityNotSet,
+    #[msg("Squads: signer does not match registered multisig PDA")]
+    SquadsSignerMismatch,
+    #[msg("Squads: threshold must be >= 1")]
+    SquadsThresholdZero,
+    #[msg("Squads: threshold cannot exceed member count")]
+    SquadsThresholdExceedsMembers,
+    #[msg("Squads: member list is empty")]
+    SquadsMembersEmpty,
+    #[msg("Squads: too many members (max 20)")]
+    SquadsMembersTooMany,
+    #[msg("Squads: duplicate member pubkey in list")]
+    SquadsDuplicateMember,
+    #[msg("Squads: provided multisig PDA does not match registered address")]
+    SquadsMultisigPdaInvalid,
+    // Proof of Reserves (SSS-123)
+    #[msg("PoR: FLAG_POR_HALT_ON_BREACH is set but ProofOfReserves PDA not provided")]
+    PoRNotAttested,
+    #[msg("PoR: reserve ratio is below minimum — minting halted")]
+    PoRBreachHaltsMinting,
+    #[msg("PoR: reserve attestor whitelist is full")]
+    ReserveAttestorWhitelistFull,
+    // PID Fee (SSS-130)
+    #[msg("PID fee: PidConfig PDA not found — call init_pid_config first")]
+    PidConfigNotFound,
+    #[msg("PID fee: fee parameters out of valid range")]
+    InvalidPidFeeRange,
+    // PSM Dynamic Fees (SSS-132)
+    #[msg("PSM: dynamic fees not enabled — set FLAG_PSM_DYNAMIC_FEES first")]
+    PsmDynamicFeesNotEnabled,
+    #[msg("PSM: PsmCurveConfig PDA not found")]
+    PsmCurveConfigNotFound,
+    #[msg("PSM: base_fee_bps must be > 0")]
+    InvalidPsmCurveBaseFee,
+    #[msg("PSM: max_fee_bps must be >= base_fee_bps")]
+    InvalidPsmCurveMaxFee,
+    #[msg("PSM: swap output amount is zero")]
+    PsmSwapOutputZero,
+    // Wallet Rate Limits (SSS-133)
+    #[msg("Wallet rate limits not enabled — set FLAG_WALLET_RATE_LIMITS first")]
+    WalletRateLimitsNotEnabled,
+    #[msg("Wallet rate limit: max_transfer_per_window must be > 0")]
+    InvalidRateLimitAmount,
+    #[msg("Wallet rate limit: window_slots must be > 0")]
+    InvalidRateLimitWindow,
+    // Redemption Pool (SSS-137)
+    #[msg("Redemption pool: pool is empty")]
+    RedemptionPoolEmpty,
+    #[msg("Redemption pool: pool is full")]
+    RedemptionPoolFull,
+    #[msg("Redemption pool: mint mismatch")]
+    RedemptionPoolMintMismatch,
+    #[msg("Redemption pool: vault mismatch")]
+    RedemptionPoolVaultMismatch,
+    #[msg("Redemption pool: fee too high (max 1000 bps)")]
+    RedemptionFeeTooHigh,
+    #[msg("Redemption pool: daily limit exceeded")]
+    RedemptionDailyLimitExceeded,
+    #[msg("Redemption pool: SLA breach — redemption not fulfilled in time")]
+    RedemptionSLABreached,
+    #[msg("Redemption pool: request already fulfilled")]
+    RedemptionAlreadyFulfilled,
+    #[msg("Redemption pool: SLA period not yet expired")]
+    RedemptionNotExpired,
+    // Reserve Composition (SSS-124)
+    #[msg("Reserve composition: bps values must sum to <= 10000")]
+    InvalidCompositionBps,
+    // Authority Rotation (SSS-122)
+    #[msg("Authority rotation: new authority is same as current")]
+    RotationNewAuthorityIsCurrent,
+    #[msg("Authority rotation: backup authority is same as current")]
+    RotationBackupIsCurrent,
+    #[msg("Authority rotation: backup equals new authority")]
+    RotationBackupEqualsNew,
+    #[msg("Authority rotation: zero pubkey not allowed")]
+    RotationZeroPubkey,
+    #[msg("Use the admin timelock flow for authority transfer")]
+    UseTimelockForAuthorityTransfer,
+    // ZK Credentials (SSS-129)
+    #[msg("ZK credential registry not found — call init_zk_credentials first")]
+    CredentialRegistryNotFound,
+    #[msg("ZK proof is invalid or malformed")]
+    InvalidZkProof,
+    #[msg("ZK proof hash does not match stored commitment")]
+    ProofHashMismatch,
+    // Agent/Channel (future)
+    #[msg("Channel already closed")]
+    ChannelAlreadyClosed,
+    #[msg("Channel has not yet expired")]
+    ChannelNotExpired,
+    #[msg("Feature not enabled — check required feature flag")]
+    FeatureNotEnabled,
+    // Config version
+    #[msg("Config version is too old — upgrade the program")]
+    ConfigVersionTooOld,
+    // Supply Cap (SSS-145)
+    #[msg("Supply cap and minter cap cannot both be zero when supply cap feature is enabled")]
+    SupplyCapAndMinterCapBothZero,
+    // Vault lifecycle
+    #[msg("Vault is already in terminal state")]
+    VaultAlreadyTerminal,
+    #[msg("Vault has not yet expired")]
+    VaultNotExpired,
+    // Settlement
+    #[msg("Settlement amount does not match expected")]
+    SettlementNotMatching,
+    #[msg("Invalid settle amount")]
+    InvalidSettleAmount,
+    // Liquidation tiers (SSS-131)
+    #[msg("Invalid liquidation tier configuration")]
+    InvalidLiquidationTierConfig,
+    // Oracle
+    #[msg("Invalid oracle type — must be 0 (Pyth), 1 (Switchboard), or 2 (Custom)")]
+    InvalidOracleType,
+    // Expiry
+    #[msg("Invalid expiry slot")]
+    InvalidExpirySlot,
+    // Emergency recovery
+    #[msg("Emergency recovery conditions not yet met")]
+    EmergencyRecoveryNotReady,
+    // Insurance fund
+    #[msg("Insurance fund not configured — set insurance_fund_pubkey first")]
+    InsuranceFundNotConfigured,
+    // Oracle
+    #[msg("Oracle not configured — set oracle_type and oracle_feed first")]
+    OracleNotConfigured,
 }
