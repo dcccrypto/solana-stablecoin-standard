@@ -703,3 +703,42 @@ pub struct ProbabilisticCommitmentResolved {
     pub amount_released: u64,
     pub partial: bool,
 }
+
+// ── SSS-152: Circuit Breaker Keeper Events ────────────────────────────────
+#[event]
+pub struct CircuitBreakerTriggered {
+    pub mint: Pubkey,
+    pub keeper: Pubkey,
+    pub oracle_price: i64,
+    pub target_price: u64,
+    pub deviation_bps: u64,
+    pub slot: u64,
+}
+
+#[event]
+pub struct CircuitBreakerAutoUnpaused {
+    pub mint: Pubkey,
+    pub caller: Pubkey,
+    pub oracle_price: i64,
+    pub target_price: u64,
+    pub deviation_bps: u64,
+    pub recovery_slots: u64,
+    pub slot: u64,
+}
+
+#[event]
+pub struct KeeperRewarded {
+    pub mint: Pubkey,
+    pub keeper: Pubkey,
+    pub reward_lamports: u64,
+    pub slot: u64,
+}
+
+#[event]
+pub struct KeeperConfigInitialised {
+    pub mint: Pubkey,
+    pub deviation_threshold_bps: u16,
+    pub keeper_reward_lamports: u64,
+    pub min_cooldown_slots: u64,
+    pub sustained_recovery_slots: u64,
+}

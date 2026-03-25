@@ -1013,4 +1013,36 @@ pub mod sss_token {
     pub fn get_mm_capacity(ctx: Context<GetMmCapacity>) -> Result<()> {
         instructions::market_maker::get_mm_capacity_handler(ctx)
     }
+
+    // -----------------------------------------------------------------------
+    // SSS-152: Permissionless Circuit Breaker Keeper
+    // -----------------------------------------------------------------------
+
+    /// Initialise the keeper config for a stablecoin mint.  Authority-only.
+    /// Sets peg deviation threshold, keeper reward, cooldown, and recovery params.
+    pub fn init_keeper_config(
+        ctx: Context<InitKeeperConfig>,
+        params: InitKeeperConfigParams,
+    ) -> Result<()> {
+        instructions::circuit_breaker_keeper::init_keeper_config_handler(ctx, params)
+    }
+
+    /// Fund the keeper vault by transferring SOL lamports to the KeeperConfig PDA.
+    /// Permissionless: anyone (authority, issuer, LPs) can top up the reward pool.
+    pub fn seed_keeper_vault(ctx: Context<SeedKeeperVault>, amount_lamports: u64) -> Result<()> {
+        instructions::circuit_breaker_keeper::seed_keeper_vault_handler(ctx, amount_lamports)
+    }
+
+    /// Permissionless: read oracle price, fire circuit breaker if peg deviation exceeds threshold.
+    /// If triggered, pauses the mint and pays keeper_reward_lamports to the caller.
+    /// Rate-limited by min_cooldown_slots; FLAG_CIRCUIT_BREAKER must be set.
+    pub fn crank_circuit_breaker(ctx: Context<CrankCircuitBreaker>) -> Result<()> {
+        instructions::circuit_breaker_keeper::crank_circuit_breaker_handler(ctx)
+    }
+
+    /// Permissionless: read oracle price, unpause the mint if peg has recovered for
+    /// sustained_recovery_slots consecutive slots.
+    pub fn crank_unpause(ctx: Context<CrankUnpause>) -> Result<()> {
+        instructions::circuit_breaker_keeper::crank_unpause_handler(ctx)
+    }
 }

@@ -98,5 +98,8 @@ pub use market_maker::*;
 pub mod upgrade;
 pub use upgrade::*;
 
+pub mod circuit_breaker_keeper;
+pub use circuit_breaker_keeper::*;
+
 // Re-export param types from state
 pub use crate::state::{InitializeParams, UpdateRolesParams};

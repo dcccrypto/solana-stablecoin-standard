@@ -1786,6 +1786,53 @@ impl CredentialRegistry {
     pub const INIT_SPACE: usize = 32 + 32 + 32 + 8 + 8 + 1;
 }
 
+// ---------------------------------------------------------------------------
+// SSS-152: KeeperConfig PDA — permissionless circuit breaker keeper
+// ---------------------------------------------------------------------------
+
+/// Keeper configuration PDA — one per stablecoin mint.
+/// Seeds: [b"keeper-config", sss_mint]
+///
+/// Stores peg deviation threshold, reward parameters, rate-limit state, and
+/// recovery tracking for crank_circuit_breaker / crank_unpause.
+/// SOL keeper rewards are held as lamports on this account itself (no separate vault).
+/// Seeded by `init_keeper_config` (authority-only) then funded by anyone via
+/// `seed_keeper_vault`.
+#[account]
+pub struct KeeperConfig {
+    /// The SSS stablecoin mint this config belongs to.
+    pub sss_mint: Pubkey,
+    /// Maximum peg deviation in basis points before keeper may fire (e.g. 200 = 2%).
+    pub deviation_threshold_bps: u16,
+    /// SOL lamports paid to the keeper that fires crank_circuit_breaker.
+    pub keeper_reward_lamports: u64,
+    /// Minimum slots between successive circuit-breaker triggers (rate limit).
+    pub min_cooldown_slots: u64,
+    /// Slots peg must remain within threshold before crank_unpause fires.
+    pub sustained_recovery_slots: u64,
+    /// Target peg price in oracle units (same denomination as oracle feed price).
+    pub target_price: u64,
+    /// Slot at which the circuit breaker was last triggered (0 = never).
+    pub last_trigger_slot: u64,
+    /// First slot peg returned within threshold (0 = not yet observed or reset).
+    pub last_within_threshold_slot: u64,
+    pub bump: u8,
+}
+
+impl KeeperConfig {
+    pub const SEED: &'static [u8] = b"keeper-config";
+    pub const INIT_SPACE: usize =
+        32  // sss_mint
+        + 2  // deviation_threshold_bps
+        + 8  // keeper_reward_lamports
+        + 8  // min_cooldown_slots
+        + 8  // sustained_recovery_slots
+        + 8  // target_price
+        + 8  // last_trigger_slot
+        + 8  // last_within_threshold_slot
+        + 1; // bump
+}
+
 // ── CredentialRecord ──────────────────────────────────────────────────────
 /// Per-holder credential record (SSS-129). Seeds: [b"credential-record", mint, holder].
 #[account]
