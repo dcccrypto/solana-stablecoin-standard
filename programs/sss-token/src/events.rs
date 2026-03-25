@@ -174,3 +174,19 @@ pub struct CollateralLiquidated {
     /// Liquidation bonus applied in basis points (from CollateralConfig or global default).
     pub bonus_bps: u16,
 }
+
+
+// SSS-BUG-008 / AUDIT-G6 / AUDIT-H4: emitted when FLAG_POR_HALT_ON_BREACH blocks a mint.
+#[event]
+pub struct MintHaltedByPoRBreach {
+    /// The stablecoin mint that was blocked.
+    pub mint: Pubkey,
+    /// Reserve ratio at time of the attempted mint (basis points).
+    pub current_ratio_bps: u64,
+    /// Configured minimum ratio (basis points).
+    pub min_ratio_bps: u64,
+    /// Slot of the last on-chain attestation.
+    pub last_attestation_slot: u64,
+    /// Amount that was attempted to be minted.
+    pub attempted_amount: u64,
+}

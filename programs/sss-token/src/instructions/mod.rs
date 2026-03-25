@@ -1,5 +1,6 @@
 pub mod bad_debt_backstop;
 pub mod accept_authority;
+pub mod proof_of_reserves;
 pub mod admin_timelock;
 pub mod burn;
 pub mod dao_committee;
@@ -59,6 +60,7 @@ pub use update_minter::*;
 pub use update_roles::*;
 pub use yield_collateral::*;
 pub use zk_compliance::*;
+pub use proof_of_reserves::*;
 
 // Re-export param types from state
 pub use crate::state::{InitializeParams, UpdateRolesParams};

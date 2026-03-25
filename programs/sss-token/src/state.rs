@@ -35,6 +35,11 @@ pub const FLAG_ZK_COMPLIANCE: u64 = 1 << 4;
 /// Foundation for Token-2022 ConfidentialTransferMint extension.
 /// See docs/confidential-transfers.md for the full compliance model.
 pub const FLAG_CONFIDENTIAL_TRANSFERS: u64 = 1 << 5;
+/// SSS-BUG-008 / AUDIT-G6 / AUDIT-H4: When set, minting is halted if the
+/// on-chain ProofOfReserves ratio falls below `StablecoinConfig.min_reserve_ratio_bps`.
+/// Callers must pass the ProofOfReserves PDA as remaining_accounts[0] on every
+/// mint / cpi_mint call while this flag is active.
+pub const FLAG_POR_HALT_ON_BREACH: u64 = 1 << 16;
 
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
@@ -133,6 +138,11 @@ pub struct StablecoinConfig {
     /// SSS-106: Auditor ElGamal pubkey for confidential transfers.
     /// All-zero if FLAG_CONFIDENTIAL_TRANSFERS is not enabled.
     pub auditor_elgamal_pubkey: [u8; 32],
+    /// SSS-BUG-008 / AUDIT-G6 / AUDIT-H4: Minimum reserve ratio in basis points required
+    /// when FLAG_POR_HALT_ON_BREACH is set. Minting is blocked when the attested
+    /// `ProofOfReserves.last_verified_ratio_bps` drops below this threshold.
+    /// 0 = check disabled (flag should not be set without configuring this).
+    pub min_reserve_ratio_bps: u16,
     pub bump: u8,
 }
 
@@ -561,4 +571,31 @@ pub struct ConfidentialTransferConfig {
 
 impl ConfidentialTransferConfig {
     pub const SEED: &'static [u8] = b"ct-config";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-BUG-008 / AUDIT-G6 / AUDIT-H4: Proof-of-Reserves on-chain record
+// ---------------------------------------------------------------------------
+/// On-chain attestation record written by an authorised PoR oracle/keeper.
+/// When FLAG_POR_HALT_ON_BREACH is set, mint and cpi_mint instructions read
+/// this account and block execution whenever
+/// `last_verified_ratio_bps < StablecoinConfig.min_reserve_ratio_bps`.
+///
+/// Seeds: `[b"proof-of-reserves", mint]`
+#[account]
+#[derive(InitSpace)]
+pub struct ProofOfReserves {
+    /// The stablecoin mint this record belongs to.
+    pub mint: Pubkey,
+    /// Slot at which the most recent attestation was submitted.
+    pub last_attestation_slot: u64,
+    /// Attested reserve ratio in basis points (e.g. 10_000 = 100% fully backed).
+    pub last_verified_ratio_bps: u64,
+    /// Authority allowed to submit attestations.
+    pub attester: Pubkey,
+    pub bump: u8,
+}
+
+impl ProofOfReserves {
+    pub const SEED: &'static [u8] = b"proof-of-reserves";
 }

@@ -417,4 +417,27 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::collateral_config::update_collateral_config_handler(ctx, params)
     }
+
+    // ─── SSS-BUG-008 / AUDIT-G6 / AUDIT-H4: Proof-of-Reserves ──────────────
+
+    /// Create the ProofOfReserves PDA for a stablecoin mint (authority-only).
+    /// Must be called before enabling FLAG_POR_HALT_ON_BREACH.
+    pub fn init_proof_of_reserves(
+        ctx: Context<InitProofOfReserves>,
+        attester: Pubkey,
+    ) -> Result<()> {
+        instructions::proof_of_reserves::init_proof_of_reserves_handler(ctx, attester)
+    }
+
+    /// Submit a new on-chain PoR attestation (attester-only).
+    /// Updates `last_verified_ratio_bps` and `last_attestation_slot`.
+    pub fn attest_proof_of_reserves(
+        ctx: Context<AttestProofOfReserves>,
+        verified_ratio_bps: u64,
+    ) -> Result<()> {
+        instructions::proof_of_reserves::attest_proof_of_reserves_handler(
+            ctx,
+            verified_ratio_bps,
+        )
+    }
 }

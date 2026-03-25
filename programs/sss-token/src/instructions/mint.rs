@@ -3,7 +3,10 @@ use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::{MinterInfo, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
+use crate::events::MintHaltedByPoRBreach;
+use crate::state::{
+    MinterInfo, ProofOfReserves, StablecoinConfig, FLAG_CIRCUIT_BREAKER, FLAG_POR_HALT_ON_BREACH,
+};
 
 // Solana clock is available via Clock::get() in Anchor instructions.
 
@@ -47,6 +50,41 @@ pub fn handler(ctx: Context<MintTokens>, amount: u64) -> Result<()> {
         ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
         SssError::CircuitBreakerActive
     );
+
+    // SSS-BUG-008 / AUDIT-G6 / AUDIT-H4: PoR breach halt.
+    // When FLAG_POR_HALT_ON_BREACH is set, the caller must pass the ProofOfReserves
+    // PDA as remaining_accounts[0]. We deserialize it and reject minting if
+    // reserve_ratio < min_reserve_ratio_bps.
+    {
+        let config = &ctx.accounts.config;
+        if config.feature_flags & FLAG_POR_HALT_ON_BREACH != 0 {
+            require!(
+                !ctx.remaining_accounts.is_empty(),
+                SssError::PoRNotAttested
+            );
+            let por_info = &ctx.remaining_accounts[0];
+            let (expected_pda, _bump) = Pubkey::find_program_address(
+                &[ProofOfReserves::SEED, config.mint.as_ref()],
+                ctx.program_id,
+            );
+            require!(por_info.key() == expected_pda, SssError::InvalidVault);
+            let data = por_info.try_borrow_data()?;
+            let por = ProofOfReserves::try_deserialize(&mut data.as_ref())?;
+            drop(data);
+            require!(por.last_attestation_slot > 0, SssError::PoRNotAttested);
+            let min_ratio = config.min_reserve_ratio_bps as u64;
+            if min_ratio > 0 && por.last_verified_ratio_bps < min_ratio {
+                emit!(MintHaltedByPoRBreach {
+                    mint: config.mint,
+                    current_ratio_bps: por.last_verified_ratio_bps,
+                    min_ratio_bps: min_ratio,
+                    last_attestation_slot: por.last_attestation_slot,
+                    attempted_amount: amount,
+                });
+                return err!(SssError::PoRBreachHaltsMinting);
+            }
+        }
+    }
 
     // SSS-093: Per-minter epoch velocity limit check.
     {

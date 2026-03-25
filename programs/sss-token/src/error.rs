@@ -166,4 +166,9 @@ pub enum SssError {
     InvalidElGamalKey,
     #[msg("ct_config account must be omitted when FLAG_CONFIDENTIAL_TRANSFERS is not set")]
     UnexpectedCtConfig,
+    // SSS-BUG-008 / AUDIT-G6 / AUDIT-H4: Proof-of-Reserves breach halt
+    #[msg("PoR not attested: proof-of-reserves account missing or attestation not yet submitted")]
+    PoRNotAttested,
+    #[msg("Minting halted: on-chain reserve ratio is below the configured minimum (FLAG_POR_HALT_ON_BREACH)")]
+    PoRBreachHaltsMinting,
 }
