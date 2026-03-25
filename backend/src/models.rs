@@ -212,8 +212,8 @@ pub struct EventLogEntry {
     pub event_type: String,
     /// Token mint / CDP position address / program address
     pub address: String,
-    /// JSON blob with event-specific fields (raw string)
-    pub data: String,
+    /// JSON blob with event-specific fields (parsed value)
+    pub data: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tx_signature: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -305,4 +305,156 @@ pub struct LiquidationsQuery {
     pub limit: Option<u32>,
     /// Row offset for pagination (default: 0).
     pub offset: Option<u32>,
+}
+
+// ─── SSS-139: Alerts ─────────────────────────────────────────────────────────
+
+/// POST /api/alerts request body.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PostAlertRequest {
+    pub invariant: String,
+    pub detail: String,
+    pub severity: Option<String>,
+}
+
+// ─── SSS-127: Travel Rule ─────────────────────────────────────────────────────
+
+/// GET /api/travel-rule/records query params.
+#[derive(Debug, Deserialize)]
+pub struct TravelRuleQuery {
+    pub wallet: Option<String>,
+    pub mint: Option<String>,
+    pub limit: Option<u32>,
+}
+
+/// A single indexed TravelRuleRecord.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TravelRuleRecord {
+    pub id: String,
+    pub originator_vasp: String,
+    pub beneficiary_vasp: String,
+    pub mint: String,
+    pub amount: i64,
+    pub threshold: i64,
+    pub compliant: bool,
+    pub tx_signature: Option<String>,
+    pub created_at: String,
+}
+
+/// GET /api/pid-config response.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PidConfigResponse {
+    pub sss_token_program_id: String,
+    pub sss_transfer_hook_program_id: String,
+    pub travel_rule_indexing_active: bool,
+    pub travel_rule_threshold: i64,
+}
+
+// ─── SSS-145: Webhook Deliveries ─────────────────────────────────────────────
+
+/// A single webhook delivery log entry.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WebhookDeliveryLog {
+    pub id: String,
+    pub webhook_id: String,
+    pub event_type: String,
+    pub payload: String,
+    pub status: String,
+    pub attempt_count: i64,
+    pub last_error: Option<String>,
+    pub next_retry_at: Option<String>,
+    pub created_at: String,
+}
+
+/// GET /api/webhook-deliveries query params.
+#[derive(Debug, Deserialize)]
+pub struct WebhookDeliveriesQuery {
+    pub status: Option<String>,
+}
+
+// ─── SSS-129: ZK Credentials ─────────────────────────────────────────────────
+
+/// Query params for GET /api/zk-credentials/records.
+#[derive(Debug, Deserialize)]
+pub struct CredentialQuery {
+    pub user: Option<String>,
+    pub mint: Option<String>,
+    pub credential_type: Option<String>,
+    pub valid_only: Option<bool>,
+    pub limit: Option<u32>,
+}
+
+/// An indexed CredentialRecord (on-chain PDA data).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CredentialRecord {
+    pub id: String,
+    pub mint: String,
+    pub user: String,
+    pub credential_type: String,
+    pub issuer_pubkey: String,
+    pub verified_at: i64,
+    pub expires_at: i64,
+    pub is_valid: bool,
+    pub tx_signature: Option<String>,
+    pub slot: Option<i64>,
+    pub created_at: String,
+}
+
+/// Query params for GET /api/zk-credentials/registry.
+#[derive(Debug, Deserialize)]
+pub struct RegistryQuery {
+    pub mint: Option<String>,
+    pub credential_type: Option<String>,
+}
+
+/// POST /api/zk-credentials/submit request body.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SubmitCredentialRequest {
+    pub mint: String,
+    pub user: String,
+    pub credential_type: String,
+    pub issuer_pubkey: String,
+    pub proof_data: String,
+    pub proof_expiry_seconds: Option<u64>,
+    pub tx_signature: Option<String>,
+    pub slot: Option<i64>,
+}
+
+/// POST /api/zk-credentials/registry request body.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpsertRegistryRequest {
+    pub mint: String,
+    pub credential_type: String,
+    pub issuer_pubkey: String,
+    pub merkle_root: String,
+    pub proof_expiry_seconds: Option<u64>,
+}
+
+/// POST /api/zk-credentials/verify request body.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifyCredentialRequest {
+    pub mint: String,
+    pub user: String,
+    pub credential_type: String,
+}
+
+/// POST /api/zk-credentials/verify response.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifyCredentialResponse {
+    pub is_valid: bool,
+    pub record: Option<CredentialRecord>,
+    pub message: String,
+}
+
+/// A CredentialRegistry entry (per-mint, per-type issuer config).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CredentialRegistry {
+    pub id: String,
+    pub mint: String,
+    pub credential_type: String,
+    pub issuer_pubkey: String,
+    pub merkle_root: String,
+    pub proof_expiry_seconds: i64,
+    pub created_at: String,
+    pub updated_at: String,
 }

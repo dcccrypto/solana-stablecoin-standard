@@ -2,6 +2,7 @@ mod auth;
 mod db;
 mod error;
 mod indexer;
+mod indexer_schema;
 mod models;
 mod monitor;
 mod rate_limit;
@@ -24,6 +25,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use auth::require_api_key;
 use db::Database;
 use routes::{
+    alerts::{get_alerts, post_alert},
     analytics::{get_cdp_health, get_liquidation_analytics, get_protocol_stats},
     apikeys::{create_api_key, delete_api_key, list_api_keys},
     cdp::{get_cdp_position, get_collateral_types, post_cdp_simulate},
@@ -37,13 +39,16 @@ use routes::{
     events::events,
     health::health,
     liquidations::get_liquidations,
+    metrics::get_metrics,
     mint::mint,
     burn::burn,
     reserves::get_reserves_proof,
     supply::supply,
     travel_rule::{get_pid_config, get_travel_rule_records},
+    webhook_deliveries::list_webhook_deliveries,
     webhooks::{delete_webhook, list_webhooks, register_webhook},
     ws_events::ws_events_handler,
+    zk_credentials::{list_credential_records, list_registries, submit_credential, upsert_registry, verify_credential},
 };
 use state::AppState;
 

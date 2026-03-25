@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
-use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, EventLogEntry, LiquidationHistoryEntry, MintEvent, WebhookEntry};
+use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, CredentialRecord, CredentialRegistry, EventLogEntry, LiquidationHistoryEntry, MintEvent, TravelRuleRecord, WebhookDeliveryLog, WebhookEntry};
 
 pub struct Database {
     pub conn: Mutex<Connection>,
@@ -555,7 +555,7 @@ impl Database {
             id,
             event_type: event_type.to_string(),
             address: address.to_string(),
-            data: data_json,
+            data: data.clone(),
             tx_signature: tx_signature.map(|s| s.to_string()),
             slot,
             created_at,
@@ -588,11 +588,14 @@ impl Database {
         let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
         let mut stmt = conn.prepare(&sql)?;
         let entries = stmt.query_map(refs.as_slice(), |row| {
+            let data_str: String = row.get(3)?;
+            let data: serde_json::Value = serde_json::from_str(&data_str)
+                .unwrap_or(serde_json::Value::Null);
             Ok(EventLogEntry {
                 id: row.get(0)?,
                 event_type: row.get(1)?,
                 address: row.get(2)?,
-                data: row.get(3)?,
+                data,
                 tx_signature: row.get(4)?,
                 slot: row.get(5)?,
                 created_at: row.get(6)?,
@@ -1121,6 +1124,496 @@ impl Database {
             backstop_fund_debt_repaid,
             active_collateral_types,
         })
+    }
+
+    // ─── query_event_log (alias with offset support) ──────────────────────────
+
+    /// Query the event_log table with optional type/address filters and offset.
+    /// This is the version used by monitor code that needs offset-based pagination.
+    pub fn query_event_log(
+        &self,
+        event_type: Option<&str>,
+        address: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<EventLogEntry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = "SELECT id, event_type, address, data, tx_signature, slot, created_at \
+                       FROM event_log WHERE 1=1".to_string();
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(t) = event_type {
+            param_values.push(Box::new(t.to_string()));
+            sql.push_str(&format!(" AND event_type = ?{}", param_values.len()));
+        }
+        if let Some(a) = address {
+            param_values.push(Box::new(a.to_string()));
+            sql.push_str(&format!(" AND address = ?{}", param_values.len()));
+        }
+        param_values.push(Box::new(limit as i64));
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", param_values.len()));
+        param_values.push(Box::new(offset as i64));
+        sql.push_str(&format!(" OFFSET ?{}", param_values.len()));
+
+        let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let entries = stmt.query_map(refs.as_slice(), |row| {
+            let data_str: String = row.get(3)?;
+            let data: serde_json::Value = serde_json::from_str(&data_str)
+                .unwrap_or(serde_json::Value::Null);
+            Ok(EventLogEntry {
+                id: row.get(0)?,
+                event_type: row.get(1)?,
+                address: row.get(2)?,
+                data,
+                tx_signature: row.get(4)?,
+                slot: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(entries)
+    }
+
+    // ─── SSS-145: Webhook deliveries ─────────────────────────────────────────
+
+    fn ensure_webhook_deliveries_table(&self, conn: &Connection) -> Result<(), AppError> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS webhook_deliveries (
+                id TEXT PRIMARY KEY,
+                webhook_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                next_retry_at TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_wd_status ON webhook_deliveries(status);
+            CREATE INDEX IF NOT EXISTS idx_wd_webhook ON webhook_deliveries(webhook_id);"
+        ).map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    pub fn insert_webhook_delivery(
+        &self,
+        webhook_id: &str,
+        event_type: &str,
+        payload: &str,
+    ) -> Result<String, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let created_at = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        self.ensure_webhook_deliveries_table(&conn)?;
+        conn.execute(
+            "INSERT INTO webhook_deliveries (id, webhook_id, event_type, payload, status, attempt_count, created_at) \
+             VALUES (?1, ?2, ?3, ?4, 'pending', 0, ?5)",
+            params![id, webhook_id, event_type, payload, created_at],
+        )?;
+        Ok(id)
+    }
+
+    pub fn get_pending_webhook_deliveries(&self, now: &str) -> Result<Vec<WebhookDeliveryLog>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        self.ensure_webhook_deliveries_table(&conn)?;
+        let mut stmt = conn.prepare(
+            "SELECT id, webhook_id, event_type, payload, status, attempt_count, last_error, next_retry_at, created_at \
+             FROM webhook_deliveries WHERE status IN ('pending','failed') \
+             AND (next_retry_at IS NULL OR next_retry_at <= ?1) \
+             ORDER BY created_at ASC LIMIT 100"
+        )?;
+        let rows = stmt.query_map(params![now], |row| {
+            Ok(WebhookDeliveryLog {
+                id: row.get(0)?,
+                webhook_id: row.get(1)?,
+                event_type: row.get(2)?,
+                payload: row.get(3)?,
+                status: row.get(4)?,
+                attempt_count: row.get(5)?,
+                last_error: row.get(6)?,
+                next_retry_at: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn list_failed_webhook_deliveries(&self) -> Result<Vec<WebhookDeliveryLog>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        self.ensure_webhook_deliveries_table(&conn)?;
+        let mut stmt = conn.prepare(
+            "SELECT id, webhook_id, event_type, payload, status, attempt_count, last_error, next_retry_at, created_at \
+             FROM webhook_deliveries WHERE status = 'permanently_failed' \
+             ORDER BY created_at DESC LIMIT 500"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(WebhookDeliveryLog {
+                id: row.get(0)?,
+                webhook_id: row.get(1)?,
+                event_type: row.get(2)?,
+                payload: row.get(3)?,
+                status: row.get(4)?,
+                attempt_count: row.get(5)?,
+                last_error: row.get(6)?,
+                next_retry_at: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn mark_webhook_delivery_failed(
+        &self,
+        id: &str,
+        attempt: i64,
+        next_retry_at: Option<&str>,
+    ) -> Result<(), AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        self.ensure_webhook_deliveries_table(&conn)?;
+        let status = if next_retry_at.is_none() { "permanently_failed" } else { "failed" };
+        conn.execute(
+            "UPDATE webhook_deliveries SET status = ?1, attempt_count = ?2, next_retry_at = ?3 WHERE id = ?4",
+            params![status, attempt, next_retry_at, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_webhook_delivery_delivered(&self, id: &str) -> Result<(), AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        self.ensure_webhook_deliveries_table(&conn)?;
+        conn.execute(
+            "UPDATE webhook_deliveries SET status = 'delivered' WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_webhook_by_id(&self, id: &str) -> Result<Option<WebhookEntry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, url, events, secret_key, created_at FROM webhooks WHERE id = ?1"
+        )?;
+        let mut rows = stmt.query(params![id])?;
+        if let Some(row) = rows.next()? {
+            let events_str: String = row.get(2)?;
+            let events: Vec<String> = serde_json::from_str(&events_str).unwrap_or_default();
+            Ok(Some(WebhookEntry {
+                id: row.get(0)?,
+                url: row.get(1)?,
+                events,
+                secret_key: row.get(3)?,
+                created_at: row.get(4)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    // ─── SSS-127: Travel Rule ────────────────────────────────────────────────
+
+    fn ensure_travel_rule_table(&self, conn: &Connection) -> Result<(), AppError> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS travel_rule_records (
+                id TEXT PRIMARY KEY,
+                originator_vasp TEXT NOT NULL,
+                beneficiary_vasp TEXT NOT NULL,
+                mint TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                threshold INTEGER NOT NULL DEFAULT 0,
+                compliant INTEGER NOT NULL DEFAULT 0,
+                tx_signature TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_tr_wallet ON travel_rule_records(originator_vasp);
+            CREATE INDEX IF NOT EXISTS idx_tr_mint ON travel_rule_records(mint);"
+        ).map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    pub fn list_travel_rule_records(
+        &self,
+        wallet: Option<&str>,
+        mint: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<TravelRuleRecord>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        self.ensure_travel_rule_table(&conn)?;
+        let mut sql = "SELECT id, originator_vasp, beneficiary_vasp, mint, amount, threshold, compliant, tx_signature, created_at \
+                       FROM travel_rule_records WHERE 1=1".to_string();
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(w) = wallet {
+            param_values.push(Box::new(w.to_string()));
+            let n = param_values.len();
+            sql.push_str(&format!(" AND (originator_vasp = ?{n} OR beneficiary_vasp = ?{n})"));
+        }
+        if let Some(m) = mint {
+            param_values.push(Box::new(m.to_string()));
+            sql.push_str(&format!(" AND mint = ?{}", param_values.len()));
+        }
+        param_values.push(Box::new(limit as i64));
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", param_values.len()));
+
+        let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(refs.as_slice(), |row| {
+            Ok(TravelRuleRecord {
+                id: row.get(0)?,
+                originator_vasp: row.get(1)?,
+                beneficiary_vasp: row.get(2)?,
+                mint: row.get(3)?,
+                amount: row.get(4)?,
+                threshold: row.get(5)?,
+                compliant: { let v: i32 = row.get(6)?; v != 0 },
+                tx_signature: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    // ─── SSS-129: ZK Credentials ────────────────────────────────────────────
+
+    fn ensure_credential_tables(&self, conn: &Connection) -> Result<(), AppError> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS credential_records (
+                id TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                user TEXT NOT NULL,
+                credential_type TEXT NOT NULL,
+                issuer_pubkey TEXT NOT NULL,
+                verified_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                is_valid INTEGER NOT NULL DEFAULT 1,
+                tx_signature TEXT,
+                slot INTEGER,
+                created_at TEXT NOT NULL,
+                UNIQUE(mint, user, credential_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cr_user ON credential_records(user);
+            CREATE INDEX IF NOT EXISTS idx_cr_mint ON credential_records(mint);
+            CREATE TABLE IF NOT EXISTS credential_registry (
+                id TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                credential_type TEXT NOT NULL,
+                issuer_pubkey TEXT NOT NULL,
+                merkle_root TEXT NOT NULL,
+                proof_expiry_seconds INTEGER NOT NULL DEFAULT 2592000,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(mint, credential_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_creg_mint ON credential_registry(mint);"
+        ).map_err(|e| AppError::Internal(e.to_string()))
+    }
+
+    pub fn upsert_credential_record(
+        &self,
+        mint: &str,
+        user: &str,
+        credential_type: &str,
+        issuer_pubkey: &str,
+        verified_at: i64,
+        expires_at: i64,
+        tx_signature: Option<&str>,
+        slot: Option<i64>,
+    ) -> Result<CredentialRecord, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let created_at = Utc::now().to_rfc3339();
+        let now_unix = Utc::now().timestamp();
+        let is_valid = expires_at > now_unix;
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        self.ensure_credential_tables(&conn)?;
+        conn.execute(
+            "INSERT INTO credential_records \
+             (id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, is_valid, tx_signature, slot, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) \
+             ON CONFLICT(mint, user, credential_type) DO UPDATE SET \
+               issuer_pubkey = ?5, verified_at = ?6, expires_at = ?7, is_valid = ?8, \
+               tx_signature = ?9, slot = ?10",
+            params![id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at,
+                    is_valid as i32, tx_signature, slot, created_at],
+        )?;
+        Ok(CredentialRecord {
+            id,
+            mint: mint.to_string(),
+            user: user.to_string(),
+            credential_type: credential_type.to_string(),
+            issuer_pubkey: issuer_pubkey.to_string(),
+            verified_at,
+            expires_at,
+            is_valid,
+            tx_signature: tx_signature.map(str::to_string),
+            slot,
+            created_at,
+        })
+    }
+
+    pub fn get_credential_record(
+        &self,
+        mint: &str,
+        user: &str,
+        credential_type: &str,
+    ) -> Result<Option<CredentialRecord>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        self.ensure_credential_tables(&conn)?;
+        let mut stmt = conn.prepare(
+            "SELECT id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, \
+             is_valid, tx_signature, slot, created_at \
+             FROM credential_records WHERE mint = ?1 AND user = ?2 AND credential_type = ?3"
+        )?;
+        let mut rows = stmt.query(params![mint, user, credential_type])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(CredentialRecord {
+                id: row.get(0)?,
+                mint: row.get(1)?,
+                user: row.get(2)?,
+                credential_type: row.get(3)?,
+                issuer_pubkey: row.get(4)?,
+                verified_at: row.get(5)?,
+                expires_at: row.get(6)?,
+                is_valid: { let v: i32 = row.get(7)?; v != 0 },
+                tx_signature: row.get(8)?,
+                slot: row.get(9)?,
+                created_at: row.get(10)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn list_credential_records(
+        &self,
+        user: Option<&str>,
+        mint: Option<&str>,
+        credential_type: Option<&str>,
+        valid_only: bool,
+        limit: u32,
+    ) -> Result<Vec<CredentialRecord>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        self.ensure_credential_tables(&conn)?;
+        let mut sql = "SELECT id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, \
+                       is_valid, tx_signature, slot, created_at \
+                       FROM credential_records WHERE 1=1".to_string();
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(u) = user {
+            param_values.push(Box::new(u.to_string()));
+            sql.push_str(&format!(" AND user = ?{}", param_values.len()));
+        }
+        if let Some(m) = mint {
+            param_values.push(Box::new(m.to_string()));
+            sql.push_str(&format!(" AND mint = ?{}", param_values.len()));
+        }
+        if let Some(ct) = credential_type {
+            param_values.push(Box::new(ct.to_string()));
+            sql.push_str(&format!(" AND credential_type = ?{}", param_values.len()));
+        }
+        if valid_only {
+            sql.push_str(" AND is_valid = 1");
+        }
+        param_values.push(Box::new(limit as i64));
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", param_values.len()));
+
+        let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(refs.as_slice(), |row| {
+            Ok(CredentialRecord {
+                id: row.get(0)?,
+                mint: row.get(1)?,
+                user: row.get(2)?,
+                credential_type: row.get(3)?,
+                issuer_pubkey: row.get(4)?,
+                verified_at: row.get(5)?,
+                expires_at: row.get(6)?,
+                is_valid: { let v: i32 = row.get(7)?; v != 0 },
+                tx_signature: row.get(8)?,
+                slot: row.get(9)?,
+                created_at: row.get(10)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn list_credential_registries(
+        &self,
+        mint: Option<&str>,
+        credential_type: Option<&str>,
+    ) -> Result<Vec<CredentialRegistry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        self.ensure_credential_tables(&conn)?;
+        let mut sql = "SELECT id, mint, credential_type, issuer_pubkey, merkle_root, \
+                       proof_expiry_seconds, created_at, updated_at \
+                       FROM credential_registry WHERE 1=1".to_string();
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(m) = mint {
+            param_values.push(Box::new(m.to_string()));
+            sql.push_str(&format!(" AND mint = ?{}", param_values.len()));
+        }
+        if let Some(ct) = credential_type {
+            param_values.push(Box::new(ct.to_string()));
+            sql.push_str(&format!(" AND credential_type = ?{}", param_values.len()));
+        }
+        param_values.push(Box::new(1000_i64));
+        sql.push_str(&format!(" ORDER BY updated_at DESC LIMIT ?{}", param_values.len()));
+
+        let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(refs.as_slice(), |row| {
+            Ok(CredentialRegistry {
+                id: row.get(0)?,
+                mint: row.get(1)?,
+                credential_type: row.get(2)?,
+                issuer_pubkey: row.get(3)?,
+                merkle_root: row.get(4)?,
+                proof_expiry_seconds: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    pub fn upsert_credential_registry(
+        &self,
+        mint: &str,
+        credential_type: &str,
+        issuer_pubkey: &str,
+        merkle_root: &str,
+        proof_expiry_seconds: u64,
+    ) -> Result<CredentialRegistry, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        self.ensure_credential_tables(&conn)?;
+        conn.execute(
+            "INSERT INTO credential_registry \
+             (id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7) \
+             ON CONFLICT(mint, credential_type) DO UPDATE SET \
+               issuer_pubkey = ?4, merkle_root = ?5, proof_expiry_seconds = ?6, updated_at = ?7",
+            params![id, mint, credential_type, issuer_pubkey, merkle_root,
+                    proof_expiry_seconds as i64, now],
+        )?;
+        // Re-query to get the actual row (id may differ if conflict updated)
+        let mut stmt = conn.prepare(
+            "SELECT id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds, created_at, updated_at \
+             FROM credential_registry WHERE mint = ?1 AND credential_type = ?2"
+        )?;
+        let mut rows = stmt.query(params![mint, credential_type])?;
+        if let Some(row) = rows.next()? {
+            Ok(CredentialRegistry {
+                id: row.get(0)?,
+                mint: row.get(1)?,
+                credential_type: row.get(2)?,
+                issuer_pubkey: row.get(3)?,
+                merkle_root: row.get(4)?,
+                proof_expiry_seconds: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        } else {
+            Err(AppError::Internal("upsert_credential_registry: row not found after insert".to_string()))
+        }
     }
 }
 
