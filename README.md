@@ -127,6 +127,7 @@ Endpoints:
 |---------|-------------|
 | [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | Cryptographic supply commitments — fetch, verify, and manually reproduce Merkle proofs |
 | [Trust Model](docs/TRUST-MODEL.md) | Real trust assumptions per SSS tier — what is/isn't trustless in v1; v1 stubs and mitigations |
+| [Insurance Vault](docs/INSURANCE-VAULT.md) | First-loss on-chain reserve for liquidation cascades — setup, seeding, draws, mint gate, replenishment runbook (SSS-151) |
 
 ## Documentation
 
