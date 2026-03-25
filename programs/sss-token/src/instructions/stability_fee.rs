@@ -156,6 +156,12 @@ pub struct SetStabilityFee<'info> {
 }
 
 pub fn set_stability_fee_handler(ctx: Context<SetStabilityFee>, fee_bps: u16) -> Result<()> {
+    // BUG-010: block direct call when timelock is active; use propose+execute path instead.
+    crate::instructions::admin_timelock::require_timelock_executed(
+        &ctx.accounts.config,
+        crate::state::ADMIN_OP_SET_STABILITY_FEE,
+    )?;
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(
@@ -169,6 +175,6 @@ pub fn set_stability_fee_handler(ctx: Context<SetStabilityFee>, fee_bps: u16) ->
         SssError::StabilityFeeTooHigh
     );
     ctx.accounts.config.stability_fee_bps = fee_bps;
-    msg!("SSS-092: stability_fee_bps set to {}", fee_bps);
+    msg!("SSS-092: stability_fee_bps set to {} (no-timelock path)", fee_bps);
     Ok(())
 }

@@ -42,6 +42,12 @@ pub fn set_sanctions_oracle_handler(
     oracle: Pubkey,
     max_staleness_slots: u64,
 ) -> Result<()> {
+    // BUG-010: block direct call when timelock is active.
+    crate::instructions::admin_timelock::require_timelock_executed(
+        &ctx.accounts.config,
+        crate::state::ADMIN_OP_SET_SANCTIONS_PARAMS,
+    )?;
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(

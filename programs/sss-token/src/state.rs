@@ -84,6 +84,37 @@ pub const ADMIN_OP_TRANSFER_AUTHORITY: u8 = 1;
 pub const ADMIN_OP_SET_FEATURE_FLAG: u8 = 2;
 /// Pending: clear feature flag `admin_op_param` bits.
 pub const ADMIN_OP_CLEAR_FEATURE_FLAG: u8 = 3;
+/// Pending: set_pyth_feed — `admin_op_target` = new Pyth feed pubkey.
+pub const ADMIN_OP_SET_PYTH_FEED: u8 = 4;
+/// Pending: set_oracle_params — `admin_op_param` = (max_age_secs as u64) << 16 | (max_conf_bps as u64).
+pub const ADMIN_OP_SET_ORACLE_PARAMS: u8 = 5;
+/// Pending: set_stability_fee — `admin_op_param` = fee_bps as u64.
+pub const ADMIN_OP_SET_STABILITY_FEE: u8 = 6;
+/// Pending: set_psm_fee — `admin_op_param` = fee_bps as u64.
+pub const ADMIN_OP_SET_PSM_FEE: u8 = 7;
+/// Pending: set_backstop_params — `admin_op_target` = insurance fund vault pubkey,
+/// `admin_op_param` = max_backstop_bps as u64.
+pub const ADMIN_OP_SET_BACKSTOP_PARAMS: u8 = 8;
+/// Pending: set_spend_limit — `admin_op_param` = max_transfer_amount.
+pub const ADMIN_OP_SET_SPEND_LIMIT: u8 = 9;
+/// Pending: transfer_compliance_authority — `admin_op_target` = new compliance authority.
+pub const ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY: u8 = 10;
+/// Pending: set_oracle_config — `admin_op_param` = oracle_type as u64,
+/// `admin_op_target` = oracle_feed pubkey.
+pub const ADMIN_OP_SET_ORACLE_CONFIG: u8 = 11;
+/// Pending: set_min_reserve_ratio — `admin_op_param` = min_reserve_ratio_bps as u64.
+pub const ADMIN_OP_SET_MIN_RESERVE_RATIO: u8 = 12;
+/// Pending: set_travel_rule_threshold — `admin_op_param` = threshold in native token units.
+pub const ADMIN_OP_SET_TRAVEL_RULE_THRESHOLD: u8 = 13;
+/// Pending: set_sanctions_params — `admin_op_target` = sanctions oracle pubkey,
+/// `admin_op_param` = max_staleness_slots.
+pub const ADMIN_OP_SET_SANCTIONS_PARAMS: u8 = 14;
+/// Pending: set_timelock_delay — `admin_op_param` = new delay in slots.
+pub const ADMIN_OP_SET_TIMELOCK_DELAY: u8 = 15;
+/// Pending: pause the protocol — no additional params.
+pub const ADMIN_OP_PAUSE: u8 = 16;
+/// Pending: unpause the protocol — no additional params.
+pub const ADMIN_OP_UNPAUSE: u8 = 17;
 
 /// Default timelock delay: 2 Solana epochs ≈ 432 000 slots (at 2 days/epoch).
 pub const DEFAULT_ADMIN_TIMELOCK_DELAY: u64 = 432_000;

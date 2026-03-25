@@ -117,6 +117,19 @@ pub enum SssError {
     TimelockNotMature,
     #[msg("No pending timelocked operation to execute")]
     NoTimelockPending,
+    // BUG-010: Timelock enforcement errors
+    #[msg("Direct admin call blocked — timelock is active; use propose_timelocked_op + execute_timelocked_op")]
+    TimelockRequired,
+    #[msg("Invalid timelock op kind — unrecognised ADMIN_OP_* constant")]
+    InvalidTimelockOpKind,
+    #[msg("Invalid timelock delay — minimum 216_000 slots (1 epoch) required")]
+    InvalidTimelockDelay,
+    #[msg("Invalid stability fee — max 10_000 bps (100% p.a.)")]
+    InvalidStabilityFee,
+    #[msg("Invalid backstop params — max_backstop_bps must be ≤ 10_000")]
+    InvalidBackstopParams,
+    #[msg("Invalid min reserve ratio — max 20_000 bps (200%)")]
+    InvalidReserveRatio,
     #[msg("Duplicate pubkey in DAO committee member list")]
     DuplicateMember,
     #[msg("Liquidation slippage: collateral received is below caller-specified minimum")]
