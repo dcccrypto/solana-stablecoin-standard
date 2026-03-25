@@ -1,6 +1,6 @@
 # Multi-Oracle Consensus
 
-Introduced in **SSS-153** (`cd66124`). Provides tamper-resistant price feeds
+Introduced in **SSS-153** (`cd66124`; QA fixes `28ea3d1`). Provides tamper-resistant price feeds
 by aggregating up to five oracle sources (Pyth, Switchboard, Custom) into a
 single consensus price with outlier rejection and TWAP fallback.
 
@@ -77,13 +77,17 @@ Args:
 
 ### `update_oracle_consensus`
 **Permissionless keeper crank.** Reads all configured source feeds via
-`remaining_accounts` (one account per slot, in slot order — use a placeholder
-for empty slots so indices line up), computes consensus price, updates TWAP,
-and emits events.
+`remaining_accounts` (one account per slot, in slot order — use `SystemProgram id`
+as placeholder for empty slots so indices line up), computes consensus price,
+updates TWAP, and emits events.
+
+> **H-2 (QA fix):** `remaining_accounts` must contain **exactly `MAX_SOURCES` (5)**
+> entries. Passing fewer or more returns `OracleRemainingAccountsMismatch`.
+> Use `SystemProgram id` (`11111111111111111111111111111111`) for unconfigured slots.
 
 ```
 remaining_accounts: [feed_0, feed_1, feed_2, feed_3, feed_4]
-  (must match oracle_consensus.sources order; use any placeholder for empty slots)
+  Length must be exactly 5. Use SystemProgram id for empty/unconfigured slots.
 ```
 
 ---
@@ -91,10 +95,19 @@ remaining_accounts: [feed_0, feed_1, feed_2, feed_3, feed_4]
 ## Consensus Algorithm
 
 ```
+0. Guard: if FLAG_MULTI_ORACLE_CONSENSUS set but config_is_set() == false
+   → err OracleNoSourcesConfigured                         [M-2, QA fix]
+
+   Guard: remaining_accounts.len() != MAX_SOURCES (5)
+   → err OracleRemainingAccountsMismatch                   [H-2, QA fix]
+
 1. For each source with a configured feed:
    a. Validate remaining_accounts[i].key == source.feed
    b. Read price via oracle adapter (Pyth / Switchboard / Custom)
-   c. If stale (current_slot - last_slot > max_age_slots) → emit OracleStalenessDetected, skip
+      - Pyth: staleness = current_slot - agg.pub_slot       [H-1, QA fix]
+        (formerly used clock.slot — now reads actual publish slot)
+      - Switchboard / Custom: staleness per their slot field
+   c. If stale (staleness > max_age_slots) → emit OracleStalenessDetected, skip
 
 2. Compute median of all fresh prices
 
@@ -109,8 +122,9 @@ remaining_accounts: [feed_0, feed_1, feed_2, feed_3, feed_4]
    Else:
      err InsufficientOracles
 
-5. Update TWAP (EMA, α=1/8):
-   twap = twap * 7/8 + new_price * 1/8
+5. Update TWAP (EMA, α=1/8) — u128 intermediary to prevent truncation:
+   twap = (twap as u128 * 7 + new_price as u128) / 8      [M-1, QA fix]
+   (formerly twap/8*7 caused precision loss on large prices)
 
 6. Write last_consensus_price, emit OracleConsensusUpdated
 ```
@@ -161,6 +175,8 @@ remaining_accounts: [feed_0, feed_1, feed_2, feed_3, feed_4]
 | `OracleStaleFeed` | _(reserved; staleness is handled via event + skip)_ |
 | `InvalidOracleConsensusConfig` | Bad `init_oracle_consensus` args (min\_oracles, bps, or max\_age\_slots out of range) |
 | `InvalidOracleSourceIndex` | `slot_index >= MAX_SOURCES` |
+| `OracleRemainingAccountsMismatch` | `remaining_accounts.len() != MAX_SOURCES (5)` — must pass exactly 5 accounts _(QA H-2)_ |
+| `OracleNoSourcesConfigured` | `FLAG_MULTI_ORACLE_CONSENSUS` is set but no sources are configured (`config_is_set()` false) _(QA M-2)_ |
 
 ---
 
@@ -199,8 +215,9 @@ anchor run set-oracle-source -- --mint <SSS_MINT> --slot 2 --type custom \
   --feed <CUSTOM_FEED_PDA>
 
 # 5. Start permissionless keeper cranking
+#    remaining_accounts must be exactly 5 — use SystemProgram id for empty slots
 anchor run update-oracle-consensus -- --mint <SSS_MINT> \
-  --feeds <FEED_0> <FEED_1> <FEED_2> <PLACEHOLDER> <PLACEHOLDER>
+  --feeds <FEED_0> <FEED_1> <FEED_2> 11111111111111111111111111111111 11111111111111111111111111111111
 ```
 
 ---
@@ -209,8 +226,8 @@ anchor run update-oracle-consensus -- --mint <SSS_MINT> \
 
 - Call `update_oracle_consensus` before each CDP borrow / liquidation cycle
   (or at least once per `max_age_slots` to keep TWAP current).
-- Pass feeds in **slot-index order**; use any read-only placeholder pubkey for
-  unconfigured slots.
+- Pass feeds in **slot-index order**; use `SystemProgram id`
+  (`11111111111111111111111111111111`) for unconfigured slots — **exactly 5 accounts required** (H-2).
 - Monitor `OracleStalenessDetected` events — repeated staleness for a source
   indicates a feed that should be replaced via `set_oracle_source`.
 - Monitor `OracleOutlierRejected` events — persistent outliers may indicate
@@ -232,13 +249,19 @@ introduced in SSS-119. When `FLAG_MULTI_ORACLE_CONSENSUS` is set:
 
 ## Test Coverage (SSS-153)
 
-18 anchor tests in `tests/sss-153-multi-oracle-consensus.ts`:
+26 anchor tests in `tests/sss-153-multi-oracle-consensus.ts` (18 original + 8 QA regression):
 - Init validation (bad args rejected)
 - Source CRUD (add, update, remove)
 - Staleness detection (slot-expired sources skipped)
 - Outlier rejection (price outside threshold emits event and is excluded)
 - TWAP fallback (triggered when `accepted_count < min_oracles`)
 - Flag check (`MultiOracleNotEnabled` when flag absent)
+- **QA regression (28ea3d1):**
+  - C-1: `FLAG_MULTI_ORACLE_CONSENSUS` wired into `mint` and `cdp_borrow_stable` via `get_effective_oracle_price`
+  - H-1: Pyth staleness check uses `agg.pub_slot` (not `clock.slot`)
+  - H-2: `OracleRemainingAccountsMismatch` on wrong-count `remaining_accounts`
+  - M-1: TWAP EMA precision — no truncation on large prices (u128 intermediary)
+  - M-2: `OracleNoSourcesConfigured` when flag set but no sources configured
 
 ---
 
