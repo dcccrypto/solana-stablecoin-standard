@@ -1,8 +1,9 @@
 # SSS — Stability Fee (SSS-092)
 
-> **Anchor instructions:** `set_stability_fee`, `collect_stability_fee`
+> **Anchor instructions:** `set_stability_fee`, `collect_stability_fee`, `add_authorized_keeper`, `remove_authorized_keeper`
 > **SDK module:** `StabilityFeeModule` (`sdk/src/StabilityFeeModule.ts`, added SSS-096)
 > **Applies to:** SSS-3 (reserve-backed CDP) stablecoins only
+> **Bug fixes:** BUG-015 (keeper authorization), BUG-016 (accrued_fees double-count) — commit 7f9bbf2
 
 ---
 
@@ -13,7 +14,7 @@ The stability fee is an **annual interest charge** levied on CDP (Collateral Deb
 Key properties:
 - **Simple interest**, not compound — `fee = debt × rate × elapsed / year`
 - **Per-position accrual** — each `CdpPosition` PDA tracks `last_fee_accrual` and `accrued_fees` independently
-- **Keeper-compatible** — `collect_stability_fee` is permissionless; any bot may trigger collection on behalf of debtors (undercollateralised positions trend toward liquidation as fees accumulate)
+- **Keeper-whitelisted** — `collect_stability_fee` requires the caller to be the config `authority` or a whitelisted keeper; **debtors no longer sign** (BUG-015 fix — see below)
 - **SSS-3 only** — the instruction is rejected with `InvalidPreset` on SSS-1 / SSS-2 mints
 
 ---
@@ -38,6 +39,28 @@ Limits:
 
 ---
 
+## Bug Fixes (BUG-015 / BUG-016)
+
+### BUG-015 — Keeper Authorization (commit 7f9bbf2)
+
+**Problem:** `collect_stability_fee` previously required the **debtor to sign**, making keeper automation impossible. Debtors could simply refuse to sign, making fee collection entirely voluntary and unenforceable.
+
+**Fix:** The `debtor` account is now an unsigned `CHECK` account (PDA seed only). A new `caller` signer must be either:
+1. The stablecoin `config.authority`, or
+2. A pubkey in `config.authorized_keepers` (max 8 slots, managed via `add_authorized_keeper` / `remove_authorized_keeper`)
+
+Deployers must add at least one keeper pubkey via `add_authorized_keeper` for automated fee collection to work.
+
+### BUG-016 — `accrued_fees` Double-Count (commit 7f9bbf2)
+
+**Problem:** `accrued_fees` on `CdpPosition` was incremented on every `collect_stability_fee` call, even though the fee was already burned from the debtor's balance. This double-counted the same amount in both `accrued_fees` and `total_burned` on `StablecoinConfig`.
+
+**Fix:** `accrued_fees` is **no longer incremented** on collection. Only `last_fee_accrual` and `StablecoinConfig.total_burned` are updated. `accrued_fees` now accurately reflects only pre-collection accruals.
+
+> ⚠️ **Breaking change:** Existing integrations that passed `debtor` as a signer to `collect_stability_fee` must update to pass `caller` (keeper or authority keypair) instead. The `debtor` account remains in the instruction but is no longer a signer.
+
+---
+
 ## On-Chain State
 
 ### `StablecoinConfig` (seed `"stablecoin-config"`)
@@ -45,13 +68,14 @@ Limits:
 | Field | Type | Description |
 |---|---|---|
 | `stability_fee_bps` | `u16` | Annual fee rate. 0 = disabled |
+| `authorized_keepers` | `[Pubkey; 8]` | BUG-015: whitelisted keeper pubkeys. Unused slots are `Pubkey::default()`. Managed via `add_authorized_keeper` / `remove_authorized_keeper` (authority-only) |
 
 ### `CdpPosition` (seed `"cdp-position"`)
 
 | Field | Type | Description |
 |---|---|---|
 | `last_fee_accrual` | `i64` | Unix timestamp of last `collect_stability_fee` call |
-| `accrued_fees` | `u64` | Cumulative fees burned for this position (informational) |
+| `accrued_fees` | `u64` | Pre-collection accrued fees (not incremented on burn — BUG-016 fix) |
 
 ---
 
@@ -80,15 +104,16 @@ Authority-only. Sets the annual stability fee rate for a CDP stablecoin. Takes e
 
 ### `collect_stability_fee`
 
-Permissionless. Accrues and burns outstanding stability fees for a specific CDP position.
+Keeper-authorized (BUG-015). Accrues and burns outstanding stability fees for a specific CDP position. The caller must be the config authority or a whitelisted keeper — the debtor does **not** sign.
 
 **Accounts:**
 
 | Account | Writable | Signer | Description |
 |---|---|---|---|
-| `debtor` | ✅ | ✅ | CDP position owner; authorises the burn |
+| `caller` | ✅ | ✅ | BUG-015: config authority OR a whitelisted keeper (`authorized_keepers`) |
 | `config` | ✅ | — | `StablecoinConfig` PDA |
 | `sss_mint` | ✅ | — | SSS-3 token mint |
+| `debtor` | — | — | CDP position owner (CHECK — unsigned, used only for PDA seed derivation) |
 | `cdp_position` | ✅ | — | `CdpPosition` PDA for `(mint, debtor)` |
 | `debtor_sss_account` | ✅ | — | Debtor's Token-2022 SSS account |
 | `token_program` | — | — | Token-2022 program |
@@ -97,7 +122,49 @@ Permissionless. Accrues and burns outstanding stability fees for a specific CDP 
 - `stability_fee_bps == 0` on the config
 - Less than 1 second has elapsed since `last_fee_accrual`
 
-**Errors:** `InvalidPreset` (not SSS-3), `MintPaused`, `Unauthorized` (debtor ≠ position owner).
+**Errors:** `InvalidPreset` (not SSS-3), `MintPaused`, `Unauthorized` (caller not authority/keeper).
+
+---
+
+### `add_authorized_keeper`
+
+Authority-only. Adds a pubkey to `config.authorized_keepers` (max 8 slots).
+
+**Accounts:**
+
+| Account | Writable | Signer | Description |
+|---|---|---|---|
+| `authority` | — | ✅ | Stablecoin authority |
+| `config` | ✅ | — | `StablecoinConfig` PDA |
+
+**Arguments:**
+
+| Arg | Type | Description |
+|---|---|---|
+| `keeper` | `Pubkey` | Keeper pubkey to whitelist (must not be `Pubkey::default()`) |
+
+**Notes:** Idempotent — adding a duplicate is a no-op. **Errors:** `Unauthorized`, `InvalidPreset`, `WhitelistFull` (all 8 slots occupied).
+
+---
+
+### `remove_authorized_keeper`
+
+Authority-only. Removes a pubkey from `config.authorized_keepers`.
+
+**Accounts:**
+
+| Account | Writable | Signer | Description |
+|---|---|---|---|
+| `authority` | — | ✅ | Stablecoin authority |
+| `config` | ✅ | — | `StablecoinConfig` PDA |
+
+**Arguments:**
+
+| Arg | Type | Description |
+|---|---|---|
+| `keeper` | `Pubkey` | Keeper pubkey to remove |
+
+**Errors:** `Unauthorized`, `InvalidPreset`, `MemberNotFound` (pubkey not in list).
 
 ---
 
@@ -163,6 +230,16 @@ sf.annualFeeRate(mint)   // number  — feeBps / 10_000 (e.g. 0.02 for 200 bps)
 
 ---
 
+## Example: Registering a Keeper (BUG-015)
+
+Before a keeper bot can collect fees, the **authority** must whitelist its pubkey:
+
+```ts
+// Authority registers a keeper (run once at setup)
+const sf = new StabilityFeeModule(authorityProvider, SSS_PROGRAM_ID);
+await sf.addAuthorizedKeeper({ mint: sssMint, keeper: keeperKeypair.publicKey });
+```
+
 ## Example: Keeper Bot
 
 ```ts
@@ -170,6 +247,7 @@ import { StabilityFeeModule } from '@stbr/sss-token';
 import { Connection, Keypair } from '@solana/web3.js';
 import { AnchorProvider, Wallet } from '@coral-xyz/anchor';
 
+// BUG-015: keeper must sign (must be in config.authorized_keepers)
 const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
 const provider   = new AnchorProvider(connection, new Wallet(keeperKeypair), {});
 const sf         = new StabilityFeeModule(provider, SSS_PROGRAM_ID);
@@ -181,7 +259,13 @@ if (!enabled) process.exit(0);
 for (const { debtor, debtorSssAccount } of positions) {
   const preview = await sf.previewAccruedFee(sssMint, debtor);
   if (preview.estimatedFee > 0n) {
-    const sig = await sf.collectStabilityFee({ mint: sssMint, debtor, debtorSssAccount });
+    // BUG-015: pass caller (keeper keypair) — debtor no longer signs
+    const sig = await sf.collectStabilityFee({
+      mint: sssMint,
+      caller: keeperKeypair.publicKey,
+      debtor,
+      debtorSssAccount,
+    });
     console.log(`Collected fees for ${debtor.toBase58()}: ${sig}`);
   }
 }
@@ -193,6 +277,7 @@ for (const { debtor, debtorSssAccount } of positions) {
 
 - Burned fees increment `StablecoinConfig.total_burned` — reflected in `netSupply()` and the reserve ratio.
 - `CdpPosition.accrued_fees` is a running total for auditing; it is **not** deducted from `debt_amount` automatically.
+- **BUG-016:** `accrued_fees` is **not** incremented on collection — only `last_fee_accrual` and `StablecoinConfig.total_burned` update. This prevents the previously broken double-count where `accrued_fees` and `total_burned` both grew by the same burned amount.
 - Positions with large uncollected fees will have higher effective debt, reducing their collateral ratio and moving them toward liquidation.
 - `last_fee_accrual` is updated even when the computed fee rounds to zero, preventing repeated zero-fee calls from accumulating un-timestamped time.
 
