@@ -19,6 +19,7 @@ Key guarantees:
 - **Partial liquidation (SSS-100):** `cdp_liquidate` accepts a `partial_repay_amount`; only enough debt is burned to restore the position to the liquidation threshold, seizing the minimum required collateral — full liquidation remains the default when `partial_repay_amount = 0`
 - **`CollateralLiquidated` event (SSS-100):** emitted on every liquidation with `collateral_mint`, `debt_burned`, `collateral_seized`, `ratio_before_bps`, `partial`, and `bonus_bps` fields
 - **TypeScript liquidation SDK (SSS-101):** `MultiCollateralLiquidationModule` wraps `cdp_liquidate`, exposes `fetchLiquidatableCDPs`, `calcLiquidationAmount`, and full PDA helpers — see [`on-chain-sdk-liquidation.md`](./on-chain-sdk-liquidation.md)
+- **Circuit breaker parity (BUG-014 / AUDIT-A HIGH-11):** `cdp_liquidate_v2` now enforces `FLAG_CIRCUIT_BREAKER` (bit 0) as step 0, identical to V1. When the breaker is active, both V1 and V2 return `CircuitBreakerActive` — neither version can be used to bypass an emergency halt.
 
 ---
 
@@ -367,6 +368,7 @@ Errors originate from the on-chain Anchor program. Common causes:
 
 | Error | Cause |
 |---|---|
+| `CircuitBreakerActive` | `FLAG_CIRCUIT_BREAKER` (bit 0) is set — both `cdp_liquidate` V1 and V2 are halted until the breaker is cleared (BUG-014 / AUDIT-A HIGH-11) |
 | `InsufficientCollateral` | Resulting collateral ratio would be < 150% after borrow |
 | `CollateralMintLocked` | Borrow attempted with a different collateral mint than the locked one |
 | `InvalidPythFeed` | Pyth price feed account doesn't match expected collateral mint |
