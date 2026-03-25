@@ -117,8 +117,9 @@ await program.methods
 - `!config.paused`
 - `FLAG_CIRCUIT_BREAKER` not set
 - `FLAG_BRIDGE_ENABLED` set
-- `proof.proof_bytes` non-empty
-- `proof.verified == true` (bridge proof validated)
+- `proof.proof_bytes.len() >= 32` (minimum proof size enforced; empty or trivially short proofs rejected)
+- `bridge_config.authority != Pubkey::default()` (bridge must have a configured authority before accepting inbound transfers)
+- `proof.verified` flag is **not** checked on-chain — verification relies on the authority being a trusted, hardware-secured key (see Security Model §3)
 - `recipient_token_account.owner == recipient`
 - `config.max_supply` cap respected
 
@@ -142,7 +143,7 @@ await program.methods
 
 1. **Burn-and-mint**: tokens are burned on Solana before any cross-chain message is emitted.  No double-spend is possible on the Solana side.
 2. **Supply invariant**: `bridge_in` respects `max_supply`.  Total supply (minted − burned) is preserved across chains only if the EVM-side contract enforces the same invariant.
-3. **Proof verification**: in production, `bridge_in` should CPI to `bridge_config.bridge_program` (Wormhole core bridge or LZ endpoint) to validate the VAA/proof on-chain.  The mock `verified` flag is for test environments only.
+3. **Proof verification**: `bridge_in` requires `proof_bytes.len() >= 32` and `bridge_config.authority != Pubkey::default()`.  The `verified` flag in the proof struct is **ignored** on-chain — security currently depends on `bridge_config.authority` being a hardware-secured multisig or HSM key that validates the proof off-chain before submitting.  Full on-chain CPI verification (Wormhole `parseAndVerifyVM` or LayerZero `verifyPacket`) is required before mainnet deployment.  **Authority MUST be rotated to a Squads multisig before mainnet.**
 4. **Pause / circuit breaker**: both `bridge_out` and `bridge_in` check `paused` and `FLAG_CIRCUIT_BREAKER`.  A single `pause()` call halts all cross-chain activity.
 5. **Blacklist**: outbound transfers are subject to the Token-2022 transfer hook (SSS-2 mints), which enforces the blacklist.  Bridge_out burns from the sender ATA; a blacklisted account cannot hold tokens to burn.
 6. **Per-tx limit**: `max_bridge_amount_per_tx` limits individual bridge-out transactions to prevent large flash exits.
