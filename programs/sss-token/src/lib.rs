@@ -333,6 +333,22 @@ pub mod sss_token {
         instructions::stability_fee::set_stability_fee_handler(ctx, fee_bps)
     }
 
+    /// BUG-015: Add a keeper pubkey to the stability-fee keeper whitelist.
+    pub fn add_authorized_keeper(
+        ctx: Context<AddAuthorizedKeeper>,
+        keeper: Pubkey,
+    ) -> Result<()> {
+        instructions::stability_fee::add_authorized_keeper_handler(ctx, keeper)
+    }
+
+    /// BUG-015: Remove a keeper pubkey from the stability-fee keeper whitelist.
+    pub fn remove_authorized_keeper(
+        ctx: Context<RemoveAuthorizedKeeper>,
+        keeper: Pubkey,
+    ) -> Result<()> {
+        instructions::stability_fee::remove_authorized_keeper_handler(ctx, keeper)
+    }
+
     /// Propose a timelocked admin operation (2-epoch delay by default).
     /// `op_kind`: 1=TransferAuthority, 2=SetFeatureFlag, 3=ClearFeatureFlag.
     pub fn propose_timelocked_op(

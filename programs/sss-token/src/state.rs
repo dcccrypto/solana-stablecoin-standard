@@ -236,6 +236,11 @@ pub struct StablecoinConfig {
     /// Pubkey::default() = Squads authority not configured.
     /// Set by `init_squads_authority` (irreversible); also sets FLAG_SQUADS_AUTHORITY.
     pub squads_multisig: Pubkey,
+    /// BUG-015: Whitelisted keeper pubkeys allowed to call `collect_stability_fee`
+    /// on behalf of any debtor without requiring their signature.
+    /// Up to MAX_AUTHORIZED_KEEPERS slots; unused entries are Pubkey::default().
+    /// Managed via `add_authorized_keeper` / `remove_authorized_keeper` (authority-only).
+    pub authorized_keepers: [Pubkey; StablecoinConfig::MAX_AUTHORIZED_KEEPERS],
     pub bump: u8,
 }
 
@@ -243,6 +248,8 @@ impl StablecoinConfig {
     pub const SEED: &'static [u8] = b"stablecoin-config";
     /// Maximum number of whitelisted reserve attestors (custodians / Pyth publishers).
     pub const MAX_RESERVE_ATTESTORS: usize = 4;
+    /// BUG-015: Maximum number of whitelisted stability-fee keepers.
+    pub const MAX_AUTHORIZED_KEEPERS: usize = 8;
 
     /// Net circulating supply (total_minted - total_burned)
     pub fn net_supply(&self) -> u64 {
