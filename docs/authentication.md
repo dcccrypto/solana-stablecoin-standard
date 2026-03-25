@@ -3,27 +3,38 @@
 > **Feature:** SSS-007  
 > **Scope:** `X-Api-Key` header validation and API key lifecycle via `/api/admin/keys`
 
+> **Security fix BUG-033 (2026-03-25):** Admin role separation — `/api/admin/*` endpoints now require an API key with `is_admin = true`. Standard (non-admin) API keys receive `403 Forbidden` on admin routes even if they pass authentication. See [Admin Role](#admin-role) below.
+
 ---
 
 ## Overview
 
 Every SSS backend endpoint except `GET /api/health` is protected by API key authentication. Requests must present a valid key in the `X-Api-Key` HTTP header. Invalid or missing keys are rejected with `401 Unauthorized` before the request reaches any route handler.
 
-API keys are stored in the SQLite database and managed via the `/api/admin/keys` endpoints (which are themselves key-protected).
+API keys are stored in the SQLite database and managed via the `/api/admin/keys` endpoints (which are themselves key-protected and require admin role).
 
 ---
 
 ## How Authentication Works
 
-Authentication is enforced by the `require_api_key` Axum middleware (`backend/src/auth.rs`). For every incoming request it:
+Authentication is enforced by two Axum middleware layers (`backend/src/auth.rs`):
+
+**`require_api_key`** (all authenticated routes):
 
 1. **Skips** if the path is `/api/health` (public endpoint).
 2. **Reads** the `X-Api-Key` header.
-3. **Validates** the key against the database.
+3. **Validates** the key against the database; returns `Option<bool>` (`None` = not found, `Some(is_admin)` = found with admin flag).
 4. **Checks rate limit** for the validated key (see [rate-limiting.md](./rate-limiting.md)).
-5. **Passes** the request to the route handler on success, or returns an error response.
+5. **Attaches** `ApiKeyInfo` to the request extensions (includes `is_admin`).
+6. **Passes** the request downstream on success, or returns `401`/`400`.
 
-The middleware is the single enforcement point — route handlers do not perform their own auth checks.
+**`require_admin`** (`/api/admin/*` subrouter only):
+
+1. **Reads** `ApiKeyInfo` from request extensions (populated by `require_api_key`).
+2. **Returns `403 Forbidden`** if `is_admin` is false.
+3. **Passes** the request to the route handler if admin.
+
+The two middleware layers are the single enforcement point — route handlers do not perform their own auth checks.
 
 ---
 
@@ -72,6 +83,7 @@ sss-token --key sss_yourApiKeyHere supply
 | `X-Api-Key` header absent | `401` | `{"success":false,"error":"Missing X-Api-Key header"}` |
 | Header value is not valid UTF-8 | `400` | `{"success":false,"error":"Invalid X-Api-Key header"}` |
 | Key not found in database | `401` | `{"success":false,"error":"Invalid API key"}` |
+| Key valid but not admin (on `/api/admin/*`) | `403` | `{"success":false,"error":"Forbidden"}` |
 | Key valid but rate-limited | `429` | `{"success":false,"error":"Rate limit exceeded"}` (+ `Retry-After` header) |
 | Database error during validation | `500` | `{"success":false,"error":"<message>"}` |
 
@@ -89,9 +101,24 @@ When listed via `GET /api/admin/keys`, only the first 8 characters (`sss_xxxx`) 
 
 ---
 
+## Admin Role
+
+**Added:** BUG-033 (2026-03-25)
+
+API keys carry an `is_admin` boolean flag. Only admin keys can reach `/api/admin/*` routes (circuit breaker, key management). Standard keys can call all other authenticated endpoints.
+
+| Role | Can call `/api/admin/*` | Can call other auth'd routes |
+|---|---|---|
+| Admin key (`is_admin=true`) | ✅ Yes | ✅ Yes |
+| Standard key (`is_admin=false`) | ❌ No (`403`) | ✅ Yes |
+
+The bootstrap API key (seeded at startup) is always created with `is_admin=true`. Admin keys can create other admin keys by setting `"is_admin": true` in the create-key request body.
+
+---
+
 ## API Key Management Endpoints
 
-All `/api/admin/keys` endpoints require a valid `X-Api-Key` header.
+All `/api/admin/keys` endpoints require a valid `X-Api-Key` header **with admin role**.
 
 ---
 
@@ -103,11 +130,12 @@ Create a new API key.
 
 ```json
 {
-  "label": "my-service"
+  "label": "my-service",
+  "is_admin": false
 }
 ```
 
-`label` is optional and defaults to `"unnamed"`.
+`label` is optional (defaults to `"unnamed"`). `is_admin` is optional (defaults to `false`). Set `"is_admin": true` to create an admin key.
 
 **Response:**
 
@@ -118,6 +146,7 @@ Create a new API key.
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "key": "sss_a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "label": "my-service",
+    "is_admin": false,
     "created_at": "2026-03-13T19:54:00Z"
   }
 }
@@ -142,6 +171,7 @@ List all API keys. Key values are redacted; only the first 8 characters are show
         "id": "550e8400-e29b-41d4-a716-446655440000",
         "label": "my-service",
         "key_prefix": "sss_a1b2",
+        "is_admin": false,
         "created_at": "2026-03-13T19:54:00Z"
       }
     ]
@@ -188,7 +218,8 @@ sqlite3 sss.db "INSERT INTO api_keys (id, key, label, created_at) VALUES (lower(
 ## Security Considerations
 
 - **Keys are secrets.** Treat them like passwords. Never commit them to source control.
-- **No expiry or scopes.** All valid keys have equal access to all authenticated endpoints. Rotate keys regularly and delete ones that are no longer needed.
+- **Admin vs standard keys.** Issue standard (`is_admin=false`) keys for application services. Reserve admin keys for operators who need to manage keys or toggle the circuit breaker. Minimise the number of live admin keys.
+- **No expiry or scopes.** All valid keys have equal access to all authenticated endpoints within their role. Rotate keys regularly and delete ones that are no longer needed.
 - **No key in URL.** Keys must be in the `X-Api-Key` header, never in query strings or URLs, to avoid accidental logging.
 - **Rate limiting.** Each key has its own independent token bucket — a compromised key that is being abused can be rate-limited without affecting others. See [rate-limiting.md](./rate-limiting.md).
 - **HTTPS in production.** Key values are transmitted in plain text headers; always use TLS (HTTPS) in production deployments.
@@ -197,7 +228,8 @@ sqlite3 sss.db "INSERT INTO api_keys (id, key, label, created_at) VALUES (lower(
 
 ## Implementation Notes
 
-- **Middleware location:** `backend/src/auth.rs` — `require_api_key` async function.
-- **Database methods:** `db.validate_api_key(&key)` returns `Ok(true/false)`; `db.create_api_key(&label)`, `db.list_api_keys()`, `db.delete_api_key(&id)`.
+- **Middleware location:** `backend/src/auth.rs` — `require_api_key` and `require_admin` async functions.
+- **Database methods:** `db.validate_api_key(&key)` returns `Ok(Option<bool>)` (`None` = not found, `Some(is_admin)` = found); `db.create_api_key_with_role(&label, is_admin)`, `db.list_api_keys()`, `db.delete_api_key(&id)`.
+- **Request extension:** `require_api_key` populates `ApiKeyInfo { is_admin }` on the request extensions; `require_admin` reads it.
 - **Key redaction:** The list endpoint trims to `key[..8]` — the prefix `sss_` plus 4 hex characters.
 - **Ordering:** Auth middleware runs before rate-limit middleware; an invalid key is rejected before any rate-limit bucket is touched.

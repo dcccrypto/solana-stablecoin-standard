@@ -133,7 +133,8 @@ Endpoints:
 | Guide | Description |
 |-------|-------------|
 | [API Reference](docs/api.md) | Full REST API reference for all backend endpoints |
-| [Authentication](docs/authentication.md) | API key creation and management |
+| [Authentication](docs/authentication.md) | API key creation, management, and admin role separation (BUG-033) |
+| [DAO Governance](docs/DAO-GOVERNANCE.md) | DAO committee proposal lifecycle, member-proposable governance, FLAG_DAO_COMMITTEE protection (BUG-011) |
 | [SDK & CLI](docs/sdk-cli.md) | TypeScript SDK and `sss-token` CLI usage |
 | [Python SDK](docs/PYTHON-SDK.md) | `SSSClient` async Python library + `sss-cli` — supply, reserves, CDPs, events, pandas analytics (SSS-144) |
 | [Rate Limiting](docs/rate-limiting.md) | Token-bucket rate limiter configuration and `Retry-After` behaviour |
