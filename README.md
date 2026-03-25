@@ -127,6 +127,7 @@ Endpoints:
 |---------|-------------|
 | [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | Cryptographic supply commitments — fetch, verify, and manually reproduce Merkle proofs |
 | [Trust Model](docs/TRUST-MODEL.md) | Real trust assumptions per SSS tier — what is/isn't trustless in v1; v1 stubs and mitigations |
+| [Circuit Breaker Keeper](docs/CIRCUIT-BREAKER-KEEPER.md) | Permissionless keeper instructions (`crank_circuit_breaker` / `crank_unpause`) — automated peg-deviation protection with SOL keeper reward and oracle-driven recovery window (SSS-152) |
 
 ## Documentation
 
