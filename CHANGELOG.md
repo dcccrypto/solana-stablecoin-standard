@@ -6,6 +6,14 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### BUG-016 — Stability Fee `accrued_fees` Reset After Burn (commit d276b85)
+
+- `docs/stability-fee.md` — updated BUG-016 section to document the full fix:
+  - `cdp_position.accrued_fees` is now **reset to `0`** after each successful burn (previously it was never cleared, causing settled fees to persist as outstanding debt across collection rounds)
+  - Burn amount uses `total_to_burn = accrued_fees + fee_amount` (full pending balance cleared atomically per round)
+  - `StablecoinConfig.total_burned` now increments by `total_to_burn` (was using wrong variable `fee_amount` — compile error in prior attempt)
+  - State table, header, and accounting notes updated to reflect reset semantics
+
 ### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
 - `docs/SECURITY.md` § 9 — full risk analysis of Token-2022 hook fail-open conditions: fail-open scenarios, current mitigations (Squads multisig, PDA ownership, fail-closed flags), residual risk, recommended operational + on-chain mitigations, incident response timeline [commit 0293169]
