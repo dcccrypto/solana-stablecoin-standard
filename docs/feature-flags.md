@@ -1,7 +1,7 @@
 # SSS — Feature Flags Reference
 
 > **SDK class:** `FeatureFlagsModule` (`sdk/src/FeatureFlagsModule.ts`)
-> **Added:** SSS-059 | **Updated:** SSS-060 (FLAG_SPEND_POLICY — SSS-063), SSS-065 (FLAG_DAO_COMMITTEE — SSS-067), SSS-070 (FLAG_YIELD_COLLATERAL), SSS-075 (FLAG_ZK_COMPLIANCE), SSS-106 (FLAG_CONFIDENTIAL_TRANSFERS), SSS-107 (ConfidentialTransferModule SDK)
+> **Added:** SSS-059 | **Updated:** SSS-060 (FLAG_SPEND_POLICY — SSS-063), SSS-065 (FLAG_DAO_COMMITTEE — SSS-067), SSS-070 (FLAG_YIELD_COLLATERAL), SSS-075 (FLAG_ZK_COMPLIANCE), SSS-106 (FLAG_CONFIDENTIAL_TRANSFERS), SSS-107 (ConfidentialTransferModule SDK), BUG-024 (FLAG_REQUIRE_OWNER_CONSENT — bit 15)
 
 ---
 
@@ -26,8 +26,9 @@ corresponding behaviour; clearing it deactivates it.
 | `FLAG_YIELD_COLLATERAL` | 3 | `0x08` | Enables yield-bearing SPL tokens (e.g. stSOL, mSOL) as CDP collateral. Enabled atomically by `init_yield_collateral`. SSS-3 only. |
 | `FLAG_ZK_COMPLIANCE` | 4 | `0x10` | Enforces zero-knowledge proof verification on transfers: sender must hold a valid, non-expired `VerificationRecord` PDA. Enabled atomically by `init_zk_compliance`. SSS-2 only. |
 | `FLAG_CONFIDENTIAL_TRANSFERS` | 5 | `0x20` | Enables Token-2022 ElGamal encrypted confidential transfers. Stores an auditor ElGamal pubkey in `ConfidentialTransferConfig` PDA. Managed via `ConfidentialTransferModule` (SSS-107). |
+| `FLAG_REQUIRE_OWNER_CONSENT` | 15 | `0x8000` | **BUG-024 (AUDIT MEDIUM).** Requires a `DelegateConsent` PDA for permanent-delegate transfers. When set, the transfer hook rejects any token move where the signer is not the wallet owner unless a valid `DelegateConsent` PDA (`["delegate-consent", mint, wallet_owner]`) is present in `remaining_accounts`. Owner-signed transfers bypass the check at zero overhead. OPT-IN: issuers needing permanent-delegate for compliance workflows leave this unset. |
 
-> **Reserved bits:** bits 6–63 are reserved for future protocol flags.
+> **Reserved bits:** bits 6–14 and 16–63 are reserved for future protocol flags.
 > Do not set them directly.
 
 ---
@@ -832,6 +833,90 @@ Seeds: `["dao-proposal", config_pubkey, proposal_id (u64 LE)]`
 | `quorum` | `u8` | Snapshot of required quorum at proposal creation time. |
 | `executed` | `bool` | True once `execute_action` has been called successfully. |
 | `cancelled` | `bool` | True if the proposal was cancelled. |
+
+---
+
+### `FLAG_REQUIRE_OWNER_CONSENT` _(BUG-024 — AUDIT MEDIUM)_
+
+> **Fix commit:** `630ecb3` (programs/transfer-hook + programs/sss-token, 2026-03-26)
+> **Scope:** Token-2022 permanent delegate enforcement
+
+```typescript
+export const FLAG_REQUIRE_OWNER_CONSENT = 1n << 15n; // 0x8000
+```
+
+```rust
+pub const FLAG_REQUIRE_OWNER_CONSENT: u64 = 1 << 15; // 0x8000
+```
+
+#### Security Background
+
+Token-2022 supports a **permanent delegate** extension that lets a designated keypair transfer tokens from any non-blacklisted wallet without explicit per-transfer approval. Prior to BUG-024, the SSS transfer hook had no guard for this: a permanent delegate could silently drain any wallet as long as it wasn't blacklisted, regardless of whether the wallet owner had consented.
+
+**Fix:** When `FLAG_REQUIRE_OWNER_CONSENT` is set, the transfer hook enforces that non-owner-signed transfers must pass a `DelegateConsent` PDA in `remaining_accounts`. Owner-signed transfers take an early-return zero-overhead path.
+
+#### `DelegateConsent` PDA
+
+**Program:** `sss-token`
+**Seeds:** `[b"delegate-consent", mint, wallet_owner]`
+
+| Field          | Type     | Description                                      |
+|----------------|----------|--------------------------------------------------|
+| `mint`         | `Pubkey` | The Token-2022 mint                              |
+| `wallet_owner` | `Pubkey` | The wallet whose tokens may be delegated         |
+| `granted_slot` | `u64`    | Slot at which consent was granted                |
+| `bump`         | `u8`     | PDA bump seed                                    |
+
+Minimum size: 8 bytes (discriminator guard). The PDA must be derivable for the correct `(mint, wallet_owner)` pair — cross-wallet PDAs are rejected.
+
+#### Transfer Hook Behavior
+
+After all existing checks (blacklist, ZK compliance, rate limits):
+
+1. Detect permanent-delegate transfer: signer ≠ `src_token_account.owner`
+2. If `FLAG_REQUIRE_OWNER_CONSENT` is **not set**: allow (backward-compat, legacy path)
+3. If set and signer = wallet owner: **early return OK** (zero overhead)
+4. If set and signer ≠ wallet owner:
+   - Require a `DelegateConsent` PDA in `remaining_accounts` (≥ 8 bytes)
+   - PDA seeds must match `[b"delegate-consent", mint, src_owner]`
+   - On mismatch or missing → reject with `HookError::OwnerConsentRequired`
+
+#### Error
+
+| Code | Name | Message |
+|------|------|---------|
+| — | `HookError::OwnerConsentRequired` | Permanent delegate transfer requires owner consent PDA |
+
+#### TypeScript Integration
+
+```typescript
+import { PublicKey } from '@solana/web3.js';
+
+const SSS_TOKEN_PROGRAM_ID = new PublicKey('<sss-token-program-id>');
+
+// Derive DelegateConsent PDA for a wallet owner
+const [delegateConsentPda] = PublicKey.findProgramAddressSync(
+  [
+    Buffer.from('delegate-consent'),
+    mint.toBuffer(),
+    walletOwner.toBuffer(),
+  ],
+  SSS_TOKEN_PROGRAM_ID,
+);
+
+// Pass as remainingAccounts in a permanent-delegate transfer
+await program.methods
+  .transfer(amount)
+  .accounts({ /* ... */ })
+  .remainingAccounts([
+    { pubkey: delegateConsentPda, isSigner: false, isWritable: false },
+  ])
+  .rpc();
+```
+
+#### OPT-IN Semantics
+
+`FLAG_REQUIRE_OWNER_CONSENT` is **OPT-IN**. Issuers whose compliance workflows legitimately use the permanent delegate (e.g. regulated custodians performing court-ordered asset freezes) leave this flag unset. Issuers enforcing strict owner-consent semantics enable it.
 
 ---
 

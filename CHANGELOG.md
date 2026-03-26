@@ -6,6 +6,13 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### BUG-024 — Permanent Delegate Consent Enforcement (AUDIT MEDIUM)
+
+- `docs/feature-flags.md` — added `FLAG_REQUIRE_OWNER_CONSENT` (bit 15, `0x8000`) to the flag constants table and a full reference section: DelegateConsent PDA layout, transfer hook enforcement steps, error code, TypeScript integration, and opt-in semantics [commit 630ecb3]
+- `docs/transfer-hook.md` — updated `transfer_hook` behavior sequence (step 5): BUG-024 permanent delegate consent gate; added `OwnerConsentRequired` error to the error table [commit 630ecb3]
+
+**Security context:** Token-2022 permanent delegates could silently transfer tokens from any non-blacklisted wallet without owner knowledge. Fix adds `FLAG_REQUIRE_OWNER_CONSENT` (OPT-IN) which enforces a `DelegateConsent` PDA (`["delegate-consent", mint, wallet_owner]`) for any non-owner-signed transfer. Owner-signed transfers take a zero-overhead early-return path. 12 tests (BUG-024-01..12) cover all acceptance criteria.
+
 ### Added
 - `docs/MARKET-MAKER-HOOKS.md` — Market Maker Hooks reference (SSS-138): MarketMakerConfig PDA, FLAG_MARKET_MAKER_HOOKS (bit 18), mm_mint/mm_burn/register_market_maker/get_mm_capacity instructions, per-slot rate limits, oracle spread check, events, errors, TypeScript example [PR #230]
 - `docs/compliance-module.md` — full SDK reference for `ComplianceModule` (SSS-017) [PR #73]

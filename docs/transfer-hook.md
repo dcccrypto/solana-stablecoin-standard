@@ -109,7 +109,7 @@ Removes a public key from the blacklist. Transfers to/from this address will be 
 
 This instruction is called automatically by Token-2022 on every transfer for an SSS-2 mint. **Do not call it directly** — it requires the Token-2022 CPI calling convention.
 
-**Behavior (SSS-075+):**
+**Behavior (SSS-075+ / BUG-024+):**
 1. Loads the `BlacklistState` PDA for the mint.
 2. Checks `blacklist_state.is_blacklisted(source_token_account.owner)` → rejects with `SenderBlacklisted` if true.
 3. Checks `blacklist_state.is_blacklisted(destination_token_account.owner)` → rejects with `ReceiverBlacklisted` if true.
@@ -117,7 +117,12 @@ This instruction is called automatically by Token-2022 on every transfer for an 
    - Loads the sender's `VerificationRecord` PDA (`["zk-verification", mint, sender]`).
    - If the record is missing → rejects with `VerificationRecordMissing`.
    - If `record.expires_at_slot <= Clock::slot` → rejects with `VerificationExpired`.
-5. Otherwise → logs `"Transfer hook: <amount> tokens OK"` and returns `Ok(())`.
+5. **BUG-024 Permanent Delegate Consent gate:** If `FLAG_REQUIRE_OWNER_CONSENT` (bit 15) is set in `StablecoinConfig.feature_flags`:
+   - Detect permanent-delegate transfer: signer ≠ `src_token_account.owner`.
+   - If signer = wallet owner → **early return OK** (zero overhead).
+   - If signer ≠ wallet owner → require a `DelegateConsent` PDA in `remaining_accounts` (≥ 8 bytes), seeds `[b"delegate-consent", mint, src_owner]` from the `sss-token` program.
+   - On missing or mismatched PDA → rejects with `HookError::OwnerConsentRequired`.
+6. Otherwise → logs `"Transfer hook: <amount> tokens OK"` and returns `Ok(())`.
 
 ---
 
@@ -150,6 +155,7 @@ Pre-SSS-075 mints may have the `ExtraAccountMetaList` initialized via `transfer+
 | `Unauthorized`                | 6002  | Unauthorized |
 | `VerificationRecordMissing`   | —     | ZK: sender has no verification record |
 | `VerificationExpired`         | —     | ZK: sender's verification record has expired |
+| `OwnerConsentRequired`        | —     | BUG-024: permanent delegate transfer requires `DelegateConsent` PDA |
 
 ---
 
