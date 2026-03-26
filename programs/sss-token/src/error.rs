@@ -230,4 +230,11 @@ pub enum SssError {
     InvalidBlacklistState,
     #[msg("Invalid transfer hook program — expected registered transfer_hook_program")]
     InvalidTransferHookProgram,
+    // SSS-147: Trustless hardening
+    #[msg("FLAG_DAO_COMMITTEE cannot be cleared via timelock — requires an explicit DAO governance vote")]
+    DaoFlagProtected,
+    #[msg("Caller is not the authority nor a registered committee member — cannot propose")]
+    NotAuthorizedToPropose,
+    #[msg("SSS-3 requires supply_cap > 0 to prevent uncapped minting (supply_cap_locked)")]
+    SupplyCapRequired,
 }

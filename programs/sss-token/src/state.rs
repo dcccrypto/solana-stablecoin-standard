@@ -235,6 +235,10 @@ pub struct StablecoinConfig {
     /// For Custom: the CustomPriceFeed PDA address.
     /// Pubkey::default() = validation deferred to expected_pyth_feed (backward compat).
     pub oracle_feed: Pubkey,
+    /// SSS-147: When true (set at initialize for preset==3), the max_supply / supply_cap
+    /// is immutable after initialization.  Prevents the authority from later expanding
+    /// the supply cap to defeat the SSS-3 trust-minimized minting invariant.
+    pub supply_cap_locked: bool,
     pub bump: u8,
 }
 
