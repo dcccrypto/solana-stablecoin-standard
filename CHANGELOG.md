@@ -6,11 +6,16 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
-### SSS-156 — Issuer Legal Entity Registry
+### BUG-031 — Bad Debt Backstop: On-Chain Shortfall Computation
 
-- `docs/LEGAL-ENTITY-REGISTRY.md` — full regulatory traceability guide: `FLAG_LEGAL_REGISTRY` (bit 24), `IssuerRegistry` PDA fields, `register_legal_entity` / `attest_legal_entity` / `update_legal_entity` instructions, regulatory verification flow, privacy design (hashed fields, plaintext jurisdiction only), MiCA Art.68 + GENIUS Act mapping, TypeScript register + verify examples [commit d0ab961]
-- `docs/feature-flags.md` — added `FLAG_LEGAL_REGISTRY` (bit 24, `0x1000000`) to flag constants table + full `### FLAG_LEGAL_REGISTRY` section with TypeScript/Rust constants, instruction table, error codes, and Related Docs cross-link [commit d0ab961]
-- `README.md` — added `LEGAL-ENTITY-REGISTRY.md` row under Compliance docs
+- `docs/on-chain-sdk-backstop.md` — updated `triggerBackstop` / `triggerBadDebtSocialization`
+  signatures: `shortfallAmount` param **removed**; `cdpOwner` + `oraclePriceFeed` **added**.
+  Shortfall is now computed entirely on-chain from `CdpPosition.debt_amount`,
+  `CollateralVault.deposited_amount`, and the oracle price feed. Instruction reverts
+  `NoBadDebt` if collateral covers the debt at trigger time. Security callout added.
+  New `computeOnChainShortfall()` helper documented for off-chain pre-flight checks.
+  `BadDebtTriggered` event gains `computed_shortfall` field. Type reference updated.
+  [commit 1407e2c]
 
 ### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
