@@ -227,15 +227,11 @@ pub enum SssError {
     InvalidBlacklistState,
     #[msg("Invalid transfer hook program — expected registered transfer_hook_program")]
     InvalidTransferHookProgram,
-    // SSS-156: Legal entity registry
-    #[msg("legal_entity_hash and registration_number_hash must be non-zero SHA-256 hashes")]
-    InvalidLegalEntityHash,
-    #[msg("jurisdiction must be a non-zero ISO 3166-1 alpha-2 code (4 bytes)")]
-    InvalidLegalEntityJurisdiction,
-    #[msg("attestor pubkey must be non-zero")]
-    InvalidLegalEntityAttestor,
-    #[msg("Legal entity record is already attested; re-register to update")]
-    LegalEntityAlreadyAttested,
-    #[msg("Legal entity record has expired (expiry_slot passed)")]
-    LegalEntityExpired,
+    // SSS-147: Trustless hardening
+    #[msg("FLAG_DAO_COMMITTEE cannot be cleared via timelock — requires an explicit DAO governance vote")]
+    DaoFlagProtected,
+    #[msg("Caller is not the authority nor a registered committee member — cannot propose")]
+    NotAuthorizedToPropose,
+    #[msg("SSS-3 requires supply_cap > 0 to prevent uncapped minting (supply_cap_locked)")]
+    SupplyCapRequired,
 }

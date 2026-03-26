@@ -244,23 +244,10 @@ pub struct StablecoinConfig {
     /// For Custom: the CustomPriceFeed PDA address.
     /// Pubkey::default() = validation deferred to expected_pyth_feed (backward compat).
     pub oracle_feed: Pubkey,
-    /// SSS-122: config version for migration checks (0 = pre-SSS-122, 1 = current).
-    pub version: u8,
-    /// SSS-127: Travel Rule threshold in native token units. 0 = disabled.
-    pub travel_rule_threshold: u64,
-    /// SSS-128: Sanctions oracle signer pubkey. Pubkey::default() = disabled.
-    pub sanctions_oracle: Pubkey,
-    /// SSS-128: Max staleness in slots for sanctions records. 0 = unlimited.
-    pub sanctions_max_staleness_slots: u64,
-    /// SSS-134: Squads V4 multisig PDA (set by init_squads_authority). Default = disabled.
-    pub squads_multisig: Pubkey,
-    /// SSS-BUG-008: Minimum reserve ratio in bps (0 = no minimum). Used with FLAG_POR_HALT_ON_BREACH.
-    pub min_reserve_ratio_bps: u16,
-    /// BUG-015: Whitelisted stability-fee keeper pubkeys (max 8).
-    #[max_len(8)]
-    pub authorized_keepers: Vec<Pubkey>,
-    /// SSS-150: Expected BPF upgrade authority (for monitoring / guard). Default = unset.
-    pub expected_upgrade_authority: Pubkey,
+    /// SSS-147: When true (set at initialize for preset==3), the max_supply / supply_cap
+    /// is immutable after initialization.  Prevents the authority from later expanding
+    /// the supply cap to defeat the SSS-3 trust-minimized minting invariant.
+    pub supply_cap_locked: bool,
     pub bump: u8,
 }
 
