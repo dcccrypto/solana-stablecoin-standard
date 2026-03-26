@@ -417,4 +417,44 @@ pub mod sss_token {
     ) -> Result<()> {
         instructions::collateral_config::update_collateral_config_handler(ctx, params)
     }
+
+    // ── SSS-121 / BUG-018: Guardian Multisig Emergency Pause ─────────────────
+
+    /// Initialise the guardian multisig for a stablecoin.
+    /// Registers 1–7 guardian pubkeys and a vote threshold.
+    /// Authority only; can only be called once.
+    pub fn init_guardian_config(
+        ctx: Context<InitGuardianConfig>,
+        guardians: Vec<Pubkey>,
+        threshold: u8,
+    ) -> Result<()> {
+        instructions::guardian::init_guardian_config_handler(ctx, guardians, threshold)
+    }
+
+    /// Any registered guardian proposes an emergency pause.
+    /// Creates a PauseProposal PDA.  If threshold == 1 the pause is immediate.
+    pub fn guardian_propose_pause(
+        ctx: Context<GuardianProposePause>,
+        reason: [u8; 32],
+    ) -> Result<()> {
+        instructions::guardian::guardian_propose_pause_handler(ctx, reason)
+    }
+
+    /// Cast a YES vote on an open pause proposal.
+    /// When votes >= threshold the mint is paused immediately.
+    /// BUG-018: sets guardian_pause_active=true and starts the authority-override timelock.
+    pub fn guardian_vote_pause(
+        ctx: Context<GuardianVotePause>,
+        proposal_id: u64,
+    ) -> Result<()> {
+        instructions::guardian::guardian_vote_pause_handler(ctx, proposal_id)
+    }
+
+    /// Lift a guardian-imposed pause.
+    /// BUG-018: Authority alone cannot lift a guardian-initiated pause until
+    /// GUARDIAN_PAUSE_AUTHORITY_OVERRIDE_DELAY (24h) has elapsed.
+    /// Full guardian quorum can always lift immediately.
+    pub fn guardian_lift_pause(ctx: Context<GuardianLiftPause>) -> Result<()> {
+        instructions::guardian::guardian_lift_pause_handler(ctx)
+    }
 }

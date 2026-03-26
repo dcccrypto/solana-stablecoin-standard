@@ -1,4 +1,5 @@
 pub mod bad_debt_backstop;
+pub mod guardian;
 pub mod accept_authority;
 pub mod admin_timelock;
 pub mod burn;
@@ -43,6 +44,7 @@ pub use cdp_liquidate_v2::*;
 pub use cdp_repay_stable::*;
 pub use cpi_burn::*;
 pub use cpi_mint::*;
+pub use guardian::*;
 pub use deposit_collateral::*;
 pub use freeze::*;
 pub use initialize::*;

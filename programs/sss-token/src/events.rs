@@ -174,3 +174,169 @@ pub struct CollateralLiquidated {
     /// Liquidation bonus applied in basis points (from CollateralConfig or global default).
     pub bonus_bps: u16,
 }
+
+// ─── SSS-109: Probabilistic Balance Standard events ───────────────────────────
+
+/// Emitted when a new probabilistic commitment is created (funds locked in escrow).
+#[event]
+pub struct ProbabilisticCommitmentCreated {
+    /// StablecoinConfig PDA this commitment belongs to.
+    pub config: Pubkey,
+    /// Unique commitment id (caller-provided, scoped to config).
+    pub commitment_id: u64,
+    /// Account that locked the funds.
+    pub issuer: Pubkey,
+    /// Account authorised to claim on proof.
+    pub claimant: Pubkey,
+    /// SSS stablecoin mint.
+    pub stable_mint: Pubkey,
+    /// Total tokens committed.
+    pub committed_amount: u64,
+    /// Condition hash the proof must match.
+    pub condition_hash: [u8; 32],
+    /// Slot after which issuer may claim a refund.
+    pub expiry_slot: u64,
+}
+
+/// Emitted on every resolution (full or partial) of a probabilistic commitment.
+#[event]
+pub struct ProbabilisticCommitmentResolved {
+    /// StablecoinConfig PDA.
+    pub config: Pubkey,
+    /// Commitment id being resolved.
+    pub commitment_id: u64,
+    /// Claimant who received the tokens.
+    pub claimant: Pubkey,
+    /// Amount released to claimant in this resolution.
+    pub amount_released: u64,
+    /// True if this was a partial resolution (remainder returned to issuer).
+    pub partial: bool,
+}
+
+
+// ─── SSS-110: Agent Payment Channel events ────────────────────────────────────
+
+/// Emitted when a new agent payment channel is opened.
+#[event]
+pub struct ChannelOpened {
+    pub channel_id: u64,
+    pub initiator: Pubkey,
+    pub counterparty: Pubkey,
+    pub stable_mint: Pubkey,
+    pub initiator_deposit: u64,
+    pub dispute_policy: u8,
+    pub timeout_slots: u64,
+}
+
+/// Emitted when a work proof is submitted to a channel.
+#[event]
+pub struct WorkProofSubmitted {
+    pub channel_id: u64,
+    pub initiator: Pubkey,
+    pub task_hash: [u8; 32],
+    pub output_hash: [u8; 32],
+    pub proof_type: u8,
+}
+
+/// Emitted when a channel is mutually settled.
+#[event]
+pub struct ChannelSettled {
+    pub channel_id: u64,
+    pub initiator: Pubkey,
+    pub counterparty: Pubkey,
+    pub amount_to_counterparty: u64,
+    pub amount_to_initiator: u64,
+}
+
+/// Emitted when a channel is placed in dispute.
+#[event]
+pub struct ChannelDisputed {
+    pub channel_id: u64,
+    pub initiator: Pubkey,
+    pub counterparty: Pubkey,
+    pub evidence_hash: [u8; 32],
+}
+
+/// Emitted when a channel is force-closed by the initiator after timeout.
+#[event]
+pub struct ChannelForceClosed {
+    pub channel_id: u64,
+    pub initiator: Pubkey,
+    pub amount_returned: u64,
+}
+
+// ─── SSS-120: Authority Rotation events ──────────────────────────────────────
+
+/// Emitted when an authority rotation is proposed.
+#[event]
+pub struct AuthorityRotationProposed {
+    pub mint: Pubkey,
+    pub current_authority: Pubkey,
+    pub new_authority: Pubkey,
+    pub backup_authority: Pubkey,
+    pub proposed_slot: u64,
+    pub timelock_slots: u64,
+}
+
+/// Emitted when the new_authority accepts the rotation after the timelock.
+#[event]
+pub struct AuthorityRotationCompleted {
+    pub mint: Pubkey,
+    pub prev_authority: Pubkey,
+    pub new_authority: Pubkey,
+}
+
+/// Emitted when the backup_authority claims authority via emergency recovery.
+#[event]
+pub struct AuthorityRotationEmergencyRecovered {
+    pub mint: Pubkey,
+    pub prev_authority: Pubkey,
+    pub backup_authority: Pubkey,
+}
+
+/// Emitted when the current authority cancels an in-flight rotation proposal.
+#[event]
+pub struct AuthorityRotationCancelled {
+    pub mint: Pubkey,
+    pub authority: Pubkey,
+    pub cancelled_new_authority: Pubkey,
+}
+
+// SSS-121: Guardian Multisig Emergency Pause
+
+/// Emitted when a guardian opens a new pause proposal.
+#[event]
+pub struct GuardianPauseProposed {
+    pub mint: Pubkey,
+    pub proposer: Pubkey,
+    pub proposal_id: u64,
+    pub reason: [u8; 32],
+}
+
+/// Emitted when a guardian votes on an open pause proposal.
+#[event]
+pub struct GuardianPauseVoted {
+    pub mint: Pubkey,
+    pub guardian: Pubkey,
+    pub proposal_id: u64,
+    pub votes_so_far: u8,
+    pub threshold: u8,
+}
+
+/// Emitted when a guardian-imposed pause is lifted.
+#[event]
+pub struct GuardianPauseLifted {
+    pub mint: Pubkey,
+    pub lifted_by: Pubkey,
+    pub by_quorum: bool,
+}
+
+// BUG-018: Guardian pause override timelock
+/// Emitted when authority lifts a guardian pause after the timelock has expired.
+#[event]
+pub struct GuardianPauseAuthorityOverride {
+    pub mint: Pubkey,
+    pub authority: Pubkey,
+    /// Unix timestamp when override occurred.
+    pub timestamp: i64,
+}
