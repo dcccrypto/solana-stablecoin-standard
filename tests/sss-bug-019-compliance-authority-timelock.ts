@@ -118,7 +118,7 @@ describe("BUG-019: Compliance authority transfer always requires admin timelock"
       expect.fail("Should have rejected — ComplianceAuthorityRequiresTimelock expected");
     } catch (err: any) {
       const msg = err.message || err.toString();
-      expect(msg).to.match(/ComplianceAuthorityRequiresTimelock|UseTimelockForAuthorityTransfer|AnchorError|Error/i);
+      expect(msg).to.match(/ComplianceAuthorityRequiresTimelock/);
     }
   });
 
@@ -138,7 +138,7 @@ describe("BUG-019: Compliance authority transfer always requires admin timelock"
       expect.fail("Should have rejected — ComplianceAuthorityRequiresTimelock expected");
     } catch (err: any) {
       const msg = err.message || err.toString();
-      expect(msg).to.match(/ComplianceAuthorityRequiresTimelock|UseTimelockForAuthorityTransfer|AnchorError|Error/i);
+      expect(msg).to.match(/ComplianceAuthorityRequiresTimelock/);
     }
   });
 
@@ -185,7 +185,7 @@ describe("BUG-019: Compliance authority transfer always requires admin timelock"
       expect.fail("Should have rejected — timelock not mature");
     } catch (err: any) {
       const msg = err.message || err.toString();
-      expect(msg).to.match(/TimelockNotMature|AnchorError|Error/i);
+      expect(msg).to.match(/TimelockNotMature/);
     }
   });
 
@@ -231,7 +231,7 @@ describe("BUG-019: Compliance authority transfer always requires admin timelock"
       expect.fail("Should have rejected — timelock not mature");
     } catch (err: any) {
       const msg = err.message || err.toString();
-      expect(msg).to.match(/TimelockNotMature|AnchorError|Error/i);
+      expect(msg).to.match(/TimelockNotMature/);
     }
   });
 
@@ -261,7 +261,7 @@ describe("BUG-019: Compliance authority transfer always requires admin timelock"
       expect.fail("Should have rejected — attacker is not authority");
     } catch (err: any) {
       const msg = err.message || err.toString();
-      expect(msg).to.match(/Unauthorized|ConstraintRaw|AnchorError|Error/i);
+      expect(msg).to.match(/Unauthorized|ConstraintRaw/);
     }
   });
 
