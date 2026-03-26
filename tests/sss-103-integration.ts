@@ -980,27 +980,42 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
       }
     });
 
-    it("INT-097-06: trigger_backstop rejects shortfall_amount = 0", async () => {
-      // For this test we don't need a real vault — just verify the zero-amount guard fires first
-      const dummyVault = Keypair.generate().publicKey;
-      const dummyInsuranceFundVault = Keypair.generate().publicKey;
+    it("INT-097-06: trigger_backstop rejects when called by non-config-PDA signer (BUG-031 on-chain shortfall)", async () => {
+      // BUG-031: shortfall is now computed on-chain; caller no longer supplies it.
+      // Triggering with a wrong (non-config-PDA) liquidation authority fails on auth first.
+      const fakeCdpOwner = Keypair.generate().publicKey;
+      const fakePriceFeed = Keypair.generate().publicKey;
+      const dummyCollateralMint = Keypair.generate().publicKey;
+      const [cdpPosPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cdp-position"), mintKp.publicKey.toBuffer(), fakeCdpOwner.toBuffer()],
+        program.programId
+      );
+      const [collVaultPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cdp-collateral-vault"), mintKp.publicKey.toBuffer(), fakeCdpOwner.toBuffer(), dummyCollateralMint.toBuffer()],
+        program.programId
+      );
 
       try {
         await program.methods
-          .triggerBackstop(new BN(0))
+          .triggerBackstop(fakeCdpOwner)
           .accounts({
-            authority: authority.publicKey,
+            liquidationAuthority: authority.publicKey,  // wrong — not config PDA
             config: configPda,
             sssMint: mintKp.publicKey,
-            insuranceFundVault: dummyInsuranceFundVault,
-            collateralVault: dummyVault,
-            tokenProgram: TOKEN_PROGRAM_ID,
+            cdpPosition: cdpPosPda,
+            collateralVault: collVaultPda,
+            collateralMint: dummyCollateralMint,
+            oraclePriceFeed: fakePriceFeed,
+            insuranceFund: insuranceFundKp.publicKey,
+            reserveVault: Keypair.generate().publicKey,
+            insuranceFundAuthority: authority.publicKey,
+            collateralTokenProgram: TOKEN_PROGRAM_ID,
           })
           .rpc();
-        expect.fail("should have rejected shortfall=0");
+        expect.fail("should have rejected");
       } catch (e: any) {
-        // ZeroShortfall, account validation error, or AccountNotFound — all acceptable
-        expect(e.toString()).to.match(/ZeroShortfall|shortfall|InvalidAccount|custom|AccountNotInit|Account|provided|not pr/i);
+        // NoBadDebt, UnauthorizedBackstopCaller, or account-not-found — all acceptable
+        expect(e.toString()).to.match(/NoBadDebt|UnauthorizedBackstopCaller|InvalidAccount|custom|AccountNotInit|Account|provided|not pr/i);
       }
     });
 
@@ -1035,24 +1050,37 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
         .signers([noBackstopMintKp])
         .rpc();
 
-      const dummyVault = Keypair.generate().publicKey;
-      const dummyInsuranceFundVault = Keypair.generate().publicKey;
+      const fakeCdpOwner = Keypair.generate().publicKey;
+      const fakePriceFeed = Keypair.generate().publicKey;
+      const [cdpPosPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cdp-position"), noBackstopMintKp.publicKey.toBuffer(), fakeCdpOwner.toBuffer()],
+        program.programId
+      );
+      const [collVaultPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("cdp-collateral-vault"), noBackstopMintKp.publicKey.toBuffer(), fakeCdpOwner.toBuffer(), SystemProgram.programId.toBuffer()],
+        program.programId
+      );
 
       try {
         await program.methods
-          .triggerBackstop(new BN(1_000_000))
+          .triggerBackstop(fakeCdpOwner)
           .accounts({
-            authority: authority.publicKey,
+            liquidationAuthority: authority.publicKey,
             config: noBackstopConfigPda,
             sssMint: noBackstopMintKp.publicKey,
-            insuranceFundVault: dummyInsuranceFundVault,
-            collateralVault: dummyVault,
-            tokenProgram: TOKEN_PROGRAM_ID,
+            cdpPosition: cdpPosPda,
+            collateralVault: collVaultPda,
+            collateralMint: SystemProgram.programId,
+            oraclePriceFeed: fakePriceFeed,
+            insuranceFund: Keypair.generate().publicKey,
+            reserveVault: Keypair.generate().publicKey,
+            insuranceFundAuthority: authority.publicKey,
+            collateralTokenProgram: TOKEN_PROGRAM_ID,
           })
           .rpc();
         expect.fail("should have rejected — backstop not configured");
       } catch (e: any) {
-        expect(e.toString()).to.match(/BackstopNotConfigured|NotConfigured|custom|AccountNotInit|Account|provided|not pr/i);
+        expect(e.toString()).to.match(/BackstopNotConfigured|NotConfigured|UnauthorizedBackstopCaller|custom|AccountNotInit|Account|provided|not pr/i);
       }
     });
 

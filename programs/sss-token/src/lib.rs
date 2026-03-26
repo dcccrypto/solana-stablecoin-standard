@@ -435,12 +435,13 @@ pub mod sss_token {
     /// Trigger the bad debt backstop after a liquidation leaves collateral < debt.
     /// Draws up to `max_backstop_bps` of outstanding debt from the insurance fund.
     /// Only callable by the config PDA (i.e. via CPI from `cdp_liquidate`).
+    /// Shortfall is computed entirely on-chain from CDP position + oracle price (BUG-031).
     /// Emits `BadDebtTriggered`.
     pub fn trigger_backstop(
         ctx: Context<TriggerBackstop>,
-        shortfall_amount: u64,
+        cdp_owner: Pubkey,
     ) -> Result<()> {
-        instructions::bad_debt_backstop::trigger_backstop_handler(ctx, shortfall_amount)
+        instructions::bad_debt_backstop::trigger_backstop_handler(ctx, cdp_owner)
     }
 
     // ─── SSS-151: First-loss Insurance Vault ─────────────────────────────────
