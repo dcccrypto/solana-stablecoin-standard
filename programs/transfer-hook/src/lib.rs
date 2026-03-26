@@ -244,16 +244,17 @@ pub mod sss_transfer_hook {
             // VerificationRecord PDA at seeds [b"zk-verification", mint, src_owner].
             if feature_flags & FLAG_ZK_COMPLIANCE != 0 {
                 let vr_account = &ctx.accounts.verification_record;
-                // Verify the PDA address
-                // Use the transfer authority (owner at account index 3) for VR PDA derivation.
-                // For delegated transfers, index 3 is the delegate — the party
-                // executing the transfer and required to hold a valid VerificationRecord.
-                // This matches the ExtraAccountMeta registration which uses index 3.
+                // BUG-036 fix: derive VR PDA using src_owner (token account owner from
+                // bytes 32..64) NOT ctx.accounts.owner (index 3 = delegate for delegated
+                // transfers). Using the delegate allowed a sender with no VerificationRecord
+                // to delegate to a verified party and bypass ZK compliance.
+                // Consistency: blacklist checks also use src_owner (bytes 32..64), so ZK
+                // compliance must match. Both now key off the true token account owner.
                 let (expected_vr_pda, _bump) = Pubkey::find_program_address(
                     &[
                         ZK_VERIFICATION_SEED,
                         ctx.accounts.mint.key().as_ref(),
-                        ctx.accounts.owner.key().as_ref(),
+                        src_owner.as_ref(),
                     ],
                     &sss_token_program::ID,
                 );
@@ -305,45 +306,51 @@ pub mod sss_transfer_hook {
 
                 // Only enforce when oracle is configured (non-default pubkey).
                 if sanctions_oracle != Pubkey::default() {
-                    // The sanctions_record is passed as remaining_accounts[0]
-                    // when FLAG_SANCTIONS_ORACLE is set.
-                    if let Some(sr_account) = ctx.remaining_accounts.first() {
-                        // Verify PDA: seeds = [b"sanctions-record", mint, src_owner]
-                        let (expected_sr_pda, _bump) = Pubkey::find_program_address(
-                            &[
-                                SANCTIONS_RECORD_SEED,
-                                ctx.accounts.mint.key().as_ref(),
-                                src_owner.as_ref(),
-                            ],
-                            &sss_token_program::ID,
-                        );
-                        // Only act if the account matches expected PDA.
-                        if sr_account.key() == expected_sr_pda {
-                            let sr_data = sr_account.try_borrow_data()?;
-                            if sr_data.len() >= SANCTIONS_RECORD_MIN_SIZE {
-                                let is_sanctioned = sr_data[SANCTIONS_IS_SANCTIONED_OFFSET] != 0;
-                                if is_sanctioned {
-                                    // Staleness check.
-                                    if sanctions_max_staleness > 0 {
-                                        let clock = Clock::get()?;
-                                        let updated_slot = u64::from_le_bytes(
-                                            sr_data[SANCTIONS_UPDATED_SLOT_OFFSET
-                                                ..SANCTIONS_UPDATED_SLOT_OFFSET + 8]
-                                                .try_into()
-                                                .unwrap(),
-                                        );
-                                        let age = clock.slot.saturating_sub(updated_slot);
-                                        if age > sanctions_max_staleness {
-                                            return Err(error!(HookError::SanctionsRecordStale));
-                                        }
-                                    }
-                                    return Err(error!(HookError::SanctionedAddress));
-                                }
+                    // BUG-035 fix: derive expected PDA first, then REQUIRE it be present.
+                    // Previously, omitting remaining_accounts[0] silently bypassed this check
+                    // — sanctioned wallets could transfer by simply not passing the PDA.
+                    // Fix: the check is FAIL-CLOSED. If FLAG_SANCTIONS_ORACLE is set and the
+                    // expected SanctionsRecord PDA is not present in remaining_accounts with
+                    // the correct key, the transfer is REJECTED.
+                    let (expected_sr_pda, _bump) = Pubkey::find_program_address(
+                        &[
+                            SANCTIONS_RECORD_SEED,
+                            ctx.accounts.mint.key().as_ref(),
+                            src_owner.as_ref(),
+                        ],
+                        &sss_token_program::ID,
+                    );
+                    // Find the SanctionsRecord PDA in remaining_accounts.
+                    let sr_account = ctx
+                        .remaining_accounts
+                        .iter()
+                        .find(|a| a.key() == expected_sr_pda)
+                        .ok_or_else(|| error!(HookError::SanctionsRecordMissing))?;
+
+                    let sr_data = sr_account.try_borrow_data()?;
+                    require!(
+                        sr_data.len() >= SANCTIONS_RECORD_MIN_SIZE,
+                        HookError::SanctionsRecordMissing
+                    );
+                    let is_sanctioned = sr_data[SANCTIONS_IS_SANCTIONED_OFFSET] != 0;
+                    if is_sanctioned {
+                        // Staleness check.
+                        if sanctions_max_staleness > 0 {
+                            let clock = Clock::get()?;
+                            let updated_slot = u64::from_le_bytes(
+                                sr_data[SANCTIONS_UPDATED_SLOT_OFFSET
+                                    ..SANCTIONS_UPDATED_SLOT_OFFSET + 8]
+                                    .try_into()
+                                    .unwrap(),
+                            );
+                            let age = clock.slot.saturating_sub(updated_slot);
+                            if age > sanctions_max_staleness {
+                                return Err(error!(HookError::SanctionsRecordStale));
                             }
-                            msg!("SanctionsOracle OK: sender {} not sanctioned", src_owner);
                         }
+                        return Err(error!(HookError::SanctionedAddress));
                     }
-                    // No sanctions_record passed or PDA mismatch = wallet not in oracle DB = allow.
+                    msg!("SanctionsOracle OK: sender {} not sanctioned", src_owner);
                 }
             }
 
@@ -565,7 +572,10 @@ pub mod sss_transfer_hook {
                 false, // is_signer
                 false, // is_writable
             )?,
-            // verification_record PDA: seeds = [b"zk-verification", mint (index 1), owner (index 3)]
+            // verification_record PDA: seeds = [b"zk-verification", mint (index 1), src_owner]
+            // BUG-036 fix: use source token account owner (bytes 32..64 from index 0),
+            // NOT the delegate/signer at index 3. This ensures a delegated transfer
+            // cannot bypass ZK compliance by delegating to a verified party.
             // owned by sss-token program — only enforced when FLAG_ZK_COMPLIANCE is set
             ExtraAccountMeta::new_with_seeds(
                 &[
@@ -573,7 +583,12 @@ pub mod sss_transfer_hook {
                         bytes: b"zk-verification".to_vec(),
                     },
                     Seed::AccountKey { index: 1 }, // mint is at index 1
-                    Seed::AccountKey { index: 3 }, // owner (source owner) is at index 3
+                    // Read src_owner from source_token_account (index 0) at data offset 32, length 32
+                    Seed::AccountData {
+                        account_index: 0, // source_token_account
+                        data_index: 32,   // owner field starts at byte 32 in Token-2022 account
+                        length: 32,       // Pubkey length
+                    },
                 ],
                 false, // is_signer
                 false, // is_writable
@@ -684,7 +699,13 @@ pub mod sss_transfer_hook {
                 &[
                     Seed::Literal { bytes: b"zk-verification".to_vec() },
                     Seed::AccountKey { index: 1 }, // mint
-                    Seed::AccountKey { index: 3 }, // owner/delegate
+                    // BUG-036 fix: use src_owner from token account data (index 0 @ offset 32),
+                    // not the delegate/signer at index 3.
+                    Seed::AccountData {
+                        account_index: 0, // source_token_account
+                        data_index: 32,   // owner field starts at byte 32
+                        length: 32,       // Pubkey length
+                    },
                 ],
                 false,
                 false,
@@ -748,6 +769,8 @@ pub enum HookError {
     ZkRecordExpired,
     #[msg("Sanctions oracle: sender is on the sanctions list")]
     SanctionedAddress,
+    #[msg("Sanctions oracle: SanctionsRecord PDA missing from remaining_accounts — required when FLAG_SANCTIONS_ORACLE is set")]
+    SanctionsRecordMissing,
     #[msg("Sanctions oracle: record is stale — oracle has not updated within max_staleness_slots")]
     SanctionsRecordStale,
     #[msg("ZK credentials: sender does not hold a valid CredentialRecord")]
