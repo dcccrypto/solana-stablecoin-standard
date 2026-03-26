@@ -7,7 +7,7 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 ## [Unreleased]
 
 ### Added
-- `docs/CIRCUIT-BREAKER-KEEPER.md` — Permissionless Circuit Breaker Keeper (SSS-152): `KeeperConfig` PDA, `init_keeper_config` / `seed_keeper_vault` / `crank_circuit_breaker` / `crank_unpause` instructions, SOL keeper reward mechanism, oracle-driven recovery window, deviation BPS math, error catalogue, TypeScript SDK + keeper bot runbook [PR #257]
+- `docs/MULTI-ORACLE-CONSENSUS.md` — Multi-Oracle Consensus reference (SSS-153): OracleConsensus PDA, FLAG_MULTI_ORACLE_CONSENSUS (bit 22), median/TWAP aggregation across up to 5 sources (Pyth/Switchboard/Custom), outlier rejection, per-source staleness guards, 3 events, 7 errors, keeper runbook [PR #258]
 - `docs/MARKET-MAKER-HOOKS.md` — Market Maker Hooks reference (SSS-138): MarketMakerConfig PDA, FLAG_MARKET_MAKER_HOOKS (bit 18), mm_mint/mm_burn/register_market_maker/get_mm_capacity instructions, per-slot rate limits, oracle spread check, events, errors, TypeScript example [PR #230]
 - `docs/compliance-module.md` — full SDK reference for `ComplianceModule` (SSS-017) [PR #73]
 - `docs/ARCHITECTURE.md` — three-layer architecture reference
