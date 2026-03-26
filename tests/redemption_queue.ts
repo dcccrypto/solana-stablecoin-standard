@@ -89,7 +89,7 @@ function getConfigPda(mint: PublicKey, programId: PublicKey): PublicKey {
 
 function getRedemptionQueuePda(mint: PublicKey, programId: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("redemption_queue"), mint.toBuffer()],
+    [Buffer.from("redemption-queue"), mint.toBuffer()],
     programId
   );
   return pda;
@@ -103,7 +103,7 @@ function getRedemptionEntryPda(
   const idxBuf = Buffer.alloc(8);
   idxBuf.writeBigUInt64LE(BigInt(queueIndex.toString()));
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("redemption_entry"), mint.toBuffer(), idxBuf],
+    [Buffer.from("redemption-entry"), mint.toBuffer(), idxBuf],
     programId
   );
   return pda;
@@ -516,26 +516,21 @@ describe("SSS-154: redemption_queue", () => {
   // ---------------------------------------------------------------------------
 
   it("3. init_redemption_queue: fails for non-authority", async () => {
-    // Verify authority enforcement via update_redemption_queue (non-init path,
-    // same Unauthorized constraint on config.authority == authority).
-    // The queue was already init'd in test 1; nonOwner is not the authority.
+    // Derive a fresh PDA with nonOwner as authority — this queue has not been init'd,
+    // but initRedemptionQueue checks config.authority == authority signer before init.
+    // nonOwner is not config.authority so it should fail with Unauthorized.
     await assertError(
       async () => {
-        const tx = await program.methods
-          .updateRedemptionQueue(new BN(50), null, null, null)
+        await program.methods
+          .initRedemptionQueue()
           .accounts({
             authority: nonOwner.publicKey,
             config: configPda,
             redemptionQueue: redemptionQueuePda,
+            systemProgram: SystemProgram.programId,
           } as any)
           .signers([nonOwner])
-          .transaction();
-        // Sign with nonOwner and send (preflight will catch constraint)
-        const { blockhash } = await provider.connection.getLatestBlockhash();
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = nonOwner.publicKey;
-        tx.sign(nonOwner);
-        await provider.connection.sendRawTransaction(tx.serialize());
+          .rpc({ commitment: "confirmed" });
       },
       "Unauthorized"
     );
