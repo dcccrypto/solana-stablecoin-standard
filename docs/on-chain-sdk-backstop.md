@@ -94,31 +94,44 @@ Draw collateral from the insurance fund to cover a post-liquidation shortfall.
 > is intended for local-validator testing, simulation, and composable transaction
 > building only.
 
+> **BUG-031 (commit 1407e2c):** `shortfallAmount` has been **removed**. The
+> shortfall is now computed entirely on-chain from `CdpPosition.debt_amount`,
+> `CollateralVault.deposited_amount`, and the oracle price feed. The instruction
+> reverts with `NoBadDebt` if collateral value covers the full debt at trigger
+> time. This prevents callers from inflating the shortfall to drain more from
+> the insurance fund than the actual deficit. The `BadDebtTriggered` event now
+> includes a `computed_shortfall` field reflecting the on-chain calculation.
+
 ```typescript
 await backstop.triggerBackstop({
   mint,
+  cdpOwner,
+  oraclePriceFeed,
   insuranceFund,
   reserveVault,
   collateralMint,
   insuranceFundAuthority,
   collateralTokenProgram: TOKEN_PROGRAM_ID,
-  shortfallAmount: 40_000n,
 });
 ```
 
-| Param                      | Type        | Description                                      |
-|----------------------------|-------------|--------------------------------------------------|
-| `mint`                     | `PublicKey` | SSS-3 stablecoin mint.                           |
-| `insuranceFund`            | `PublicKey` | Insurance fund token account (source).           |
-| `reserveVault`             | `PublicKey` | Reserve vault token account (destination).       |
-| `collateralMint`           | `PublicKey` | Collateral token mint.                           |
-| `insuranceFundAuthority`   | `PublicKey` | Authority signing the insurance fund transfer.   |
-| `collateralTokenProgram`   | `PublicKey` | Token program for collateral.                    |
-| `shortfallAmount`          | `bigint`    | Post-liquidation shortfall in native units (> 0).|
+| Param                      | Type        | Description                                                      |
+|----------------------------|-------------|------------------------------------------------------------------|
+| `mint`                     | `PublicKey` | SSS-3 stablecoin mint.                                           |
+| `cdpOwner`                 | `PublicKey` | Owner of the CDP position being backstopped.                     |
+| `oraclePriceFeed`          | `PublicKey` | Oracle price feed account for collateral valuation.              |
+| `insuranceFund`            | `PublicKey` | Insurance fund token account (source).                           |
+| `reserveVault`             | `PublicKey` | Reserve vault token account (destination).                       |
+| `collateralMint`           | `PublicKey` | Collateral token mint.                                           |
+| `insuranceFundAuthority`   | `PublicKey` | Authority signing the insurance fund transfer.                   |
+| `collateralTokenProgram`   | `PublicKey` | Token program for collateral.                                    |
+
+The SDK derives `CdpPosition` and `CollateralVault` PDAs client-side from
+`cdpOwner` before building the transaction.
 
 **Returns:** `Promise<TransactionSignature>`
 
-**Throws:** If `shortfallAmount <= 0n`.
+**Throws:** If the CDP position is not under-water at execution time (`NoBadDebt`).
 
 ---
 
@@ -130,12 +143,13 @@ Ergonomic alias for `triggerBackstop`. Accepts the same `TriggerBackstopArgs` /
 ```typescript
 await backstop.triggerBadDebtSocialization({
   mint,
+  cdpOwner,
+  oraclePriceFeed,
   insuranceFund,
   reserveVault,
   collateralMint,
   insuranceFundAuthority,
   collateralTokenProgram: TOKEN_PROGRAM_ID,
-  shortfallAmount: 40_000n,
 });
 ```
 
@@ -256,13 +270,16 @@ const active = await backstop.isBackstopEnabled(mint);
 
 ### `computeMaxDraw(params)` — off-chain
 
-Replicate the on-chain `trigger_backstop` draw calculation locally.
+Replicate the on-chain `trigger_backstop` draw calculation locally. Since
+**BUG-031** the on-chain shortfall is computed from CDP + oracle state, not
+supplied by the caller. Use `computeOnChainShortfall` (below) to derive the
+shortfall before passing it here.
 
 ```typescript
 const draw = backstop.computeMaxDraw({
   netSupply: 1_000_000n,
   maxBackstopBps: 500,      // 5%
-  shortfall: 40_000n,
+  shortfall: 40_000n,       // obtained from computeOnChainShortfall or BadDebtTriggered.computed_shortfall
   insuranceFundBalance: 100_000n,
 });
 // draw = 40_000n (shortfall is the binding constraint; fund has enough)
@@ -276,6 +293,35 @@ max_draw = maxBackstopBps == 0
 
 actual_draw = min(max_draw, insuranceFundBalance)  // when balance provided
 ```
+
+---
+
+### `computeOnChainShortfall(params)` — off-chain *(BUG-031)*
+
+Mirror the on-chain shortfall formula client-side for pre-flight checks and
+monitoring. Returns `0n` if the position is solvent.
+
+```typescript
+const shortfall = backstop.computeOnChainShortfall({
+  debtAmount: 1_000_000n,      // CdpPosition.debt_amount (native SSS units)
+  accruedFees: 5_000n,         // CdpPosition.accrued_fees
+  depositedAmount: 100_000n,   // CollateralVault.deposited_amount (native collateral units)
+  oraclePrice: 99_950_000n,    // oracle price mantissa
+  priceExpoAbs: 8,             // |expo| (e.g. 8 for 1e-8 price)
+  collateralDecimals: 6,       // collateral mint decimals
+  sssDecimals: 6,              // SSS mint decimals
+});
+```
+
+**Formula (mirrors on-chain):**
+```
+effective_debt = debt_amount + accrued_fees
+collateral_value_in_sss = deposited * oracle_price * 10^sss_decimals
+                          / (10^coll_decimals * 10^price_expo_abs)
+shortfall = max(0, effective_debt - collateral_value_in_sss)
+```
+
+Returns `0n` when `collateral_value_in_sss >= effective_debt`.
 
 ---
 
@@ -325,14 +371,17 @@ interface SetBackstopParamsArgs {
   maxBackstopBps: number;
 }
 
+// BUG-031: shortfallAmount removed; shortfall now computed on-chain.
+// cdpOwner + oraclePriceFeed added so the instruction can read CDP/vault PDAs.
 interface TriggerBackstopArgs {
   mint: PublicKey;
+  cdpOwner: PublicKey;         // owner of the CDP position being backstopped
+  oraclePriceFeed: PublicKey;  // price feed used for collateral valuation
   insuranceFund: PublicKey;
   reserveVault: PublicKey;
   collateralMint: PublicKey;
   insuranceFundAuthority: PublicKey;
   collateralTokenProgram: PublicKey;
-  shortfallAmount: bigint;
 }
 
 // TriggerBadDebtSocializationArgs = TriggerBackstopArgs
@@ -366,6 +415,26 @@ interface BackstopConfig {
 interface BackstopFundState extends BackstopConfig {
   fundBalance: bigint;
   fundMint: PublicKey;
+}
+
+// BUG-031: on-chain shortfall pre-flight helper
+interface ComputeOnChainShortfallParams {
+  debtAmount: bigint;
+  accruedFees: bigint;
+  depositedAmount: bigint;
+  oraclePrice: bigint;
+  priceExpoAbs: number;
+  collateralDecimals: number;
+  sssDecimals: number;
+}
+
+// BadDebtTriggered event (on-chain) — BUG-031 adds computed_shortfall
+interface BadDebtTriggeredEvent {
+  sssMint: PublicKey;
+  backstopAmount: bigint;
+  computedShortfall: bigint; // added BUG-031: on-chain-derived shortfall
+  remainingShortfall: bigint;
+  netSupply: bigint;
 }
 ```
 
@@ -417,11 +486,23 @@ const state = await backstop.fetchBackstopFundState(mint);
 const ratio = backstop.computeCoverageRatio(state.fundBalance, netSupply);
 console.log(`Coverage: ${(ratio * 100).toFixed(2)}%`);
 
-// 4. Estimate draw for a hypothetical shortfall
+// 4. Pre-flight: estimate on-chain shortfall for a CDP before triggering
+// (BUG-031: shortfall is now computed on-chain; use this for monitoring only)
+const shortfall = backstop.computeOnChainShortfall({
+  debtAmount: cdpPosition.debtAmount,
+  accruedFees: cdpPosition.accruedFees,
+  depositedAmount: collateralVault.depositedAmount,
+  oraclePrice: BigInt(oraclePriceData.price),
+  priceExpoAbs: Math.abs(oraclePriceData.exponent),
+  collateralDecimals: collateralMintInfo.decimals,
+  sssDecimals: sssMintInfo.decimals,
+});
+
+// 5. Estimate draw cap
 const draw = backstop.computeMaxDraw({
   netSupply,
   maxBackstopBps: state.maxBackstopBps,
-  shortfall: 40_000n,
+  shortfall,
   insuranceFundBalance: state.fundBalance,
 });
 ```

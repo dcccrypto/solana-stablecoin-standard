@@ -6,6 +6,17 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### BUG-031 — Bad Debt Backstop: On-Chain Shortfall Computation
+
+- `docs/on-chain-sdk-backstop.md` — updated `triggerBackstop` / `triggerBadDebtSocialization`
+  signatures: `shortfallAmount` param **removed**; `cdpOwner` + `oraclePriceFeed` **added**.
+  Shortfall is now computed entirely on-chain from `CdpPosition.debt_amount`,
+  `CollateralVault.deposited_amount`, and the oracle price feed. Instruction reverts
+  `NoBadDebt` if collateral covers the debt at trigger time. Security callout added.
+  New `computeOnChainShortfall()` helper documented for off-chain pre-flight checks.
+  `BadDebtTriggered` event gains `computed_shortfall` field. Type reference updated.
+  [commit 1407e2c]
+
 ### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
 - `docs/SECURITY.md` § 9 — full risk analysis of Token-2022 hook fail-open conditions: fail-open scenarios, current mitigations (Squads multisig, PDA ownership, fail-closed flags), residual risk, recommended operational + on-chain mitigations, incident response timeline [commit 0293169]
