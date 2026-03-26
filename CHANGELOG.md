@@ -6,11 +6,13 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
-### BUG-003 — Sanctions Oracle PDA Spoofing Guard (Audit C-2 refinement)
+### BUG-016 — Stability Fee `accrued_fees` Reset After Burn (commit d276b85)
 
-- `docs/SANCTIONS-ORACLE.md` — Security section updated: new subsection _PDA Spoofing Guard + Uninitialized PDA Semantics (BUG-003)_ documenting the `require!(sr_account.key() == expected_sr_pda)` spoofing guard, uninitialized-PDA = wallet-not-in-DB = allow semantic, and updated `SanctionsRecordMissing` error message referencing BUG-003 [commit 29d285f]
-- `programs/transfer-hook/src/lib.rs` — sanctions oracle path is now fully fail-closed: missing account → `SanctionsRecordMissing`; wrong key → `SanctionsRecordMissing`; uninitialized PDA → allow; initialized + not sanctioned → allow; initialized + sanctioned + fresh → `SanctionedAddress` [commit 29d285f]
-- `tests/sss-bug-003-sanctions-wrl-fail-open.ts` — 15 Anchor tests covering missing account, wrong-key account, uninitialized PDA allow, sanctioned block, stale record, FLAG_WALLET_RATE_LIMITS fail-closed verification [commit 29d285f]
+- `docs/stability-fee.md` — updated BUG-016 section to document the full fix:
+  - `cdp_position.accrued_fees` is now **reset to `0`** after each successful burn (previously it was never cleared, causing settled fees to persist as outstanding debt across collection rounds)
+  - Burn amount uses `total_to_burn = accrued_fees + fee_amount` (full pending balance cleared atomically per round)
+  - `StablecoinConfig.total_burned` now increments by `total_to_burn` (was using wrong variable `fee_amount` — compile error in prior attempt)
+  - State table, header, and accounting notes updated to reflect reset semantics
 
 ### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 

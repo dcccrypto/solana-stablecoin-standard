@@ -3,7 +3,7 @@
 > **Anchor instructions:** `set_stability_fee`, `collect_stability_fee`, `add_authorized_keeper`, `remove_authorized_keeper`
 > **SDK module:** `StabilityFeeModule` (`sdk/src/StabilityFeeModule.ts`, added SSS-096)
 > **Applies to:** SSS-3 (reserve-backed CDP) stablecoins only
-> **Bug fixes:** BUG-015 (keeper authorization), BUG-016 (accrued_fees double-count) — commit 7f9bbf2
+> **Bug fixes:** BUG-015 (keeper authorization), BUG-016 (accrued_fees double-count) — commits 7f9bbf2 + d276b85
 
 ---
 
@@ -51,11 +51,18 @@ Limits:
 
 Deployers must add at least one keeper pubkey via `add_authorized_keeper` for automated fee collection to work.
 
-### BUG-016 — `accrued_fees` Double-Count (commit 7f9bbf2)
+### BUG-016 — `accrued_fees` Double-Count (commits 7f9bbf2 + d276b85)
 
-**Problem:** `accrued_fees` on `CdpPosition` was incremented on every `collect_stability_fee` call, even though the fee was already burned from the debtor's balance. This double-counted the same amount in both `accrued_fees` and `total_burned` on `StablecoinConfig`.
+**Problem:** Two related bugs caused `accrued_fees` to misrepresent outstanding debt after fee collection:
 
-**Fix:** `accrued_fees` is **no longer incremented** on collection. Only `last_fee_accrual` and `StablecoinConfig.total_burned` are updated. `accrued_fees` now accurately reflects only pre-collection accruals.
+1. *(7f9bbf2)* `accrued_fees` was **incremented** on every `collect_stability_fee` call, even though the fee was already burned. This double-counted the same amount in both `accrued_fees` and `StablecoinConfig.total_burned`.
+2. *(d276b85)* After the burn, `accrued_fees` was never **reset to zero**, so previously-settled pending fees continued to show as outstanding debt across multiple collection rounds. Additionally, the burn used an undefined variable instead of `total_to_burn` (pending + new fee), which was a compile error — only the new incremental fee was being burned, not the full pending balance.
+
+**Fix (d276b85):**
+- `cdp_position.accrued_fees` is now **reset to `0`** after each successful burn (fees are settled).
+- Burn amount uses `total_to_burn = accrued_fees + fee_amount` (pending backlog + current round fee), ensuring the full outstanding balance is cleared atomically.
+- `StablecoinConfig.total_burned` is updated with `total_to_burn` (was incorrectly using `fee_amount` in previous build).
+- Only `last_fee_accrual` and `total_burned` update when `accrued_fees` was already 0 and the new fee is 0 (no-op path unchanged).
 
 > ⚠️ **Breaking change:** Existing integrations that passed `debtor` as a signer to `collect_stability_fee` must update to pass `caller` (keeper or authority keypair) instead. The `debtor` account remains in the instruction but is no longer a signer.
 
@@ -75,7 +82,7 @@ Deployers must add at least one keeper pubkey via `add_authorized_keeper` for au
 | Field | Type | Description |
 |---|---|---|
 | `last_fee_accrual` | `i64` | Unix timestamp of last `collect_stability_fee` call |
-| `accrued_fees` | `u64` | Pre-collection accrued fees (not incremented on burn — BUG-016 fix) |
+| `accrued_fees` | `u64` | Pending accrued fees; reset to `0` after each successful burn (BUG-016 fix — d276b85) |
 
 ---
 
@@ -277,7 +284,7 @@ for (const { debtor, debtorSssAccount } of positions) {
 
 - Burned fees increment `StablecoinConfig.total_burned` — reflected in `netSupply()` and the reserve ratio.
 - `CdpPosition.accrued_fees` is a running total for auditing; it is **not** deducted from `debt_amount` automatically.
-- **BUG-016:** `accrued_fees` is **not** incremented on collection — only `last_fee_accrual` and `StablecoinConfig.total_burned` update. This prevents the previously broken double-count where `accrued_fees` and `total_burned` both grew by the same burned amount.
+- **BUG-016 (d276b85):** `accrued_fees` is **reset to `0`** after each burn. The burn amount is `total_to_burn = accrued_fees + fee_amount` (full pending balance cleared atomically). `StablecoinConfig.total_burned` is updated with `total_to_burn`. This prevents the double-count where `accrued_fees` and `total_burned` both grew by the same burned amount, and ensures settled fees no longer appear as outstanding debt in subsequent rounds.
 - Positions with large uncollected fees will have higher effective debt, reducing their collateral ratio and moving them toward liquidation.
 - `last_fee_accrual` is updated even when the computed fee rounds to zero, preventing repeated zero-fee calls from accumulating un-timestamped time.
 
