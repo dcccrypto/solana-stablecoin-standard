@@ -19,7 +19,8 @@ describe("Integration: mint, burn, supply", () => {
   });
 
   it("mint() with tx_signature records it", async () => {
-    const sig = "5KtP9x2cZg7DnK1mHMT3fQ8uBpz4Wj6Yx9AvN2rELsS";
+    // Use a valid 88-char base58 Solana signature (format check in backend requires 80-90 chars)
+    const sig = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d6mi8ySAaJBx3YAN1mSbFcgzB9n6z6uMFnvNn3Z1sV8zQ";
     const event = await client.mint({
       token_mint: TOKEN_MINT,
       amount: 500_000,
