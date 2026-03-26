@@ -167,9 +167,11 @@ pub fn collect_stability_fee_handler(ctx: Context<CollectStabilityFee>) -> Resul
     )?;
 
     // BUG-016 FIX: Do NOT increment accrued_fees — the fee has been burned.
-    // Only update last_fee_accrual timestamp and total_burned on config.
+    // Reset accrued_fees to 0 (pending fees are now settled) and update
+    // last_fee_accrual timestamp and total_burned on config.
     // (Previously accrued_fees was incorrectly incremented here, double-counting
     // fees that had already left the debtor's balance via burn.)
+    ctx.accounts.cdp_position.accrued_fees = 0;
     ctx.accounts.cdp_position.last_fee_accrual = now;
 
     let config = &mut ctx.accounts.config;
