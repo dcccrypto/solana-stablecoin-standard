@@ -41,7 +41,7 @@ Public endpoint. No authentication required.
 
 ### `POST /api/mint`
 
-Record a stablecoin mint event. The recipient is checked against the blacklist before the event is persisted. On success, all registered `"mint"` (or `"all"`) webhooks are notified asynchronously.
+Record a stablecoin mint event. The recipient is checked against the blacklist before the event is persisted. The `tx_signature` is verified against the Solana RPC before the event is recorded — fabricated or missing signatures are rejected (BUG-035 / audit E-4). On success, all registered `"mint"` (or `"all"`) webhooks are notified asynchronously.
 
 **Request body**
 
@@ -50,7 +50,7 @@ Record a stablecoin mint event. The recipient is checked against the blacklist b
 | `token_mint` | string | ✓ | Solana token-mint public key |
 | `amount` | u64 | ✓ | Token amount (raw units, must be > 0) |
 | `recipient` | string | ✓ | Recipient wallet public key |
-| `tx_signature` | string | ✗ | Solana transaction signature |
+| `tx_signature` | string | ✓ | Solana transaction signature — must be a confirmed on-chain tx |
 
 ```json
 {
@@ -78,7 +78,7 @@ Record a stablecoin mint event. The recipient is checked against the blacklist b
 }
 ```
 
-**Response 400** — missing field, zero amount, or blacklisted recipient  
+**Response 400** — missing field, zero amount, blacklisted recipient, or unconfirmed/invalid `tx_signature`  
 **Response 401** — missing or invalid API key
 
 ---
@@ -87,7 +87,7 @@ Record a stablecoin mint event. The recipient is checked against the blacklist b
 
 ### `POST /api/burn`
 
-Record a stablecoin burn event. On success, all registered `"burn"` (or `"all"`) webhooks are notified asynchronously.
+Record a stablecoin burn event. The `tx_signature` is verified against the Solana RPC before the event is recorded — fabricated or missing signatures are rejected (BUG-035 / audit E-4). On success, all registered `"burn"` (or `"all"`) webhooks are notified asynchronously.
 
 **Request body**
 
@@ -96,7 +96,7 @@ Record a stablecoin burn event. On success, all registered `"burn"` (or `"all"`)
 | `token_mint` | string | ✓ | Solana token-mint public key |
 | `amount` | u64 | ✓ | Token amount (raw units, must be > 0) |
 | `source` | string | ✓ | Source wallet public key |
-| `tx_signature` | string | ✗ | Solana transaction signature |
+| `tx_signature` | string | ✓ | Solana transaction signature — must be a confirmed on-chain tx |
 
 ```json
 {
@@ -124,7 +124,7 @@ Record a stablecoin burn event. On success, all registered `"burn"` (or `"all"`)
 }
 ```
 
-**Response 400** — missing field or zero amount  
+**Response 400** — missing field, zero amount, or unconfirmed/invalid `tx_signature`  
 **Response 401** — missing or invalid API key
 
 ---

@@ -266,6 +266,19 @@ Define clear criteria for the multisig to call `pause()` immediately:
 
 ---
 
+## 8b. Backend API Security (Audit Fixes)
+
+| Item | Audit Ref | Status |
+|------|-----------|--------|
+| `tx_signature` required on `/api/mint` and `/api/burn`; RPC verification active (BUG-035 / E-4) | E-4 | 🔲 |
+| `SOLANA_TX_VERIFY_SKIP` env var **not set** in production backend | E-4 | 🔲 |
+| `SOLANA_RPC_URL` points to mainnet RPC endpoint | E-4 | 🔲 |
+| Timelock covers all 17 admin operations (BUG-010) | BUG-010 | 🔲 |
+| DAO governance: only DAO authority can propose on-chain actions (BUG-011) | BUG-011 | 🔲 |
+| Admin role separation: backend admin key ≠ program upgrade authority (BUG-033) | BUG-033 | 🔲 |
+
+---
+
 ## 9. Blacklist / Compliance Sanity Checks
 
 | Item | Status |
