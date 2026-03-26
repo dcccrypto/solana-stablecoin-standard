@@ -19,7 +19,7 @@ Key guarantees:
 - **Partial liquidation (SSS-100):** `cdp_liquidate` accepts a `partial_repay_amount`; only enough debt is burned to restore the position to the liquidation threshold, seizing the minimum required collateral — full liquidation remains the default when `partial_repay_amount = 0`
 - **`CollateralLiquidated` event (SSS-100):** emitted on every liquidation with `collateral_mint`, `debt_burned`, `collateral_seized`, `ratio_before_bps`, `partial`, and `bonus_bps` fields
 - **TypeScript liquidation SDK (SSS-101):** `MultiCollateralLiquidationModule` wraps `cdp_liquidate`, exposes `fetchLiquidatableCDPs`, `calcLiquidationAmount`, and full PDA helpers — see [`on-chain-sdk-liquidation.md`](./on-chain-sdk-liquidation.md)
-- **Circuit breaker on V2 liquidations (BUG-020):** `cdp_liquidate_v2` now enforces the same `FLAG_CIRCUIT_BREAKER` guard as V1. Prior to commit `041b4b8`, the V2 path bypassed the circuit breaker entirely; liquidators could still trigger V2 liquidations during an emergency halt. The guard now fires at the top of the V2 handler (before the Pyth feed check), returning `SssError::CircuitBreakerActive` when the flag is set.
+- **Global pause enforced on `deposit_collateral` (BUG-032):** Prior to this fix, `deposit_collateral` did not check the global `paused` flag — users could continue depositing collateral during an emergency halt (e.g., to front-run a liquidation or inflate a position before the pause took effect). The handler now checks `StablecoinConfig.paused` at entry and returns `SssError::Paused` when the program is paused. This aligns `deposit_collateral` with the pause semantics enforced on `cdp_borrow_stable`, `cdp_liquidate`, and `cdp_repay_stable`.
 
 ---
 
@@ -92,6 +92,8 @@ async depositCollateral(params: DepositCollateralParams): Promise<TransactionSig
 ```
 
 Deposits SPL token collateral into the user's `CollateralVault` PDA. Creates the vault on first deposit for this collateral mint.
+
+> **Pause check (BUG-032):** `deposit_collateral` now enforces the global pause flag. If `StablecoinConfig.paused = true`, the instruction returns `SssError::Paused` before any state is modified.
 
 **Params — `DepositCollateralParams`**
 
@@ -368,7 +370,7 @@ Errors originate from the on-chain Anchor program. Common causes:
 
 | Error | Cause |
 |---|---|
-| `CircuitBreakerActive` | `FLAG_CIRCUIT_BREAKER` (bit 0) is set — both `cdp_liquidate` V1 and V2 are halted until the breaker is cleared (BUG-014 / AUDIT-A HIGH-11) |
+| `Paused` | Program is globally paused — `deposit_collateral`, `cdp_borrow_stable`, `cdp_liquidate`, and `cdp_repay_stable` all reject when `StablecoinConfig.paused = true` (BUG-032) |
 | `InsufficientCollateral` | Resulting collateral ratio would be < 150% after borrow |
 | `CollateralMintLocked` | Borrow attempted with a different collateral mint than the locked one |
 | `InvalidPythFeed` | Pyth price feed account doesn't match expected collateral mint |

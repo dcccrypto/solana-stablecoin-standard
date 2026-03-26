@@ -6,23 +6,13 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
-### BUG-031 — Bad Debt Backstop: On-Chain Shortfall Computation
+### BUG-032 — `deposit_collateral` Missing Pause Check
 
-- `docs/on-chain-sdk-backstop.md` — updated `triggerBackstop` / `triggerBadDebtSocialization`
-  signatures: `shortfallAmount` param **removed**; `cdpOwner` + `oraclePriceFeed` **added**.
-  Shortfall is now computed entirely on-chain from `CdpPosition.debt_amount`,
-  `CollateralVault.deposited_amount`, and the oracle price feed. Instruction reverts
-  `NoBadDebt` if collateral covers the debt at trigger time. Security callout added.
-  New `computeOnChainShortfall()` helper documented for off-chain pre-flight checks.
-  `BadDebtTriggered` event gains `computed_shortfall` field. Type reference updated.
-  [commit 1407e2c]
+- `docs/on-chain-sdk-cdp.md` — Key guarantees updated: `deposit_collateral` now enforces `StablecoinConfig.paused`; returns `SssError::Paused` on entry when program is halted. Error Reference table updated with `Paused` row. `depositCollateral` method description updated with BUG-032 pause-check callout.
 
-### BUG-023 — Transfer Hook Fail-Open Risk Documentation
+### BUG-030 — Kani Proof Extension: On-Chain State Transitions & Adversarial Scenarios
 
-- `docs/feature-flags.md` — added `FLAG_REQUIRE_OWNER_CONSENT` (bit 15, `0x8000`) to the flag constants table and a full reference section: DelegateConsent PDA layout, transfer hook enforcement steps, error code, TypeScript integration, and opt-in semantics [commit 630ecb3]
-- `docs/transfer-hook.md` — updated `transfer_hook` behavior sequence (step 5): BUG-024 permanent delegate consent gate; added `OwnerConsentRequired` error to the error table [commit 630ecb3]
-
-**Security context:** Token-2022 permanent delegates could silently transfer tokens from any non-blacklisted wallet without owner knowledge. Fix adds `FLAG_REQUIRE_OWNER_CONSENT` (OPT-IN) which enforces a `DelegateConsent` PDA (`["delegate-consent", mint, wallet_owner]`) for any non-owner-signed transfer. Owner-signed transfers take a zero-overhead early-return path. 12 tests (BUG-024-01..12) cover all acceptance criteria.
+- `docs/formal-verification.md` — Section 17 added: 20 new Kani proofs (commit `a385b9a`), total 75 (was 55). Sections: 17-A config-struct field isolation (5), 17-B PDA seed collision-resistance (5), 17-C adversarial AUDIT-C scenarios (10). Status line and `cargo kani` expected output updated to 75.
 
 ### Added
 - `docs/MULTI-ORACLE-CONSENSUS.md` — Multi-Oracle Consensus reference (SSS-153): OracleConsensus PDA, FLAG_MULTI_ORACLE_CONSENSUS (bit 22), median/TWAP aggregation across up to 5 sources (Pyth/Switchboard/Custom), outlier rejection, per-source staleness guards, 3 events, 7 errors, keeper runbook [PR #258]

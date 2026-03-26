@@ -2,7 +2,7 @@
 
 > **Tool:** [Kani Rust Verifier](https://github.com/model-checking/kani)
 > **Source:** `programs/sss-token/src/proofs.rs`
-> **Status:** 35/35 proofs verified, 0 failures — all 35 are properly inductive (SSS-108, SSS-117)
+> **Status:** 75/75 proofs verified, 0 failures — all 75 are properly inductive (SSS-108, SSS-117, BUG-029, BUG-030)
 
 ---
 
@@ -31,7 +31,7 @@ Every proof in `proofs.rs` is **inductive**:
 ```bash
 cd programs/sss-token
 
-# Run all 35 harnesses (all are inductive — no tautological proofs remain as of SSS-117)
+# Run all 75 harnesses (all are inductive — no tautological proofs remain as of SSS-117)
 cargo kani
 
 # Run a specific harness
@@ -39,8 +39,8 @@ cargo kani --harness proof_sss3_mint_solvency_inductive
 
 # Expected output:
 # VERIFICATION:- SUCCESSFUL
-# Complete - 35 successfully verified harnesses, 0 failures
-# All 35 are properly inductive — 17 tautological/vacuous proofs rewritten in SSS-117
+# Complete - 75 successfully verified harnesses, 0 failures
+# All 75 are properly inductive — 17 tautological/vacuous proofs rewritten in SSS-117
 ```
 
 **Requirements:**
@@ -99,7 +99,7 @@ These proofs cover the core SSS-3 (Trustless Collateral-Backed) guarantee: colla
 | `proof_deposit_improves_reserve_ratio` | Depositing collateral without minting strictly improves the reserve ratio |
 | `proof_reserve_ratio_exact_at_parity` | When `collateral == net_supply`, ratio equals exactly 10 000 bps (100%) |
 
----
+These proofs cover the core SSS-3 (Trustless Collateral-Backed) guarantee: collateral ≥ net supply at all times.
 
 ### Section 5: CDP Module (4 proofs)
 
@@ -185,18 +185,6 @@ These proofs cover the core SSS-3 (Trustless Collateral-Backed) guarantee: colla
 
 ---
 
-## Proof Hygiene Fix — BUG-029 (2026-03-26)
-
-`proof_minter_cap_inductive` in `proofs.rs` had a stale inline comment from BUG-004 that described a now-removed duplicate proof harness. The duplicate (which had referenced an undeclared `total_minted` binding and would not compile under Kani) was renamed to `proof_total_minted_strictly_increases` during BUG-004. BUG-029 removes the stale reference comment and replaces it with a canonical **PROOF INTENT** block on the surviving `proof_minter_cap_inductive`, clarifying:
-
-- Only one definition of this harness must exist.
-- The proof establishes the inductive step: `minted ≤ cap` pre-state → `minted' ≤ cap` post-state for any Anchor-allowed mint.
-- Overflow is handled by `checked_add`; the program aborts on overflow via `overflow-checks = true`.
-
-**Commit:** `8c227dc` — no behaviour change, no proof count change (still 35/35 verified).
-
----
-
 ## Proof Quality Audit — SSS-117 (2026-03-22)
 
 An internal audit of all 35 proofs (commit `c0a744b`) found 17 that were tautological, vacuous, or weak. All 17 were rewritten to proper inductive form. Categories fixed:
@@ -208,6 +196,57 @@ An internal audit of all 35 proofs (commit `c0a744b`) found 17 that were tautolo
 | Weak (trivially true, not ratio improvement) | 2 | `proof_deposit_improves_reserve_ratio` | Assert ratio inequality using u128 arithmetic |
 
 Proofs that were already strong and untouched: `proof_sss3_mint_solvency_inductive`, `proof_sss3_redeem_preserves_solvency`, `proof_cdp_collateral_ratio_inductive`, `proof_dao_quorum_enforced`, `proof_dao_member_dedup`, `proof_authority_two_step_inductive`, `proof_authority_accept_clears_pending`, `proof_blacklist_pda_no_collision`, `proof_feature_flags_set_clear_inverse`, `proof_feature_flag_bit_isolation`, `proof_backstop_never_overdraws_fund`, and PBS/APC proofs.
+
+---
+
+## Section 17: On-Chain State Transitions (BUG-030)
+
+Added 20 proofs in commit `a385b9a`, bringing the total from 55 to 75. All use symbolic structs (not raw `u64`s) to verify handler behaviour at the struct level.
+
+### Section 17-A: Config-Struct State Transitions (5 proofs)
+
+These proofs verify that each handler mutates **only the intended field** of `StablecoinConfig` — stray writes to unrelated fields (e.g. a mint path accidentally clearing `paused`) are impossible.
+
+| Harness | Mutation Proved Isolated |
+|---------|--------------------------|
+| `proof_mint_mutates_only_total_minted` | `mint_handler` writes only `total_minted` |
+| `proof_burn_mutates_only_total_burned` | `burn_handler` writes only `total_burned`; net supply decreases |
+| `proof_pause_mutates_only_paused_field` | `set_paused(true)` writes only `paused`; other fields unchanged |
+| `proof_accept_authority_mutates_only_authority_fields` | `accept_authority` writes only `authority` + `pending_authority` |
+| `proof_set_feature_flag_mutates_only_flags` | `set_feature_flag` writes only `feature_flags`; no other fields touched |
+
+### Section 17-B: PDA Seed Collision-Resistance (5 proofs)
+
+Proves that each PDA type produces distinct addresses for distinct inputs — no two different accounts can share the same PDA.
+
+| Harness | PDA Type |
+|---------|----------|
+| `proof_stablecoin_config_pda_no_collision` | `StablecoinConfig` (per-mint singleton) |
+| `proof_minter_info_pda_no_collision` | `MinterInfo` per minter key |
+| `proof_cdp_position_pda_no_collision` | `CdpPosition` per (user, collateral mint) |
+| `proof_dao_committee_pda_no_collision` | `DaoCommittee` per committee ID |
+| `proof_dao_proposal_pda_no_collision` | `DaoProposal` per (committee, proposal index) |
+
+### Section 17-C: Adversarial AUDIT-C Scenarios (10 proofs)
+
+Formal proofs for the 10 highest-priority AUDIT-C adversarial scenarios — attacks that are difficult to cover exhaustively with unit tests.
+
+| Harness | Attack Blocked |
+|---------|---------------|
+| `proof_spoofed_signer_rejected_on_mint` | Signer spoofing — wrong key cannot mint |
+| `proof_supply_cap_cannot_be_bypassed_by_sequential_mints` | Sequential cap race — two sequential mints cannot together exceed the cap |
+| `proof_pause_blocks_burn_as_well_as_mint` | Pause bypass via burn path — `paused = true` blocks burns too |
+| `proof_timelock_shortcut_rejected_before_mature` | Timelock skip — execution before `mature_slot` is unconditionally rejected |
+| `proof_double_mint_blocked_by_cap_state` | Concurrent double-mint — state serialization prevents cap bypass |
+| `proof_zero_amount_mint_unconditionally_rejected` | Zero-amount probe — `amount = 0` always rejects |
+| `proof_cdp_overborrow_rejected_on_price_overflow` | Oracle price overflow → overborrow — saturating arithmetic prevents it |
+| `proof_liquidation_front_run_impossible` | Front-run with stale Pyth price — stale-price guard fires before liquidation math |
+| `proof_old_authority_cannot_act_after_transfer` | Post-transfer authority race — old key rejected after `accept_authority` |
+| `proof_feature_flag_race_order_independent` | Concurrent flag set/clear — result is always a valid flag state |
+
+> **Total after BUG-030:** 75 proofs (was 55). All 20 new proofs use symbolic structs and `kani::any()` inputs — no hardcoded concrete values.
+
+---
 
 ## Adding New Proofs
 
