@@ -592,4 +592,12 @@ pub mod sss_token {
             expiry_slot,
         )
     }
+
+    /// SSS-122: Migrate a StablecoinConfig PDA from v0 → current version.
+    ///
+    /// Idempotent — safe to call on already-migrated configs.
+    /// Required before mint/burn/redeem on configs created by a pre-SSS-122 build.
+    pub fn migrate_config(ctx: Context<MigrateConfig>) -> Result<()> {
+        instructions::upgrade::migrate_config_handler(ctx)
+    }
 }
