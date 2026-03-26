@@ -36,7 +36,7 @@ Seeds: `["sanctions-record", sss_mint, wallet_pubkey]`
 | `updated_slot` | `u64` | Slot at which the oracle last updated this record. |
 | `bump` | `u8` | PDA bump. |
 
-No record for a wallet = not sanctioned (oracle has not flagged it).
+When `FLAG_SANCTIONS_ORACLE` is active, the `SanctionsRecord` PDA **must** be passed in `remaining_accounts` on every transfer. If it is omitted the transfer is rejected with `SanctionsRecordMissing` (fail-closed — see Security below).
 
 ---
 
@@ -90,10 +90,11 @@ The transfer hook performs sanctions checks on every transfer when `FLAG_SANCTIO
 
 1. If `FLAG_SANCTIONS_ORACLE` not set → pass
 2. If `sanctions_oracle == Pubkey::default()` → pass
-3. If no `SanctionsRecord` for sender → pass (not flagged)
-4. If `record.is_sanctioned == false` → pass
-5. **Staleness check** (if `max_staleness_slots > 0`): if `current_slot - record.updated_slot > max_staleness_slots` → reject with `SanctionsRecordStale`
-6. If record is fresh and sanctioned → reject with `SanctionedAddress`
+3. Derive `expected_sr_pda = PDA(["sanctions-record", mint, src_owner])`
+4. Require `remaining_accounts[0]` exists and matches `expected_sr_pda` → if absent, reject with `SanctionsRecordMissing` (**fail-closed**, see Security below)
+5. If `record.is_sanctioned == false` → pass
+6. **Staleness check** (if `max_staleness_slots > 0`): if `current_slot - record.updated_slot > max_staleness_slots` → reject with `SanctionsRecordStale`
+7. If record is fresh and sanctioned → reject with `SanctionedAddress`
 
 **Error codes:**
 
@@ -101,6 +102,7 @@ The transfer hook performs sanctions checks on every transfer when `FLAG_SANCTIO
 |---|---|
 | `SanctionedAddress` | Transfer rejected; sender is on the sanctions list |
 | `SanctionsRecordStale` | Oracle has not refreshed the record within `max_staleness_slots` |
+| `SanctionsRecordMissing` | `SanctionsRecord` account not passed in `remaining_accounts` when oracle is active |
 
 ---
 
@@ -208,6 +210,18 @@ Recommended: set a staleness window aligned with your oracle's update frequency 
 
 ---
 
+## Security
+
+### Fail-Closed Enforcement (BUG-035 / Audit C-2, HIGH — fixed `cba65fc`)
+
+Prior to this fix the `SanctionsRecord` account was optional: if a sender did not include it in `remaining_accounts`, the hook treated the wallet as un-flagged and allowed the transfer. A sanctioned wallet could silently bypass screening by omitting the account.
+
+**Fix:** The hook now derives `expected_sr_pda` first, then requires the account be present via `.ok_or_else(HookError::SanctionsRecordMissing)`. Any transfer that omits the `SanctionsRecord` when `FLAG_SANCTIONS_ORACLE` is active is **rejected**.
+
+**Client impact:** All transfer callers must include the sender's `SanctionsRecord` PDA in `remaining_accounts[0]` whenever `FLAG_SANCTIONS_ORACLE` is set. The PDA address is deterministic — see _Computing the SanctionsRecord PDA_ above.
+
+---
+
 ## Tests
 
 20 anchor tests in `tests/sss-128-sanctions-oracle.ts` covering:
@@ -220,6 +234,7 @@ Recommended: set a staleness window aligned with your oracle's update frequency 
 - `max_staleness_slots` stored correctly (0 and non-zero)
 - `is_sanctioned` can flip true → false
 - Two wallets get independent PDAs
+- **BUG-035 (10 tests, `bug-035-036-transfer-hook-sanctions-zk-owner.ts`):** omitting `SanctionsRecord` in `remaining_accounts` rejects with `SanctionsRecordMissing` (fail-closed)
 
 ---
 

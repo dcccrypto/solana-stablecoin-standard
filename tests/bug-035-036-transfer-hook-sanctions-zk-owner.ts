@@ -1,5 +1,5 @@
 /**
- * BUG-035: Transfer hook sanctions oracle is fail-open (AUDIT-C C-1, HIGH)
+ * BUG-035: Transfer hook sanctions oracle is fail-open (AUDIT-C C-2, HIGH)
  * BUG-036: ZK compliance check uses delegate instead of token account owner (AUDIT-C C-3, MEDIUM)
  *
  * BUG-035 — Sanctions oracle fail-open:

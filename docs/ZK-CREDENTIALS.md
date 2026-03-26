@@ -242,8 +242,16 @@ The Groth16 proof reveals only that the user's wallet is a leaf in the credentia
 ### Proof expiry
 Set `proof_expiry_seconds` conservatively. The default of 30 days (2592000s) balances regulatory freshness requirements against user friction. Corporate or high-risk use cases should use shorter windows (e.g. 24 hours).
 
+### Transfer Hook PDA Derivation — Owner, Not Delegate (BUG-036 / Audit C-3, MEDIUM — fixed `cba65fc`)
+
+Prior to this fix, the transfer hook derived the `VerificationRecord` PDA using the **transfer authority** (account index 3, which is the delegate for delegated transfers). This allowed a sender with no `VerificationRecord` to delegate to a verified party and bypass ZK compliance entirely.
+
+**Fix:** The PDA is now derived from `src_owner` — the token account owner read from bytes 32..64 of the source token account — consistent with how blacklist and sanctions checks are keyed. Both `initialize_extra_account_meta_list` and `migrate_hook_extra_accounts` use `Seed::AccountData { account_index: 0, data_index: 32, length: 32 }`.
+
+**Client impact:** No change to how `VerificationRecord` is created. The hook always resolves the PDA from the token account owner. Integrators who were relying on delegated-transfer ZK compliance bypass (the old, incorrect behaviour) must ensure the actual token owner has a valid `CredentialRecord`.
+
 ### Wallet-bound records
-`CredentialRecord` is keyed by `(mint, user_pubkey, credential_type)`. Users who rotate wallets must re-submit proofs from their new key. There is no cross-wallet identity linking on-chain by design.
+`CredentialRecord` is keyed by `(mint, user_pubkey, credential_type)` where `user_pubkey` is the **token account owner**, not a delegate. Users who rotate wallets must re-submit proofs from their new key. There is no cross-wallet identity linking on-chain by design.
 
 ### Merkle root rotation
 When an issuer rotates the Merkle root (e.g. to add/revoke credentials), existing `CredentialRecord` PDAs remain valid until their `expires_at`. For immediate revocation, set a very short expiry window.
