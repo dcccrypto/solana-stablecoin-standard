@@ -22,6 +22,7 @@
 //! variable.  If the variable is absent or empty, delivery proceeds
 //! *without* a signature header (backwards-compatible for local dev).
 
+use chrono::{Duration, Utc};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use serde_json::Value;
@@ -74,7 +75,8 @@ pub async fn execute_attempt(
     }
 
     // Now perform the HTTP POST.
-    match post_json(url, body, secret).await {
+    let delivered_at = Utc::now().timestamp();
+    match post_json(url, body, delivery_id, delivered_at, secret.unwrap_or("")).await {
         Ok(()) => {
             info!(url = %url, delivery_id = %delivery_id, "Webhook delivered");
             if let Err(e) = db.mark_webhook_delivery_delivered(delivery_id) {
@@ -155,6 +157,8 @@ pub fn dispatch(db: &Arc<Database>, event_type: &str, payload: Value) {
         let payload_str = body.to_string();
 
         let secret_clone = secret.clone();
+        let body2 = body.clone();
+        let delivery_id2 = delivery_id.clone();
 
         tokio::spawn(async move {
             if let Err(e) = post_json(&url, &body, &delivery_id, delivered_at, &secret_clone).await {
@@ -169,7 +173,7 @@ pub fn dispatch(db: &Arc<Database>, event_type: &str, payload: Value) {
         let secret = wh.hashed_secret.clone();
 
         tokio::spawn(async move {
-            execute_attempt(&db_clone, &delivery_id, 1, &url, &body, secret.as_deref()).await;
+            execute_attempt(&db_clone, &delivery_id2, 1, &url, &body2, secret.as_deref()).await;
         });
     }
 }
@@ -206,8 +210,6 @@ async fn post_json(
     }
 
     let req = builder.body(Full::new(Bytes::from(json_bytes)))?;
-
-    let req = req_builder.body(Full::new(Bytes::from(json_bytes)))?;
     let client = Client::builder(TokioExecutor::new()).build_http::<Full<Bytes>>();
     let resp = client.request(req).await?;
     info!(status = %resp.status(), "Webhook HTTP response");

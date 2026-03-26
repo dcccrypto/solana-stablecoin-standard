@@ -355,4 +355,114 @@ pub enum SssError {
     UpgradeAuthorityGuardInvalidKey,
     #[msg("Upgrade authority mismatch — actual BPF upgrade authority differs from guard")]
     UpgradeAuthorityMismatch,
+    // SSS-121: Guardian errors
+    #[msg("Guardian list is empty — add at least one guardian before setting threshold")]
+    GuardianListEmpty,
+    #[msg("Guardian list is full (max 7)")]
+    GuardianListFull,
+    #[msg("Invalid guardian threshold — must be >= 1 and <= guardians.len()")]
+    InvalidGuardianThreshold,
+    #[msg("Duplicate guardian pubkey in list")]
+    DuplicateGuardian,
+    #[msg("Caller is not a registered guardian")]
+    NotAGuardian,
+    #[msg("Guardian-initiated pause timelock is still active")]
+    GuardianPauseTimelockActive,
+    // Config version
+    #[msg("Config version is too old — upgrade the config before calling this instruction")]
+    ConfigVersionTooOld,
+    // SSS-153: Multi-oracle consensus errors
+    #[msg("OracleConsensus PDA not found — call init_oracle_consensus first")]
+    OracleConsensusNotFound,
+    // SSS-BUG-008: Proof-of-Reserves errors
+    #[msg("Proof-of-Reserves has not been attested yet")]
+    PoRNotAttested,
+    #[msg("Proof-of-Reserves breach: reserve ratio below minimum — minting halted")]
+    PoRBreachHaltsMinting,
+    // SSS-147: Supply cap
+    #[msg("Supply cap is required for SSS-3 preset — set max_supply > 0")]
+    SupplyCapRequired,
+    // SSS-129: ZK credential
+    #[msg("CredentialRegistry not found — call init_credential_registry first")]
+    CredentialRegistryNotFound,
+    // SSS-153: Oracle errors
+    #[msg("Insufficient valid oracle sources for consensus")]
+    InsufficientOracles,
+    // SSS-156: Legal entity registry errors
+    #[msg("Invalid legal entity attestor — attestor pubkey does not match registry")]
+    InvalidLegalEntityAttestor,
+    #[msg("Invalid legal entity hash — hash must be 32 non-zero bytes")]
+    InvalidLegalEntityHash,
+    #[msg("Invalid jurisdiction — must be a 2-character ISO 3166-1 alpha-2 code")]
+    InvalidLegalEntityJurisdiction,
+    // SSS-131: Liquidation bonus errors
+    #[msg("Invalid liquidation tier config — thresholds must be ordered and bonuses within bounds")]
+    InvalidLiquidationTierConfig,
+    // SSS-153: Oracle consensus config errors
+    #[msg("Invalid oracle consensus config — check num_sources and max_age_slots")]
+    InvalidOracleConsensusConfig,
+    #[msg("Invalid oracle source index — index out of range")]
+    InvalidOracleSourceIndex,
+    // SSS-130: PID fee errors
+    #[msg("Invalid PID fee range — min_fee_bps must be <= max_fee_bps")]
+    InvalidPidFeeRange,
+    // SSS-132: PSM curve errors
+    #[msg("Invalid PSM curve base fee — must be <= max_fee_bps")]
+    InvalidPsmCurveBaseFee,
+    #[msg("Invalid PSM curve max fee — exceeds maximum allowed (1000 bps)")]
+    InvalidPsmCurveMaxFee,
+    // SSS-133: Wallet rate limit errors
+    #[msg("Invalid rate limit amount — must be > 0")]
+    InvalidRateLimitAmount,
+    #[msg("Invalid rate limit window — window_slots must be > 0")]
+    InvalidRateLimitWindow,
+    // SSS-129: ZK proof errors
+    #[msg("Invalid ZK proof — proof verification failed")]
+    InvalidZkProof,
+    // SSS-156: Legal entity attestation errors
+    #[msg("Legal entity has already been attested — cannot attest twice")]
+    LegalEntityAlreadyAttested,
+    #[msg("Legal entity record has expired")]
+    LegalEntityExpired,
+    // SSS-153: Multi-oracle not enabled
+    #[msg("Multi-oracle consensus not enabled — FLAG_MULTI_ORACLE_CONSENSUS is not set")]
+    MultiOracleNotEnabled,
+    #[msg("No oracle sources configured for consensus")]
+    OracleNoSourcesConfigured,
+    #[msg("Oracle remaining accounts count does not match num_sources")]
+    OracleRemainingAccountsMismatch,
+    // SSS-130: PID config not found
+    #[msg("PID config not found — call init_pid_config first")]
+    PidConfigNotFound,
+    // SSS-132: PSM curve config not found
+    #[msg("PSM curve config not found — call init_psm_curve_config first")]
+    PsmCurveConfigNotFound,
+    #[msg("PSM dynamic fees not enabled — FLAG_PSM_DYNAMIC_FEES is not set")]
+    PsmDynamicFeesNotEnabled,
+    #[msg("PSM dynamic swap output is zero after fee deduction")]
+    PsmSwapOutputZero,
+    // SSS-134: Squads authority errors
+    #[msg("Squads authority already set — FLAG_SQUADS_AUTHORITY is irreversible")]
+    SquadsAuthorityAlreadySet,
+    #[msg("Squads authority not set — FLAG_SQUADS_AUTHORITY is not enabled")]
+    SquadsAuthorityNotSet,
+    #[msg("Duplicate member in Squads member list")]
+    SquadsDuplicateMember,
+    #[msg("Squads member list is empty — provide at least one member")]
+    SquadsMembersEmpty,
+    #[msg("Squads member list is too large — max 10 members")]
+    SquadsMembersTooMany,
+    #[msg("Squads multisig PDA is invalid — does not match expected derivation")]
+    SquadsMultisigPdaInvalid,
+    #[msg("Squads signer does not match the configured multisig_pda")]
+    SquadsSignerMismatch,
+    #[msg("Squads threshold exceeds member count")]
+    SquadsThresholdExceedsMembers,
+    #[msg("Squads threshold must be >= 1")]
+    SquadsThresholdZero,
+    // SSS-133: Wallet rate limit errors
+    #[msg("Wallet rate limit exceeded — transfer would exceed window allowance")]
+    WalletRateLimitExceeded,
+    #[msg("Wallet rate limits not enabled — FLAG_WALLET_RATE_LIMITS is not set")]
+    WalletRateLimitsNotEnabled,
 }
