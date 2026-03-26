@@ -163,21 +163,23 @@ pub fn collect_stability_fee_handler(ctx: Context<CollectStabilityFee>) -> Resul
             },
             signer_seeds,
         ),
-        pending,
+        total_to_burn,
     )?;
 
     // BUG-016 FIX: Do NOT increment accrued_fees — the fee has been burned.
-    // Only update last_fee_accrual timestamp and total_burned on config.
+    // Reset accrued_fees to 0 (pending fees are now settled) and update
+    // last_fee_accrual timestamp and total_burned on config.
     // (Previously accrued_fees was incorrectly incremented here, double-counting
     // fees that had already left the debtor's balance via burn.)
+    ctx.accounts.cdp_position.accrued_fees = 0;
     ctx.accounts.cdp_position.last_fee_accrual = now;
 
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(fee_amount).unwrap();
+    config.total_burned = config.total_burned.checked_add(total_to_burn).unwrap();
 
     msg!(
         "SSS-092/BUG-015-016 stability fee: burned {} SSS from {}. elapsed={}s fee_bps={} caller={}",
-        fee_amount,
+        total_to_burn,
         ctx.accounts.debtor.key(),
         elapsed_secs,
         fee_bps,
