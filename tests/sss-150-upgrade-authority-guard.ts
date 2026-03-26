@@ -38,7 +38,7 @@ import { PublicKey, Keypair } from "@solana/web3.js";
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const FLAG_SQUADS_AUTHORITY = BigInt(1) << BigInt(15); // 32768
+const FLAG_SQUADS_AUTHORITY = BigInt(1) << BigInt(13); // 8192 — matches state.rs 1<<13
 
 // ---------------------------------------------------------------------------
 // Pure TypeScript model of StablecoinConfig (SSS-150 fields)

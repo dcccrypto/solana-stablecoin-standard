@@ -149,6 +149,7 @@ Endpoints:
 | [Preset: SSS-2 Compliant](docs/SSS-2.md) | SSS-2 preset specification |
 | [Preset: SSS-3 Trustless](docs/SSS-3.md) | SSS-3 trustless collateral-backed reference design |
 | [Preset: SSS-4 Institutional](docs/SSS-4-INSTITUTIONAL.md) | SSS-4 Squads V4 multisig authority — institutional grade m-of-n governance (SSS-134) |
+| [Upgrade Authority Guard](docs/UPGRADE-AUTHORITY-GUARD.md) | BPF upgrade authority transfer to Squads multisig + on-chain guard for continuous drift monitoring (SSS-150) |
 | [Architecture](docs/ARCHITECTURE.md) | Three-layer system architecture |
 | [Devnet Deployment](docs/devnet-deploy.md) | Deploying and smoke-testing on Solana devnet |
 | [Deployment Wizard](scripts/deploy-wizard.ts) | Interactive 10-step deployment wizard (`npm run wizard`) — guided safe initialization with footgun protections, dry-run, and deploy manifest (SSS-155) |
