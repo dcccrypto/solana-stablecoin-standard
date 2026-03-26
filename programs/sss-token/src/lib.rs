@@ -137,10 +137,19 @@ pub mod sss_token {
         instructions::cdp_liquidate_v2::cdp_liquidate_v2_handler(ctx, debt_to_repay, min_collateral_amount)
     }
 
-    /// SSS-092: Accrue and burn stability fees on a CDP position.
-    /// Callable by the debtor (or any keeper); debtor signs to authorise the burn.
+    /// SSS-092: Accrue stability fees on a CDP position (keeper-callable, no burn).
+    /// BUG-012 HIGH-05: debtor does NOT need to sign — any keeper can force accrual.
+    /// Fees are accrued to `accrued_fees`; actual burn occurs on repay or via
+    /// `burn_accrued_fees` (requires debtor signature).
     pub fn collect_stability_fee(ctx: Context<CollectStabilityFee>) -> Result<()> {
         instructions::stability_fee::collect_stability_fee_handler(ctx)
+    }
+
+    /// SSS-092: Burn previously accrued stability fees from debtor's token account.
+    /// BUG-012 CRIT-07: resets `accrued_fees` to 0 after burn to prevent double-count.
+    /// Requires debtor signature.
+    pub fn burn_accrued_fees(ctx: Context<BurnAccruedFees>) -> Result<()> {
+        instructions::stability_fee::burn_accrued_fees_handler(ctx)
     }
 
     // ─── Direction 3: CPI Composability Standard ──────────────────────────────

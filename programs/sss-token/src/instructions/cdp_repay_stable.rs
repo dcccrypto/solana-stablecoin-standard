@@ -8,6 +8,10 @@ use crate::error::SssError;
 use crate::events::CdpRepaid;
 use crate::state::{CdpPosition, CollateralVault, StablecoinConfig};
 
+// BUG-012: cdp_repay_stable must settle accrued_fees before/during repayment.
+// Repay flow: (1) burn accrued_fees first (fee settlement), (2) burn principal repay amount,
+// (3) release proportional collateral based on remaining debt post-repay.
+
 /// Repay SSS-3 stablecoin debt and release collateral proportionally.
 /// Burns the repaid SSS from user's account and transfers collateral back.
 #[derive(Accounts)]
@@ -93,23 +97,32 @@ pub fn cdp_repay_stable_handler(ctx: Context<CdpRepayStable>, amount: u64) -> Re
     require!(amount > 0, SssError::ZeroAmount);
 
     let position = &ctx.accounts.cdp_position;
-    require!(
-        position.debt_amount >= amount,
-        SssError::InsufficientDebt
-    );
-
-    // Proportional collateral release:
-    // release = deposited * (repay_amount / total_debt)
-    // Using integer math: release = deposited * repay_amount / total_debt
-    let deposited = ctx.accounts.collateral_vault.deposited_amount;
     let debt = position.debt_amount;
-    let collateral_to_release = (deposited as u128)
-        .checked_mul(amount as u128)
-        .unwrap()
-        .checked_div(debt as u128)
-        .unwrap_or(0) as u64;
+    let accrued_fees = position.accrued_fees;
 
-    // 1. Burn SSS from user
+    // BUG-012 CRIT-06: `amount` applies to principal debt only. accrued_fees are settled
+    // separately below. Validate amount against principal debt.
+    require!(debt >= amount, SssError::InsufficientDebt);
+
+    // Proportional collateral release based on remaining PRINCIPAL debt post-repay.
+    // (accrued_fees are settled but don't release proportional collateral — they represent
+    //  protocol revenue already accounted for.)
+    let deposited = ctx.accounts.collateral_vault.deposited_amount;
+    let collateral_to_release = if debt > 0 {
+        (deposited as u128)
+            .checked_mul(amount as u128)
+            .unwrap()
+            .checked_div(debt as u128)
+            .unwrap_or(0) as u64
+    } else {
+        0
+    };
+
+    // BUG-012 CRIT-06: total burn = principal repay amount + any pending accrued_fees
+    // This ensures accrued_fees cannot become phantom uncollectable debt.
+    let total_burn = amount.checked_add(accrued_fees).ok_or(error!(SssError::InvalidAmount))?;
+
+    // 1. Burn principal + accrued_fees from user
     spl_burn_checked(
         CpiContext::new(
             ctx.accounts.sss_token_program.to_account_info(),
@@ -119,7 +132,7 @@ pub fn cdp_repay_stable_handler(ctx: Context<CdpRepayStable>, amount: u64) -> Re
                 authority: ctx.accounts.user.to_account_info(),
             },
         ),
-        amount,
+        total_burn,
         ctx.accounts.sss_mint.decimals,
     )?;
 
@@ -157,6 +170,8 @@ pub fn cdp_repay_stable_handler(ctx: Context<CdpRepayStable>, amount: u64) -> Re
     // 3. Update state
     let position = &mut ctx.accounts.cdp_position;
     position.debt_amount = position.debt_amount.checked_sub(amount).unwrap();
+    // BUG-012 CRIT-06: reset accrued_fees to 0 — they have been burned above
+    position.accrued_fees = 0;
 
     let vault = &mut ctx.accounts.collateral_vault;
     vault.deposited_amount = vault
@@ -165,7 +180,8 @@ pub fn cdp_repay_stable_handler(ctx: Context<CdpRepayStable>, amount: u64) -> Re
         .unwrap_or(0);
 
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(amount).unwrap();
+    // total_burned includes both principal and fees
+    config.total_burned = config.total_burned.checked_add(total_burn).unwrap();
 
     emit!(CdpRepaid {
         sss_mint: ctx.accounts.sss_mint.key(),
@@ -177,8 +193,9 @@ pub fn cdp_repay_stable_handler(ctx: Context<CdpRepayStable>, amount: u64) -> Re
     });
 
     msg!(
-        "CDP: repaid {} SSS. Released {} collateral. Remaining debt: {}",
+        "CDP: repaid {} SSS principal + {} fees settled. Released {} collateral. Remaining debt: {}",
         amount,
+        accrued_fees,
         collateral_to_release,
         ctx.accounts.cdp_position.debt_amount,
     );
