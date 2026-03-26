@@ -1,7 +1,7 @@
 # SSS — Feature Flags Reference
 
 > **SDK class:** `FeatureFlagsModule` (`sdk/src/FeatureFlagsModule.ts`)
-> **Added:** SSS-059 | **Updated:** SSS-060 (FLAG_SPEND_POLICY — SSS-063), SSS-065 (FLAG_DAO_COMMITTEE — SSS-067), SSS-070 (FLAG_YIELD_COLLATERAL), SSS-075 (FLAG_ZK_COMPLIANCE), SSS-106 (FLAG_CONFIDENTIAL_TRANSFERS), SSS-107 (ConfidentialTransferModule SDK), BUG-024 (FLAG_REQUIRE_OWNER_CONSENT — bit 15)
+> **Added:** SSS-059 | **Updated:** SSS-060 (FLAG_SPEND_POLICY — SSS-063), SSS-065 (FLAG_DAO_COMMITTEE — SSS-067), SSS-070 (FLAG_YIELD_COLLATERAL), SSS-075 (FLAG_ZK_COMPLIANCE), SSS-106 (FLAG_CONFIDENTIAL_TRANSFERS), SSS-107 (ConfidentialTransferModule SDK), SSS-156 (FLAG_LEGAL_REGISTRY — bit 24)
 
 ---
 
@@ -26,9 +26,26 @@ corresponding behaviour; clearing it deactivates it.
 | `FLAG_YIELD_COLLATERAL` | 3 | `0x08` | Enables yield-bearing SPL tokens (e.g. stSOL, mSOL) as CDP collateral. Enabled atomically by `init_yield_collateral`. SSS-3 only. |
 | `FLAG_ZK_COMPLIANCE` | 4 | `0x10` | Enforces zero-knowledge proof verification on transfers: sender must hold a valid, non-expired `VerificationRecord` PDA. Enabled atomically by `init_zk_compliance`. SSS-2 only. |
 | `FLAG_CONFIDENTIAL_TRANSFERS` | 5 | `0x20` | Enables Token-2022 ElGamal encrypted confidential transfers. Stores an auditor ElGamal pubkey in `ConfidentialTransferConfig` PDA. Managed via `ConfidentialTransferModule` (SSS-107). |
-| `FLAG_REQUIRE_OWNER_CONSENT` | 15 | `0x8000` | **BUG-024 (AUDIT MEDIUM).** Requires a `DelegateConsent` PDA for permanent-delegate transfers. When set, the transfer hook rejects any token move where the signer is not the wallet owner unless a valid `DelegateConsent` PDA (`["delegate-consent", mint, wallet_owner]`) is present in `remaining_accounts`. Owner-signed transfers bypass the check at zero overhead. OPT-IN: issuers needing permanent-delegate for compliance workflows leave this unset. |
+| `FLAG_TRAVEL_RULE` | 6 | `0x40` | Enforces travel-rule data attachment on transfers above threshold. |
+| `FLAG_SANCTIONS_ORACLE` | 7 | `0x80` | Requires a valid sanctions-oracle clearance PDA before each transfer. |
+| `FLAG_ZK_CREDENTIALS` | 8 | `0x100` | Enforces zero-knowledge credential verification on transfers. |
+| `FLAG_PID_FEE_CONTROL` | 9 | `0x200` | Enables PID-controller-driven stability fee. |
+| `FLAG_GRAD_LIQUIDATION_BONUS` | 10 | `0x400` | Enables graduated liquidation bonus tiers. |
+| `FLAG_PSM_DYNAMIC_FEES` | 11 | `0x800` | Enables dynamic Peg Stability Module fees. |
+| `FLAG_WALLET_RATE_LIMITS` | 12 | `0x1000` | Enforces per-wallet transfer rate limits. |
+| `FLAG_SQUADS_AUTHORITY` | 13 | `0x2000` | Requires all authority-gated operations to be signed by a Squads multisig PDA. |
+| `FLAG_BRIDGE_ENABLED` | 17 | `0x20000` | Enables cross-chain bridge mint/burn. |
+| `FLAG_MARKET_MAKER_HOOKS` | 18 | `0x40000` | Enables market-maker hook rate-limits and oracle spread checks. |
+| `FLAG_AGENT_PAYMENT_CHANNEL` | 19 | `0x80000` | Enables agent payment channel instructions. |
+| `FLAG_PROBABILISTIC_MONEY` | 20 | `0x100000` | Enables probabilistic transfer lottery mechanics. |
+| `FLAG_INSURANCE_VAULT_REQUIRED` | 21 | `0x200000` | Requires an insurance vault PDA to be funded before mint operations. |
+| `FLAG_MULTI_ORACLE_CONSENSUS` | 22 | `0x400000` | Enables multi-oracle median/TWAP consensus price feed (up to 5 sources). |
+| `FLAG_REDEMPTION_QUEUE` | 23 | `0x800000` | Enables the redemption queue with priority ordering and rate limiting. |
+| `FLAG_LEGAL_REGISTRY` | 24 | `0x1000000` | Creates an `IssuerRegistry` PDA binding the issuer's legal entity to the on-chain program. Enabled atomically by `register_legal_entity`. |
+| `FLAG_POR_HALT_ON_BREACH` | 16 | `0x10000` | Halts all mint operations when the proof-of-reserves ratio drops below the configured threshold. |
+| `FLAG_REQUIRE_OWNER_CONSENT` | 15 | `0x8000` | Requires explicit owner consent PDA before a permanent delegate may transfer tokens. |
 
-> **Reserved bits:** bits 6–14 and 16–63 are reserved for future protocol flags.
+> **Reserved bits:** bits 25–63 are reserved for future protocol flags.
 > Do not set them directly.
 
 ---
@@ -956,6 +973,62 @@ sss-cli spend-policy clear \
 
 ---
 
+---
+
+### `FLAG_LEGAL_REGISTRY`
+
+> **SSS-156** — Issuer Legal Entity Registry — on-chain regulatory traceability.
+
+```typescript
+// TypeScript SDK
+export const FLAG_LEGAL_REGISTRY = 1n << 24n; // 0x1000000
+```
+
+```rust
+// Anchor program (state.rs)
+pub const FLAG_LEGAL_REGISTRY: u64 = 1 << 24; // 0x1000000
+```
+
+When `FLAG_LEGAL_REGISTRY` is set in `StablecoinConfig.feature_flags`:
+
+- An `IssuerRegistry` PDA `["issuer_registry", config_pubkey]` is created, binding the issuer's legal entity hash, jurisdiction, and registration number hash to the on-chain program.
+- A designated attestor (notary/lawyer) must co-sign the record via `attest_legal_entity`.
+- Regulators can verify the issuer's identity without any PII appearing on-chain (all identifying data stored as SHA-256 hashes; only jurisdiction is plaintext).
+
+**Set by:** `register_legal_entity` (authority-only; creates the PDA and sets this flag atomically)
+
+**Cleared by:** Not cleared automatically; the flag persists as long as the registry PDA exists.
+
+#### Key Accounts
+
+| Account | Seeds | Description |
+|---|---|---|
+| `IssuerRegistry` | `["issuer_registry", config_pubkey]` | Stores `legal_entity_hash`, `jurisdiction`, `registration_number_hash`, `attestor`, `attested`, `expiry_slot` |
+
+#### Instructions
+
+| Instruction | Authority | Description |
+|---|---|---|
+| `register_legal_entity` | Config authority | Creates the `IssuerRegistry` PDA and sets `FLAG_LEGAL_REGISTRY`. |
+| `attest_legal_entity` | Designated attestor | Co-signs the registry record (`attested = true`). |
+| `update_legal_entity` | Config authority | Updates registry data; resets `attested = false` (re-attestation required). |
+
+#### Error Codes
+
+| Code | Description |
+|---|---|
+| `InvalidLegalEntityHash` | `legal_entity_hash` or `registration_number_hash` is all-zeros |
+| `InvalidLegalEntityJurisdiction` | `jurisdiction` field is all-zeros |
+| `InvalidLegalEntityAttestor` | `attestor` is the zero pubkey |
+| `LegalEntityAlreadyAttested` | Record already attested; call `update_legal_entity` first |
+| `LegalEntityExpired` | `expiry_slot` has passed |
+
+#### Regulatory Use
+
+Supports MiCA Article 68 (authorized credit institution disclosure) and the GENIUS Act issuer disclosure requirements. See [`LEGAL-ENTITY-REGISTRY.md`](./LEGAL-ENTITY-REGISTRY.md) for the full guide.
+
+---
+
 ## Related Docs
 
 - [on-chain-sdk-admin.md](./on-chain-sdk-admin.md) — pause/unpause, minter management, authority transfer
@@ -964,4 +1037,5 @@ sss-cli spend-policy clear \
 - [transfer-hook.md](./transfer-hook.md) — transfer-hook extra account metas (FLAG_ZK_COMPLIANCE index 7)
 - [compliance-module.md](./compliance-module.md) — compliance authority, ZK oracle patterns
 - [confidential-transfers.md](./confidential-transfers.md) — FLAG_CONFIDENTIAL_TRANSFERS full reference + ConfidentialTransferModule SDK
+- [LEGAL-ENTITY-REGISTRY.md](./LEGAL-ENTITY-REGISTRY.md) — FLAG_LEGAL_REGISTRY (bit 24) issuer legal entity registry guide
 - [SSS-3.md](./SSS-3.md) — protocol specification

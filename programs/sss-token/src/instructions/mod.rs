@@ -111,5 +111,8 @@ pub use circuit_breaker_keeper::*;
 pub mod blacklist;
 pub use blacklist::*;
 
+pub mod legal_entity_registry;
+pub use legal_entity_registry::*;
+
 // Re-export param types from state
 pub use crate::state::{InitializeParams, UpdateRolesParams};

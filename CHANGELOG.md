@@ -6,10 +6,11 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
-### BUG-029 — Remove Stale Duplicate Proof Comment; Add PROOF INTENT to `proof_minter_cap_inductive`
+### SSS-156 — Issuer Legal Entity Registry
 
-- `programs/sss-token/src/proofs.rs` — removed stale BUG-004 inline comment that described a no-longer-existing duplicate `proof_minter_cap_inductive` harness; added canonical PROOF INTENT block explaining the single surviving harness's inductive argument, uniqueness requirement, and overflow handling [commit 8c227dc]
-- `docs/formal-verification.md` — added BUG-029 section under Proof Hygiene documenting the cleanup and confirming 35/35 proofs still verified
+- `docs/LEGAL-ENTITY-REGISTRY.md` — full regulatory traceability guide: `FLAG_LEGAL_REGISTRY` (bit 24), `IssuerRegistry` PDA fields, `register_legal_entity` / `attest_legal_entity` / `update_legal_entity` instructions, regulatory verification flow, privacy design (hashed fields, plaintext jurisdiction only), MiCA Art.68 + GENIUS Act mapping, TypeScript register + verify examples [commit d0ab961]
+- `docs/feature-flags.md` — added `FLAG_LEGAL_REGISTRY` (bit 24, `0x1000000`) to flag constants table + full `### FLAG_LEGAL_REGISTRY` section with TypeScript/Rust constants, instruction table, error codes, and Related Docs cross-link [commit d0ab961]
+- `README.md` — added `LEGAL-ENTITY-REGISTRY.md` row under Compliance docs
 
 ### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
