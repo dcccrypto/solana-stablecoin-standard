@@ -57,7 +57,9 @@ const op = new OracleParamsModule(provider, programId);
 
 Configure oracle staleness and confidence parameters for a stablecoin.
 
-**Authority required:** stablecoin `authority` (admin).
+> **⚠️ TIMELOCK REQUIRED (BUG-017 / AUDIT-A HIGH-06):** `set_oracle_params` is protected by the admin timelock (`ADMIN_OP_SET_ORACLE_PARAMS`, op_kind=5). Direct invocations are rejected by the on-chain program when `admin_timelock_delay > 0`. Use [`AdminTimelockModule.setOracleParams()`](./on-chain-sdk-admin-timelock.md#setoracleparams) for the propose → wait → execute flow, or call `proposeTimelockOp` with `opKind: ADMIN_OP_SET_ORACLE_PARAMS` directly. `OracleParamsModule.setOracleParams()` should only be called in zero-delay test environments.
+
+**Authority required:** stablecoin `authority` (admin); timelock-protected on mainnet.
 
 ```typescript
 setOracleParams(args: SetOracleParamsArgs): Promise<TransactionSignature>
@@ -75,22 +77,30 @@ setOracleParams(args: SetOracleParamsArgs): Promise<TransactionSignature>
 - `maxAgeSecs`: `u32` range (0–4,294,967,295)
 - `maxConfBps`: `u16` range (0–65,535); practical values are 50–500 bps
 
-**Example — tighten mainnet settings:**
+**Example — tighten mainnet settings (via AdminTimelockModule — required on mainnet):**
 
 ```typescript
-import { RECOMMENDED_MAX_ORACLE_CONF_BPS } from '@sss/sdk';
+import { AdminTimelockModule } from '@sss/sdk';
 
-const sig = await op.setOracleParams({
+const timelock = new AdminTimelockModule(provider, program);
+
+// Step 1: propose (timelock-protected)
+const sig = await timelock.setOracleParams({
   mint,
-  maxAgeSecs: 60,                           // reject prices older than 60 s
-  maxConfBps: RECOMMENDED_MAX_ORACLE_CONF_BPS, // reject conf > 1% of price
+  maxOracleAgeSecs: 60,
+  maxOracleConfBps: 100, // 1%
 });
-console.log('Oracle params set:', sig);
+console.log('SET_ORACLE_PARAMS proposed, matures in ~2 days:', sig);
+
+// Step 2: wait for mature_slot (~432 000 slots), then execute
+await timelock.executeTimelockOp({ mint });
+console.log('Oracle params updated');
 ```
 
-**Example — relax for devnet / mock feeds:**
+**Example — devnet / zero-delay test environment only:**
 
 ```typescript
+// Only valid when config.admin_timelock_delay = 0
 await op.setOracleParams({
   mint,
   maxAgeSecs: 300,  // 5-minute tolerance
@@ -104,6 +114,7 @@ await op.setOracleParams({
 |---|---|
 | `Unauthorized` | Caller is not the stablecoin authority |
 | `AccountNotInitialized` | `StablecoinConfig` PDA does not exist |
+| `TimelockRequired` | `admin_timelock_delay > 0` and direct call attempted (mainnet) |
 
 ---
 
@@ -245,4 +256,5 @@ interface OracleParams {
 
 - [on-chain-sdk-cdp.md](./on-chain-sdk-cdp.md) — CDP borrowing and collateral management
 - [on-chain-sdk-admin.md](./on-chain-sdk-admin.md) — Admin & governance methods
+- [on-chain-sdk-admin-timelock.md](./on-chain-sdk-admin-timelock.md) — Timelock module (required for `set_oracle_params` and `set_pyth_feed` on mainnet)
 - [on-chain-sdk-core.md](./on-chain-sdk-core.md) — Core lifecycle methods

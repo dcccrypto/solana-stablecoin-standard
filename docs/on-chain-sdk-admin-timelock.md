@@ -11,14 +11,16 @@
 
 | Method | Description |
 |---|---|
-| [`proposeTimelockOp()`](#proposetimelockop) | Queue an admin operation (authority transfer or feature-flag change) |
+| [`proposeTimelockOp()`](#proposetimelockop) | Queue an admin operation (authority transfer, feature-flag change, Pyth feed, or oracle params) |
 | [`executeTimelockOp()`](#executetimelockop) | Execute the queued op once the delay has elapsed |
 | [`cancelTimelockOp()`](#canceltimelockop) | Cancel a pending op before it executes |
-| [`setPythFeed()`](#setpythfeed) | Register the canonical Pyth price feed (SSS-085 Fix 1) |
+| [`setPythFeed()`](#setpythfeed) | Register the canonical Pyth price feed via timelock (ADMIN_OP_SET_PYTH_FEED) |
+| [`setOracleParams()`](#setoracleparams) | Set oracle staleness / confidence params via timelock (ADMIN_OP_SET_ORACLE_PARAMS) |
 | [`decodePendingOp()`](#decodependingop) | Decode a pending op from a fetched config account |
 
 See [on-chain-sdk-admin.md](./on-chain-sdk-admin.md) for non-timelocked admin operations.
 See [on-chain-sdk-cdp.md](./on-chain-sdk-cdp.md) for how `setPythFeed` affects borrowing and liquidation.
+See [on-chain-sdk-oracle-params.md](./on-chain-sdk-oracle-params.md) for the full oracle-params reference.
 
 ---
 
@@ -45,18 +47,6 @@ import {
   ADMIN_OP_CLEAR_FEATURE_FLAG,
   ADMIN_OP_SET_PYTH_FEED,
   ADMIN_OP_SET_ORACLE_PARAMS,
-  ADMIN_OP_SET_STABILITY_FEE,
-  ADMIN_OP_SET_PSM_FEE,
-  ADMIN_OP_SET_BACKSTOP_PARAMS,
-  ADMIN_OP_SET_SPEND_LIMIT,
-  ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY,
-  ADMIN_OP_SET_ORACLE_CONFIG,
-  ADMIN_OP_SET_MIN_RESERVE_RATIO,
-  ADMIN_OP_SET_TRAVEL_RULE_THRESHOLD,
-  ADMIN_OP_SET_SANCTIONS_PARAMS,
-  ADMIN_OP_SET_TIMELOCK_DELAY,
-  ADMIN_OP_PAUSE,
-  ADMIN_OP_UNPAUSE,
   DEFAULT_ADMIN_TIMELOCK_DELAY,
 } from '@stbr/sss-token';
 ```
@@ -73,20 +63,8 @@ import {
 | `ADMIN_OP_TRANSFER_AUTHORITY` | `1` | Pending authority transfer |
 | `ADMIN_OP_SET_FEATURE_FLAG` | `2` | Pending feature-flag enable |
 | `ADMIN_OP_CLEAR_FEATURE_FLAG` | `3` | Pending feature-flag disable |
-| `ADMIN_OP_SET_PYTH_FEED` | `4` | Register canonical Pyth price feed |
-| `ADMIN_OP_SET_ORACLE_PARAMS` | `5` | Update oracle parameters |
-| `ADMIN_OP_SET_STABILITY_FEE` | `6` | Change stability fee rate |
-| `ADMIN_OP_SET_PSM_FEE` | `7` | Change PSM fee rate |
-| `ADMIN_OP_SET_BACKSTOP_PARAMS` | `8` | Update bad-debt backstop parameters |
-| `ADMIN_OP_SET_SPEND_LIMIT` | `9` | Update spend policy limit |
-| `ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` | `10` | Transfer compliance authority key |
-| `ADMIN_OP_SET_ORACLE_CONFIG` | `11` | Update oracle config |
-| `ADMIN_OP_SET_MIN_RESERVE_RATIO` | `12` | Change minimum reserve ratio |
-| `ADMIN_OP_SET_TRAVEL_RULE_THRESHOLD` | `13` | Change travel rule threshold |
-| `ADMIN_OP_SET_SANCTIONS_PARAMS` | `14` | Update sanctions oracle parameters |
-| `ADMIN_OP_SET_TIMELOCK_DELAY` | `15` | Change the timelock delay itself (min 216 000 slots to prevent self-reset) |
-| `ADMIN_OP_PAUSE` | `16` | Emergency pause via timelock path |
-| `ADMIN_OP_UNPAUSE` | `17` | Unpause via timelock path |
+| `ADMIN_OP_SET_PYTH_FEED` | `4` | Pending Pyth price feed update (BUG-017 / AUDIT-A HIGH-06) |
+| `ADMIN_OP_SET_ORACLE_PARAMS` | `5` | Pending oracle staleness / confidence-interval update (BUG-017 / AUDIT-A HIGH-06) |
 | `DEFAULT_ADMIN_TIMELOCK_DELAY` | `432_000n` slots | ≈ 2 Solana epochs ≈ 2 days |
 
 > **Note on compliance authority transfer:** When `admin_timelock_delay > 0`, calling `update_roles` to transfer the compliance authority is blocked on-chain. Use `ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` (op kind `10`) via the propose → execute flow instead.
@@ -132,15 +110,16 @@ Propose a timelocked admin operation. Only one operation may be pending at a tim
 | Field | Type | Description |
 |---|---|---|
 | `mint` | `PublicKey` | The stablecoin mint |
-| `opKind` | `AdminOpKind` | `ADMIN_OP_TRANSFER_AUTHORITY`, `ADMIN_OP_SET_FEATURE_FLAG`, or `ADMIN_OP_CLEAR_FEATURE_FLAG` |
-| `param` | `bigint` | Flag bits for flag ops; `0n` for authority transfer |
-| `target` | `PublicKey` | New authority for `ADMIN_OP_TRANSFER_AUTHORITY`; `PublicKey.default` for flag ops |
+| `opKind` | `AdminOpKind` | `ADMIN_OP_TRANSFER_AUTHORITY`, `ADMIN_OP_SET_FEATURE_FLAG`, `ADMIN_OP_CLEAR_FEATURE_FLAG`, `ADMIN_OP_SET_PYTH_FEED`, or `ADMIN_OP_SET_ORACLE_PARAMS` |
+| `param` | `bigint` | Flag bits for flag ops; `0n` for authority transfer, Pyth feed, or oracle-params ops |
+| `target` | `PublicKey` | New authority for `ADMIN_OP_TRANSFER_AUTHORITY`; Pyth feed pubkey for `ADMIN_OP_SET_PYTH_FEED`; `PublicKey.default` for all other ops |
+| `oracleParams` | `{ maxOracleAgeSecs: number, maxOracleConfBps: number }` | Required for `ADMIN_OP_SET_ORACLE_PARAMS`; omit for all other ops |
 
 **Returns:** `Promise<TransactionSignature>`
 
 **Throws:**
 - `SSSError` if `opKind` is `ADMIN_OP_NONE` (0) — passing a no-op kind locks out all admin operations for the full timelock delay (~2 days) without effect. See [AUDIT-F2 fix](#security-notes) and [audit finding](#audit-findings).
-- If `opKind` is not one of the three valid operation kinds.
+- If `opKind` is not one of the five valid operation kinds.
 
 **Example — propose an authority transfer:**
 
@@ -236,9 +215,11 @@ console.log('Pending op cancelled:', sig);
 async setPythFeed(params: SetPythFeedParams): Promise<TransactionSignature>
 ```
 
-Register the canonical Pyth price feed for the stablecoin's CDP module (SSS-085 Fix 1 — FINDING-006 mitigation). After calling this, both `cdp_borrow_stable` and `cdp_liquidate` will reject any price-feed account that does not exactly match the stored pubkey, blocking price-feed substitution attacks.
+Convenience wrapper that proposes a `ADMIN_OP_SET_PYTH_FEED` (op_kind=4) timelocked operation to register the canonical Pyth price feed for the stablecoin's CDP module (SSS-085 Fix 1 — FINDING-006 mitigation, BUG-017 / AUDIT-A HIGH-06). After the proposal matures and is executed, both `cdp_borrow_stable` and `cdp_liquidate` will reject any price-feed account that does not exactly match the stored pubkey, blocking price-feed substitution attacks.
 
-**Authority required:** current admin authority (not timelocked — immediate effect).
+> **⚠️ BREAKING (BUG-017):** Prior documentation incorrectly described `setPythFeed` as "immediate / not timelocked". The on-chain program **enforces the timelock** for this instruction (direct calls are rejected when `admin_timelock_delay > 0`). Always use the propose → wait → execute flow. See [AUDIT-A HIGH-06](#audit-a-high-06-oracle-config-not-behind-timelock).
+
+**Authority required:** current admin authority (timelock-protected).
 
 #### `SetPythFeedParams`
 
@@ -247,18 +228,59 @@ Register the canonical Pyth price feed for the stablecoin's CDP module (SSS-085 
 | `mint` | `PublicKey` | The stablecoin mint |
 | `feed` | `PublicKey` | The canonical Pyth price feed pubkey |
 
-> **Note:** `setPythFeed` is an immediate instruction (not timelocked). However, it is included in `AdminTimelockModule` because it is an admin-only operation added as part of the SSS-085 security fixes.
-
-**Example:**
+**Example — full propose → wait → execute flow:**
 
 ```typescript
 const SOL_USD_PYTH = new PublicKey('J83w4HKfqxwcq3BEMMkPFSppX3gqekLyLJBexebFVkix');
 
+// Step 1: propose
 const sig = await timelock.setPythFeed({
   mint,
   feed: SOL_USD_PYTH,
 });
-console.log('Pyth feed registered:', sig);
+console.log('SET_PYTH_FEED proposed, matures in ~2 days:', sig);
+
+// Step 2: wait for mature_slot, then execute
+await timelock.executeTimelockOp({ mint });
+console.log('Pyth feed registered:', SOL_USD_PYTH.toBase58());
+```
+
+---
+
+### `setOracleParams()`
+
+```typescript
+async setOracleParams(params: SetOracleParamsTimelockParams): Promise<TransactionSignature>
+```
+
+Convenience wrapper that proposes a `ADMIN_OP_SET_ORACLE_PARAMS` (op_kind=5) timelocked operation to update oracle staleness and confidence-interval constraints (BUG-017 / AUDIT-A HIGH-06). After the proposal matures and is executed, `StablecoinConfig.max_oracle_age_secs` and `max_oracle_conf_bps` are updated atomically and take effect for all subsequent CDP borrows and liquidations.
+
+> **⚠️ BREAKING (BUG-017):** Prior documentation in [on-chain-sdk-oracle-params.md](./on-chain-sdk-oracle-params.md) described `set_oracle_params` as authority-only but did not mention timelock enforcement. The on-chain program **requires** the timelock for this instruction when `admin_timelock_delay > 0`. Direct calls are rejected. Always use the propose → wait → execute flow.
+
+**Authority required:** current admin authority (timelock-protected).
+
+#### `SetOracleParamsTimelockParams`
+
+| Field | Type | Description |
+|---|---|---|
+| `mint` | `PublicKey` | The stablecoin mint |
+| `maxOracleAgeSecs` | `number` | Maximum allowed Pyth price age in seconds (`0` → 60 s on-chain default) |
+| `maxOracleConfBps` | `number` | Maximum confidence/price ratio in basis points (`0` → disabled) |
+
+**Example — full propose → wait → execute flow:**
+
+```typescript
+// Step 1: propose
+const sig = await timelock.setOracleParams({
+  mint,
+  maxOracleAgeSecs: 60,
+  maxOracleConfBps: 100, // 1%
+});
+console.log('SET_ORACLE_PARAMS proposed, matures in ~2 days:', sig);
+
+// Step 2: wait for mature_slot, then execute
+await timelock.executeTimelockOp({ mint });
+console.log('Oracle params updated: 60 s / 100 bps');
 ```
 
 ---
@@ -367,7 +389,7 @@ waitAndExecute();
 ## Security Notes
 
 - **One op at a time.** Proposing a new op overwrites any existing pending op. Verify on-chain state before proposing if you need to preserve a pending op.
-- **`setPythFeed` is immediate.** Unlike the three timelocked ops, `setPythFeed` takes effect the moment the transaction lands. Set this at protocol initialisation and monitor for unexpected changes.
+- **All five op kinds are timelock-protected.** `setPythFeed` and `setOracleParams` are **not** immediate — they require the full propose → wait → execute cycle just like authority transfers and feature-flag changes (BUG-017 / AUDIT-A HIGH-06). Direct calls to `set_pyth_feed` or `set_oracle_params` are rejected by the on-chain program when `admin_timelock_delay > 0`.
 - **Delay is configurable.** `config.admin_timelock_delay` can be changed via protocol governance. The default is `DEFAULT_ADMIN_TIMELOCK_DELAY` (432 000 slots ≈ 2 days).
 - **Key rotation fallback.** If the admin key is lost before a pending authority transfer executes, the protocol is locked. Maintain a secure backup key and test the rotation flow on devnet before mainnet.
 
@@ -375,17 +397,17 @@ waitAndExecute();
 
 ## Audit Findings
 
-### BUG-010 (AUDIT-A CRIT-04 / HIGH-06 / HIGH-07) — Timelock Coverage Extended to All Privileged Ops
+### AUDIT-A HIGH-06 — Oracle Config Not Behind Timelock
 
-**Fixed in:** on-chain program (2026-03-25)
+**Fixed in:** on-chain program commit `b4fd126` tests; enforcement already present from BUG-010 (`require_timelock_executed` in both handlers). Doc corrected 2026-03-25.
 
-**Description:** Previously only 3 on-chain operations were protected by the timelock mechanism (`ADMIN_OP_TRANSFER_AUTHORITY`, `ADMIN_OP_SET_FEATURE_FLAG`, `ADMIN_OP_CLEAR_FEATURE_FLAG`). The remaining ~14 privileged operations — including oracle feed registration, stability fee, PSM fee, backstop params, spend limit, reserve ratio, travel rule threshold, sanctions params, pause/unpause, and the timelock delay itself — could be executed immediately by the authority key with no delay. An adversary controlling the authority key could instantly change critical protocol parameters.
+**Description:** `AUDIT-A HIGH-06` identified that `set_pyth_feed` (ADMIN_OP_SET_PYTH_FEED, op_kind=4) and `set_oracle_params` (ADMIN_OP_SET_ORACLE_PARAMS, op_kind=5) were not explicitly documented as timelock-protected. The on-chain enforcement (`require_timelock_executed`) was added in BUG-010 but SDK docs and oracle-params docs described `setPythFeed` as "immediate" and `set_oracle_params` as "authority-only" without mentioning the timelock requirement.
 
-**Fix:** All critical admin operations now call `require_timelock_executed()` when `admin_timelock_delay > 0`, returning `TimelockRequired` if the op was not pre-approved via the propose → wait → execute path. The timelock delay itself (`ADMIN_OP_SET_TIMELOCK_DELAY`, op kind 15) has a hardcoded minimum of 216 000 slots (~1 day) to prevent the authority from reducing the delay to zero in a single pass.
+**Impact:** Callers following the old documentation would attempt direct invocations that are silently rejected by the on-chain program, causing confusing `Unauthorized` / `TimelockNotPending` errors in production.
 
-**Exception:** `register_collateral` and `update_collateral_config` are still allowed directly when the caller is a Squads multisig PDA, because Squads provides equivalent multi-party controls.
+**Fix:** Both ops now documented as timelock-protected. `ADMIN_OP_SET_PYTH_FEED` (4) and `ADMIN_OP_SET_ORACLE_PARAMS` (5) added to the enum table. `setPythFeed()` and new `setOracleParams()` SDK methods updated with correct propose → wait → execute examples. Verified by BUG-017 test suite (10 tests, BUG-017-01 through BUG-017-10).
 
-**Upgrade action:** Integrators who call any of the newly-timelocked instructions directly must migrate to the propose → execute flow. Direct calls return `TimelockRequired` on-chain when `admin_timelock_delay > 0`.
+**Upgrade action:** Any caller using `timelock.setPythFeed()` expecting immediate effect must adopt the two-step flow (propose + executeTimelockOp after delay). See updated examples above.
 
 ---
 
