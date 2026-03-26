@@ -769,7 +769,7 @@ pub struct RedemptionQueued {
     pub queue_index: u64,
     pub amount: u64,
     pub enqueue_slot: u64,
-    pub slot_hash_seed: [u8; 32],
+    pub slot_hash_seed: [u8; 8],
     pub earliest_process_slot: u64,
 }
 
@@ -795,24 +795,8 @@ pub struct RedemptionCancelled {
 }
 
 // ---------------------------------------------------------------------------
-// SSS-151: Insurance vault events
+// SSS-151: Insurance vault events (defined in instructions/insurance_vault.rs)
 // ---------------------------------------------------------------------------
-
-#[event]
-pub struct InsuranceVaultSeeded {
-    pub mint: Pubkey,
-    pub seeder: Pubkey,
-    pub amount: u64,
-    pub current_balance: u64,
-}
-
-#[event]
-pub struct InsuranceVaultReplenished {
-    pub mint: Pubkey,
-    pub replenisher: Pubkey,
-    pub amount: u64,
-    pub current_balance: u64,
-}
 
 // ---------------------------------------------------------------------------
 // SSS-138: Market maker events

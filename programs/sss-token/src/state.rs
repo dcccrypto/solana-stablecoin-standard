@@ -1366,6 +1366,8 @@ pub struct InsuranceVault {
     pub vault_token_account: Pubkey,
     /// Minimum seed bps: min % of net_supply that must be deposited.
     pub min_seed_bps: u16,
+    /// Per-event draw cap in bps of net_supply (0 = no cap).
+    pub max_draw_per_event_bps: u16,
     /// Current balance in native token units.
     pub current_balance: u64,
     /// Total drawn from the vault.
@@ -1377,6 +1379,17 @@ pub struct InsuranceVault {
 
 impl InsuranceVault {
     pub const SEED: &'static [u8] = b"insurance-vault";
+
+    /// Compute the minimum required balance given net_supply and min_seed_bps.
+    pub fn required_seed_amount(&self, net_supply: u64) -> u64 {
+        if self.min_seed_bps == 0 {
+            return 0;
+        }
+        let result = (net_supply as u128)
+            .saturating_mul(self.min_seed_bps as u128)
+            / 10_000u128;
+        result.min(u64::MAX as u128) as u64
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1403,9 +1416,12 @@ pub struct MarketMakerConfig {
     pub last_burn_slot: u64,
     /// Tokens burned by MMs in the current slot.
     pub mm_burned_this_slot: u64,
-    /// Registered market maker pubkeys (max 8).
+    /// Registered market maker pubkeys (max 8, alias: whitelisted_mms).
     #[max_len(8)]
     pub market_makers: Vec<Pubkey>,
+    /// Alias for market_makers used in instruction code.
+    #[max_len(10)]
+    pub whitelisted_mms: Vec<Pubkey>,
     pub bump: u8,
 }
 
@@ -1436,6 +1452,10 @@ pub struct RedemptionQueue {
     pub max_redemption_per_slot_bps: u16,
     /// Last slot at which redemptions were processed.
     pub last_process_slot: u64,
+    /// Alias: last_slot_processed (same as last_process_slot).
+    pub last_slot_processed: u64,
+    /// Total redeemed in the current slot (reset each new slot).
+    pub slot_redemption_total: u64,
     /// Lamports paid to keepers per processed redemption.
     pub keeper_reward_lamports: u64,
     pub bump: u8,
@@ -1463,8 +1483,12 @@ pub struct RedemptionEntry {
     pub amount: u64,
     /// Slot at which this entry was enqueued.
     pub enqueue_slot: u64,
-    /// Slot hash seed for front-run protection.
-    pub slot_hash_seed: [u8; 32],
+    /// Slot hash seed for front-run protection (8 bytes from SlotHashes sysvar).
+    pub slot_hash_seed: [u8; 8],
+    /// Whether this entry has been fulfilled.
+    pub fulfilled: bool,
+    /// Whether this entry has been cancelled.
+    pub cancelled: bool,
     pub bump: u8,
 }
 
@@ -1482,7 +1506,11 @@ impl RedemptionEntry {
 #[derive(InitSpace)]
 pub struct KeeperConfig {
     pub mint: Pubkey,
+    /// Alias: sss_mint (same as mint).
+    pub sss_mint: Pubkey,
     /// Price deviation threshold in bps to trigger circuit breaker.
+    pub deviation_threshold_bps: u16,
+    /// Price deviation threshold in bps (alias).
     pub deviation_bps_threshold: u16,
     /// Target peg price in oracle units.
     pub target_price: u64,
@@ -1496,6 +1524,8 @@ pub struct KeeperConfig {
     pub last_trigger_slot: u64,
     /// Recovery slot tracker.
     pub recovery_start_slot: u64,
+    /// Slot at which peg came within threshold (for recovery tracking).
+    pub last_within_threshold_slot: u64,
     pub bump: u8,
 }
 

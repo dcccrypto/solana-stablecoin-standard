@@ -163,7 +163,7 @@ pub fn collect_stability_fee_handler(ctx: Context<CollectStabilityFee>) -> Resul
             },
             signer_seeds,
         ),
-        pending,
+        total_to_burn,
     )?;
 
     // BUG-016 FIX: Do NOT increment accrued_fees — the fee has been burned.
@@ -173,11 +173,11 @@ pub fn collect_stability_fee_handler(ctx: Context<CollectStabilityFee>) -> Resul
     ctx.accounts.cdp_position.last_fee_accrual = now;
 
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(fee_amount).unwrap();
+    config.total_burned = config.total_burned.checked_add(total_to_burn).unwrap();
 
     msg!(
         "SSS-092/BUG-015-016 stability fee: burned {} SSS from {}. elapsed={}s fee_bps={} caller={}",
-        fee_amount,
+        total_to_burn,
         ctx.accounts.debtor.key(),
         elapsed_secs,
         fee_bps,
@@ -310,4 +310,58 @@ pub fn remove_authorized_keeper_handler(
         }
         None => err!(SssError::MemberNotFound),
     }
+}
+
+// ─── BurnAccruedFees ─────────────────────────────────────────────────────────
+
+/// Accounts for burning accrued stability fees for a CDP position.
+/// The debtor must sign to authorize the burn of their accrued fees.
+///
+/// Seeds: none beyond config and cdp_position derivation.
+#[derive(Accounts)]
+pub struct BurnAccruedFees<'info> {
+    /// The CDP owner (debtor) — must sign.
+    pub debtor: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [StablecoinConfig::SEED, config.mint.as_ref()],
+        bump = config.bump,
+    )]
+    pub config: Account<'info, StablecoinConfig>,
+
+    #[account(
+        mut,
+        seeds = [CdpPosition::SEED, config.mint.as_ref(), debtor.key().as_ref()],
+        bump = cdp_position.bump,
+        constraint = cdp_position.owner == debtor.key() @ crate::error::SssError::Unauthorized,
+    )]
+    pub cdp_position: Account<'info, CdpPosition>,
+}
+
+/// BUG-012 CRIT-07: Burn accrued stability fees for a CDP position.
+/// Resets `accrued_fees` to 0 after burn to prevent double-counting.
+pub fn burn_accrued_fees_handler(ctx: Context<BurnAccruedFees>) -> Result<()> {
+    let position = &mut ctx.accounts.cdp_position;
+    let config = &mut ctx.accounts.config;
+
+    let fees = position.accrued_fees;
+    if fees == 0 {
+        msg!("burn_accrued_fees: no accrued fees to burn");
+        return Ok(());
+    }
+
+    // Deduct from total minted (simulates fee burn)
+    config.total_burned = config.total_burned.saturating_add(fees);
+
+    // BUG-012: Reset to 0 to prevent double-count
+    position.accrued_fees = 0;
+
+    msg!(
+        "burn_accrued_fees: burned {} accrued fees for debtor {} mint {}",
+        fees,
+        ctx.accounts.debtor.key(),
+        config.mint,
+    );
+    Ok(())
 }
