@@ -5,7 +5,6 @@ use chrono::Utc;
 
 use crate::error::AppError;
 use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, CredentialRecord, CredentialRegistry, EventLogEntry, LiquidationHistoryEntry, MintEvent, ParsedEventLogEntry, TravelRuleRecord, WebhookDeliveryLog, WebhookEntry};
-use crate::routes::analytics::{CdpHealthResponse, HealthBucket};
 
 pub struct Database {
     pub conn: Mutex<Connection>,
@@ -658,7 +657,8 @@ impl Database {
             "INSERT INTO api_keys (id, key, label, is_admin, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![id, key, label, is_admin as i64, created_at],
         )?;
-        Ok(ApiKeyEntry { id, key, label: label.to_string(), is_admin, created_at })
+        let role = if is_admin { "admin".to_string() } else { "read".to_string() };
+        Ok(ApiKeyEntry { id, key, label: label.to_string(), is_admin, role, created_at })
     }
 
     /// Validate the given key and return its admin status.
@@ -685,11 +685,13 @@ impl Database {
         )?;
         let entries = stmt.query_map([], |row| {
             let is_admin: i64 = row.get(3)?;
+            let admin = is_admin != 0;
             Ok(ApiKeyEntry {
                 id: row.get(0)?,
                 key: row.get(1)?,
                 label: row.get(2)?,
-                is_admin: is_admin != 0,
+                is_admin: admin,
+                role: if admin { "admin".to_string() } else { "read".to_string() },
                 created_at: row.get(4)?,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
@@ -1311,6 +1313,308 @@ impl Database {
             .filter_map(|r| r.ok())
             .collect();
         Ok(mints)
+    }
+
+    /// Return the role string ("admin" or "read") for the given API key.
+    /// Returns `Ok(None)` if the key does not exist.
+    pub fn get_api_key_role(&self, key: &str) -> Result<Option<String>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT is_admin FROM api_keys WHERE key = ?1 LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![key])?;
+        if let Some(row) = rows.next()? {
+            let is_admin: i64 = row.get(0)?;
+            Ok(Some(if is_admin != 0 { "admin".to_string() } else { "read".to_string() }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Query the event_log with optional type/address filters, limit and offset.
+    /// Returns `ParsedEventLogEntry` with `data` as `serde_json::Value`.
+    pub fn query_event_log(
+        &self,
+        event_type: Option<&str>,
+        address: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<crate::models::ParsedEventLogEntry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = "SELECT id, event_type, address, data, tx_signature, slot, created_at \
+                       FROM event_log WHERE 1=1".to_string();
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(t) = event_type {
+            param_values.push(Box::new(t.to_string()));
+            sql.push_str(&format!(" AND event_type = ?{}", param_values.len()));
+        }
+        if let Some(a) = address {
+            param_values.push(Box::new(a.to_string()));
+            sql.push_str(&format!(" AND address = ?{}", param_values.len()));
+        }
+        param_values.push(Box::new(limit as i64));
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", param_values.len()));
+        param_values.push(Box::new(offset as i64));
+        sql.push_str(&format!(" OFFSET ?{}", param_values.len()));
+
+        let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let entries = stmt.query_map(refs.as_slice(), |row| {
+            let data_str: Option<String> = row.get(3)?;
+            let data_str = data_str.unwrap_or_else(|| "null".to_string());
+            Ok(crate::models::ParsedEventLogEntry {
+                id: row.get(0)?,
+                event_type: row.get(1)?,
+                address: row.get(2)?,
+                data: serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null),
+                tx_signature: row.get(4)?,
+                slot: row.get(5)?,
+                created_at: row.get(6)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(entries)
+    }
+
+    /// List travel rule records with optional wallet/mint filters.
+    pub fn list_travel_rule_records(
+        &self,
+        wallet: Option<&str>,
+        mint: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<crate::models::TravelRuleRecord>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = "SELECT id, originator_vasp, beneficiary_vasp, mint, amount, threshold, \
+                       compliant, tx_signature, created_at FROM travel_rule_records WHERE 1=1".to_string();
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        if let Some(w) = wallet {
+            param_values.push(Box::new(w.to_string()));
+            sql.push_str(&format!(" AND (originator_vasp = ?{} OR beneficiary_vasp = ?{})", param_values.len(), param_values.len()));
+        }
+        if let Some(m) = mint {
+            param_values.push(Box::new(m.to_string()));
+            sql.push_str(&format!(" AND mint = ?{}", param_values.len()));
+        }
+        param_values.push(Box::new(limit as i64));
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", param_values.len()));
+        let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let records = stmt.query_map(refs.as_slice(), |row| {
+            let compliant: i64 = row.get(6)?;
+            Ok(crate::models::TravelRuleRecord {
+                id: row.get(0)?,
+                originator_vasp: row.get(1)?,
+                beneficiary_vasp: row.get(2)?,
+                mint: row.get(3)?,
+                amount: row.get(4)?,
+                threshold: row.get(5)?,
+                compliant: compliant != 0,
+                tx_signature: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(records)
+    }
+
+    /// List credential records with optional filters.
+    pub fn list_credential_records(
+        &self,
+        user: Option<&str>,
+        mint: Option<&str>,
+        credential_type: Option<&str>,
+        valid_only: bool,
+        limit: u32,
+    ) -> Result<Vec<crate::models::CredentialRecord>, AppError> {
+        let now = Utc::now().timestamp();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = "SELECT id, mint, user, credential_type, issuer_pubkey, verified_at, \
+                       expires_at, is_valid, tx_signature, slot, created_at \
+                       FROM credential_records WHERE 1=1".to_string();
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        if let Some(u) = user {
+            param_values.push(Box::new(u.to_string()));
+            sql.push_str(&format!(" AND user = ?{}", param_values.len()));
+        }
+        if let Some(m) = mint {
+            param_values.push(Box::new(m.to_string()));
+            sql.push_str(&format!(" AND mint = ?{}", param_values.len()));
+        }
+        if let Some(ct) = credential_type {
+            param_values.push(Box::new(ct.to_string()));
+            sql.push_str(&format!(" AND credential_type = ?{}", param_values.len()));
+        }
+        if valid_only {
+            param_values.push(Box::new(now));
+            sql.push_str(&format!(" AND expires_at > ?{} AND is_valid = 1", param_values.len()));
+        }
+        param_values.push(Box::new(limit as i64));
+        sql.push_str(&format!(" ORDER BY created_at DESC LIMIT ?{}", param_values.len()));
+        let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let records = stmt.query_map(refs.as_slice(), |row| {
+            let is_valid: i64 = row.get(7)?;
+            Ok(crate::models::CredentialRecord {
+                id: row.get(0)?,
+                mint: row.get(1)?,
+                user: row.get(2)?,
+                credential_type: row.get(3)?,
+                issuer_pubkey: row.get(4)?,
+                verified_at: row.get(5)?,
+                expires_at: row.get(6)?,
+                is_valid: is_valid != 0,
+                tx_signature: row.get(8)?,
+                slot: row.get(9)?,
+                created_at: row.get(10)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(records)
+    }
+
+    /// Upsert a credential record (insert or update by mint+user+credential_type).
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_credential_record(
+        &self,
+        mint: &str,
+        user: &str,
+        credential_type: &str,
+        issuer_pubkey: &str,
+        verified_at: i64,
+        expires_at: i64,
+        tx_signature: Option<&str>,
+        slot: Option<i64>,
+    ) -> Result<crate::models::CredentialRecord, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let created_at = Utc::now().to_rfc3339();
+        let now = Utc::now().timestamp();
+        let is_valid = if expires_at > now { 1i64 } else { 0i64 };
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO credential_records \
+             (id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, is_valid, tx_signature, slot, created_at) \
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11) \
+             ON CONFLICT(mint, user, credential_type) DO UPDATE SET \
+             issuer_pubkey=excluded.issuer_pubkey, verified_at=excluded.verified_at, \
+             expires_at=excluded.expires_at, is_valid=excluded.is_valid, \
+             tx_signature=excluded.tx_signature, slot=excluded.slot",
+            params![id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, is_valid, tx_signature, slot, created_at],
+        )?;
+        Ok(crate::models::CredentialRecord {
+            id,
+            mint: mint.to_string(),
+            user: user.to_string(),
+            credential_type: credential_type.to_string(),
+            issuer_pubkey: issuer_pubkey.to_string(),
+            verified_at,
+            expires_at,
+            is_valid: is_valid != 0,
+            tx_signature: tx_signature.map(|s| s.to_string()),
+            slot,
+            created_at,
+        })
+    }
+
+    /// Get a single credential record by mint+user+credential_type.
+    pub fn get_credential_record(
+        &self,
+        mint: &str,
+        user: &str,
+        credential_type: &str,
+    ) -> Result<Option<crate::models::CredentialRecord>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, mint, user, credential_type, issuer_pubkey, verified_at, expires_at, \
+             is_valid, tx_signature, slot, created_at \
+             FROM credential_records WHERE mint=?1 AND user=?2 AND credential_type=?3 LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![mint, user, credential_type])?;
+        if let Some(row) = rows.next()? {
+            let is_valid: i64 = row.get(7)?;
+            Ok(Some(crate::models::CredentialRecord {
+                id: row.get(0)?,
+                mint: row.get(1)?,
+                user: row.get(2)?,
+                credential_type: row.get(3)?,
+                issuer_pubkey: row.get(4)?,
+                verified_at: row.get(5)?,
+                expires_at: row.get(6)?,
+                is_valid: is_valid != 0,
+                tx_signature: row.get(8)?,
+                slot: row.get(9)?,
+                created_at: row.get(10)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// List credential registries with optional mint/credential_type filters.
+    pub fn list_credential_registries(
+        &self,
+        mint: Option<&str>,
+        credential_type: Option<&str>,
+    ) -> Result<Vec<crate::models::CredentialRegistry>, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut sql = "SELECT id, mint, credential_type, issuer_pubkey, merkle_root, \
+                       proof_expiry_seconds, created_at, updated_at \
+                       FROM credential_registries WHERE 1=1".to_string();
+        let mut param_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        if let Some(m) = mint {
+            param_values.push(Box::new(m.to_string()));
+            sql.push_str(&format!(" AND mint = ?{}", param_values.len()));
+        }
+        if let Some(ct) = credential_type {
+            param_values.push(Box::new(ct.to_string()));
+            sql.push_str(&format!(" AND credential_type = ?{}", param_values.len()));
+        }
+        sql.push_str(" ORDER BY updated_at DESC");
+        let refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let registries = stmt.query_map(refs.as_slice(), |row| {
+            Ok(crate::models::CredentialRegistry {
+                id: row.get(0)?,
+                mint: row.get(1)?,
+                credential_type: row.get(2)?,
+                issuer_pubkey: row.get(3)?,
+                merkle_root: row.get(4)?,
+                proof_expiry_seconds: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        Ok(registries)
+    }
+
+    /// Upsert a credential registry entry (insert or update by mint+credential_type).
+    pub fn upsert_credential_registry(
+        &self,
+        mint: &str,
+        credential_type: &str,
+        issuer_pubkey: &str,
+        merkle_root: &str,
+        proof_expiry_seconds: u64,
+    ) -> Result<crate::models::CredentialRegistry, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO credential_registries \
+             (id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds, created_at, updated_at) \
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8) \
+             ON CONFLICT(mint, credential_type) DO UPDATE SET \
+             issuer_pubkey=excluded.issuer_pubkey, merkle_root=excluded.merkle_root, \
+             proof_expiry_seconds=excluded.proof_expiry_seconds, updated_at=excluded.updated_at",
+            params![id, mint, credential_type, issuer_pubkey, merkle_root, proof_expiry_seconds as i64, now, now],
+        )?;
+        Ok(crate::models::CredentialRegistry {
+            id,
+            mint: mint.to_string(),
+            credential_type: credential_type.to_string(),
+            issuer_pubkey: issuer_pubkey.to_string(),
+            merkle_root: merkle_root.to_string(),
+            proof_expiry_seconds: proof_expiry_seconds as i64,
+            created_at: now.clone(),
+            updated_at: now,
+        })
     }
 }
 

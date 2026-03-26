@@ -939,8 +939,6 @@ pub enum HookError {
     WalletRateLimitExceeded,
     #[msg("WalletRateLimit account must be passed as writable")]
     WalletRateLimitAccountNotWritable,
-    #[msg("Sanctions oracle: SanctionsRecord PDA missing from remaining_accounts — required when FLAG_SANCTIONS_ORACLE is set")]
-    SanctionsRecordMissing,
     #[msg("Sanctions oracle: SanctionsRecord PDA must be provided in remaining_accounts when FLAG_SANCTIONS_ORACLE is active (BUG-003)")]
     SanctionsRecordRequired,
     /// BUG-024: Permanent delegate transfer rejected — wallet owner has not granted

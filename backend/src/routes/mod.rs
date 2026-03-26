@@ -18,6 +18,7 @@ pub mod metrics;
 pub mod mint;
 pub mod reserves;
 pub mod supply;
+pub mod supply_verify;
 pub mod travel_rule;
 pub mod webhook_deliveries;
 pub mod webhooks;

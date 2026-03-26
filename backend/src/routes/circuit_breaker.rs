@@ -120,9 +120,9 @@ pub async fn set_circuit_breaker(
     Ok(Json(ApiResponse::ok(CircuitBreakerResponse {
         mint: req.mint,
         enabled: req.enabled,
-        unsigned_tx_message_b64: unsigned_tx_b64,
-        recent_blockhash: blockhash_str,
-        authority_pubkey: req.authority_pubkey,
+        unsigned_tx_message_b64: req.signed_transaction,
+        recent_blockhash: tx_signature.clone(),
+        authority_pubkey: signer_pubkey.clone(),
         flag: "FLAG_CIRCUIT_BREAKER",
         signer: signer_pubkey,
     })))
@@ -324,15 +324,11 @@ async fn send_signed_transaction(
         return Err(format!("sendTransaction RPC error: {err}"));
     }
 
-/// Compute the 8-byte Anchor instruction discriminator:
-/// `sha256("global:<instruction_name>")[..8]`
-fn anchor_discriminator(namespace_name: &str) -> [u8; 8] {
-    let mut hasher = Sha256::new();
-    hasher.update(namespace_name.as_bytes());
-    let result = hasher.finalize();
-    let mut disc = [0u8; 8];
-    disc.copy_from_slice(&result[..8]);
-    disc
+    let sig = send_resp["result"]
+        .as_str()
+        .ok_or_else(|| format!("no result in sendTransaction response: {send_resp}"))?
+        .to_string();
+    Ok(sig)
 }
 
 // ---------------------------------------------------------------------------
