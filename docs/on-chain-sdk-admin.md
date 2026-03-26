@@ -185,9 +185,11 @@ const sig = await stablecoin.revokeMinter({
 
 ## `updateRoles()`
 
-> ⚠️ **Deprecated.** This is a one-step authority transfer that takes effect immediately. For production use, prefer the two-step flow: [`proposeAuthority()`](#proposeauthority) + [`acceptAuthority()`](#acceptauthority).
+> ⚠️ **Deprecated for admin authority transfer.** For production use, prefer the timelocked flow: [`proposeTimelockOp()`](./on-chain-sdk-admin-timelock.md) + [`executeTimelockOp()`](./on-chain-sdk-admin-timelock.md).
+>
+> 🚫 **Blocked for compliance authority (BUG-019).** Passing `newComplianceAuthority` **always** throws `ComplianceAuthorityRequiresTimelock`. Compliance authority transfers must use `proposeTimelockOp` with `opKind = ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` (op_kind=10) and a minimum 432 000-slot (~48 h) delay. See [on-chain-sdk-admin-timelock.md](./on-chain-sdk-admin-timelock.md).
 
-Transfer the admin or compliance authority to a new keypair in a single transaction.
+Transfer the admin authority to a new keypair in a single transaction. Compliance authority transfer via this method is permanently blocked.
 
 **Authority required:** admin authority.
 
@@ -200,11 +202,12 @@ updateRoles(params: UpdateRolesParams): Promise<TransactionSignature>
 | Field | Type | Description |
 |---|---|---|
 | `newAuthority` | `PublicKey?` | New admin authority. Omit to leave unchanged |
-| `newComplianceAuthority` | `PublicKey?` | New compliance authority. Omit to leave unchanged |
+| `newComplianceAuthority` | `PublicKey?` | **Permanently blocked** — always throws `ComplianceAuthorityRequiresTimelock`. Use the timelock flow (op_kind=10) instead |
 
 **Example:**
 
 ```typescript
+// Admin authority change only — compliance authority is blocked in this method
 const sig = await stablecoin.updateRoles({
   newAuthority: newAdminKeypair.publicKey,
 });
@@ -215,6 +218,7 @@ const sig = await stablecoin.updateRoles({
 | Error | Cause |
 |---|---|
 | `Unauthorized` | Caller is not the admin authority |
+| `ComplianceAuthorityRequiresTimelock` | `newComplianceAuthority` was provided — always blocked; use `proposeTimelockOp` (op_kind=10) |
 
 ---
 
@@ -224,7 +228,9 @@ The recommended pattern for transferring authority uses two transactions so the 
 
 ### `proposeAuthority()`
 
-Step 1: propose a new admin or compliance authority. Stores the candidate in `pending_authority` or `pending_compliance_authority` on the config PDA.
+Step 1: propose a new **admin** authority. Stores the candidate in `pending_authority` on the config PDA.
+
+> ⚠️ **Compliance authority is no longer accepted here (BUG-019).** Calling with `isCompliance = true` will be rejected on-chain with `ComplianceAuthorityRequiresTimelock`. Use [`proposeTimelockOp()`](./on-chain-sdk-admin-timelock.md) with `opKind = ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` (op_kind=10) instead.
 
 **Authority required:** admin authority.
 
@@ -239,8 +245,8 @@ proposeAuthority(
 
 | Field | Type | Description |
 |---|---|---|
-| `params.proposed` | `PublicKey` | The proposed new authority public key |
-| `isCompliance` | `boolean` | `true` to propose a compliance authority; `false` (default) for admin authority |
+| `params.proposed` | `PublicKey` | The proposed new admin authority public key |
+| `isCompliance` | `boolean` | **Always pass `false` (or omit).** Passing `true` throws `ComplianceAuthorityRequiresTimelock` — use the timelock flow instead |
 
 **Events emitted:** `AuthorityProposed`
 
@@ -252,11 +258,8 @@ const sig = await stablecoin.proposeAuthority({
   proposed: newAdminKeypair.publicKey,
 });
 
-// Propose a new compliance authority
-const sig2 = await stablecoin.proposeAuthority(
-  { proposed: newComplianceKeypair.publicKey },
-  true,
-);
+// ❌ Do NOT use isCompliance=true — blocked since BUG-019.
+// Use proposeTimelockOp({ opKind: ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY, ... }) instead.
 ```
 
 ---
@@ -347,16 +350,20 @@ interface ProposeAuthorityParams {
 Admin Authority
 ├── pause() / unpause()
 ├── updateMinter() / revokeMinter()
-├── updateRoles()  ← deprecated one-step
+├── updateRoles(newAuthority)      ← deprecated one-step (admin only)
 └── proposeAuthority(isCompliance=false)
     └── acceptAuthority()          ← called by pending admin
 
-Compliance Authority
-└── proposeAuthority(isCompliance=true)
-    └── acceptComplianceAuthority() ← called by pending compliance
+Compliance Authority Transfer (BUG-019: always via timelock)
+└── proposeTimelockOp({ opKind: ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY (10),
+                        param: 0n, target: newComplianceKey })
+    └── executeTimelockOp()        ← after min 432 000-slot (~48 h) delay
+        └── acceptComplianceAuthority() ← called by pending compliance
 ```
 
-The `SssConfig.authority` and `SssConfig.complianceAuthority` fields on the config PDA always reflect the **current** (accepted) authorities. `pending_authority` and `pending_compliance_authority` are only set during an in-flight two-step transfer and revert to the default public key once accepted.
+> **BUG-019:** `updateRoles(newComplianceAuthority)` and `proposeAuthority(_, true)` both permanently return `ComplianceAuthorityRequiresTimelock`. The only valid path is `proposeTimelockOp` (op_kind=10) with `max(admin_timelock_delay, 432_000)` slot delay — see [on-chain-sdk-admin-timelock.md](./on-chain-sdk-admin-timelock.md).
+
+The `SssConfig.authority` and `SssConfig.complianceAuthority` fields on the config PDA always reflect the **current** (accepted) authorities. `pending_authority` and `pending_compliance_authority` are only set during an in-flight transfer and revert to the default public key once accepted.
 
 ---
 
