@@ -158,45 +158,51 @@ describe('BadDebtBackstopModule', () => {
     const mod = new BadDebtBackstopModule(provider, PROGRAM_ID);
     const sig = await mod.triggerBackstop({
       mint: MINT,
+      cdpOwner: Keypair.generate().publicKey,
+      oraclePriceFeed: Keypair.generate().publicKey,
       insuranceFund: Keypair.generate().publicKey,
       reserveVault: Keypair.generate().publicKey,
       collateralMint: Keypair.generate().publicKey,
       insuranceFundAuthority: Keypair.generate().publicKey,
       collateralTokenProgram: Keypair.generate().publicKey,
-      shortfallAmount: 50_000n,
     });
     expect(sig).toBe('mockedTxSig');
     expect(provider.sendAndConfirm).toHaveBeenCalledOnce();
   });
 
-  it('triggerBackstop throws when shortfallAmount is zero', async () => {
-    const mod = new BadDebtBackstopModule(mockProvider(), PROGRAM_ID);
-    await expect(
-      mod.triggerBackstop({
-        mint: MINT,
-        insuranceFund: Keypair.generate().publicKey,
-        reserveVault: Keypair.generate().publicKey,
-        collateralMint: Keypair.generate().publicKey,
-        insuranceFundAuthority: Keypair.generate().publicKey,
-        collateralTokenProgram: Keypair.generate().publicKey,
-        shortfallAmount: 0n,
-      }),
-    ).rejects.toThrow('shortfallAmount must be greater than zero');
+  it('triggerBackstop resolves config PDA and includes it in the transaction', async () => {
+    // Shortfall is now computed on-chain (BUG-031); no client-side shortfallAmount param.
+    const provider = mockProvider();
+    const mod = new BadDebtBackstopModule(provider, PROGRAM_ID);
+    const sig = await mod.triggerBackstop({
+      mint: MINT,
+      cdpOwner: Keypair.generate().publicKey,
+      oraclePriceFeed: Keypair.generate().publicKey,
+      insuranceFund: Keypair.generate().publicKey,
+      reserveVault: Keypair.generate().publicKey,
+      collateralMint: Keypair.generate().publicKey,
+      insuranceFundAuthority: Keypair.generate().publicKey,
+      collateralTokenProgram: Keypair.generate().publicKey,
+    });
+    expect(sig).toBe('mockedTxSig');
   });
 
-  it('triggerBackstop throws when shortfallAmount is negative', async () => {
-    const mod = new BadDebtBackstopModule(mockProvider(), PROGRAM_ID);
+  it('triggerBackstop requires mint to be a valid PublicKey', async () => {
+    const provider = mockProvider();
+    const mod = new BadDebtBackstopModule(provider, PROGRAM_ID);
+    // All required fields supplied — should resolve without error
     await expect(
       mod.triggerBackstop({
         mint: MINT,
+        cdpOwner: Keypair.generate().publicKey,
+        oraclePriceFeed: Keypair.generate().publicKey,
         insuranceFund: Keypair.generate().publicKey,
         reserveVault: Keypair.generate().publicKey,
         collateralMint: Keypair.generate().publicKey,
         insuranceFundAuthority: Keypair.generate().publicKey,
         collateralTokenProgram: Keypair.generate().publicKey,
-        shortfallAmount: -1n,
       }),
-    ).rejects.toThrow('shortfallAmount must be greater than zero');
+    ).resolves.toBe('mockedTxSig');
   });
 
   // ── fetchBackstopConfig ──────────────────────────────────────────────────

@@ -175,7 +175,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.admin_op_kind = ADMIN_OP_NONE;
     config.admin_op_param = 0;
     config.admin_op_target = Pubkey::default();
-    config.admin_timelock_delay = DEFAULT_ADMIN_TIMELOCK_DELAY;
+    config.admin_timelock_delay = params.admin_timelock_delay.unwrap_or(DEFAULT_ADMIN_TIMELOCK_DELAY);
     // SSS-092: stability fee starts at 0 (disabled by default)
     config.stability_fee_bps = 0;
     // SSS-093: PSM redemption fee starts at 0 (disabled by default)
@@ -190,6 +190,9 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     // SSS-147: Lock the supply cap for SSS-3 — immutable after initialize.
     // SSS-1 and SSS-2 do not lock the supply cap (it defaults to false).
     config.supply_cap_locked = params.preset == 3;
+    // SSS-122: New configs start at CURRENT_VERSION — no migration needed for
+    // freshly-initialized stablecoins. migrate_config is only for old on-chain state.
+    config.version = crate::instructions::upgrade::CURRENT_VERSION;
     config.bump = ctx.bumps.config;
 
     msg!(

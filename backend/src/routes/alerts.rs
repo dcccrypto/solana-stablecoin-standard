@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // SSS-139: POST /api/alerts — submit an alert record; GET /api/alerts — list alert records.
 
 use axum::{

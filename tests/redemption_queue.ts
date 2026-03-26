@@ -89,7 +89,7 @@ function getConfigPda(mint: PublicKey, programId: PublicKey): PublicKey {
 
 function getRedemptionQueuePda(mint: PublicKey, programId: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("redemption_queue"), mint.toBuffer()],
+    [Buffer.from("redemption-queue"), mint.toBuffer()],
     programId
   );
   return pda;
@@ -103,7 +103,7 @@ function getRedemptionEntryPda(
   const idxBuf = Buffer.alloc(8);
   idxBuf.writeBigUInt64LE(BigInt(queueIndex.toString()));
   const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("redemption_entry"), mint.toBuffer(), idxBuf],
+    [Buffer.from("redemption-entry"), mint.toBuffer(), idxBuf],
     programId
   );
   return pda;
@@ -176,6 +176,11 @@ describe("SSS-154: redemption_queue", () => {
   let configPda2: PublicKey;
   let queuePda2: PublicKey;
 
+  // Tertiary mint (FLAG_REDEMPTION_QUEUE enabled — for non-authority test #3, fresh PDA)
+  let mintKp3: Keypair;
+  let configPda3: PublicKey;
+  let queuePda3: PublicKey;
+
   // Track queue index across tests
   let nextQueueIndex = new BN(0);
 
@@ -218,6 +223,7 @@ describe("SSS-154: redemption_queue", () => {
         maxSupply: new BN(1_000_000_000_000),
         featureFlags: FLAG_REDEMPTION_QUEUE,
         auditorElgamalPubkey: null,
+        adminTimelockDelay: new BN(0),
       })
       .accounts({
         payer: authority.publicKey,
@@ -231,16 +237,9 @@ describe("SSS-154: redemption_queue", () => {
       .signers([stableMintKp])
       .rpc({ commitment: "confirmed", skipPreflight: true });
 
-    // SSS-122: migrate config from v0 → v1 so mint/burn version guards pass
-    await program.methods
-      .migrateConfig()
-      .accounts({
-        authority: authority.publicKey,
-        mint: stableMint,
-        config: configPda,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc({ commitment: "confirmed" });
+    // SSS-122: migrateConfig is a no-op for freshly-initialized configs
+    // (initialize() already sets version = CURRENT_VERSION). Removed to avoid
+    // IDL lookup issues in CI where the idl-build pass may not emit migrate_config.
 
     // Register authority as minter
     await program.methods
@@ -316,6 +315,7 @@ describe("SSS-154: redemption_queue", () => {
         maxSupply: new BN(1_000_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+        adminTimelockDelay: new BN(0),
       })
       .accounts({
         payer: authority.publicKey,
@@ -329,16 +329,7 @@ describe("SSS-154: redemption_queue", () => {
       .signers([collateralMintKp])
       .rpc({ commitment: "confirmed", skipPreflight: true });
 
-    // SSS-122: migrate collateral config v0 → v1
-    await program.methods
-      .migrateConfig()
-      .accounts({
-        authority: authority.publicKey,
-        mint: collateralMint,
-        config: collateralConfigPda,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc({ commitment: "confirmed" });
+    // SSS-122: migrateConfig no-op — initialize() sets CURRENT_VERSION already.
 
     await program.methods
       .updateMinter(new BN(0))
@@ -428,6 +419,7 @@ describe("SSS-154: redemption_queue", () => {
         maxSupply: null,
         featureFlags: null,
         auditorElgamalPubkey: null,
+        adminTimelockDelay: new BN(0),
       })
       .accounts({
         payer: authority.publicKey,
@@ -441,16 +433,42 @@ describe("SSS-154: redemption_queue", () => {
       .signers([mintKp2])
       .rpc({ commitment: "confirmed", skipPreflight: true });
 
-    // SSS-122: migrate secondary config v0 → v1
+    // SSS-122: migrateConfig no-op — initialize() sets CURRENT_VERSION already.
+
+    // ── Tertiary mint (FLAG_REDEMPTION_QUEUE — for non-authority test #3) ────
+    // Use a separate mint so PDA does not collide with the primary redemptionQueuePda.
+    mintKp3 = Keypair.generate();
+    configPda3 = getConfigPda(mintKp3.publicKey, program.programId);
+    queuePda3 = getRedemptionQueuePda(mintKp3.publicKey, program.programId);
+
     await program.methods
-      .migrateConfig()
+      .initialize({
+        preset: 1,
+        decimals: 6,
+        name: "NonAuth Test Stable",
+        symbol: "NAT",
+        uri: "https://example.com/nat",
+        transferHookProgram: null,
+        collateralMint: null,
+        reserveVault: null,
+        maxSupply: null,
+        featureFlags: FLAG_REDEMPTION_QUEUE,
+        auditorElgamalPubkey: null,
+        adminTimelockDelay: new BN(0),
+      })
       .accounts({
-        authority: authority.publicKey,
-        mint: mintKp2.publicKey,
-        config: configPda2,
+        payer: authority.publicKey,
+        mint: mintKp3.publicKey,
+        config: configPda3,
+        ctConfig: null,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc({ commitment: "confirmed" });
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .signers([mintKp3])
+      .rpc({ commitment: "confirmed", skipPreflight: true });
+
+    // SSS-122: migrateConfig no-op — initialize() sets CURRENT_VERSION already.
   });
 
   // ---------------------------------------------------------------------------
@@ -472,14 +490,15 @@ describe("SSS-154: redemption_queue", () => {
     expect(rq.sssMint.toBase58()).to.equal(stableMint.toBase58());
     expect(rq.queueHead.toNumber()).to.equal(0);
     expect(rq.queueTail.toNumber()).to.equal(0);
-    expect(rq.minDelaySlots.toNumber()).to.equal(50);
-    expect(rq.maxQueueDepth.toNumber()).to.equal(100);
-    expect(rq.maxRedemptionPerSlotBps).to.equal(500);
-    expect(rq.keeperRewardLamports.toNumber()).to.equal(5000);
+    // On-chain defaults from RedemptionQueue constants
+    expect(rq.minDelaySlots.toNumber()).to.equal(750);
+    expect(rq.maxQueueDepth.toNumber()).to.equal(1000);
+    expect(rq.maxRedemptionPerSlotBps).to.equal(100);
+    expect(rq.keeperRewardLamports.toNumber()).to.equal(1_000_000);
 
-    // Lower min_delay_slots to 1 for test speed
+    // Tune params for test speed: min_delay=1 slot, bps=500 (5%) for cap tests
     await program.methods
-      .updateRedemptionQueue(new BN(1), null, null, null)
+      .updateRedemptionQueue(new BN(1), null, 500, null)
       .accountsPartial({
         authority: authority.publicKey,
         config: configPda,
@@ -489,6 +508,7 @@ describe("SSS-154: redemption_queue", () => {
 
     const rq2 = await program.account.redemptionQueue.fetch(redemptionQueuePda);
     expect(rq2.minDelaySlots.toNumber()).to.equal(1);
+    expect(rq2.maxRedemptionPerSlotBps).to.equal(500);
   });
 
   // ---------------------------------------------------------------------------
@@ -516,26 +536,23 @@ describe("SSS-154: redemption_queue", () => {
   // ---------------------------------------------------------------------------
 
   it("3. init_redemption_queue: fails for non-authority", async () => {
-    // Verify authority enforcement via update_redemption_queue (non-init path,
-    // same Unauthorized constraint on config.authority == authority).
-    // The queue was already init'd in test 1; nonOwner is not the authority.
+    // Use mintKp3/configPda3/queuePda3 — a separate mint with FLAG_REDEMPTION_QUEUE
+    // whose queue PDA has NOT been allocated yet. This avoids "account already in use"
+    // collision with the primary redemptionQueuePda initialized in test #1.
+    // nonOwner is not config.authority (which is the provider wallet), so the program
+    // must reject with Unauthorized before allocating any account.
     await assertError(
       async () => {
-        const tx = await program.methods
-          .updateRedemptionQueue(new BN(50), null, null, null)
+        await program.methods
+          .initRedemptionQueue()
           .accounts({
             authority: nonOwner.publicKey,
-            config: configPda,
-            redemptionQueue: redemptionQueuePda,
+            config: configPda3,
+            redemptionQueue: queuePda3,
+            systemProgram: SystemProgram.programId,
           } as any)
           .signers([nonOwner])
-          .transaction();
-        // Sign with nonOwner and send (preflight will catch constraint)
-        const { blockhash } = await provider.connection.getLatestBlockhash();
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = nonOwner.publicKey;
-        tx.sign(nonOwner);
-        await provider.connection.sendRawTransaction(tx.serialize());
+          .rpc({ commitment: "confirmed" });
       },
       "Unauthorized"
     );

@@ -49,6 +49,8 @@ use routes::{
     webhooks::{delete_webhook, list_webhooks, register_webhook},
     ws_events::ws_events_handler,
     zk_credentials::{list_credential_records, list_registries, submit_credential, upsert_registry, verify_credential},
+    travel_rule::{get_travel_rule_records, get_pid_config},
+    webhook_deliveries::list_webhook_deliveries,
 };
 use state::AppState;
 
@@ -102,7 +104,7 @@ async fn main() {
     // Allowed admin origins are read from SSS_ADMIN_ORIGINS (comma-separated).
     // Example: SSS_ADMIN_ORIGINS=https://admin.sss.finance,https://localhost:3000
     // If unset, admin CORS falls back to localhost:3000 (development default).
-    let admin_origins: Vec<HeaderValue> = std::env::var("SSS_ADMIN_ORIGINS")
+    let _admin_origins: Vec<HeaderValue> = std::env::var("SSS_ADMIN_ORIGINS")
         .unwrap_or_else(|_| "http://localhost:3000".to_string())
         .split(',')
         .filter_map(|s| {
@@ -155,6 +157,14 @@ async fn main() {
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
         .route("/api/webhooks/register", post(register_webhook))
         .route("/api/webhooks/:id", delete(delete_webhook))
+        .route("/api/alerts", get(get_alerts).post(post_alert))
+        .route("/api/webhook-deliveries", get(list_webhook_deliveries))
+        .route("/api/travel-rule/records", get(get_travel_rule_records))
+        .route("/api/pid-config", get(get_pid_config))
+        .route("/api/zk-credentials/records", get(list_credential_records))
+        .route("/api/zk-credentials/submit", post(submit_credential))
+        .route("/api/zk-credentials/verify", post(verify_credential))
+        .route("/api/zk-credentials/registry", get(list_registries).post(upsert_registry))
         .route("/api/ws/events", get(ws_events_handler))
         .merge(admin_routes)
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
@@ -263,7 +273,7 @@ mod tests {
     /// can exercise the 429 path without hammering the default 60-token bucket.
     fn build_app_with_capacity(capacity: u32) -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        let key_entry = db.create_api_key("rl-test", "admin").expect("Failed to create test API key");
+        let key_entry = db.create_api_key("rl-test").expect("Failed to create test API key");
         let test_key = key_entry.key.clone();
 
         let state = AppState::with_limiter(db, RateLimiter::new(capacity, 0.0));
@@ -489,7 +499,7 @@ mod tests {
             Some(12350),
         ).unwrap();
 
-        let key_entry = db.create_api_key("test", "admin").unwrap();
+        let key_entry = db.create_api_key("test").unwrap();
         let test_key = key_entry.key.clone();
         let state = AppState::new(db);
         let app = Router::new()
@@ -636,7 +646,7 @@ mod tests {
         use tower::Service;
 
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("ra-test", "admin").expect("api key");
+        let key_entry = db.create_api_key("ra-test").expect("api key");
         let test_key = key_entry.key.clone();
 
         // capacity=1, rps=2.0 → Retry-After = ceil((1-0)/2.0) = 1 sec
@@ -1449,7 +1459,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_insert_and_list() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test", "admin").unwrap();
+        let key_entry = db.create_api_key("test").unwrap();
         let test_key = key_entry.key.clone();
         // Seed two liquidation entries.
         db.insert_liquidation(
@@ -1495,7 +1505,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_filter_by_cdp_address() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test", "admin").unwrap();
+        let key_entry = db.create_api_key("test").unwrap();
         let test_key = key_entry.key.clone();
         db.insert_liquidation("CDP_A", "MintX", 100, 50, "Liq1", None, None).unwrap();
         db.insert_liquidation("CDP_B", "MintX", 200, 100, "Liq2", None, None).unwrap();
@@ -1524,7 +1534,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_filter_by_collateral_mint() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test", "admin").unwrap();
+        let key_entry = db.create_api_key("test").unwrap();
         let test_key = key_entry.key.clone();
         db.insert_liquidation("CDP1", "MintSOL", 100, 50, "LiqA", None, None).unwrap();
         db.insert_liquidation("CDP2", "MintUSDC", 200, 100, "LiqB", None, None).unwrap();
@@ -1551,7 +1561,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_pagination_limit_offset() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test", "admin").unwrap();
+        let key_entry = db.create_api_key("test").unwrap();
         let test_key = key_entry.key.clone();
         for i in 0..5u64 {
             db.insert_liquidation(
@@ -1623,7 +1633,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_liquidations_response_fields() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test", "admin").unwrap();
+        let key_entry = db.create_api_key("test").unwrap();
         let test_key = key_entry.key.clone();
         db.insert_liquidation(
             "CDP_FIELD_TEST",
@@ -1764,7 +1774,7 @@ mod qa_tests {
 
     fn build_analytics_app() -> (axum::Router, String) {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("analytics-test", "admin").unwrap();
+        let key_entry = db.create_api_key("analytics-test").unwrap();
         let test_key = key_entry.key.clone();
         let state = AppState::new(db);
         let app = Router::new()
@@ -1789,7 +1799,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_analytics_liquidations_with_data() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test", "admin").unwrap();
+        let key_entry = db.create_api_key("test").unwrap();
         let test_key = key_entry.key.clone();
         // Insert 3 liquidations.
         for i in 0..3u64 {
@@ -1848,7 +1858,7 @@ mod qa_tests {
     #[tokio::test]
     async fn test_analytics_cdp_health_with_events() {
         let db = Database::new(":memory:").expect("in-memory db");
-        let key_entry = db.create_api_key("test", "admin").unwrap();
+        let key_entry = db.create_api_key("test").unwrap();
         let test_key = key_entry.key.clone();
         // Healthy CDP: 5000 collateral, 1000 debt → hf=5.0
         db.insert_event_log("cdp_deposit", "CDP_A",

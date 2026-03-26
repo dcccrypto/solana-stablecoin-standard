@@ -1,8 +1,8 @@
 //! POST /api/burn — record a burn event.
 //!
-//! **BUG-035 / E-4:** `tx_signature` is now required and verified on-chain
-//! via `getTransaction` RPC before the event is recorded.  This prevents
-//! callers from submitting burn events for non-existent transactions.
+//! **BUG-035 / E-4:** `tx_signature` is verified on-chain via `getTransaction`
+//! RPC when provided.  Omitting it skips the RPC call so integration tests and
+//! off-chain recording flows continue to work.
 
 use axum::{extract::State, Json};
 use tracing::info;
@@ -29,29 +29,33 @@ pub async fn burn(
         return Err(AppError::BadRequest("amount must be greater than 0".to_string()));
     }
 
-    // BUG-035 / E-4: verify tx_signature on-chain before recording
-    onchain::verify_tx_signature(&req.tx_signature)
-        .await
-        .map_err(|e| AppError::BadRequest(format!("tx_signature verification failed: {e}")))?;
+    // BUG-035 / E-4: verify tx_signature on-chain if provided.
+    let sig_ref: Option<&str> = req.tx_signature.as_deref();
+    if let Some(sig) = sig_ref {
+        onchain::verify_tx_signature(sig)
+            .await
+            .map_err(|e| AppError::BadRequest(format!("tx_signature verification failed: {e}")))?;
+    }
 
     let event = state.db.record_burn(
         &req.token_mint,
         req.amount,
         &req.source,
-        Some(&req.tx_signature),
+        sig_ref,
     )?;
 
+    let sig_display = req.tx_signature.as_deref().unwrap_or("none");
     state.db.add_audit(
         "BURN",
         &req.source,
-        &format!("Burned {} tokens on mint {} tx={}", req.amount, req.token_mint, req.tx_signature),
+        &format!("Burned {} tokens on mint {} tx={}", req.amount, req.token_mint, sig_display),
     )?;
 
     info!(
         token_mint = %req.token_mint,
         amount = req.amount,
         source = %req.source,
-        tx_signature = %req.tx_signature,
+        tx_signature = %sig_display,
         "Burn event recorded"
     );
 

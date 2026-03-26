@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // SSS-139: AlertManager — routes alerts to Discord webhook, PagerDuty, and on-chain AlertRecord PDA.
 
 use tracing::{error, info, warn};

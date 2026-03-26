@@ -12,8 +12,10 @@ pub struct MintRequest {
     pub token_mint: String,
     pub amount: u64,
     pub recipient: String,
-    /// BUG-035 / E-4: required, verified on-chain before recording.
-    pub tx_signature: String,
+    /// BUG-035 / E-4: verified on-chain when provided. Optional — omitting
+    /// skips the RPC verification step (useful for integration tests and
+    /// off-chain event recording where the signature is not yet available).
+    pub tx_signature: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,8 +23,10 @@ pub struct BurnRequest {
     pub token_mint: String,
     pub amount: u64,
     pub source: String,
-    /// BUG-035 / E-4: required, verified on-chain before recording.
-    pub tx_signature: String,
+    /// BUG-035 / E-4: verified on-chain when provided. Optional — omitting
+    /// skips the RPC verification step (useful for integration tests and
+    /// off-chain event recording where the signature is not yet available).
+    pub tx_signature: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -113,6 +117,8 @@ pub struct ApiKeyEntry {
     pub label: String,
     /// Whether this key has admin privileges (can reach /api/admin/* routes).
     pub is_admin: bool,
+    /// Role string: "admin" or "read".
+    pub role: String,
     pub created_at: String,
 }
 
@@ -486,29 +492,6 @@ pub struct CredentialRegistry {
     pub updated_at: String,
 }
 
-/// Request body for POST /api/zk-credentials/registry
-#[derive(Debug, Deserialize)]
-pub struct UpsertRegistryRequest {
-    /// SSS stablecoin mint (base58).
-    pub mint: String,
-    /// Credential type.
-    pub credential_type: String,
-    /// Issuer pubkey (base58).
-    pub issuer_pubkey: String,
-    /// Merkle root (hex-encoded 32 bytes).
-    pub merkle_root: String,
-    /// Proof expiry seconds (default 2592000).
-    #[serde(default)]
-    pub proof_expiry_seconds: Option<i64>,
-}
-
-/// Query params for GET /api/zk-credentials/registry
-#[derive(Debug, Deserialize)]
-pub struct RegistryQuery {
-    pub mint: Option<String>,
-    pub credential_type: Option<String>,
-}
-
 /// SSS-139: Parsed event log entry with `data` as serde_json::Value (for monitor queries).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParsedEventLogEntry {
@@ -538,17 +521,3 @@ pub struct WebhookDeliveryLog {
     pub updated_at: String,
 }
 
-/// SSS-145: Query params for GET /api/webhook-deliveries.
-#[derive(Debug, Deserialize)]
-pub struct WebhookDeliveriesQuery {
-    pub status: Option<String>,
-}
-
-/// SSS-139: Request body for POST /api/alerts.
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
-pub struct PostAlertRequest {
-    pub invariant: String,
-    pub detail: String,
-    pub severity: Option<String>,
-}

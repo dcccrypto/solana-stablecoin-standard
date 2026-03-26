@@ -17,7 +17,7 @@ pub async fn create_api_key(
         .unwrap_or("unnamed")
         .to_string();
     // E-2: caller must specify role; default to "read" if omitted
-    let role = body
+    let _role = body
         .get("role")
         .and_then(|v| v.as_str())
         .unwrap_or("read")
