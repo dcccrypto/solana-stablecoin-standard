@@ -9,7 +9,7 @@ pub mod redemption_pool;
 pub mod travel_rule;
 pub mod sanctions_oracle;
 pub mod accept_authority;
-pub mod bridge;
+pub mod proof_of_reserves;
 pub mod admin_timelock;
 pub mod burn;
 pub mod dao_committee;
@@ -86,26 +86,7 @@ pub use update_roles::*;
 pub use yield_collateral::*;
 pub use pid_fee::*;
 pub use zk_compliance::*;
-pub use zk_credential::*;
-pub use liquidation_bonus::*;
-pub use psm_amm_slippage::*;
-pub use squads_authority::*;
-pub use wallet_rate_limit::*;
-
-pub mod market_maker;
-pub use market_maker::*;
-
-pub mod multi_oracle;
-pub use multi_oracle::*;
-
-pub mod upgrade;
-pub use upgrade::*;
-
-pub mod guardian;
-pub use guardian::*;
-
-pub mod redemption_queue;
-pub use redemption_queue::*;
+pub use proof_of_reserves::*;
 
 // Re-export param types from state
 pub use crate::state::{InitializeParams, UpdateRolesParams};

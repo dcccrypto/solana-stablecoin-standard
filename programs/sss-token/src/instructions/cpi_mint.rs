@@ -17,7 +17,11 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
-use crate::state::{InterfaceVersion, MinterInfo, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
+use crate::events::MintHaltedByPoRBreach;
+use crate::state::{
+    InterfaceVersion, MinterInfo, ProofOfReserves, StablecoinConfig, FLAG_CIRCUIT_BREAKER,
+    FLAG_POR_HALT_ON_BREACH,
+};
 
 #[derive(Accounts)]
 pub struct CpiMint<'info> {
@@ -73,28 +77,44 @@ pub fn cpi_mint_handler(ctx: Context<CpiMint>, amount: u64, required_version: u8
     // ── Standard mint logic (identical to mint::handler) ─────────────────────
     require!(amount > 0, SssError::ZeroAmount);
     require!(!ctx.accounts.config.paused, SssError::MintPaused);
-    // SSS-113 HIGH-02: Circuit breaker — halt all minting when FLAG_CIRCUIT_BREAKER is set.
+    // Circuit breaker — halt all minting when FLAG_CIRCUIT_BREAKER is set.
     require!(
         ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
         SssError::CircuitBreakerActive
     );
 
-    // SSS-113 HIGH-02: Per-minter epoch velocity limit — same guard as in mint::handler.
-    // Without this, the CPI entrypoint bypasses the rate-limit added in SSS-093.
+    // SSS-BUG-008 / AUDIT-G6 / AUDIT-H4: PoR breach halt.
+    // When FLAG_POR_HALT_ON_BREACH is set, the caller must pass the ProofOfReserves
+    // PDA as remaining_accounts[0]. We deserialize it and reject minting if
+    // reserve_ratio < min_reserve_ratio_bps.
     {
-        let clock = Clock::get()?;
-        let current_epoch = clock.epoch;
-        let minter_info = &mut ctx.accounts.minter_info;
-        if minter_info.last_epoch_reset == 0 || current_epoch != minter_info.last_epoch_reset {
-            minter_info.minted_this_epoch = 0;
-            minter_info.last_epoch_reset = current_epoch;
-        }
-        if minter_info.max_mint_per_epoch > 0 {
+        let config = &ctx.accounts.config;
+        if config.feature_flags & FLAG_POR_HALT_ON_BREACH != 0 {
             require!(
-                minter_info.minted_this_epoch.checked_add(amount).unwrap()
-                    <= minter_info.max_mint_per_epoch,
-                SssError::MintVelocityExceeded
+                !ctx.remaining_accounts.is_empty(),
+                SssError::PoRNotAttested
             );
+            let por_info = &ctx.remaining_accounts[0];
+            let (expected_pda, _bump) = Pubkey::find_program_address(
+                &[ProofOfReserves::SEED, config.mint.as_ref()],
+                ctx.program_id,
+            );
+            require!(por_info.key() == expected_pda, SssError::InvalidVault);
+            let data = por_info.try_borrow_data()?;
+            let por = ProofOfReserves::try_deserialize(&mut data.as_ref())?;
+            drop(data);
+            require!(por.last_attestation_slot > 0, SssError::PoRNotAttested);
+            let min_ratio = config.min_reserve_ratio_bps as u64;
+            if min_ratio > 0 && por.last_verified_ratio_bps < min_ratio {
+                emit!(MintHaltedByPoRBreach {
+                    mint: config.mint,
+                    current_ratio_bps: por.last_verified_ratio_bps,
+                    min_ratio_bps: min_ratio,
+                    last_attestation_slot: por.last_attestation_slot,
+                    attempted_amount: amount,
+                });
+                return err!(SssError::PoRBreachHaltsMinting);
+            }
         }
     }
 
