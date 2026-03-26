@@ -370,13 +370,25 @@ pub enum SssError {
     // Oracle
     #[msg("Oracle not configured — set oracle_type and oracle_feed first")]
     OracleNotConfigured,
-    // SSS-150: Upgrade authority guard
-    #[msg("Upgrade authority guard already set — cannot change after initialization")]
-    UpgradeAuthorityGuardAlreadySet,
-    #[msg("Upgrade authority guard not set — call set_upgrade_authority_guard first")]
-    UpgradeAuthorityGuardNotSet,
-    #[msg("Provided upgrade authority does not match the expected upgrade authority guard")]
-    UpgradeAuthorityMismatch,
-    #[msg("Upgrade authority guard must be a non-default Squads multisig pubkey")]
-    UpgradeAuthorityGuardInvalidKey,
+    // SSS-152: Circuit Breaker Keeper
+    #[msg("Circuit breaker not armed — set FLAG_CIRCUIT_BREAKER first")]
+    CircuitBreakerNotArmed,
+    #[msg("Keeper cooldown active — must wait min_cooldown_slots since last trigger")]
+    KeeperCooldownActive,
+    #[msg("Peg is within threshold — circuit breaker cannot fire")]
+    PegWithinThreshold,
+    #[msg("Peg is still deviating — cannot unpause yet")]
+    PegStillDeviating,
+    #[msg("Recovery window not yet met — peg must stay within threshold for sustained_recovery_slots")]
+    KeeperRecoveryWindowNotMet,
+    #[msg("Mint is not paused")]
+    NotPaused,
+    #[msg("KeeperConfig mint does not match stablecoin config mint")]
+    KeeperConfigMintMismatch,
+    #[msg("Invalid keeper deviation — must be 1–5000 bps")]
+    InvalidKeeperDeviation,
+    #[msg("Invalid keeper cooldown — min_cooldown_slots must be > 0")]
+    InvalidKeeperCooldown,
+    #[msg("Invalid keeper recovery — sustained_recovery_slots must be > 0")]
+    InvalidKeeperRecovery,
 }
