@@ -6,6 +6,14 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### SSS-137 — On-Chain State Structs & Error Variants (commit f179dc3)
+
+- `programs/sss-token/src/state.rs` — added 23 missing `#[account]` structs formalizing all PDAs previously described only in docs: `ProofOfReserves`, `OracleConsensus`, `OracleSource`, `SanctionsRecord`, `InsuranceVault`, `KeeperConfig`, `MarketMakerConfig`, `BridgeConfig`, `ConsumedMessageId`, `CredentialRecord`, `CredentialRegistry`, `LiquidationBonusConfig`, `PidConfig`, `PsmCurveConfig`, `RedemptionEntry`, `RedemptionGuarantee`, `RedemptionPool`, `RedemptionQueue`, `RedemptionRequest`, `ReserveComposition`, `SquadsMultisigConfig`, `TravelRuleRecord`, `WalletRateLimit`
+- `StablecoinConfig` — added 8 missing fields: `version` (u8, breaking-change guard), `min_reserve_ratio_bps` (u16, SSS-BUG-008), `travel_rule_threshold` (u64, SSS-127), `sanctions_oracle` (Pubkey, SSS-128), `sanctions_max_staleness_slots` (u64, SSS-128), `authorized_keepers` (Vec<Pubkey> max 8, BUG-015), `squads_multisig` (Pubkey, SSS-134), `expected_upgrade_authority` (Pubkey, SSS-150)
+- `programs/sss-token/src/error.rs` — added 44 missing `SssError` variants covering: Guardian pause timelock, `ConfigVersionTooOld`, Oracle consensus, PoR breach minting halt, supply cap enforcement, ZK credentials, legal entity registry, liquidation tier config, PID fee range, PSM curve, wallet rate limits, Squads authority, and multi-oracle consensus
+- `backend/` — fixed unclosed delimiter in `circuit_breaker.rs`, removed duplicate structs from `models.rs`, added `supply_verify` route, missing DB methods (`query_event_log`, `get_api_key_role`, credential/travel-rule CRUD), fixed `webhook_dispatch.rs` imports
+
+
 ### SSS-154 — Redemption Queue + Front-Run Protection
 
 - `docs/REDEMPTION-QUEUE.md` — full reference: `RedemptionQueue`/`RedemptionEntry` PDAs, 5 instructions (`init_redemption_queue`, `enqueue_redemption`, `process_redemption`, `cancel_redemption`, `update_redemption_queue`), 3 events, 6 errors, default parameters, TypeScript example, keeper runbook, security notes [PR #295]
