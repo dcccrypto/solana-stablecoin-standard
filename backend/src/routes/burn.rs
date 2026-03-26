@@ -1,9 +1,16 @@
+//! POST /api/burn — record a burn event.
+//!
+//! **BUG-035 / E-4:** `tx_signature` is now required and verified on-chain
+//! via `getTransaction` RPC before the event is recorded.  This prevents
+//! callers from submitting burn events for non-existent transactions.
+
 use axum::{extract::State, Json};
 use tracing::info;
 
 use crate::{
     error::AppError,
     models::{ApiResponse, BurnEvent, BurnRequest},
+    routes::onchain,
     state::AppState,
     webhook_dispatch,
 };
@@ -22,23 +29,29 @@ pub async fn burn(
         return Err(AppError::BadRequest("amount must be greater than 0".to_string()));
     }
 
+    // BUG-035 / E-4: verify tx_signature on-chain before recording
+    onchain::verify_tx_signature(&req.tx_signature)
+        .await
+        .map_err(|e| AppError::BadRequest(format!("tx_signature verification failed: {e}")))?;
+
     let event = state.db.record_burn(
         &req.token_mint,
         req.amount,
         &req.source,
-        req.tx_signature.as_deref(),
+        Some(&req.tx_signature),
     )?;
 
     state.db.add_audit(
         "BURN",
         &req.source,
-        &format!("Burned {} tokens on mint {}", req.amount, req.token_mint),
+        &format!("Burned {} tokens on mint {} tx={}", req.amount, req.token_mint, req.tx_signature),
     )?;
 
     info!(
         token_mint = %req.token_mint,
         amount = req.amount,
         source = %req.source,
+        tx_signature = %req.tx_signature,
         "Burn event recorded"
     );
 
