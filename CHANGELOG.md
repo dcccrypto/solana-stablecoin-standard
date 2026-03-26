@@ -6,7 +6,11 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
-### BUG-032 — `deposit_collateral` Missing Pause Check
+### Transfer-Hook Error Enum — SanctionsRecordMissing renamed (bb98cdd)
+
+- `docs/SANCTIONS-ORACLE.md` — renamed `SanctionsRecordMissing` → `SanctionsRecordMissingBug003` in all references (error table, flow steps, security section, test descriptions) to match `programs/transfer-hook/src/lib.rs` fix that removed the duplicate error variant (commit bb98cdd)
+
+### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
 - `docs/on-chain-sdk-cdp.md` — Key guarantees updated: `deposit_collateral` now enforces `StablecoinConfig.paused`; returns `SssError::Paused` on entry when program is halted. Error Reference table updated with `Paused` row. `depositCollateral` method description updated with BUG-032 pause-check callout.
 

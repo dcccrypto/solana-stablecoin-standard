@@ -232,6 +232,127 @@ pub enum SssError {
     DaoFlagProtected,
     #[msg("Caller is not the authority nor a registered committee member — cannot propose")]
     NotAuthorizedToPropose,
-    #[msg("SSS-3 requires supply_cap > 0 to prevent uncapped minting (supply_cap_locked)")]
-    SupplyCapRequired,
+    // SSS-127: Travel Rule
+    #[msg("Compliance authority changes require a timelocked operation")]
+    ComplianceAuthorityRequiresTimelock,
+    #[msg("Travel Rule record is invalid or does not match the transfer")]
+    TravelRuleRecordInvalid,
+    #[msg("Travel Rule threshold not set — call set_travel_rule_threshold first")]
+    TravelRuleThresholdNotSet,
+    #[msg("Travel Rule threshold requires a travel rule record for this amount")]
+    TravelRuleRequired,
+    // SSS-128: Sanctions
+    #[msg("Sanctioned address — transfer blocked by sanctions oracle")]
+    SanctionedAddress,
+    #[msg("Sanctions record is stale — oracle has not attested recently")]
+    SanctionsRecordStale,
+    #[msg("Sanctions record account is required when FLAG_SANCTIONS_ORACLE is set")]
+    SanctionsRecordMissing,
+    // SSS-137: Redemption pool
+    #[msg("Redemption pool is empty — no liquidity available")]
+    RedemptionPoolEmpty,
+    #[msg("Redemption pool is full — liquidity exceeds max_pool_size")]
+    RedemptionPoolFull,
+    #[msg("Redemption pool mint mismatch — pool does not match the stablecoin mint")]
+    RedemptionPoolMintMismatch,
+    #[msg("Redemption pool vault mismatch — vault does not match the pool's vault_token_account")]
+    RedemptionPoolVaultMismatch,
+    #[msg("Redemption already fulfilled — cannot fulfill twice")]
+    RedemptionAlreadyFulfilled,
+    #[msg("Redemption not expired — SLA window has not elapsed")]
+    RedemptionNotExpired,
+    #[msg("Redemption daily limit exceeded — try again in the next window")]
+    RedemptionDailyLimitExceeded,
+    #[msg("Redemption fee too high — max 500 bps (5%)")]
+    RedemptionFeeTooHigh,
+    #[msg("SLA has been breached — use claim_expired_redemption instead")]
+    RedemptionSLABreached,
+    // Bridge errors
+    #[msg("Bridge is not enabled — FLAG_BRIDGE_ENABLED is not set")]
+    BridgeNotEnabled,
+    #[msg("Bridge config mint mismatch")]
+    BridgeConfigMintMismatch,
+    #[msg("Bridge type invalid — must be 0 (Wormhole) or 1 (LayerZero)")]
+    InvalidBridgeType,
+    #[msg("Bridge fee too high — max 1000 bps (10%)")]
+    BridgeFeeTooHigh,
+    #[msg("Bridge amount exceeds the per-tx limit")]
+    BridgeAmountExceedsLimit,
+    #[msg("Bridge proof is empty")]
+    BridgeProofEmpty,
+    #[msg("Bridge recipient mismatch")]
+    BridgeRecipientMismatch,
+    #[msg("Bridge relayer is not authorized")]
+    BridgeRelayerUnauthorized,
+    // Token account errors
+    #[msg("Token account owner mismatch")]
+    TokenAccountOwnerMismatch,
+    #[msg("Token account mint mismatch")]
+    TokenAccountMintMismatch,
+    // Fee vault errors
+    #[msg("Fee vault does not match the configured fee vault")]
+    FeeVaultMismatch,
+    // Reserve composition
+    #[msg("Invalid composition — bps components must sum to 10_000")]
+    InvalidCompositionBps,
+    // SSS-138: Market maker hooks
+    #[msg("Market maker hooks disabled — FLAG_MARKET_MAKER_HOOKS not set")]
+    MarketMakerHooksDisabled,
+    #[msg("Market maker hooks not enabled")]
+    MarketMakerHooksNotEnabled,
+    #[msg("Caller is not a whitelisted market maker")]
+    NotWhitelistedMarketMaker,
+    #[msg("Market maker list is full (max 8)")]
+    MarketMakerListFull,
+    #[msg("Market maker is already registered")]
+    MarketMakerAlreadyRegistered,
+    #[msg("MM mint limit exceeded for this slot")]
+    MmMintLimitExceeded,
+    #[msg("MM burn limit exceeded for this slot")]
+    MmBurnLimitExceeded,
+    #[msg("Oracle price is outside spread threshold — mm_mint/mm_burn not permitted")]
+    OraclePriceOutsideSpread,
+    // SSS-152: Keeper / Circuit breaker
+    #[msg("Keeper config mint mismatch")]
+    KeeperConfigMintMismatch,
+    #[msg("Circuit breaker is not armed — deviation is within threshold")]
+    CircuitBreakerNotArmed,
+    #[msg("Peg is still deviating — cannot auto-unpause yet")]
+    PegStillDeviating,
+    #[msg("Peg is within threshold — no action needed")]
+    PegWithinThreshold,
+    #[msg("Keeper cooldown is active — wait before triggering again")]
+    KeeperCooldownActive,
+    #[msg("Recovery window not met — peg must stay stable for sustained_recovery_slots")]
+    KeeperRecoveryWindowNotMet,
+    #[msg("Invalid keeper deviation threshold")]
+    InvalidKeeperDeviation,
+    #[msg("Invalid keeper cooldown — must be > 0")]
+    InvalidKeeperCooldown,
+    #[msg("Invalid keeper recovery — sustained_recovery_slots must be > 0")]
+    InvalidKeeperRecovery,
+    #[msg("Mint is not paused")]
+    NotPaused,
+    // SSS-154: Redemption queue
+    #[msg("Redemption queue not initialized — call init_redemption_queue first")]
+    RedemptionQueueNotInitialized,
+    #[msg("Redemption queue is full")]
+    RedemptionQueueFull,
+    #[msg("Redemption already processed")]
+    RedemptionAlreadyProcessed,
+    #[msg("Redemption not ready — min_delay_slots not elapsed")]
+    RedemptionNotReady,
+    #[msg("Caller is not the owner of this redemption entry")]
+    RedemptionNotOwner,
+    #[msg("Redemption slot cap exceeded — too many redeemed this slot")]
+    RedemptionSlotCapExceeded,
+    // SSS-150: Upgrade authority guard
+    #[msg("Upgrade authority guard is not set")]
+    UpgradeAuthorityGuardNotSet,
+    #[msg("Upgrade authority guard is already set (irreversible)")]
+    UpgradeAuthorityGuardAlreadySet,
+    #[msg("Upgrade authority guard key is invalid (zero or mismatches squads_multisig)")]
+    UpgradeAuthorityGuardInvalidKey,
+    #[msg("Upgrade authority mismatch — actual BPF upgrade authority differs from guard")]
+    UpgradeAuthorityMismatch,
 }

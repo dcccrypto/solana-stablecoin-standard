@@ -29,7 +29,7 @@ use anchor_spl::token_interface::{
 
 use crate::error::SssError;
 use crate::events::{BridgeConfigInitialized, BridgeIn, BridgeOut};
-use crate::state::{BridgeConfig, ConsumedMessageId, StablecoinConfig, FLAG_BRIDGE_ENABLED, FLAG_CIRCUIT_BREAKER};
+use crate::state::{BridgeConfig, ConsumedMessageId, SanctionsRecord, StablecoinConfig, FLAG_BRIDGE_ENABLED, FLAG_CIRCUIT_BREAKER, FLAG_SANCTIONS_ORACLE};
 
 // ---------------------------------------------------------------------------
 // init_bridge_config
@@ -328,6 +328,11 @@ pub struct BridgeTokensIn<'info> {
 
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
+
+    /// Optional: sanctions record for recipient. Required when FLAG_SANCTIONS_ORACLE is set.
+    /// Seeds: [b"sanctions-record", mint, recipient]
+    /// CHECK: verified manually if FLAG_SANCTIONS_ORACLE is set.
+    pub sanctions_record: Option<UncheckedAccount<'info>>,
 }
 
 /// Bridge tokens in: verify bridge proof, mint `amount` to recipient.
@@ -385,6 +390,23 @@ pub fn bridge_in_handler(
             config.net_supply().checked_add(amount).unwrap() <= config.max_supply,
             SssError::MaxSupplyExceeded
         );
+    }
+
+    // Check recipient sanctions if oracle is configured
+    if config.feature_flags & FLAG_SANCTIONS_ORACLE != 0 {
+        let sr_account = ctx.accounts.sanctions_record.as_ref()
+            .ok_or(error!(SssError::SanctionsRecordMissing))?;
+        let sr_data = sr_account.try_borrow_data()?;
+        // Verify this is the right PDA
+        let (expected_sr, _) = Pubkey::find_program_address(
+            &[SanctionsRecord::SEED, ctx.accounts.mint.key().as_ref(), recipient.as_ref()],
+            ctx.program_id,
+        );
+        require_keys_eq!(sr_account.key(), expected_sr, SssError::Unauthorized);
+        // Layout: disc(8) + sss_mint(32) + wallet(32) + is_sanctioned(1) = 73 bytes min
+        if sr_data.len() >= 73 && sr_data[72] != 0 {
+            return Err(error!(SssError::SanctionedAddress));
+        }
     }
 
     // Mark message_id as consumed (PDA already init'd in account constraints — init

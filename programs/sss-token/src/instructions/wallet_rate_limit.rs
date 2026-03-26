@@ -207,8 +207,11 @@ pub struct UpdateWalletRateLimitParams {
 #[instruction(params: UpdateWalletRateLimitParams)]
 pub struct UpdateWalletRateLimit<'info> {
     /// Must be the transfer-hook program or the sss-token authority.
-    /// In practice the transfer-hook CPI uses its own program signing.
-    pub caller: Signer<'info>,
+    /// UncheckedAccount (not Signer) to allow unsigned CPI from the transfer-hook
+    /// program — the hook cannot sign as a program (no PDA signer), so we validate
+    /// the caller key manually in the handler.
+    /// CHECK: key is verified in update_wallet_rate_limit_handler.
+    pub caller: UncheckedAccount<'info>,
 
     #[account(
         seeds = [StablecoinConfig::SEED, mint.key().as_ref()],
@@ -225,8 +228,6 @@ pub struct UpdateWalletRateLimit<'info> {
         bump = wallet_rate_limit.bump,
     )]
     pub wallet_rate_limit: Account<'info, WalletRateLimit>,
-
-    pub token_program: Interface<'info, TokenInterface>,
 }
 
 pub fn update_wallet_rate_limit_handler(
