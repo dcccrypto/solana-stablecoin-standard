@@ -45,8 +45,7 @@ import {
   ADMIN_OP_TRANSFER_AUTHORITY,
   ADMIN_OP_SET_FEATURE_FLAG,
   ADMIN_OP_CLEAR_FEATURE_FLAG,
-  ADMIN_OP_SET_PYTH_FEED,
-  ADMIN_OP_SET_ORACLE_PARAMS,
+  ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY,
   DEFAULT_ADMIN_TIMELOCK_DELAY,
 } from '@stbr/sss-token';
 ```
@@ -60,11 +59,10 @@ import {
 | Constant | Value | Description |
 |---|---|---|
 | `ADMIN_OP_NONE` | `0` | No pending operation |
-| `ADMIN_OP_TRANSFER_AUTHORITY` | `1` | Pending authority transfer |
+| `ADMIN_OP_TRANSFER_AUTHORITY` | `1` | Pending admin authority transfer |
 | `ADMIN_OP_SET_FEATURE_FLAG` | `2` | Pending feature-flag enable |
 | `ADMIN_OP_CLEAR_FEATURE_FLAG` | `3` | Pending feature-flag disable |
-| `ADMIN_OP_SET_PYTH_FEED` | `4` | Pending Pyth price feed update (BUG-017 / AUDIT-A HIGH-06) |
-| `ADMIN_OP_SET_ORACLE_PARAMS` | `5` | Pending oracle staleness / confidence-interval update (BUG-017 / AUDIT-A HIGH-06) |
+| `ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` | `10` | Pending compliance authority transfer — **always enforces min 432 000-slot delay (BUG-019)** |
 | `DEFAULT_ADMIN_TIMELOCK_DELAY` | `432_000n` slots | ≈ 2 Solana epochs ≈ 2 days |
 
 > **Note on compliance authority transfer:** When `admin_timelock_delay > 0`, calling `update_roles` to transfer the compliance authority is blocked on-chain. Use `ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` (op kind `10`) via the propose → execute flow instead.
@@ -110,18 +108,19 @@ Propose a timelocked admin operation. Only one operation may be pending at a tim
 | Field | Type | Description |
 |---|---|---|
 | `mint` | `PublicKey` | The stablecoin mint |
-| `opKind` | `AdminOpKind` | `ADMIN_OP_TRANSFER_AUTHORITY`, `ADMIN_OP_SET_FEATURE_FLAG`, `ADMIN_OP_CLEAR_FEATURE_FLAG`, `ADMIN_OP_SET_PYTH_FEED`, or `ADMIN_OP_SET_ORACLE_PARAMS` |
-| `param` | `bigint` | Flag bits for flag ops; `0n` for authority transfer, Pyth feed, or oracle-params ops |
-| `target` | `PublicKey` | New authority for `ADMIN_OP_TRANSFER_AUTHORITY`; Pyth feed pubkey for `ADMIN_OP_SET_PYTH_FEED`; `PublicKey.default` for all other ops |
-| `oracleParams` | `{ maxOracleAgeSecs: number, maxOracleConfBps: number }` | Required for `ADMIN_OP_SET_ORACLE_PARAMS`; omit for all other ops |
+| `opKind` | `AdminOpKind` | `ADMIN_OP_TRANSFER_AUTHORITY` (1), `ADMIN_OP_SET_FEATURE_FLAG` (2), `ADMIN_OP_CLEAR_FEATURE_FLAG` (3), or `ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` (10) |
+| `param` | `bigint` | Flag bits for flag ops; `0n` for authority/compliance transfers |
+| `target` | `PublicKey` | New authority for `ADMIN_OP_TRANSFER_AUTHORITY` or `ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY`; `PublicKey.default` for flag ops |
 
 **Returns:** `Promise<TransactionSignature>`
 
 **Throws:**
 - `SSSError` if `opKind` is `ADMIN_OP_NONE` (0) — passing a no-op kind locks out all admin operations for the full timelock delay (~2 days) without effect. See [AUDIT-F2 fix](#security-notes) and [audit finding](#audit-findings).
-- If `opKind` is not one of the five valid operation kinds.
+- If `opKind` is not one of the four valid operation kinds.
 
-**Example — propose an authority transfer:**
+> **BUG-019 — Compliance authority minimum delay:** When `opKind = ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` (10), the on-chain program uses `max(admin_timelock_delay, DEFAULT_ADMIN_TIMELOCK_DELAY)` as the effective delay. Even if `admin_timelock_delay` has been reduced to zero, this op always enforces the full 432 000-slot (~48 h) wait. This prevents a compromised authority from lowering the delay then immediately hijacking the compliance authority in two transactions.
+
+**Example — propose an admin authority transfer:**
 
 ```typescript
 const sig = await timelock.proposeTimelockOp({
@@ -131,6 +130,26 @@ const sig = await timelock.proposeTimelockOp({
   target:  newAuthorityPublicKey,
 });
 console.log('Transfer proposed, matures in ~2 days:', sig);
+```
+
+**Example — propose a compliance authority transfer (BUG-019: min 432 000-slot delay):**
+
+```typescript
+import { ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY } from '@stbr/sss-token';
+
+const sig = await timelock.proposeTimelockOp({
+  mint,
+  opKind:  ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY,
+  param:   0n,
+  target:  newCompliancePublicKey,
+});
+// On-chain delay = max(config.admin_timelock_delay, 432_000) slots
+console.log('Compliance transfer proposed, matures in ≥432 000 slots (~48 h):', sig);
+
+// After the delay, execute then accept:
+await timelock.executeTimelockOp({ mint });
+const stablecoinAsNewCompliance = await SolanaStablecoin.load(newComplianceProvider, mint);
+await stablecoinAsNewCompliance.acceptComplianceAuthority();
 ```
 
 **Example — propose enabling a feature flag:**
@@ -389,8 +408,10 @@ waitAndExecute();
 ## Security Notes
 
 - **One op at a time.** Proposing a new op overwrites any existing pending op. Verify on-chain state before proposing if you need to preserve a pending op.
-- **All five op kinds are timelock-protected.** `setPythFeed` and `setOracleParams` are **not** immediate — they require the full propose → wait → execute cycle just like authority transfers and feature-flag changes (BUG-017 / AUDIT-A HIGH-06). Direct calls to `set_pyth_feed` or `set_oracle_params` are rejected by the on-chain program when `admin_timelock_delay > 0`.
+- **`setPythFeed` is immediate.** Unlike the timelocked ops, `setPythFeed` takes effect the moment the transaction lands. Set this at protocol initialisation and monitor for unexpected changes.
 - **Delay is configurable.** `config.admin_timelock_delay` can be changed via protocol governance. The default is `DEFAULT_ADMIN_TIMELOCK_DELAY` (432 000 slots ≈ 2 days).
+- **Compliance authority always enforces min delay (BUG-019).** For `ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` (10), the on-chain program uses `max(admin_timelock_delay, DEFAULT_ADMIN_TIMELOCK_DELAY)`. A compromised admin cannot shorten the delay and immediately hijack the compliance authority.
+- **`updateRoles(newComplianceAuthority)` is permanently blocked.** Since BUG-019, any direct compliance authority change via `update_roles` returns `ComplianceAuthorityRequiresTimelock`. The only valid path is `proposeTimelockOp` (op_kind=10). See [on-chain-sdk-admin.md](./on-chain-sdk-admin.md).
 - **Key rotation fallback.** If the admin key is lost before a pending authority transfer executes, the protocol is locked. Maintain a secure backup key and test the rotation flow on devnet before mainnet.
 
 ---
@@ -426,3 +447,21 @@ await timelock.proposeTimelockOp({ mint, opKind: ADMIN_OP_NONE, param: 0n, targe
 ```
 
 **Upgrade action:** No migration required for callers that already pass a valid `opKind`. Callers that previously relied on `ADMIN_OP_NONE` (likely by accident) will now get a clear error message at the SDK layer.
+
+---
+
+### BUG-019 (HIGH) — Compliance Authority Hijack via 2-Tx Pattern with No Timelock
+
+**Fixed in:** `programs/sss-token` commit `23a2161` (2026-03-26)
+
+**Description:** Prior to this fix, `update_roles` only blocked compliance authority changes when `config.admin_timelock_delay > 0`. An attacker (or compromised admin) could execute a 2-transaction hijack: (1) call `set_admin_timelock_delay(0)` to zero out the delay, then (2) call `update_roles(newComplianceAuthority)` to transfer the compliance authority immediately with no timelock protection.
+
+Additionally, when using `propose_timelocked_op` (op_kind=10) for compliance authority transfers, the effective delay was `admin_timelock_delay` — which could also be reduced to near-zero before proposing.
+
+**Fix:**
+1. `update_roles`: Permanently returns `ComplianceAuthorityRequiresTimelock` when `new_compliance_authority` is set — unconditionally, regardless of `admin_timelock_delay`.
+2. `propose_timelocked_op`: For `op_kind = ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY (10)`, the effective delay is `max(admin_timelock_delay, DEFAULT_ADMIN_TIMELOCK_DELAY)` (432 000 slots ≈ 48 h), so a reduced delay cannot shorten this wait.
+
+**New error variant:** `ComplianceAuthorityRequiresTimelock` — "Compliance authority transfer always requires propose_timelocked_op (op_kind=10) with minimum 432_000 slot delay"
+
+**Migration:** Any caller using `update_roles` for compliance authority changes must switch to `proposeTimelockOp({ opKind: ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY, target: newComplianceKey, param: 0n, mint })` followed by `executeTimelockOp` after the 432 000-slot maturity, and then `acceptComplianceAuthority()` from the new compliance wallet.
