@@ -12,7 +12,7 @@ pub mod switchboard;
 use anchor_lang::prelude::*;
 
 use crate::error::SssError;
-use crate::state::StablecoinConfig;
+use crate::state::{OracleConsensus, StablecoinConfig, FLAG_MULTI_ORACLE_CONSENSUS};
 
 /// Oracle type discriminant stored in StablecoinConfig.oracle_type.
 pub const ORACLE_PYTH: u8 = 0;
@@ -74,6 +74,41 @@ pub fn get_oracle_price(
     }
 
     Ok(price)
+}
+
+/// C-1: Get oracle price, using consensus price as the canonical source when
+/// `FLAG_MULTI_ORACLE_CONSENSUS` is set on the config.
+///
+/// Callers that hold an `OracleConsensus` PDA account should pass it here.
+/// When the flag is set but no consensus account is provided, returns
+/// `OracleConsensusNotFound`.  When the flag is not set, falls back to
+/// `get_oracle_price` as usual.
+pub fn get_effective_oracle_price(
+    oracle_feed_acct: &AccountInfo,
+    config: &StablecoinConfig,
+    clock: &Clock,
+    oracle_consensus: Option<&Account<OracleConsensus>>,
+) -> Result<OraclePrice> {
+    if config.feature_flags & FLAG_MULTI_ORACLE_CONSENSUS != 0 {
+        let oc = oracle_consensus.ok_or(error!(SssError::OracleConsensusNotFound))?;
+        let consensus_price = oc.last_consensus_price;
+        require!(consensus_price > 0, SssError::InsufficientOracles);
+        // Staleness: consensus must be within max_age_slots of current slot
+        let current_slot = clock.slot;
+        require!(
+            current_slot.saturating_sub(oc.last_consensus_slot) <= oc.max_age_slots,
+            SssError::StalePriceFeed
+        );
+        // Return consensus price with primary oracle's expo (for unit consistency).
+        // Since both feeds are the same asset, expo is the same.
+        Ok(OraclePrice {
+            price: consensus_price as i64,
+            conf: 0,
+            expo: -8, // canonical stablecoin collateral expo; TODO: store in OracleConsensus
+        })
+    } else {
+        get_oracle_price(oracle_feed_acct, config, clock)
+    }
 }
 
 /// Validate that the account passed by the caller is the expected feed for this config.

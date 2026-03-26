@@ -73,6 +73,11 @@ pub const FLAG_PROBABILISTIC_MONEY: u64 = 1 << 20;
 /// Set by `init_insurance_vault`; cleared only via timelock.
 pub const FLAG_INSURANCE_VAULT_REQUIRED: u64 = 1 << 21;
 
+/// SSS-153: Multi-oracle consensus flag (bit 22): when set, `update_oracle_consensus`
+/// is the canonical price source for CDP, circuit breaker, and any instruction that
+/// reads oracle price.  Requires an `OracleConsensus` PDA via `init_oracle_consensus`.
+pub const FLAG_MULTI_ORACLE_CONSENSUS: u64 = 1 << 22;
+
 /// PRESET_INSTITUTIONAL (4): all SSS-3 features + Squads V4 multisig authority.
 /// Recommended for issuers holding > $1 M in reserves.
 pub const PRESET_INSTITUTIONAL: u8 = 4;
@@ -1860,47 +1865,58 @@ impl CredentialRecord {
     pub const INIT_SPACE: usize = 32 + 32 + 8 + 8 + 1 + 1;
 }
 
-// ── InsuranceVault ────────────────────────────────────────────────────────
-/// SSS-151: First-loss insurance vault PDA — protocol-level reserve for
-/// liquidation cascades.  One per stablecoin mint when
-/// FLAG_INSURANCE_VAULT_REQUIRED is set.
-///
-/// Seeds: [b"insurance-vault", sss_mint]
-///
-/// Distinct from `insurance_fund_pubkey` (bad-debt backstop): this vault is
-/// seeded at initialisation by the issuer and covers liquidation cascades;
-/// the backstop is invoked only after individual liquidations leave bad debt.
+// ── SSS-153: Multi-oracle consensus ─────────────────────────────────────────
+
+/// A single oracle source entry stored in OracleConsensus.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default)]
+pub struct OracleSource {
+    /// Oracle type: 0=Pyth, 1=Switchboard, 2=Custom.
+    pub oracle_type: u8,
+    /// Price feed account address.
+    pub feed: Pubkey,
+}
+
+/// OracleConsensus PDA — aggregates N oracle sources into a consensus price.
+/// Seeds: [b"oracle-consensus", sss_mint].
 #[account]
-#[derive(InitSpace)]
-pub struct InsuranceVault {
-    /// The stablecoin config this vault is associated with.
-    pub sss_mint: Pubkey,
-    /// Collateral token account that holds the vault reserves (PDA-owned).
-    pub vault_token_account: Pubkey,
-    /// Minimum seed required, in basis points of net_supply at seed time
-    /// (e.g. 500 = 5% of net_supply).  0 = no minimum enforced.
-    pub min_seed_bps: u16,
-    /// Mirrored vault balance (ground truth is on-chain token account).
-    pub current_balance: u64,
-    /// Cumulative collateral drawn since vault creation.
-    pub total_drawn: u64,
-    /// Per-event draw cap in bps of net_supply (0 = no per-event cap).
-    pub max_draw_per_event_bps: u16,
-    /// True when current_balance >= required seed amount.
-    pub adequately_seeded: bool,
+pub struct OracleConsensus {
+    /// The stablecoin mint this consensus config belongs to.
+    pub mint: Pubkey,
+    /// Minimum number of non-outlier, fresh sources needed for consensus.
+    pub min_oracles: u8,
+    /// Maximum deviation from median (bps) before a source is rejected as outlier.
+    pub outlier_threshold_bps: u16,
+    /// Maximum source age in slots.
+    pub max_age_slots: u64,
+    /// Number of configured source slots (for informational display; real truth = sources[].feed != default).
+    pub source_count: u8,
+    /// Up to MAX_SOURCES oracle source slots.
+    pub sources: [OracleSource; OracleConsensus::MAX_SOURCES],
+    /// Last computed consensus price (same units as OraclePrice.price, expo from source).
+    pub last_consensus_price: u64,
+    /// Slot when last_consensus_price was written.
+    pub last_consensus_slot: u64,
+    /// TWAP price (EMA, alpha=1/8).
+    pub twap_price: u64,
+    /// Slot when TWAP was last updated.
+    pub twap_last_slot: u64,
     pub bump: u8,
 }
 
-impl InsuranceVault {
-    pub const SEED: &'static [u8] = b"insurance-vault";
+impl OracleConsensus {
+    pub const SEED: &'static [u8] = b"oracle-consensus";
+    /// Maximum number of oracle sources supported.
+    pub const MAX_SOURCES: usize = 5;
 
-    /// Compute the minimum required balance given net_supply.
-    pub fn required_seed_amount(&self, net_supply: u64) -> u64 {
-        if self.min_seed_bps == 0 {
-            return 0;
-        }
-        ((net_supply as u128)
-            .saturating_mul(self.min_seed_bps as u128)
-            / 10_000u128) as u64
+    // Layout:
+    //   mint(32) + min_oracles(1) + outlier_threshold_bps(2) + max_age_slots(8)
+    //   + source_count(1) + sources(5 * (1+32)=165) + last_consensus_price(8)
+    //   + last_consensus_slot(8) + twap_price(8) + twap_last_slot(8) + bump(1)
+    //   = 32+1+2+8+1+165+8+8+8+8+1 = 242
+    pub const INIT_SPACE: usize = 242;
+
+    /// Returns true if at least one source is configured.
+    pub fn config_is_set(&self) -> bool {
+        self.sources.iter().any(|s| s.feed != Pubkey::default())
     }
 }

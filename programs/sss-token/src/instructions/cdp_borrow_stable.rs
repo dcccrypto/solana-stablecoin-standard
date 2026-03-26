@@ -4,7 +4,10 @@ use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInte
 use crate::error::SssError;
 use crate::events::CdpBorrowed;
 use crate::oracle;
-use crate::state::{CdpPosition, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
+use crate::state::{
+    CdpPosition, CollateralVault, OracleConsensus, StablecoinConfig, FLAG_CIRCUIT_BREAKER,
+    FLAG_MULTI_ORACLE_CONSENSUS,
+};
 
 /// Borrow SSS-3 stablecoins against deposited collateral.
 /// Enforces minimum 150% collateral ratio using Pyth price feed.
@@ -67,6 +70,15 @@ pub struct CdpBorrowStable<'info> {
     /// CHECK: Pyth price feed account — validated in handler via SolanaPriceAccount
     pub pyth_price_feed: AccountInfo<'info>,
 
+    /// C-1: Optional OracleConsensus PDA.  Required when FLAG_MULTI_ORACLE_CONSENSUS is set;
+    /// ignored otherwise.  PDA seeds: [b"oracle-consensus", sss_mint].
+    #[account(
+        seeds = [OracleConsensus::SEED, sss_mint.key().as_ref()],
+        bump,
+        constraint = oracle_consensus.mint == sss_mint.key() @ SssError::OracleConsensusNotFound,
+    )]
+    pub oracle_consensus: Option<Account<'info, OracleConsensus>>,
+
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
@@ -89,11 +101,19 @@ pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> 
     // Feed key validation, staleness check, and confidence check are all inside get_oracle_price.
     // Note: legacy expected_pyth_feed pre-check removed — oracle::get_oracle_price handles
     // feed validation internally, avoiding duplicate checks that could diverge.
+    // C-1: When FLAG_MULTI_ORACLE_CONSENSUS is set, use the consensus price as the
+    // canonical collateral price instead of reading the primary feed directly.
     let clock = Clock::get()?;
-    let oracle_price = oracle::get_oracle_price(
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_MULTI_ORACLE_CONSENSUS == 0
+            || ctx.accounts.oracle_consensus.is_some(),
+        SssError::OracleConsensusNotFound
+    );
+    let oracle_price = oracle::get_effective_oracle_price(
         &ctx.accounts.pyth_price_feed,
         &ctx.accounts.config,
         &clock,
+        ctx.accounts.oracle_consensus.as_ref(),
     )?;
 
     let price_val = oracle_price.price as u128;

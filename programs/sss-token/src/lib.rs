@@ -1068,34 +1068,48 @@ pub mod sss_token {
     }
 
     // -----------------------------------------------------------------------
-    // SSS-152: Permissionless Circuit Breaker Keeper
+    // SSS-153: Multi-oracle consensus — median/TWAP aggregation
     // -----------------------------------------------------------------------
 
-    /// Initialise the keeper config for a stablecoin mint.  Authority-only.
-    /// Sets peg deviation threshold, keeper reward, cooldown, and recovery params.
-    pub fn init_keeper_config(
-        ctx: Context<InitKeeperConfig>,
-        params: InitKeeperConfigParams,
+    /// Initialise the OracleConsensus PDA and enable FLAG_MULTI_ORACLE_CONSENSUS.
+    /// Authority-only. Sets min_oracles, outlier_threshold_bps, max_age_slots.
+    pub fn init_oracle_consensus(
+        ctx: Context<InitOracleConsensus>,
+        min_oracles: u8,
+        outlier_threshold_bps: u16,
+        max_age_slots: u64,
     ) -> Result<()> {
-        instructions::circuit_breaker_keeper::init_keeper_config_handler(ctx, params)
+        instructions::multi_oracle::init_oracle_consensus_handler(
+            ctx,
+            min_oracles,
+            outlier_threshold_bps,
+            max_age_slots,
+        )
     }
 
-    /// Fund the keeper vault by transferring SOL lamports to the KeeperConfig PDA.
-    /// Permissionless: anyone (authority, issuer, LPs) can top up the reward pool.
-    pub fn seed_keeper_vault(ctx: Context<SeedKeeperVault>, amount_lamports: u64) -> Result<()> {
-        instructions::circuit_breaker_keeper::seed_keeper_vault_handler(ctx, amount_lamports)
+    /// Add or update an oracle source slot.
+    /// Authority-only. slot_index: 0..4, oracle_type: 0=Pyth/1=Switchboard/2=Custom.
+    pub fn set_oracle_source(
+        ctx: Context<SetOracleSource>,
+        slot_index: u8,
+        oracle_type: u8,
+        feed_pubkey: Pubkey,
+    ) -> Result<()> {
+        instructions::multi_oracle::set_oracle_source_handler(ctx, slot_index, oracle_type, feed_pubkey)
     }
 
-    /// Permissionless: read oracle price, fire circuit breaker if peg deviation exceeds threshold.
-    /// If triggered, pauses the mint and pays keeper_reward_lamports to the caller.
-    /// Rate-limited by min_cooldown_slots; FLAG_CIRCUIT_BREAKER must be set.
-    pub fn crank_circuit_breaker(ctx: Context<CrankCircuitBreaker>) -> Result<()> {
-        instructions::circuit_breaker_keeper::crank_circuit_breaker_handler(ctx)
+    /// Remove an oracle source slot.
+    /// Authority-only.
+    pub fn remove_oracle_source(ctx: Context<RemoveOracleSource>, slot_index: u8) -> Result<()> {
+        instructions::multi_oracle::remove_oracle_source_handler(ctx, slot_index)
     }
 
-    /// Permissionless: read oracle price, unpause the mint if peg has recovered for
-    /// sustained_recovery_slots consecutive slots.
-    pub fn crank_unpause(ctx: Context<CrankUnpause>) -> Result<()> {
-        instructions::circuit_breaker_keeper::crank_unpause_handler(ctx)
+    /// Permissionless keeper crank: read all oracle feeds, compute median consensus,
+    /// reject outliers, TWAP fallback when below min_oracles, update OracleConsensus PDA.
+    /// Pass oracle feed accounts as remaining_accounts in source-slot order.
+    pub fn update_oracle_consensus<'info>(
+        ctx: Context<'_, '_, 'info, 'info, UpdateOracleConsensus<'info>>,
+    ) -> Result<()> {
+        instructions::multi_oracle::update_oracle_consensus_handler(ctx)
     }
 }

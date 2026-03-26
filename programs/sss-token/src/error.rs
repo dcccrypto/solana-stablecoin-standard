@@ -370,25 +370,25 @@ pub enum SssError {
     // Oracle
     #[msg("Oracle not configured — set oracle_type and oracle_feed first")]
     OracleNotConfigured,
-    // SSS-152: Circuit Breaker Keeper
-    #[msg("Circuit breaker not armed — set FLAG_CIRCUIT_BREAKER first")]
-    CircuitBreakerNotArmed,
-    #[msg("Keeper cooldown active — must wait min_cooldown_slots since last trigger")]
-    KeeperCooldownActive,
-    #[msg("Peg is within threshold — circuit breaker cannot fire")]
-    PegWithinThreshold,
-    #[msg("Peg is still deviating — cannot unpause yet")]
-    PegStillDeviating,
-    #[msg("Recovery window not yet met — peg must stay within threshold for sustained_recovery_slots")]
-    KeeperRecoveryWindowNotMet,
-    #[msg("Mint is not paused")]
-    NotPaused,
-    #[msg("KeeperConfig mint does not match stablecoin config mint")]
-    KeeperConfigMintMismatch,
-    #[msg("Invalid keeper deviation — must be 1–5000 bps")]
-    InvalidKeeperDeviation,
-    #[msg("Invalid keeper cooldown — min_cooldown_slots must be > 0")]
-    InvalidKeeperCooldown,
-    #[msg("Invalid keeper recovery — sustained_recovery_slots must be > 0")]
-    InvalidKeeperRecovery,
+    // SSS-153: Multi-oracle consensus
+    #[msg("Multi-oracle consensus not enabled — set FLAG_MULTI_ORACLE_CONSENSUS first")]
+    MultiOracleNotEnabled,
+    #[msg("OracleConsensus PDA not found for this mint")]
+    OracleConsensusNotFound,
+    #[msg("Insufficient oracle sources passed staleness and outlier checks")]
+    InsufficientOracles,
+    #[msg("Oracle price deviates beyond outlier_threshold_bps from the median")]
+    OraclePriceDeviation,
+    #[msg("Oracle feed is stale — age exceeds max_age_slots")]
+    OracleStaleFeed,
+    #[msg("Invalid OracleConsensus config — check min_oracles, outlier_threshold_bps, max_age_slots")]
+    InvalidOracleConsensusConfig,
+    #[msg("Invalid oracle source index — must be < MAX_SOURCES (5)")]
+    InvalidOracleSourceIndex,
+    /// H-2: remaining_accounts must have exactly MAX_SOURCES entries.
+    #[msg("remaining_accounts count must equal MAX_SOURCES (5) — use Pubkey::default() placeholders for empty slots")]
+    OracleRemainingAccountsMismatch,
+    /// M-2: FLAG_MULTI_ORACLE_CONSENSUS set but no sources configured.
+    #[msg("FLAG_MULTI_ORACLE_CONSENSUS is set but no oracle sources are configured")]
+    OracleNoSourcesConfigured,
 }

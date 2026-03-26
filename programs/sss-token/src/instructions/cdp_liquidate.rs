@@ -7,7 +7,10 @@ use anchor_spl::token_interface::{
 use crate::error::SssError;
 use crate::events::{CdpLiquidated, CollateralLiquidated};
 use crate::oracle;
-use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
+use crate::state::{
+    CdpPosition, CollateralConfig, CollateralVault, OracleConsensus, StablecoinConfig,
+    FLAG_CIRCUIT_BREAKER, FLAG_MULTI_ORACLE_CONSENSUS,
+};
 
 /// Global fallback liquidation bonus (5%) when no CollateralConfig is provided.
 const DEFAULT_LIQUIDATION_BONUS_BPS: u16 = 500;
@@ -127,6 +130,15 @@ pub struct CdpLiquidate<'info> {
     )]
     pub collateral_config: Option<Account<'info, CollateralConfig>>,
 
+    /// C-1: Optional OracleConsensus PDA.  Required when FLAG_MULTI_ORACLE_CONSENSUS is set;
+    /// ignored otherwise.  PDA seeds: [b"oracle-consensus", sss_mint].
+    #[account(
+        seeds = [OracleConsensus::SEED, sss_mint.key().as_ref()],
+        bump,
+        constraint = oracle_consensus.mint == sss_mint.key() @ SssError::OracleConsensusNotFound,
+    )]
+    pub oracle_consensus: Option<Account<'info, OracleConsensus>>,
+
     /// Token program for SSS-3 (Token-2022)
     pub sss_token_program: Interface<'info, TokenInterface>,
 
@@ -153,12 +165,18 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         );
     }
 
-    // SSS-119: Oracle abstraction — dispatch to the configured adapter.
+    // SSS-119/C-1: Oracle abstraction — use consensus price when FLAG_MULTI_ORACLE_CONSENSUS set.
     let clock = Clock::get()?;
-    let oracle_price = oracle::get_oracle_price(
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_MULTI_ORACLE_CONSENSUS == 0
+            || ctx.accounts.oracle_consensus.is_some(),
+        SssError::OracleConsensusNotFound
+    );
+    let oracle_price = oracle::get_effective_oracle_price(
         &ctx.accounts.pyth_price_feed,
         &ctx.accounts.config,
         &clock,
+        ctx.accounts.oracle_consensus.as_ref(),
     )?;
 
     // 2. Compute collateral value (USD, 6dp scaled)

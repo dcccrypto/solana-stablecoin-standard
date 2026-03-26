@@ -95,6 +95,9 @@ pub use wallet_rate_limit::*;
 pub mod market_maker;
 pub use market_maker::*;
 
+pub mod multi_oracle;
+pub use multi_oracle::*;
+
 pub mod upgrade;
 pub use upgrade::*;
 
