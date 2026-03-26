@@ -81,7 +81,7 @@ pub fn init_oracle_consensus_handler(
     oc.outlier_threshold_bps = outlier_threshold_bps;
     oc.max_age_slots = max_age_slots;
     oc.source_count = 0;
-    oc.sources = [OracleSource::default(); OracleConsensus::MAX_SOURCES];
+    oc.sources = vec![OracleSource::default(); OracleConsensus::MAX_SOURCES];
     oc.last_consensus_price = 0;
     oc.last_consensus_slot = 0;
     oc.twap_price = 0;

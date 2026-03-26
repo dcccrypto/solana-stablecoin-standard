@@ -340,3 +340,520 @@ pub struct GuardianPauseAuthorityOverride {
     /// Unix timestamp when override occurred.
     pub timestamp: i64,
 }
+
+// ---------------------------------------------------------------------------
+// SSS-BUG-008: Proof of Reserves breach event
+// ---------------------------------------------------------------------------
+
+/// Emitted when minting is halted because the reserve ratio breaches the minimum.
+#[event]
+pub struct MintHaltedByPoRBreach {
+    pub mint: Pubkey,
+    pub current_ratio_bps: u64,
+    pub min_ratio_bps: u64,
+    pub last_attestation_slot: u64,
+    pub attempted_amount: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-130: PID fee events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct PidConfigInitialised {
+    pub mint: Pubkey,
+    pub kp: i64,
+    pub ki: i64,
+    pub kd: i64,
+    pub target_price: u64,
+    pub min_fee_bps: u16,
+    pub max_fee_bps: u16,
+}
+
+#[event]
+pub struct PidFeeUpdated {
+    pub mint: Pubkey,
+    pub old_fee_bps: u16,
+    pub new_fee_bps: u16,
+    pub current_price: u64,
+    pub target_price: u64,
+    pub error: i64,
+    pub integral: i64,
+    pub derivative: i64,
+    pub delta_bps: i64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-129: ZK Credential events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct CredentialRegistryInitialised {
+    pub mint: Pubkey,
+    pub issuer: Pubkey,
+    pub merkle_root: [u8; 32],
+    pub credential_ttl_slots: u64,
+}
+
+#[event]
+pub struct CredentialRegistryRootRotated {
+    pub mint: Pubkey,
+    pub new_merkle_root: [u8; 32],
+    pub slot: u64,
+}
+
+#[event]
+pub struct CredentialIssued {
+    pub mint: Pubkey,
+    pub holder: Pubkey,
+    pub issued_slot: u64,
+    pub expires_slot: u64,
+}
+
+#[event]
+pub struct CredentialRevoked {
+    pub mint: Pubkey,
+    pub holder: Pubkey,
+    pub slot: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-131: Liquidation bonus events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct LiquidationBonusConfigInitialised {
+    pub mint: Pubkey,
+    pub tier1_threshold_bps: u16,
+    pub tier1_bonus_bps: u16,
+    pub tier2_threshold_bps: u16,
+    pub tier2_bonus_bps: u16,
+    pub tier3_threshold_bps: u16,
+    pub tier3_bonus_bps: u16,
+    pub max_bonus_bps: u16,
+}
+
+#[event]
+pub struct LiquidationBonusConfigUpdated {
+    pub mint: Pubkey,
+    pub old_tier1_threshold_bps: u16,
+    pub old_tier1_bonus_bps: u16,
+    pub new_tier1_threshold_bps: u16,
+    pub new_tier1_bonus_bps: u16,
+    pub old_tier2_threshold_bps: u16,
+    pub old_tier2_bonus_bps: u16,
+    pub new_tier2_threshold_bps: u16,
+    pub new_tier2_bonus_bps: u16,
+    pub old_tier3_threshold_bps: u16,
+    pub old_tier3_bonus_bps: u16,
+    pub new_tier3_threshold_bps: u16,
+    pub new_tier3_bonus_bps: u16,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-132: PSM curve events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct PsmCurveConfigInitialised {
+    pub mint: Pubkey,
+    pub base_fee_bps: u16,
+    pub curve_k: u64,
+    pub max_fee_bps: u16,
+    pub authority: Pubkey,
+}
+
+#[event]
+pub struct PsmCurveConfigUpdated {
+    pub mint: Pubkey,
+    pub old_base_fee_bps: u16,
+    pub new_base_fee_bps: u16,
+    pub old_curve_k: u64,
+    pub new_curve_k: u64,
+    pub old_max_fee_bps: u16,
+    pub new_max_fee_bps: u16,
+    pub authority: Pubkey,
+}
+
+#[event]
+pub struct PsmDynamicSwapEvent {
+    pub mint: Pubkey,
+    pub redeemer: Pubkey,
+    pub sss_burned: u64,
+    pub collateral_out: u64,
+    pub fee_collected: u64,
+    pub fee_bps: u16,
+    pub vault_amount_before: u64,
+    pub total_reserves: u64,
+}
+
+#[event]
+pub struct PsmQuoteEvent {
+    pub mint: Pubkey,
+    pub amount_in: u64,
+    pub expected_out: u64,
+    pub expected_fee: u64,
+    pub fee_bps: u16,
+    pub vault_amount: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-133: Wallet rate limit events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct WalletRateLimitSet {
+    pub mint: Pubkey,
+    pub wallet: Pubkey,
+    pub max_transfer_per_window: u64,
+    pub window_slots: u64,
+    pub authority: Pubkey,
+}
+
+#[event]
+pub struct WalletRateLimitRemoved {
+    pub mint: Pubkey,
+    pub wallet: Pubkey,
+    pub authority: Pubkey,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-134: Squads authority events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct SquadsAuthorityInitialized {
+    pub mint: Pubkey,
+    pub multisig_pda: Pubkey,
+    pub threshold: u8,
+    pub member_count: u8,
+    pub old_authority: Pubkey,
+}
+
+#[event]
+pub struct SquadsAuthorityVerified {
+    pub mint: Pubkey,
+    pub multisig_pda: Pubkey,
+    pub verified: bool,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-153: Multi-oracle consensus events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct OracleConsensusUpdated {
+    pub mint: Pubkey,
+    pub consensus_price: u64,
+    pub source_count: u8,
+    pub used_twap: bool,
+    pub slot: u64,
+}
+
+#[event]
+pub struct OracleOutlierRejected {
+    pub mint: Pubkey,
+    pub source_index: u8,
+    pub feed: Pubkey,
+    pub price: u64,
+    pub median: u64,
+    pub deviation_bps: u64,
+    pub slot: u64,
+}
+
+#[event]
+pub struct OracleStalenessDetected {
+    pub mint: Pubkey,
+    pub source_index: u8,
+    pub feed: Pubkey,
+    pub last_slot: u64,
+    pub current_slot: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-127: Travel Rule event
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct TravelRuleRecordSubmitted {
+    pub mint: Pubkey,
+    pub nonce: u64,
+    pub originator_vasp: Pubkey,
+    pub beneficiary_vasp: Pubkey,
+    pub transfer_amount: u64,
+    pub slot: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-128: Sanctions oracle events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct SanctionsOracleSet {
+    pub mint: Pubkey,
+    pub oracle: Pubkey,
+    pub max_staleness_slots: u64,
+}
+
+#[event]
+pub struct SanctionsOracleCleared {
+    pub mint: Pubkey,
+}
+
+#[event]
+pub struct SanctionsRecordUpdated {
+    pub mint: Pubkey,
+    pub wallet: Pubkey,
+    pub is_sanctioned: bool,
+    pub slot: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-125: Redemption guarantee events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct RedemptionFulfilled {
+    pub mint: Pubkey,
+    pub user: Pubkey,
+    pub amount: u64,
+    pub requested_slot: u64,
+    pub fulfilled_slot: u64,
+    pub sla_slots_used: u64,
+}
+
+#[event]
+pub struct RedemptionSLABreached {
+    pub mint: Pubkey,
+    pub user: Pubkey,
+    pub amount: u64,
+    pub requested_slot: u64,
+    pub expiry_slot: u64,
+    pub claim_slot: u64,
+    pub penalty_paid: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-137: Redemption pool events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct RedemptionPoolSeeded {
+    pub sss_mint: Pubkey,
+    pub amount: u64,
+    pub new_liquidity: u64,
+}
+
+#[event]
+pub struct InstantRedemption {
+    pub sss_mint: Pubkey,
+    pub user: Pubkey,
+    pub burned: u64,
+    pub received: u64,
+    pub fee: u64,
+    pub remaining_liquidity: u64,
+}
+
+#[event]
+pub struct RedemptionPoolReplenished {
+    pub sss_mint: Pubkey,
+    pub replenisher: Pubkey,
+    pub amount: u64,
+    pub new_liquidity: u64,
+}
+
+#[event]
+pub struct RedemptionPoolDrained {
+    pub sss_mint: Pubkey,
+    pub amount: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-125: ReserveComposition event
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct ReserveCompositionUpdated {
+    pub mint: Pubkey,
+    pub updated_by: Pubkey,
+    pub cash_bps: u16,
+    pub t_bills_bps: u16,
+    pub crypto_bps: u16,
+    pub other_bps: u16,
+    pub slot: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-Bridge: Bridge events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct BridgeConfigInitialized {
+    pub sss_mint: Pubkey,
+    pub bridge_type: u8,
+    pub bridge_program: Pubkey,
+    pub max_bridge_amount_per_tx: u64,
+    pub bridge_fee_bps: u16,
+}
+
+#[event]
+pub struct BridgeOut {
+    pub sss_mint: Pubkey,
+    pub sender: Pubkey,
+    pub amount: u64,
+    pub fee_amount: u64,
+    pub target_chain: u16,
+    pub recipient_address: [u8; 32],
+    pub bridge_type: u8,
+}
+
+#[event]
+pub struct BridgeIn {
+    pub sss_mint: Pubkey,
+    pub recipient: Pubkey,
+    pub amount: u64,
+    pub source_chain: u16,
+    pub bridge_type: u8,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-152: Circuit breaker keeper events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct KeeperConfigInitialised {
+    pub mint: Pubkey,
+    pub deviation_threshold_bps: u16,
+    pub keeper_reward_lamports: u64,
+    pub min_cooldown_slots: u64,
+    pub sustained_recovery_slots: u64,
+}
+
+#[event]
+pub struct CircuitBreakerTriggered {
+    pub mint: Pubkey,
+    pub keeper: Pubkey,
+    pub oracle_price: i64,
+    pub target_price: u64,
+    pub deviation_bps: u64,
+    pub slot: u64,
+}
+
+#[event]
+pub struct CircuitBreakerAutoUnpaused {
+    pub mint: Pubkey,
+    pub caller: Pubkey,
+    pub oracle_price: i64,
+    pub target_price: u64,
+    pub deviation_bps: u64,
+    pub recovery_slots: u64,
+    pub slot: u64,
+}
+
+#[event]
+pub struct KeeperRewarded {
+    pub mint: Pubkey,
+    pub keeper: Pubkey,
+    pub reward_lamports: u64,
+    pub slot: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-154: Redemption queue events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct RedemptionQueued {
+    pub sss_mint: Pubkey,
+    pub owner: Pubkey,
+    pub queue_index: u64,
+    pub amount: u64,
+    pub enqueue_slot: u64,
+    pub slot_hash_seed: [u8; 32],
+    pub earliest_process_slot: u64,
+}
+
+#[event]
+pub struct RedemptionFulfilledQueued {
+    pub sss_mint: Pubkey,
+    pub owner: Pubkey,
+    pub queue_index: u64,
+    pub amount: u64,
+    pub enqueue_slot: u64,
+    pub fulfilled_slot: u64,
+    pub keeper: Pubkey,
+    pub keeper_reward_lamports: u64,
+}
+
+#[event]
+pub struct RedemptionCancelled {
+    pub sss_mint: Pubkey,
+    pub owner: Pubkey,
+    pub queue_index: u64,
+    pub amount: u64,
+    pub cancel_slot: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-151: Insurance vault events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct InsuranceVaultSeeded {
+    pub mint: Pubkey,
+    pub seeder: Pubkey,
+    pub amount: u64,
+    pub current_balance: u64,
+}
+
+#[event]
+pub struct InsuranceVaultReplenished {
+    pub mint: Pubkey,
+    pub replenisher: Pubkey,
+    pub amount: u64,
+    pub current_balance: u64,
+}
+
+// ---------------------------------------------------------------------------
+// SSS-138: Market maker events
+// ---------------------------------------------------------------------------
+
+#[event]
+pub struct MarketMakerConfigInitialized {
+    pub mint: Pubkey,
+    pub mm_mint_limit_per_slot: u64,
+    pub mm_burn_limit_per_slot: u64,
+    pub spread_bps: u16,
+    pub authority: Pubkey,
+}
+
+#[event]
+pub struct MarketMakerRegistered {
+    pub mint: Pubkey,
+    pub market_maker: Pubkey,
+    pub authority: Pubkey,
+}
+
+#[event]
+pub struct MmMint {
+    pub mint: Pubkey,
+    pub market_maker: Pubkey,
+    pub amount: u64,
+    pub slot: u64,
+}
+
+#[event]
+pub struct MmBurn {
+    pub mint: Pubkey,
+    pub market_maker: Pubkey,
+    pub amount: u64,
+    pub slot: u64,
+}
+
+#[event]
+pub struct MmCapacity {
+    pub mint: Pubkey,
+    pub mint_remaining: u64,
+    pub burn_remaining: u64,
+    pub slot: u64,
+}
