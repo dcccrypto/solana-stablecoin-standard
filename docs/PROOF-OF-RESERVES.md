@@ -310,11 +310,161 @@ This returns a `merkle_root` computed as `SHA-256(SHA-256(supply_le8))` tied to 
 
 ---
 
+---
+
+## On-Chain Enforcement — FLAG_POR_HALT_ON_BREACH (BUG-008 / AUDIT-G6 / AUDIT-H4)
+
+> **Fixed in commit `d1b011c`** — Previously, `FLAG_POR_HALT_ON_BREACH` (bit 16) was defined in `state.rs` but never read by `mint.rs` or `cpi_mint.rs`. Setting the flag had zero effect on minting. This section documents the corrected behaviour.
+
+### ProofOfReserves PDA
+
+An on-chain attestation record holds the latest reserve ratio submitted by an authorised oracle/keeper.
+
+**Seeds:** `[b"proof-of-reserves", mint]`
+
+| Field | Type | Description |
+|---|---|---|
+| `mint` | `Pubkey` | The stablecoin mint this record belongs to |
+| `last_attestation_slot` | `u64` | Slot when the most recent attestation was submitted |
+| `last_verified_ratio_bps` | `u64` | Attested reserve ratio in basis points (e.g. `10_000` = 100% backed) |
+| `attester` | `Pubkey` | Authority allowed to submit attestations |
+| `bump` | `u8` | PDA bump seed |
+
+### Instructions
+
+#### `init_proof_of_reserves(attester: Pubkey)`
+
+Called by the stablecoin authority to create the `ProofOfReserves` PDA for a mint. Must be done before enabling `FLAG_POR_HALT_ON_BREACH`.
+
+**Accounts:**
+
+| Account | Role |
+|---|---|
+| `payer` | Pays for account creation |
+| `authority` | Stablecoin config authority (signer) |
+| `config` | `StablecoinConfig` PDA — validates authority |
+| `mint` | The stablecoin mint |
+| `proof_of_reserves` | New PDA (init, seeds = `[b"proof-of-reserves", mint]`) |
+| `system_program` | — |
+
+```typescript
+await program.methods
+  .initProofOfReserves(attesterKeypair.publicKey)
+  .accounts({ payer, authority, config, mint, proofOfReserves })
+  .rpc();
+```
+
+#### `attest_proof_of_reserves(verified_ratio_bps: u64)`
+
+Submitted by the designated attester (oracle / keeper) to update the on-chain reserve ratio.
+
+**Accounts:**
+
+| Account | Role |
+|---|---|
+| `attester` | Authorised attester (signer) |
+| `mint` | The stablecoin mint |
+| `proof_of_reserves` | Existing PDA (mutable) |
+
+```typescript
+const ratioBps = BigInt(9_800); // 98% backed
+
+await program.methods
+  .attestProofOfReserves(ratioBps)
+  .accounts({ attester, mint, proofOfReserves })
+  .rpc();
+```
+
+### Mint Enforcement Logic
+
+When `FLAG_POR_HALT_ON_BREACH` is set in `StablecoinConfig.feature_flags`, every call to `mint` or `cpi_mint` **must** pass the `ProofOfReserves` PDA as `remaining_accounts[0]`. The instruction enforces three checks in order:
+
+1. **PDA key verification** — `remaining_accounts[0].key()` must match the expected PDA derived from `seeds = [b"proof-of-reserves", mint]`. Fake accounts are rejected.
+2. **Attestation present** — `por.last_attestation_slot > 0`. Returns `PoRNotAttested` if never attested.
+3. **Ratio check** — `por.last_verified_ratio_bps >= config.min_reserve_ratio_bps`. If below threshold, emits `MintHaltedByPoRBreach` and returns `PoRBreachHaltsMinting`.
+
+> **Special case:** `min_reserve_ratio_bps = 0` disables the ratio check — the flag then only requires a fresh attestation to exist, not a minimum ratio. This is not recommended in production.
+
+```typescript
+import { FLAG_POR_HALT_ON_BREACH } from '@stbr/sss-token';
+
+// Minting with PoR breach halt enabled
+const [porPda] = PublicKey.findProgramAddressSync(
+  [Buffer.from('proof-of-reserves'), mint.toBuffer()],
+  program.programId,
+);
+
+await program.methods
+  .mint(new BN(amount))
+  .accounts({ authority, config, minterInfo, mint, tokenAccount, tokenProgram })
+  .remainingAccounts([{ pubkey: porPda, isWritable: false, isSigner: false }])
+  .rpc();
+```
+
+### New Errors
+
+| Error | Code | Description |
+|---|---|---|
+| `PoRNotAttested` | `SssError` | `remaining_accounts[0]` has `last_attestation_slot == 0` — attestation never submitted |
+| `PoRBreachHaltsMinting` | `SssError` | `last_verified_ratio_bps < min_reserve_ratio_bps` — minting blocked |
+
+### MintHaltedByPoRBreach Event
+
+Emitted on every `PoRBreachHaltsMinting` rejection to enable keeper/monitoring alerting.
+
+| Field | Type | Description |
+|---|---|---|
+| `mint` | `Pubkey` | Stablecoin mint that was blocked |
+| `current_ratio_bps` | `u64` | Reserve ratio at time of attempted mint |
+| `min_ratio_bps` | `u64` | Configured minimum ratio |
+| `last_attestation_slot` | `u64` | Slot of the last on-chain attestation |
+| `attempted_amount` | `u64` | Amount that was attempted to be minted |
+
+```typescript
+// Monitor breach events
+program.addEventListener('MintHaltedByPoRBreach', (event) => {
+  console.error(
+    `MINT HALTED: mint=${event.mint.toBase58()} ` +
+    `ratio=${event.currentRatioBps}bps (min=${event.minRatioBps}bps) ` +
+    `slot=${event.lastAttestationSlot} attempted=${event.attemptedAmount}`
+  );
+  // Trigger pager alert / Discord notification
+});
+```
+
+### Recommended Setup
+
+```typescript
+// 1. Set minimum reserve ratio on the config (e.g. 95%)
+await program.methods
+  .updateConfig({ minReserveRatioBps: 9_500 })
+  .accounts({ authority, config, mint })
+  .rpc();
+
+// 2. Initialise the PoR PDA with a trusted attester
+await program.methods
+  .initProofOfReserves(attester.publicKey)
+  .accounts({ payer, authority, config, mint, proofOfReserves })
+  .rpc();
+
+// 3. Submit an initial attestation before enabling the flag
+await program.methods
+  .attestProofOfReserves(new BN(10_000)) // 100% initially
+  .accounts({ attester, mint, proofOfReserves })
+  .rpc();
+
+// 4. Enable the flag
+await program.methods
+  .setFeatureFlags(FLAG_POR_HALT_ON_BREACH)
+  .accounts({ authority, config, mint })
+  .rpc();
+```
+
+---
+
 ## Related Documentation
 
 - [Architecture](ARCHITECTURE.md) — Three-layer system design
 - [Formal Verification](formal-verification.md) — Kani mathematical proofs
-- [Event Schema](EVENT-SCHEMA.md) — Full on-chain event reference
-- [Indexer Guide](INDEXER-GUIDE.md) — Subscribing to on-chain events
-- [MICA Compliance](MICA-COMPLIANCE.md) — Regulatory reserve requirements
-- [Security](SECURITY.md) — Threat model and audit status
+- [Preset: SSS-3 Trustless](SSS-3.md) — Collateral-backed stablecoin design
+- [Supply Cap & PoR Halt](SUPPLY-CAP-POR-HALT.md) — SSS-145 full feature reference
