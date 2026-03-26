@@ -29,7 +29,7 @@ use pyth_sdk_solana::state::SolanaPriceAccount;
 
 use crate::error::SssError;
 use crate::events::CollateralLiquidated;
-use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig};
+use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
 
 /// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
 const DEFAULT_MAX_PRICE_AGE_SECS: u64 = 60;
@@ -157,6 +157,13 @@ pub fn cdp_liquidate_v2_handler(
     debt_to_repay: u64,
     min_collateral_amount: u64,
 ) -> Result<()> {
+    // ── BUG-020: Circuit breaker — halt V2 liquidations when FLAG_CIRCUIT_BREAKER is set.
+    // Mirrors the same guard in cdp_liquidate (V1) to ensure no bypass via the V2 path.
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+        SssError::CircuitBreakerActive
+    );
+
     // ── 0. Pyth feed Pubkey validation (SSS-085) ──────────────────────────
     let expected_feed = ctx.accounts.config.expected_pyth_feed;
     if expected_feed != Pubkey::default() {
