@@ -322,6 +322,9 @@ pub enum SssError {
     RotationZeroPubkey,
     #[msg("Use the admin timelock flow for authority transfer")]
     UseTimelockForAuthorityTransfer,
+    // BUG-019: Compliance authority transfer always requires the admin timelock (min 432k slots)
+    #[msg("Compliance authority transfer always requires propose_timelocked_op (op_kind=10) with minimum 432_000 slot delay")]
+    ComplianceAuthorityRequiresTimelock,
     // ZK Credentials (SSS-129)
     #[msg("ZK credential registry not found — call init_zk_credentials first")]
     CredentialRegistryNotFound,

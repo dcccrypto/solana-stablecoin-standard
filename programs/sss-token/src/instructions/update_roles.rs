@@ -42,20 +42,12 @@ pub fn handler(ctx: Context<UpdateRoles>, params: UpdateRolesParams) -> Result<(
         });
         msg!("Authority transfer proposed to {}", proposed);
     }
-    if let Some(proposed) = params.new_compliance_authority {
-        // BUG-010: Compliance authority transfer must also go through the timelock
-        // when admin_timelock_delay > 0.  Use ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY
-        // (op_kind=10) in propose_timelocked_op / execute_timelocked_op.
-        if config.admin_timelock_delay > 0 {
-            return err!(SssError::UseTimelockForAuthorityTransfer);
-        }
-        config.pending_compliance_authority = proposed;
-        emit!(AuthorityProposed {
-            mint: config.mint,
-            proposed,
-            is_compliance: true,
-        });
-        msg!("Compliance authority transfer proposed to {}", proposed);
+    if let Some(_proposed) = params.new_compliance_authority {
+        // BUG-019: Compliance authority transfer ALWAYS requires the admin timelock
+        // (minimum 432_000 slots), regardless of admin_timelock_delay setting.
+        // Direct update_roles call is permanently blocked for compliance authority.
+        // Use propose_timelocked_op (op_kind=10) + execute_timelocked_op instead.
+        return err!(SssError::ComplianceAuthorityRequiresTimelock);
     }
     Ok(())
 }

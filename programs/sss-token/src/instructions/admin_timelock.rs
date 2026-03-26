@@ -24,7 +24,7 @@ use crate::state::{
     ADMIN_OP_SET_PSM_FEE, ADMIN_OP_SET_PYTH_FEED, ADMIN_OP_SET_SANCTIONS_PARAMS,
     ADMIN_OP_SET_SPEND_LIMIT, ADMIN_OP_SET_STABILITY_FEE, ADMIN_OP_SET_TIMELOCK_DELAY,
     ADMIN_OP_SET_TRAVEL_RULE_THRESHOLD, ADMIN_OP_TRANSFER_AUTHORITY,
-    ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY, ADMIN_OP_UNPAUSE,
+    ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY, ADMIN_OP_UNPAUSE, DEFAULT_ADMIN_TIMELOCK_DELAY,
 };
 
 // ---------------------------------------------------------------------------
@@ -131,7 +131,18 @@ pub fn propose_timelocked_op_handler(
     let clock = Clock::get()?;
     let config = &mut ctx.accounts.config;
     let delay = config.admin_timelock_delay;
-    let mature_slot = clock.slot.checked_add(delay).unwrap();
+
+    // BUG-019: Compliance authority transfer always enforces the full DEFAULT_ADMIN_TIMELOCK_DELAY
+    // (432_000 slots ≈ 48h) regardless of the configured admin_timelock_delay.
+    // This prevents a compromised authority from reducing the timelock delay and then
+    // immediately transferring the compliance authority in two transactions.
+    let effective_delay = if op_kind == ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY {
+        delay.max(DEFAULT_ADMIN_TIMELOCK_DELAY)
+    } else {
+        delay
+    };
+
+    let mature_slot = clock.slot.checked_add(effective_delay).unwrap();
 
     config.admin_op_kind = op_kind;
     config.admin_op_param = param;
@@ -139,12 +150,13 @@ pub fn propose_timelocked_op_handler(
     config.admin_op_mature_slot = mature_slot;
 
     msg!(
-        "TimelockOp proposed: kind={} param={} target={} mature_at_slot={} delay={}",
+        "TimelockOp proposed: kind={} param={} target={} mature_at_slot={} delay={} effective_delay={}",
         op_kind,
         param,
         target,
         mature_slot,
         delay,
+        effective_delay,
     );
     Ok(())
 }
