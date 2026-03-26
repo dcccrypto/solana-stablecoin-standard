@@ -87,6 +87,11 @@ pub const FLAG_MULTI_ORACLE_CONSENSUS: u64 = 1 << 22;
 /// front-run-protected FIFO redemption queues via `RedemptionQueue` PDA.
 pub const FLAG_REDEMPTION_QUEUE: u64 = 1 << 23;
 
+/// SSS-156: Issuer legal entity registry flag (bit 24): when set, an `IssuerRegistry`
+/// PDA is present and regulators / on-chain programs can verify the issuer's
+/// legal entity details on-chain.
+pub const FLAG_LEGAL_REGISTRY: u64 = 1 << 24;
+
 /// PRESET_INSTITUTIONAL (4): all SSS-3 features + Squads V4 multisig authority.
 /// Recommended for issuers holding > $1 M in reserves.
 pub const PRESET_INSTITUTIONAL: u8 = 4;
@@ -809,4 +814,40 @@ pub struct PauseProposal {
 impl PauseProposal {
     pub const SEED: &'static [u8] = b"pause-proposal";
     pub const MAX_VOTES: usize = 7;
+}
+
+// ─── SSS-156: Issuer Legal Entity Registry ───────────────────────────────────
+
+/// On-chain issuer registry for regulatory traceability.
+///
+/// Seeds: [b"issuer_registry", config_pubkey]
+///
+/// Optional PDA enabled by FLAG_LEGAL_REGISTRY (bit 24). Allows regulators
+/// and on-chain programs to verify the issuer's legal entity details without
+/// trusting off-chain data. The `attestor` is a notary or lawyer whose Pubkey
+/// co-signs the record via `attest_legal_entity`.
+#[account]
+#[derive(InitSpace)]
+pub struct IssuerRegistry {
+    /// StablecoinConfig this registry belongs to.
+    pub config: Pubkey,
+    /// SHA-256 hash of the legal entity document (e.g. articles of incorporation).
+    pub legal_entity_hash: [u8; 32],
+    /// ISO 3166-1 alpha-2 country code encoded as UTF-8 bytes, zero-padded to 4.
+    pub jurisdiction: [u8; 4],
+    /// SHA-256 hash of the jurisdiction registration number (for privacy).
+    pub registration_number_hash: [u8; 32],
+    /// Pubkey of the notary/lawyer who will attest this record.
+    pub attestor: Pubkey,
+    /// Slot at which the attestor signed (0 = not yet attested).
+    pub attested_slot: u64,
+    /// Slot after which this record is considered expired (0 = no expiry).
+    pub expiry_slot: u64,
+    /// True after `attest_legal_entity` succeeds.
+    pub attested: bool,
+    pub bump: u8,
+}
+
+impl IssuerRegistry {
+    pub const SEED: &'static [u8] = b"issuer_registry";
 }

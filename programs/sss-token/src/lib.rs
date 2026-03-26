@@ -545,4 +545,50 @@ pub mod sss_token {
     pub fn guardian_lift_pause(ctx: Context<GuardianLiftPause>) -> Result<()> {
         instructions::guardian::guardian_lift_pause_handler(ctx)
     }
+
+    // ── SSS-156: Issuer Legal Entity Registry ─────────────────────────────
+
+    /// Authority-only: register the issuer's legal entity on-chain.
+    /// Creates an IssuerRegistry PDA and enables FLAG_LEGAL_REGISTRY.
+    pub fn register_legal_entity(
+        ctx: Context<RegisterLegalEntity>,
+        legal_entity_hash: [u8; 32],
+        jurisdiction: [u8; 4],
+        registration_number_hash: [u8; 32],
+        attestor: Pubkey,
+        expiry_slot: u64,
+    ) -> Result<()> {
+        instructions::legal_entity_registry::register_legal_entity(
+            ctx,
+            legal_entity_hash,
+            jurisdiction,
+            registration_number_hash,
+            attestor,
+            expiry_slot,
+        )
+    }
+
+    /// Attestor-only: co-sign the IssuerRegistry, marking it as attested.
+    pub fn attest_legal_entity(ctx: Context<AttestLegalEntity>) -> Result<()> {
+        instructions::legal_entity_registry::attest_legal_entity(ctx)
+    }
+
+    /// Authority-only: update the legal entity record (resets attestation).
+    pub fn update_legal_entity(
+        ctx: Context<UpdateLegalEntity>,
+        legal_entity_hash: [u8; 32],
+        jurisdiction: [u8; 4],
+        registration_number_hash: [u8; 32],
+        attestor: Pubkey,
+        expiry_slot: u64,
+    ) -> Result<()> {
+        instructions::legal_entity_registry::update_legal_entity(
+            ctx,
+            legal_entity_hash,
+            jurisdiction,
+            registration_number_hash,
+            attestor,
+            expiry_slot,
+        )
+    }
 }

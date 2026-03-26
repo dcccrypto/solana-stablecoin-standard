@@ -84,5 +84,8 @@ pub use proof_of_reserves::*;
 pub mod blacklist;
 pub use blacklist::*;
 
+pub mod legal_entity_registry;
+pub use legal_entity_registry::*;
+
 // Re-export param types from state
 pub use crate::state::{InitializeParams, UpdateRolesParams};
