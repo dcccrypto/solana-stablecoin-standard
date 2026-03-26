@@ -127,6 +127,8 @@ Endpoints:
 |---------|-------------|
 | [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | Cryptographic supply commitments — fetch, verify, and manually reproduce Merkle proofs |
 | [Trust Model](docs/TRUST-MODEL.md) | Real trust assumptions per SSS tier — what is/isn't trustless in v1; v1 stubs and mitigations |
+| [GENIUS Act Compliance](docs/GENIUS-ACT-COMPLIANCE.md) | US GENIUS Act issuer guide — 1:1 reserves, attestation, freeze/seize/burn, AML/BSA, no-yield prohibition, Squads custody, sample config + CLI checker (SSS-148) |
+| [MiCA Recovery Plan Template](docs/RECOVERY-PLAN-TEMPLATE.md) | MiCA Art. 46 fill-in-the-blank recovery plan — trigger scenarios, escalation, guardian multisig actions, NCA notification templates (SSS-149) |
 
 ## Documentation
 
@@ -149,6 +151,10 @@ Endpoints:
 | [Preset: SSS-4 Institutional](docs/SSS-4-INSTITUTIONAL.md) | SSS-4 Squads V4 multisig authority — institutional grade m-of-n governance (SSS-134) |
 | [Architecture](docs/ARCHITECTURE.md) | Three-layer system architecture |
 | [Devnet Deployment](docs/devnet-deploy.md) | Deploying and smoke-testing on Solana devnet |
+| [Deployment Wizard](scripts/deploy-wizard.ts) | Interactive 10-step deployment wizard (`npm run wizard`) — guided safe initialization with footgun protections, dry-run, and deploy manifest (SSS-155) |
+| [Deployment Checker](scripts/check-deployment.ts) | Post-deploy validation script (`npm run check-deployment`) — verifies program, mint, PDAs, Squads multisig (SSS-155) |
+| [GENIUS Act Compliance Checker](scripts/check-genius-compliance.ts) | CLI: `check-genius-compliance --mint <PUBKEY>` — verifies GENIUS Act required flags and configuration (SSS-148) |
+| [Liquidity Stress Test](scripts/liquidity-stress-test.ts) | CLI: `liquidity-stress-test --tvl <USD> --scenarios` — MiCA Art. 45 redemption rush simulation with NCA-ready JSON output (SSS-149) |
 | [Integration Testing](docs/integration-testing.md) | Running the full integration test suite and CI setup |
 | [Anchor Program Tests](docs/anchor-program-testing.md) | Running the Anchor on-chain test suite locally and in CI (SSS-015) |
 | [Formal Verification](docs/formal-verification.md) | Kani mathematical proofs — 7/7 invariants verified for all possible inputs |
