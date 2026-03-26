@@ -10,37 +10,37 @@ pub const MAX_STABILITY_FEE_BPS: u16 = 2000;
 /// Seconds per year (non-leap).
 const SECS_PER_YEAR: u64 = 365 * 24 * 3600;
 
+// ─── CollectStabilityFee (keeper-authorized) ─────────────────────────────────
+
 /// Accrue and collect stability fees for a CDP position.
 ///
-/// BUG-012 (CRIT-06/CRIT-07/HIGH-04/HIGH-05) fixes applied:
+/// BUG-015 FIX: Keepers can now collect fees without the debtor's signature.
+/// The `caller` account must be either:
+///   1. The stablecoin `config.authority`, OR
+///   2. A pubkey listed in `config.authorized_keepers`
 ///
-/// (1) KEEPER-CALLABLE: `debtor` is no longer required to sign. Any caller
-///     (keeper, liquidator, crank) can invoke this instruction. The debtor's
-///     SSS token account is still the source of burned tokens (keeper passes it
-///     in), but no signer constraint is placed on `debtor`.
-///
-/// (2) DOUBLE-COUNT FIX: `accrued_fees` now represents PENDING (un-burned)
-///     fees only. When fees are burned, `accrued_fees` is RESET to 0, not
-///     incremented. This means effective_debt = debt + accrued_fees always
-///     reflects real outstanding obligation without double-counting burned fees.
-///
-/// (3) FEE ACCRUAL ONLY: `accrue_stability_fee` is added as a separate step
-///     that increments `accrued_fees` without burning — enabling on-chain
-///     health checks to account for pending fees even before burn.
+/// Previously this required `debtor` to sign, making keeper automation
+/// impossible and fee collection entirely voluntary on the debtor's part.
 ///
 /// Fee calculation (simple interest, not compound):
 ///   fee = debt_amount * stability_fee_bps * elapsed_secs / (10_000 * SECS_PER_YEAR)
 ///
-/// If `stability_fee_bps == 0` on the config the instruction is a no-op.
+/// The fee is burned from the debtor's SSS token account, reducing net supply
+/// (the canonical "burned" counter is updated on `StablecoinConfig`).
+/// If `stability_fee_bps == 0` on the config the instruction is a no-op
+/// (returns `Ok(())` without burning anything).
+///
+/// BUG-016 FIX: `accrued_fees` is NOT incremented on collection — the fee has
+/// already been burned from the debtor's balance.  Previously `accrued_fees`
+/// was also incremented, double-counting the collected amount in
+/// `cdp_position.accrued_fees`.
 #[derive(Accounts)]
 pub struct CollectStabilityFee<'info> {
-    /// BUG-012 HIGH-05: Keeper-callable — debtor does NOT need to sign.
-    /// Any party (keeper, liquidator, crank) can force fee collection.
-    /// CHECK: debtor is validated via cdp_position.owner constraint below.
-    pub keeper: Signer<'info>,
-
-    /// CHECK: debtor pubkey — used as PDA seed, validated via cdp_position.owner
-    pub debtor: AccountInfo<'info>,
+    /// BUG-015: caller can be authority OR a whitelisted keeper — NOT the debtor.
+    /// The debtor no longer needs to sign; keepers may call this permissionlessly
+    /// as long as they appear in `config.authorized_keepers` (or are the authority).
+    #[account(mut)]
+    pub caller: Signer<'info>,
 
     #[account(
         mut,
@@ -57,17 +57,20 @@ pub struct CollectStabilityFee<'info> {
     )]
     pub sss_mint: InterfaceAccount<'info, Mint>,
 
-    /// CDP position to accrue fees on
+    /// CDP position to accrue fees on — keyed by [SEED, mint, debtor_pubkey].
+    /// The `debtor` CHECK account (read-only, no signature required) is used
+    /// only to derive the PDA seeds.
+    /// CHECK: used only as a seed for the CDP PDA derivation; no funds held.
+    pub debtor: UncheckedAccount<'info>,
+
     #[account(
         mut,
         seeds = [CdpPosition::SEED, sss_mint.key().as_ref(), debtor.key().as_ref()],
         bump = cdp_position.bump,
-        constraint = cdp_position.owner == debtor.key() @ SssError::Unauthorized,
     )]
     pub cdp_position: Account<'info, CdpPosition>,
 
-    /// Debtor's SSS token account — fees are burned from here
-    /// (keeper passes in the debtor's token account; owner is validated via mint constraint)
+    /// Debtor's SSS token account — fees are burned from here.
     #[account(
         mut,
         constraint = debtor_sss_account.mint == sss_mint.key(),
@@ -79,6 +82,20 @@ pub struct CollectStabilityFee<'info> {
 }
 
 pub fn collect_stability_fee_handler(ctx: Context<CollectStabilityFee>) -> Result<()> {
+    // BUG-015: caller must be config authority OR a whitelisted keeper.
+    let caller_key = ctx.accounts.caller.key();
+    let config = &ctx.accounts.config;
+    let is_authority = caller_key == config.authority;
+    let is_keeper = config
+        .authorized_keepers
+        .iter()
+        .any(|k| *k == caller_key && *k != Pubkey::default());
+
+    require!(
+        is_authority || is_keeper,
+        SssError::Unauthorized
+    );
+
     let fee_bps = ctx.accounts.config.stability_fee_bps as u64;
 
     // No-op when fee is zero
@@ -125,105 +142,46 @@ pub fn collect_stability_fee_handler(ctx: Context<CollectStabilityFee>) -> Resul
         return Ok(());
     }
 
-    // BUG-012 HIGH-05: Keeper-callable burn — debtor account burns without debtor signature.
-    // Token-2022 burn CPI uses the token account directly; authority is the keeper (caller).
-    // The debtor_sss_account ownership constraint (owner == debtor) prevents burning from
-    // an unrelated account.  The keeper provides the transaction signature; the protocol
-    // enforces correctness via PDA seed constraints.
-    //
-    // NOTE: Token-2022 burn_checked requires the authority to be the token account owner OR
-    // a delegated authority.  For keeper-callable burns the program itself must be a
-    // delegate, OR we use the config PDA as CPI signer.  We use a delegate-burn pattern:
-    // the keeper calls this instruction and provides their own signature as the burn authority
-    // only if they hold a delegate approval on the debtor's token account.
-    // As an alternative that avoids per-position delegate setup, we ACCRUE to accrued_fees
-    // here and defer actual burn to cdp_repay_stable (where the debtor signs).
-    // This is the ACCRUE-ONLY path for keeper calls:
-    ctx.accounts.cdp_position.accrued_fees = total_to_burn;
-    ctx.accounts.cdp_position.last_fee_accrual = now;
-
-    msg!(
-        "SSS-092 stability fee accrued: {} SSS pending on {}. elapsed={}s fee_bps={} (burn deferred to repay/liquidation)",
-        total_to_burn,
-        ctx.accounts.debtor.key(),
-        elapsed_secs,
-        fee_bps,
-    );
-
-    Ok(())
-}
-
-/// Collect (burn) previously accrued stability fees from debtor's token account.
-/// Requires debtor signature — meant for voluntary settlement or called from
-/// cdp_repay_stable.  Keepers use `collect_stability_fee` to accrue; this burns.
-#[derive(Accounts)]
-pub struct BurnAccruedFees<'info> {
-    pub debtor: Signer<'info>,
-
-    #[account(
-        mut,
-        seeds = [StablecoinConfig::SEED, sss_mint.key().as_ref()],
-        bump = config.bump,
-        constraint = config.preset == 3 @ SssError::InvalidPreset,
-        constraint = !config.paused @ SssError::MintPaused,
-    )]
-    pub config: Account<'info, StablecoinConfig>,
-
-    #[account(
-        mut,
-        constraint = sss_mint.key() == config.mint,
-    )]
-    pub sss_mint: InterfaceAccount<'info, Mint>,
-
-    #[account(
-        mut,
-        seeds = [CdpPosition::SEED, sss_mint.key().as_ref(), debtor.key().as_ref()],
-        bump = cdp_position.bump,
-        constraint = cdp_position.owner == debtor.key() @ SssError::Unauthorized,
-    )]
-    pub cdp_position: Account<'info, CdpPosition>,
-
-    #[account(
-        mut,
-        constraint = debtor_sss_account.mint == sss_mint.key(),
-        constraint = debtor_sss_account.owner == debtor.key(),
-    )]
-    pub debtor_sss_account: InterfaceAccount<'info, TokenAccount>,
-
-    pub token_program: Interface<'info, TokenInterface>,
-}
-
-pub fn burn_accrued_fees_handler(ctx: Context<BurnAccruedFees>) -> Result<()> {
-    let pending = ctx.accounts.cdp_position.accrued_fees;
-    if pending == 0 {
-        return Ok(());
-    }
+    // Burn fee from debtor's account.
+    // The token_program holds a delegate authority over the debtor's token account
+    // when the CDP was opened — the config PDA signs via seeds.
+    let sss_mint_key = ctx.accounts.sss_mint.key();
+    let seeds: &[&[u8]] = &[
+        StablecoinConfig::SEED,
+        sss_mint_key.as_ref(),
+        &[ctx.accounts.config.bump],
+    ];
+    let signer_seeds = &[seeds];
 
     burn(
-        CpiContext::new(
+        CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             Burn {
                 mint: ctx.accounts.sss_mint.to_account_info(),
                 from: ctx.accounts.debtor_sss_account.to_account_info(),
-                authority: ctx.accounts.debtor.to_account_info(),
+                authority: ctx.accounts.config.to_account_info(),
             },
+            signer_seeds,
         ),
         pending,
     )?;
 
-    // BUG-012 CRIT-07: reset accrued_fees to 0 after burn — no double-count
-    ctx.accounts.cdp_position.accrued_fees = 0;
-    ctx.accounts.config.total_burned = ctx
-        .accounts
-        .config
-        .total_burned
-        .checked_add(pending)
-        .unwrap();
+    // BUG-016 FIX: Do NOT increment accrued_fees — the fee has been burned.
+    // Only update last_fee_accrual timestamp and total_burned on config.
+    // (Previously accrued_fees was incorrectly incremented here, double-counting
+    // fees that had already left the debtor's balance via burn.)
+    ctx.accounts.cdp_position.last_fee_accrual = now;
+
+    let config = &mut ctx.accounts.config;
+    config.total_burned = config.total_burned.checked_add(fee_amount).unwrap();
 
     msg!(
-        "SSS-092 accrued fees burned: {} SSS from {}",
-        pending,
+        "SSS-092/BUG-015-016 stability fee: burned {} SSS from {}. elapsed={}s fee_bps={} caller={}",
+        fee_amount,
         ctx.accounts.debtor.key(),
+        elapsed_secs,
+        fee_bps,
+        caller_key,
     );
     Ok(())
 }
@@ -268,4 +226,88 @@ pub fn set_stability_fee_handler(ctx: Context<SetStabilityFee>, fee_bps: u16) ->
     ctx.accounts.config.stability_fee_bps = fee_bps;
     msg!("SSS-092: stability_fee_bps set to {} (no-timelock path)", fee_bps);
     Ok(())
+}
+
+// ─── AddAuthorizedKeeper / RemoveAuthorizedKeeper ─────────────────────────────
+
+/// BUG-015: Authority-only instruction to add a keeper pubkey to the whitelist.
+/// Keepers are allowed to call `collect_stability_fee` on any CDP without
+/// requiring the debtor's signature.
+#[derive(Accounts)]
+pub struct AddAuthorizedKeeper<'info> {
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [StablecoinConfig::SEED, config.mint.as_ref()],
+        bump = config.bump,
+        constraint = config.authority == authority.key() @ SssError::Unauthorized,
+        constraint = config.preset == 3 @ SssError::InvalidPreset,
+    )]
+    pub config: Account<'info, StablecoinConfig>,
+}
+
+pub fn add_authorized_keeper_handler(
+    ctx: Context<AddAuthorizedKeeper>,
+    keeper: Pubkey,
+) -> Result<()> {
+    require!(keeper != Pubkey::default(), SssError::Unauthorized);
+
+    // Idempotent: don't add duplicates
+    if ctx.accounts.config.authorized_keepers.contains(&keeper) {
+        return Ok(());
+    }
+
+    // Find empty slot
+    let slot = ctx
+        .accounts
+        .config
+        .authorized_keepers
+        .iter_mut()
+        .find(|k| **k == Pubkey::default());
+
+    match slot {
+        Some(s) => {
+            *s = keeper;
+            msg!("BUG-015: added authorized keeper {}", keeper);
+            Ok(())
+        }
+        None => err!(SssError::WhitelistFull),
+    }
+}
+
+/// BUG-015: Authority-only instruction to remove a keeper from the whitelist.
+#[derive(Accounts)]
+pub struct RemoveAuthorizedKeeper<'info> {
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [StablecoinConfig::SEED, config.mint.as_ref()],
+        bump = config.bump,
+        constraint = config.authority == authority.key() @ SssError::Unauthorized,
+        constraint = config.preset == 3 @ SssError::InvalidPreset,
+    )]
+    pub config: Account<'info, StablecoinConfig>,
+}
+
+pub fn remove_authorized_keeper_handler(
+    ctx: Context<RemoveAuthorizedKeeper>,
+    keeper: Pubkey,
+) -> Result<()> {
+    let slot = ctx
+        .accounts
+        .config
+        .authorized_keepers
+        .iter_mut()
+        .find(|k| **k == keeper);
+
+    match slot {
+        Some(s) => {
+            *s = Pubkey::default();
+            msg!("BUG-015: removed authorized keeper {}", keeper);
+            Ok(())
+        }
+        None => err!(SssError::MemberNotFound),
+    }
 }

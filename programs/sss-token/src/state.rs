@@ -224,6 +224,43 @@ pub struct StablecoinConfig {
     /// `ProofOfReserves.last_verified_ratio_bps` drops below this threshold.
     /// 0 = check disabled (flag should not be set without configuring this).
     pub min_reserve_ratio_bps: u16,
+    /// SSS-119: Whitelisted custodian pubkeys allowed to submit reserve attestations.
+    /// Up to MAX_RESERVE_ATTESTORS entries; unused slots are Pubkey::default().
+    pub reserve_attestor_whitelist: [Pubkey; StablecoinConfig::MAX_RESERVE_ATTESTORS],
+    /// SSS-127: Minimum transfer amount (in token native units) that requires a
+    /// TravelRuleRecord PDA when FLAG_TRAVEL_RULE is set.  0 = Travel Rule disabled.
+    pub travel_rule_threshold: u64,
+    /// SSS-128: Pubkey of the registered sanctions oracle signer.
+    /// When non-default, the oracle calls `update_sanctions_record` to write
+    /// `SanctionsRecord` PDAs. Transfer hook rejects sanctioned senders when
+    /// FLAG_SANCTIONS_ORACLE is set.  Pubkey::default() = sanctions oracle disabled.
+    pub sanctions_oracle: Pubkey,
+    /// SSS-128: Maximum age in slots for a SanctionsRecord to be considered fresh.
+    /// 0 = staleness check disabled (is_sanctioned is authoritative regardless of age).
+    /// Recommended: 150 slots (~1 min at 400 ms/slot).
+    pub sanctions_max_staleness_slots: u64,
+    /// SSS-119: Program config schema version, incremented by `upgrade_config`.
+    /// Instructions that require a minimum schema version (e.g. CDP borrow, burn)
+    /// check this against `MIN_SUPPORTED_VERSION`.
+    pub version: u8,
+    /// SSS-119: Oracle type for CDP price reads.
+    /// 0 = Pyth, 1 = Switchboard (stub), 2 = Custom (CustomPriceFeed PDA).
+    /// Set via `set_oracle_config` (authority-only).
+    pub oracle_type: u8,
+    /// SSS-119: Oracle feed account address.
+    /// For Pyth: the Pyth price feed pubkey.
+    /// For Custom: the CustomPriceFeed PDA pubkey.
+    /// Pubkey::default() = feed address enforcement disabled.
+    pub oracle_feed: Pubkey,
+    /// SSS-134: Squads Protocol V4 multisig PDA acting as program authority.
+    /// Pubkey::default() = Squads authority not configured.
+    /// Set by `init_squads_authority` (irreversible); also sets FLAG_SQUADS_AUTHORITY.
+    pub squads_multisig: Pubkey,
+    /// BUG-015: Whitelisted keeper pubkeys allowed to call `collect_stability_fee`
+    /// on behalf of any debtor without requiring their signature.
+    /// Up to MAX_AUTHORIZED_KEEPERS slots; unused entries are Pubkey::default().
+    /// Managed via `add_authorized_keeper` / `remove_authorized_keeper` (authority-only).
+    pub authorized_keepers: [Pubkey; StablecoinConfig::MAX_AUTHORIZED_KEEPERS],
     pub bump: u8,
 }
 
@@ -231,6 +268,8 @@ impl StablecoinConfig {
     pub const SEED: &'static [u8] = b"stablecoin-config";
     /// Maximum number of whitelisted reserve attestors (custodians / Pyth publishers).
     pub const MAX_RESERVE_ATTESTORS: usize = 4;
+    /// BUG-015: Maximum number of whitelisted stability-fee keepers.
+    pub const MAX_AUTHORIZED_KEEPERS: usize = 8;
 
     /// Net circulating supply (total_minted - total_burned)
     pub fn net_supply(&self) -> u64 {

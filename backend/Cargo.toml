@@ -34,6 +34,7 @@ axum-extra = { version = "0.9", features = [] }
 futures = "0.3"
 tokio-tungstenite = "0.21"
 http = "1.4.0"
+# hmac = "0.12.1"  # duplicate removed (BUG-015-016 branch)
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
