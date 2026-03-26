@@ -127,8 +127,7 @@ Endpoints:
 |---------|-------------|
 | [Proof of Reserves](docs/PROOF-OF-RESERVES.md) | Cryptographic supply commitments — fetch, verify, and manually reproduce Merkle proofs |
 | [Trust Model](docs/TRUST-MODEL.md) | Real trust assumptions per SSS tier — what is/isn't trustless in v1; v1 stubs and mitigations |
-| [GENIUS Act Compliance](docs/GENIUS-ACT-COMPLIANCE.md) | US GENIUS Act issuer guide — 1:1 reserves, attestation, freeze/seize/burn, AML/BSA, no-yield prohibition, Squads custody, sample config + CLI checker (SSS-148) |
-| [MiCA Recovery Plan Template](docs/RECOVERY-PLAN-TEMPLATE.md) | MiCA Art. 46 fill-in-the-blank recovery plan — trigger scenarios, escalation, guardian multisig actions, NCA notification templates (SSS-149) |
+| [Insurance Vault](docs/INSURANCE-VAULT.md) | First-loss on-chain reserve for liquidation cascades — setup, seeding, draws, mint gate, replenishment runbook (SSS-151) |
 
 ## Documentation
 
