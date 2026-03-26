@@ -6,6 +6,11 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### SSS-154 — Redemption Queue + Front-Run Protection
+
+- `docs/REDEMPTION-QUEUE.md` — full reference: `RedemptionQueue`/`RedemptionEntry` PDAs, 5 instructions (`init_redemption_queue`, `enqueue_redemption`, `process_redemption`, `cancel_redemption`, `update_redemption_queue`), 3 events, 6 errors, default parameters, TypeScript example, keeper runbook, security notes [PR #295]
+- `FLAG_REDEMPTION_QUEUE` (bit 23) — FIFO slot-delayed redemption with `min_delay_slots` (default 50), per-slot cap `max_redemption_per_slot_bps` (default 500 bps = 5%), SlotHashes seed for MEV unpredictability, keeper reward 5,000 lamports/entry
+
 ### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
 - `docs/SECURITY.md` § 9 — full risk analysis of Token-2022 hook fail-open conditions: fail-open scenarios, current mitigations (Squads multisig, PDA ownership, fail-closed flags), residual risk, recommended operational + on-chain mitigations, incident response timeline [commit 0293169]
