@@ -6,6 +6,10 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **BUG-022:** `blacklist_add_and_freeze` instruction added to `sss-token` program — atomically records a wallet in `BlacklistState` (via CPI to transfer-hook) and freezes the wallet's token account (config PDA as freeze authority) in a single transaction. Closes the front-running window where a wallet could move tokens between a pending `blacklist_add` and a separate `freeze_account` call. New errors: `InvalidMint`, `InvalidBlacklistState`, `InvalidTransferHookProgram`. Documented in `docs/compliance-module.md`.
+
 ### Added
 - `docs/MARKET-MAKER-HOOKS.md` — Market Maker Hooks reference (SSS-138): MarketMakerConfig PDA, FLAG_MARKET_MAKER_HOOKS (bit 18), mm_mint/mm_burn/register_market_maker/get_mm_capacity instructions, per-slot rate limits, oracle spread check, events, errors, TypeScript example [PR #230]
 - `docs/compliance-module.md` — full SDK reference for `ComplianceModule` (SSS-017) [PR #73]
