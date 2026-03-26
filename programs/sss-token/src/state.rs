@@ -60,7 +60,7 @@ pub const FLAG_SQUADS_AUTHORITY: u64 = 1 << 13;
 /// Proof-of-Reserves breach halts minting (SSS-123).
 pub const FLAG_POR_HALT_ON_BREACH: u64 = 1 << 16;
 
-/// Cross-chain bridge flag (bit 13): when set, `bridge_out` and `bridge_in`
+/// Cross-chain bridge flag (bit 17): when set, `bridge_out` and `bridge_in`
 /// instructions are enabled.  Requires a `BridgeConfig` PDA to be initialized
 /// via `init_bridge_config`.  See docs/CROSS-CHAIN-BRIDGE.md for details.
 pub const FLAG_BRIDGE_ENABLED: u64 = 1 << 17;

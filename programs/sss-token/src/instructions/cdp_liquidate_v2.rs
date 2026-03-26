@@ -29,7 +29,9 @@ use pyth_sdk_solana::state::SolanaPriceAccount;
 
 use crate::error::SssError;
 use crate::events::CollateralLiquidated;
-use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig};
+use crate::state::{
+    CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig, FLAG_CIRCUIT_BREAKER,
+};
 
 /// Hardcoded fallback maximum age of a Pyth price update (60 seconds).
 const DEFAULT_MAX_PRICE_AGE_SECS: u64 = 60;
@@ -157,7 +159,13 @@ pub fn cdp_liquidate_v2_handler(
     debt_to_repay: u64,
     min_collateral_amount: u64,
 ) -> Result<()> {
-    // ── 0. Pyth feed Pubkey validation (SSS-085) ──────────────────────────
+    // ── 0. Circuit breaker — halt liquidations when FLAG_CIRCUIT_BREAKER is set (SSS-BUG-014) ──
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+        SssError::CircuitBreakerActive
+    );
+
+    // ── 1. Pyth feed Pubkey validation (SSS-085) ──────────────────────────
     let expected_feed = ctx.accounts.config.expected_pyth_feed;
     if expected_feed != Pubkey::default() {
         require!(
@@ -166,7 +174,7 @@ pub fn cdp_liquidate_v2_handler(
         );
     }
 
-    // ── 1. Fetch Pyth price ───────────────────────────────────────────────
+    // ── 2. Fetch Pyth price ───────────────────────────────────────────────
     let clock = Clock::get()?;
     let price_feed =
         SolanaPriceAccount::account_info_to_feed(&ctx.accounts.pyth_price_feed)
@@ -194,13 +202,13 @@ pub fn cdp_liquidate_v2_handler(
         );
     }
 
-    // ── 2. Read per-collateral params from CollateralConfig PDA ──────────
+    // ── 3. Read per-collateral params from CollateralConfig PDA ──────────
     let cc = &ctx.accounts.collateral_config;
     require!(cc.whitelisted, SssError::CollateralNotWhitelisted);
     let liquidation_threshold_bps = cc.liquidation_threshold_bps;
     let liquidation_bonus_bps = cc.liquidation_bonus_bps;
 
-    // ── 3. Collateral value in USD (6 dp) ────────────────────────────────
+    // ── 4. Collateral value in USD (6 dp) ────────────────────────────────
     let deposited = ctx.accounts.collateral_vault.deposited_amount;
     require!(deposited > 0, SssError::InsufficientCollateral);
 
@@ -216,7 +224,7 @@ pub fn cdp_liquidate_v2_handler(
         / 10u128.pow(price_expo_abs)
         / 10u128.pow(collateral_decimals);
 
-    // ── 4. Current collateral ratio check ────────────────────────────────
+    // ── 5. Current collateral ratio check ────────────────────────────────
     let total_debt = ctx.accounts.cdp_position.debt_amount;
     require!(total_debt > 0, SssError::InsufficientDebt);
 
@@ -236,7 +244,7 @@ pub fn cdp_liquidate_v2_handler(
         SssError::CdpNotLiquidatable
     );
 
-    // ── 5. Determine debt to burn and collateral to seize ────────────────
+    // ── 6. Determine debt to burn and collateral to seize ────────────────
     // debt_to_repay = 0 → full liquidation
     let actual_debt_repaid = if debt_to_repay == 0 || debt_to_repay >= total_debt {
         total_debt
@@ -284,7 +292,7 @@ pub fn cdp_liquidate_v2_handler(
         seize_collateral_raw as u64
     };
 
-    // ── 6. Partial liquidation health check ──────────────────────────────
+    // ── 7. Partial liquidation health check ──────────────────────────────
     // After seizing, remaining position must be healthy (>= MIN_COLLATERAL_RATIO 150%)
     // to prevent over-liquidation.
     if is_partial {
@@ -318,7 +326,7 @@ pub fn cdp_liquidate_v2_handler(
         }
     }
 
-    // ── 7. Slippage guard (SSS-085 compatible) ───────────────────────────
+    // ── 8. Slippage guard (SSS-085 compatible) ───────────────────────────
     if min_collateral_amount > 0 {
         require!(
             collateral_to_seize >= min_collateral_amount,
@@ -326,7 +334,7 @@ pub fn cdp_liquidate_v2_handler(
         );
     }
 
-    // ── 8. Burn SSS debt tokens ───────────────────────────────────────────
+    // ── 9. Burn SSS debt tokens ───────────────────────────────────────────
     spl_burn_checked(
         CpiContext::new(
             ctx.accounts.sss_token_program.to_account_info(),
@@ -340,7 +348,7 @@ pub fn cdp_liquidate_v2_handler(
         ctx.accounts.sss_mint.decimals,
     )?;
 
-    // ── 9. Transfer collateral vault → liquidator ─────────────────────────
+    // ── 10. Transfer collateral vault → liquidator ─────────────────────────
     let sss_mint_key = ctx.accounts.sss_mint.key();
     let owner_key = ctx.accounts.cdp_owner.key();
     let collateral_mint_key = ctx.accounts.collateral_mint.key();
@@ -369,7 +377,7 @@ pub fn cdp_liquidate_v2_handler(
         ctx.accounts.collateral_mint.decimals,
     )?;
 
-    // ── 10. Update state ──────────────────────────────────────────────────
+    // ── 11. Update state ──────────────────────────────────────────────────
     let position = &mut ctx.accounts.cdp_position;
     position.debt_amount = total_debt.saturating_sub(actual_debt_repaid);
 
@@ -379,7 +387,7 @@ pub fn cdp_liquidate_v2_handler(
     let config = &mut ctx.accounts.config;
     config.total_burned = config.total_burned.checked_add(actual_debt_repaid).unwrap();
 
-    // ── 11. Emit CollateralLiquidated event ───────────────────────────────
+    // ── 12. Emit CollateralLiquidated event ───────────────────────────────
     emit!(CollateralLiquidated {
         mint: sss_mint_key,
         collateral_mint: collateral_mint_key,

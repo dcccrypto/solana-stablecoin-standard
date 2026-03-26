@@ -1,6 +1,6 @@
 //! SSS cross-chain bridge hooks — Wormhole + LayerZero integration.
 //!
-//! Implements `FLAG_BRIDGE_ENABLED` (bit 13).
+//! Implements `FLAG_BRIDGE_ENABLED` (bit 17).
 //!
 //! Architecture:
 //! - `BridgeConfig` PDA: per-mint bridge configuration (bridge type, program, limits, fee).

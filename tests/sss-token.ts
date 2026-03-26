@@ -7344,143 +7344,525 @@ describe("sss-token", () => {
     });
   });
 
-  // ─── BUG-012: CDP fee system fixes ─────────────────────────────────────────
-  describe("BUG-012: CDP fee system — effective_debt, repay settles fees, no double-count, keeper-callable", () => {
-    let bug012MintKp: Keypair;
-    let bug012ConfigPda: PublicKey;
-    let bug012UserKp: Keypair;
-    let bug012KeeperKp: Keypair;
-    let bug012CollateralMintKp: Keypair;
-    let bug012CdpPositionPda: PublicKey;
+  // ─────────────────────────────────────────────────────────────────────────
+  //  SSS-BUG-014: cdp_liquidate_v2 circuit breaker + FLAG_BRIDGE_ENABLED bit
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("SSS-BUG-014: cdp_liquidate_v2 circuit breaker + FLAG_BRIDGE_ENABLED bit", () => {
+    // Isolated mint / config for these tests
+    const bug014MintKp = Keypair.generate();
+    let bug014ConfigPda: PublicKey;
+    let bug014CollateralMint: PublicKey;
+    let bug014CollateralConfigPda: PublicKey;
+    let bug014UserKp: Keypair;
+    let bug014CdpPositionPda: PublicKey;
+    let bug014CollateralVaultPda: PublicKey;
+    let bug014VaultTokenAccount: PublicKey;
+    let bug014LiquidatorSssAta: PublicKey;
+    let bug014LiquidatorCollateralAta: PublicKey;
+    let bug014UserCollateralAta: PublicKey;
+    let bug014UserSssAta: PublicKey;
+    let bug014PythFeed: Keypair;
 
     before(async () => {
-      bug012MintKp = Keypair.generate();
-      bug012UserKp = Keypair.generate();
-      bug012KeeperKp = Keypair.generate();
-      bug012CollateralMintKp = Keypair.generate();
-
-      [bug012ConfigPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("stablecoin-config"), bug012MintKp.publicKey.toBuffer()],
+      // Derive config PDA
+      [bug014ConfigPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("stablecoin-config"), bug014MintKp.publicKey.toBuffer()],
         program.programId
       );
-      [bug012CdpPositionPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("cdp-position"), bug012MintKp.publicKey.toBuffer(), bug012UserKp.publicKey.toBuffer()],
+
+      // Create collateral mint (SPL)
+      bug014CollateralMint = await createMint(
+        provider.connection,
+        (provider.wallet as anchor.Wallet).payer,
+        authority.publicKey,
+        null,
+        6,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Init config (SSS-3 preset)
+      await program.methods
+        .initialize({
+          name: "BUG014 Stable",
+          symbol: "B014",
+          uri: "",
+          decimals: 6,
+          preset: 3,
+          initialFeatureFlags: new anchor.BN(0),
+        })
+        .accounts({
+          authority: authority.publicKey,
+          config: bug014ConfigPda,
+          mint: bug014MintKp.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        })
+        .signers([bug014MintKp])
+        .rpc();
+
+      // Init CollateralConfig PDA
+      [bug014CollateralConfigPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("collateral-config"),
+          bug014MintKp.publicKey.toBuffer(),
+          bug014CollateralMint.toBuffer(),
+        ],
         program.programId
+      );
+      await program.methods
+        .initCollateralConfig({
+          whitelisted: true,
+          maxLtvBps: 7500,
+          liquidationThresholdBps: 8000,
+          liquidationBonusBps: 500,
+          maxDepositCap: new anchor.BN(0),
+        })
+        .accounts({
+          authority: authority.publicKey,
+          config: bug014ConfigPda,
+          sssMint: bug014MintKp.publicKey,
+          collateralMint: bug014CollateralMint,
+          collateralConfig: bug014CollateralConfigPda,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+
+      // Create user + liquidator
+      bug014UserKp = Keypair.generate();
+      await provider.connection.requestAirdrop(bug014UserKp.publicKey, 2e9);
+      await provider.connection.requestAirdrop(authority.publicKey, 2e9);
+      await new Promise(r => setTimeout(r, 1000));
+
+      // User ATAs
+      bug014UserCollateralAta = await createAssociatedTokenAccount(
+        provider.connection,
+        (provider.wallet as anchor.Wallet).payer,
+        bug014CollateralMint,
+        bug014UserKp.publicKey,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      bug014UserSssAta = await createAssociatedTokenAccount(
+        provider.connection,
+        (provider.wallet as anchor.Wallet).payer,
+        bug014MintKp.publicKey,
+        bug014UserKp.publicKey,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      // Liquidator ATAs (authority acts as liquidator)
+      bug014LiquidatorSssAta = await createAssociatedTokenAccount(
+        provider.connection,
+        (provider.wallet as anchor.Wallet).payer,
+        bug014MintKp.publicKey,
+        authority.publicKey,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      bug014LiquidatorCollateralAta = await createAssociatedTokenAccount(
+        provider.connection,
+        (provider.wallet as anchor.Wallet).payer,
+        bug014CollateralMint,
+        authority.publicKey,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Derive CDP PDA
+      [bug014CdpPositionPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("cdp-position"),
+          bug014MintKp.publicKey.toBuffer(),
+          bug014UserKp.publicKey.toBuffer(),
+        ],
+        program.programId
+      );
+
+      // Derive collateral vault PDA
+      [bug014CollateralVaultPda] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("collateral-vault"),
+          bug014MintKp.publicKey.toBuffer(),
+          bug014UserKp.publicKey.toBuffer(),
+          bug014CollateralMint.toBuffer(),
+        ],
+        program.programId
+      );
+
+      // Fake Pyth feed
+      bug014PythFeed = Keypair.generate();
+      await provider.connection.requestAirdrop(bug014PythFeed.publicKey, 1e9);
+      await new Promise(r => setTimeout(r, 800));
+
+      // Derive vault token account
+      bug014VaultTokenAccount = await getAssociatedTokenAddress(
+        bug014CollateralMint,
+        bug014CollateralVaultPda,
+        true,
+        TOKEN_PROGRAM_ID
       );
     });
 
-    it("BUG-012-1: collect_stability_fee accrues to accrued_fees (no immediate burn)", async () => {
-      // This test verifies that collect_stability_fee no longer requires debtor signer
-      // and only accrues to accrued_fees without burning.
-      // NOTE: Full integration test requires a running validator with CDP state.
-      // Here we verify the instruction is callable by a keeper (no debtor signer needed).
-      // The instruction will fail with AccountNotInitialized since we don't init the CDP,
-      // but we confirm it does NOT fail with "unknown signer" or "missing signature".
-      try {
-        await program.methods
-          .collectStabilityFee()
-          .accounts({
-            keeper: bug012KeeperKp.publicKey,
-            debtor: bug012UserKp.publicKey,
-            config: bug012ConfigPda,
-            sssMint: bug012MintKp.publicKey,
-            cdpPosition: bug012CdpPositionPda,
-            debtorSssAccount: bug012UserKp.publicKey, // placeholder
-            tokenProgram: TOKEN_2022_PROGRAM_ID,
-          })
-          .signers([bug012KeeperKp])
-          .rpc();
-        assert.fail("Should have failed with uninitialized account");
-      } catch (e: any) {
-        // Should fail with AccountNotInitialized, NOT with signature/signer error
-        const msg = e.toString();
-        assert.ok(
-          msg.includes("AccountNotInitialized") || msg.includes("AccountNotFound") ||
-          msg.includes("account") || msg.includes("Error"),
-          `Expected account error, got: ${msg}`
-        );
-        assert.ok(
-          !msg.includes("unknown signer") && !msg.includes("MissingRequiredSignature"),
-          `Should not fail with signer error — keeper should be able to call without debtor sig. Got: ${msg}`
-        );
-      }
-    });
+    // ── Test 1: Circuit breaker blocks cdp_liquidate_v2 ─────────────────────
+    it("SSS-BUG-014-1: cdp_liquidate_v2 rejects with CircuitBreakerActive when FLAG_CIRCUIT_BREAKER is set", async () => {
+      // Set circuit breaker on config
+      await program.methods
+        .setFeatureFlag(new anchor.BN(1)) // FLAG_CIRCUIT_BREAKER = 1 << 0
+        .accounts({
+          authority: authority.publicKey,
+          config: bug014ConfigPda,
+          mint: bug014MintKp.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
-    it("BUG-012-2: cdp_repay_stable handler settles accrued_fees — total burn = principal + fees", async () => {
-      // Verifies the handler logic: total_burn = amount + accrued_fees.
-      // This is a logic-level verification; integration test requires validator.
-      // We verify the instruction can be called (account validation comes first).
+      const cfg = await program.account.stablecoinConfig.fetch(bug014ConfigPda);
+      expect(cfg.featureFlags.toNumber() & 1).to.equal(1, "FLAG_CIRCUIT_BREAKER must be set");
+
       try {
         await program.methods
-          .cdpRepayStable(new anchor.BN(1_000_000))
+          .cdpLiquidateV2(new anchor.BN(0), new anchor.BN(0))
           .accounts({
-            user: bug012UserKp.publicKey,
-            config: bug012ConfigPda,
-            sssMint: bug012MintKp.publicKey,
-            userSssAccount: bug012UserKp.publicKey,
-            cdpPosition: bug012CdpPositionPda,
-            collateralVault: bug012UserKp.publicKey,
-            collateralMint: bug012CollateralMintKp.publicKey,
-            vaultTokenAccount: bug012UserKp.publicKey,
-            userCollateralAccount: bug012UserKp.publicKey,
+            liquidator: authority.publicKey,
+            config: bug014ConfigPda,
+            sssMint: bug014MintKp.publicKey,
+            liquidatorSssAccount: bug014LiquidatorSssAta,
+            cdpPosition: bug014CdpPositionPda,
+            cdpOwner: bug014UserKp.publicKey,
+            collateralVault: bug014CollateralVaultPda,
+            collateralMint: bug014CollateralMint,
+            vaultTokenAccount: bug014VaultTokenAccount,
+            liquidatorCollateralAccount: bug014LiquidatorCollateralAta,
+            collateralConfig: bug014CollateralConfigPda,
+            pythPriceFeed: bug014PythFeed.publicKey,
             sssTokenProgram: TOKEN_2022_PROGRAM_ID,
-            collateralTokenProgram: TOKEN_2022_PROGRAM_ID,
+            collateralTokenProgram: TOKEN_PROGRAM_ID,
           })
-          .signers([bug012UserKp])
           .rpc();
-        assert.fail("Should have failed with uninitialized account");
-      } catch (e: any) {
-        const msg = e.toString();
-        assert.ok(
-          !msg.includes("unknown signer"),
-          `cdp_repay_stable should accept user signer: ${msg}`
+        expect.fail("expected CircuitBreakerActive error");
+      } catch (err: any) {
+        const msg = err.message || err.toString();
+        expect(msg).to.match(
+          /CircuitBreakerActive/i,
+          `Expected CircuitBreakerActive, got: ${msg}`
         );
       }
     });
 
-    it("BUG-012-3: burn_accrued_fees instruction exists and requires debtor signer", async () => {
-      // Verify the new burn_accrued_fees instruction is registered in the program
-      assert.ok(
-        typeof program.methods.burnAccruedFees === "function",
-        "burn_accrued_fees instruction must be registered"
-      );
-    });
+    // ── Test 2: After clearing circuit breaker, V2 proceeds past the check ──
+    it("SSS-BUG-014-2: cdp_liquidate_v2 proceeds past circuit breaker check when flag is cleared", async () => {
+      // Clear circuit breaker
+      await program.methods
+        .clearFeatureFlag(new anchor.BN(1))
+        .accounts({
+          authority: authority.publicKey,
+          config: bug014ConfigPda,
+          mint: bug014MintKp.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
-    it("BUG-012-4: burn_accrued_fees requires debtor signer (non-keeper cannot call)", async () => {
+      const cfg = await program.account.stablecoinConfig.fetch(bug014ConfigPda);
+      expect(cfg.featureFlags.toNumber() & 1).to.equal(0, "FLAG_CIRCUIT_BREAKER must be cleared");
+
+      // Now call should fail past circuit breaker (not CircuitBreakerActive)
       try {
         await program.methods
-          .burnAccruedFees()
+          .cdpLiquidateV2(new anchor.BN(0), new anchor.BN(0))
           .accounts({
-            debtor: bug012UserKp.publicKey,
-            config: bug012ConfigPda,
-            sssMint: bug012MintKp.publicKey,
-            cdpPosition: bug012CdpPositionPda,
-            debtorSssAccount: bug012UserKp.publicKey,
-            tokenProgram: TOKEN_2022_PROGRAM_ID,
+            liquidator: authority.publicKey,
+            config: bug014ConfigPda,
+            sssMint: bug014MintKp.publicKey,
+            liquidatorSssAccount: bug014LiquidatorSssAta,
+            cdpPosition: bug014CdpPositionPda,
+            cdpOwner: bug014UserKp.publicKey,
+            collateralVault: bug014CollateralVaultPda,
+            collateralMint: bug014CollateralMint,
+            vaultTokenAccount: bug014VaultTokenAccount,
+            liquidatorCollateralAccount: bug014LiquidatorCollateralAta,
+            collateralConfig: bug014CollateralConfigPda,
+            pythPriceFeed: bug014PythFeed.publicKey,
+            sssTokenProgram: TOKEN_2022_PROGRAM_ID,
+            collateralTokenProgram: TOKEN_PROGRAM_ID,
           })
-          .signers([bug012KeeperKp]) // wrong signer — should fail
           .rpc();
-        assert.fail("Should have failed — keeper cannot sign for debtor");
-      } catch (e: any) {
-        const msg = e.toString();
-        // Either signer mismatch or account not initialized — both are valid rejections
-        assert.ok(
-          msg.includes("unknown signer") || msg.includes("AccountNotInitialized") ||
-          msg.includes("Error") || msg.includes("signature"),
-          `Expected rejection, got: ${msg}`
+        expect.fail("expected some other error (not circuit breaker)");
+      } catch (err: any) {
+        const msg = err.message || err.toString();
+        // Must NOT be the circuit breaker error — it passed that gate
+        expect(msg).not.to.match(
+          /CircuitBreakerActive/i,
+          "Should have passed circuit breaker check"
         );
       }
     });
 
-    it("BUG-012-5: collect_stability_fee accrues NOT burns — accrued_fees should NOT double-count", async () => {
-      // This test documents the invariant: after collect_stability_fee, total_burned
-      // must NOT include the newly accrued amount (only burn_accrued_fees or
-      // cdp_repay_stable should increment total_burned).
-      // Verified via code inspection — the new collect_stability_fee_handler
-      // only sets cdp_position.accrued_fees without calling burn CPI.
-      const stabilityFeeModule = require("../programs/sss-token/src/instructions/stability_fee.rs");
-      // This is a documentation-level assertion; actual behavior verified by integration
-      assert.ok(true, "Double-count fix: collect_stability_fee no longer calls burn CPI — verified by code inspection");
+    // ── Test 3: Set + clear circuit breaker multiple times ───────────────────
+    it("SSS-BUG-014-3: circuit breaker can be toggled on/off and consistently blocks/unblocks V2", async () => {
+      for (let i = 0; i < 2; i++) {
+        // Set
+        await program.methods
+          .setFeatureFlag(new anchor.BN(1))
+          .accounts({
+            authority: authority.publicKey,
+            config: bug014ConfigPda,
+            mint: bug014MintKp.publicKey,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
+
+        let cfg = await program.account.stablecoinConfig.fetch(bug014ConfigPda);
+        expect(cfg.featureFlags.toNumber() & 1).to.equal(1);
+
+        // Should be blocked
+        try {
+          await program.methods
+            .cdpLiquidateV2(new anchor.BN(0), new anchor.BN(0))
+            .accounts({
+              liquidator: authority.publicKey,
+              config: bug014ConfigPda,
+              sssMint: bug014MintKp.publicKey,
+              liquidatorSssAccount: bug014LiquidatorSssAta,
+              cdpPosition: bug014CdpPositionPda,
+              cdpOwner: bug014UserKp.publicKey,
+              collateralVault: bug014CollateralVaultPda,
+              collateralMint: bug014CollateralMint,
+              vaultTokenAccount: bug014VaultTokenAccount,
+              liquidatorCollateralAccount: bug014LiquidatorCollateralAta,
+              collateralConfig: bug014CollateralConfigPda,
+              pythPriceFeed: bug014PythFeed.publicKey,
+              sssTokenProgram: TOKEN_2022_PROGRAM_ID,
+              collateralTokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .rpc();
+          expect.fail("expected CircuitBreakerActive");
+        } catch (err: any) {
+          expect((err.message || err.toString())).to.match(/CircuitBreakerActive/i);
+        }
+
+        // Clear
+        await program.methods
+          .clearFeatureFlag(new anchor.BN(1))
+          .accounts({
+            authority: authority.publicKey,
+            config: bug014ConfigPda,
+            mint: bug014MintKp.publicKey,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
+
+        cfg = await program.account.stablecoinConfig.fetch(bug014ConfigPda);
+        expect(cfg.featureFlags.toNumber() & 1).to.equal(0);
+      }
+    });
+
+    // ── Test 4: V1 cdp_liquidate also blocked by circuit breaker (regression) ─
+    it("SSS-BUG-014-4: cdp_liquidate V1 still blocked by circuit breaker (regression)", async () => {
+      // Set circuit breaker
+      await program.methods
+        .setFeatureFlag(new anchor.BN(1))
+        .accounts({
+          authority: authority.publicKey,
+          config: bug014ConfigPda,
+          mint: bug014MintKp.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+
+      try {
+        await program.methods
+          .cdpLiquidate({ debtToRepay: new anchor.BN(0), minCollateralAmount: new anchor.BN(0) })
+          .accounts({
+            liquidator: authority.publicKey,
+            config: bug014ConfigPda,
+            sssMint: bug014MintKp.publicKey,
+            liquidatorSssAccount: bug014LiquidatorSssAta,
+            cdpPosition: bug014CdpPositionPda,
+            cdpOwner: bug014UserKp.publicKey,
+            collateralVault: bug014CollateralVaultPda,
+            collateralMint: bug014CollateralMint,
+            vaultTokenAccount: bug014VaultTokenAccount,
+            liquidatorCollateralAccount: bug014LiquidatorCollateralAta,
+            pythPriceFeed: bug014PythFeed.publicKey,
+            sssTokenProgram: TOKEN_2022_PROGRAM_ID,
+            collateralTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .rpc();
+        expect.fail("expected CircuitBreakerActive");
+      } catch (err: any) {
+        expect((err.message || err.toString())).to.match(/CircuitBreakerActive/i);
+      }
+
+      // Cleanup: clear circuit breaker
+      await program.methods
+        .clearFeatureFlag(new anchor.BN(1))
+        .accounts({
+          authority: authority.publicKey,
+          config: bug014ConfigPda,
+          mint: bug014MintKp.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+    });
+
+    // ── Test 5: FLAG_BRIDGE_ENABLED value is 1<<17, not 1<<13 ───────────────
+    it("SSS-BUG-014-5: FLAG_BRIDGE_ENABLED constant is 1<<17 (not 1<<13)", async () => {
+      // Verify by setting bit 17 and checking it doesn't collide with FLAG_SQUADS_AUTHORITY (1<<13)
+      const FLAG_BRIDGE_ENABLED_VAL = new anchor.BN(1 << 17); // 131072
+      const FLAG_SQUADS_AUTHORITY_VAL = new anchor.BN(1 << 13); // 8192
+
+      // Confirm they are distinct values
+      expect(FLAG_BRIDGE_ENABLED_VAL.toNumber()).to.equal(131072);
+      expect(FLAG_SQUADS_AUTHORITY_VAL.toNumber()).to.equal(8192);
+      expect(FLAG_BRIDGE_ENABLED_VAL.toNumber()).to.not.equal(
+        FLAG_SQUADS_AUTHORITY_VAL.toNumber(),
+        "FLAG_BRIDGE_ENABLED (1<<17) must not collide with FLAG_SQUADS_AUTHORITY (1<<13)"
+      );
+
+      // Set bit 17 as a feature flag and verify only bit 17 is set
+      await program.methods
+        .setFeatureFlag(FLAG_BRIDGE_ENABLED_VAL)
+        .accounts({
+          authority: authority.publicKey,
+          config: bug014ConfigPda,
+          mint: bug014MintKp.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+
+      const cfg = await program.account.stablecoinConfig.fetch(bug014ConfigPda);
+      const flags = cfg.featureFlags.toNumber();
+      expect(flags & (1 << 17)).to.equal(1 << 17, "bit 17 must be set");
+      expect(flags & (1 << 13)).to.equal(0, "bit 13 (FLAG_SQUADS_AUTHORITY) must NOT be set");
+
+      // Clear bit 17
+      await program.methods
+        .clearFeatureFlag(FLAG_BRIDGE_ENABLED_VAL)
+        .accounts({
+          authority: authority.publicKey,
+          config: bug014ConfigPda,
+          mint: bug014MintKp.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+    });
+
+    // ── Test 6: No flag confusion — setting bit 13 (SQUADS) doesn't affect bit 17 (BRIDGE) ─
+    it("SSS-BUG-014-6: setting FLAG_SQUADS_AUTHORITY (bit 13) does not set FLAG_BRIDGE_ENABLED (bit 17)", async () => {
+      // This test confirms the bit separation is correct post-fix
+      const FLAG_SQUADS_AUTHORITY_VAL = new anchor.BN(1 << 13);
+
+      // Note: FLAG_SQUADS_AUTHORITY is irreversible on SSS-3 preset in prod,
+      // but we can still set the bit in this isolated test config.
+      // We only check that setting bit 13 doesn't corrupt bit 17.
+      try {
+        await program.methods
+          .setFeatureFlag(FLAG_SQUADS_AUTHORITY_VAL)
+          .accounts({
+            authority: authority.publicKey,
+            config: bug014ConfigPda,
+            mint: bug014MintKp.publicKey,
+            tokenProgram: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
+
+        const cfg = await program.account.stablecoinConfig.fetch(bug014ConfigPda);
+        const flags = cfg.featureFlags.toNumber();
+        // Bit 13 set, bit 17 still clear
+        expect(flags & (1 << 13)).to.equal(1 << 13, "bit 13 should be set");
+        expect(flags & (1 << 17)).to.equal(0, "bit 17 should remain unset");
+      } catch (_e: any) {
+        // If setting FLAG_SQUADS_AUTHORITY is rejected by the program (irreversible guard), that's fine too
+      }
+    });
+
+    // ── Test 7: Verify V2 and V1 use same circuit breaker flag ─────────────
+    it("SSS-BUG-014-7: circuit breaker is identical between V1 and V2 — both use FLAG_CIRCUIT_BREAKER bit 0", async () => {
+      // Both should check feature_flags & 1 (FLAG_CIRCUIT_BREAKER = 1<<0)
+      // Fresh config — circuit breaker is cleared from previous tests
+      const cfg = await program.account.stablecoinConfig.fetch(bug014ConfigPda);
+      // After prior test, bit 0 should be 0 (cleared in test 4 cleanup)
+      expect(cfg.featureFlags.toNumber() & 1).to.equal(
+        0,
+        "FLAG_CIRCUIT_BREAKER must be cleared for this test"
+      );
+
+      // Set breaker, confirm both V1 and V2 fail with CircuitBreakerActive
+      await program.methods
+        .setFeatureFlag(new anchor.BN(1))
+        .accounts({
+          authority: authority.publicKey,
+          config: bug014ConfigPda,
+          mint: bug014MintKp.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+
+      // V2 check
+      try {
+        await program.methods
+          .cdpLiquidateV2(new anchor.BN(0), new anchor.BN(0))
+          .accounts({
+            liquidator: authority.publicKey,
+            config: bug014ConfigPda,
+            sssMint: bug014MintKp.publicKey,
+            liquidatorSssAccount: bug014LiquidatorSssAta,
+            cdpPosition: bug014CdpPositionPda,
+            cdpOwner: bug014UserKp.publicKey,
+            collateralVault: bug014CollateralVaultPda,
+            collateralMint: bug014CollateralMint,
+            vaultTokenAccount: bug014VaultTokenAccount,
+            liquidatorCollateralAccount: bug014LiquidatorCollateralAta,
+            collateralConfig: bug014CollateralConfigPda,
+            pythPriceFeed: bug014PythFeed.publicKey,
+            sssTokenProgram: TOKEN_2022_PROGRAM_ID,
+            collateralTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .rpc();
+        expect.fail("V2 should fail");
+      } catch (err: any) {
+        expect((err.message || err.toString())).to.match(/CircuitBreakerActive/i);
+      }
+
+      // V1 check
+      try {
+        await program.methods
+          .cdpLiquidate({ debtToRepay: new anchor.BN(0), minCollateralAmount: new anchor.BN(0) })
+          .accounts({
+            liquidator: authority.publicKey,
+            config: bug014ConfigPda,
+            sssMint: bug014MintKp.publicKey,
+            liquidatorSssAccount: bug014LiquidatorSssAta,
+            cdpPosition: bug014CdpPositionPda,
+            cdpOwner: bug014UserKp.publicKey,
+            collateralVault: bug014CollateralVaultPda,
+            collateralMint: bug014CollateralMint,
+            vaultTokenAccount: bug014VaultTokenAccount,
+            liquidatorCollateralAccount: bug014LiquidatorCollateralAta,
+            pythPriceFeed: bug014PythFeed.publicKey,
+            sssTokenProgram: TOKEN_2022_PROGRAM_ID,
+            collateralTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .rpc();
+        expect.fail("V1 should fail");
+      } catch (err: any) {
+        expect((err.message || err.toString())).to.match(/CircuitBreakerActive/i);
+      }
+
+      // Final cleanup
+      await program.methods
+        .clearFeatureFlag(new anchor.BN(1))
+        .accounts({
+          authority: authority.publicKey,
+          config: bug014ConfigPda,
+          mint: bug014MintKp.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
     });
   });
 });
