@@ -236,6 +236,13 @@ pub struct StablecoinConfig {
     /// Pubkey::default() = Squads authority not configured.
     /// Set by `init_squads_authority` (irreversible); also sets FLAG_SQUADS_AUTHORITY.
     pub squads_multisig: Pubkey,
+    /// SSS-150: Expected BPF upgrade authority pubkey for on-chain enforcement.
+    /// When non-default, `set_upgrade_authority_guard` has been called and any
+    /// attempt to call the Solana BPF Loader's SetAuthority instruction on this
+    /// program must go through the timelock + Squads multisig flow.
+    /// Pubkey::default() = guard not configured (upgrade authority is unchecked).
+    /// Set once via `set_upgrade_authority_guard` (irreversible; requires timelock).
+    pub expected_upgrade_authority: Pubkey,
     pub bump: u8,
 }
 

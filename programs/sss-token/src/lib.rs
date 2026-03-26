@@ -1022,4 +1022,36 @@ pub mod sss_token {
     pub fn get_mm_capacity(ctx: Context<GetMmCapacity>) -> Result<()> {
         instructions::market_maker::get_mm_capacity_handler(ctx)
     }
+
+    // -----------------------------------------------------------------------
+    // SSS-150: Upgrade authority guard
+    // -----------------------------------------------------------------------
+
+    /// Record the expected BPF upgrade authority in config for off-chain monitoring.
+    /// Irreversible. Requires FLAG_SQUADS_AUTHORITY (init_squads_authority first).
+    /// The supplied `upgrade_authority` must equal `config.squads_multisig`.
+    /// After calling this, monitoring scripts compare the live BPF upgrade
+    /// authority against `config.expected_upgrade_authority` every block.
+    pub fn set_upgrade_authority_guard(
+        ctx: Context<SetUpgradeAuthorityGuard>,
+        upgrade_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::upgrade_authority_guard::set_upgrade_authority_guard_handler(
+            ctx,
+            upgrade_authority,
+        )
+    }
+
+    /// Assert that `current_upgrade_authority` matches the recorded guard.
+    /// Callable by anyone. Use in CI, deployment scripts, and monitoring.
+    /// Returns UpgradeAuthorityMismatch if drift is detected.
+    pub fn verify_upgrade_authority(
+        ctx: Context<VerifyUpgradeAuthority>,
+        current_upgrade_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::upgrade_authority_guard::verify_upgrade_authority_handler(
+            ctx,
+            current_upgrade_authority,
+        )
+    }
 }

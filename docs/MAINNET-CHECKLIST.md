@@ -18,7 +18,7 @@ The following features are **not production-ready** in v1. Each requires explici
 | Reserve attestation trust | **Attestor-submitted** — not trustless | Document; consider decentralized oracle |
 | `set_reserve_attestor_whitelist` timelock | **Missing** — instant admin control | Add timelock before mainnet |
 | `max_supply` uncapped when = 0 | **Footgun** | Always set explicitly |
-| BPF upgrade authority | **Unchecked** (all 3 items below) | Transfer to DAO multisig |
+| BPF upgrade authority | **Script + on-chain guard added (SSS-150)** — `transfer-upgrade-authority.ts` + `set_upgrade_authority_guard` instruction | Transfer to Squads multisig (BLOCKING — see Section 2) |
 
 See [TRUST-MODEL.md](./TRUST-MODEL.md) for full trust-assumption breakdown.
 
@@ -93,34 +93,48 @@ solana program show <PROGRAM_ID>
 
 ## 2. Upgrade Authority → Squads Multisig
 
-> **Critical.** If the deployer keypair remains upgrade authority, a single key compromise gives an attacker full program control.
+> **🚨 BLOCKING — mainnet launch is BLOCKED until all items in this section are ✅.**
+> Deploying to mainnet with the deployer keypair as upgrade authority is a critical security failure. A single key compromise gives an attacker full program replacement capability.
 
-> **⚠️ Audit finding H-1 — No on-chain upgrade timelock (checklist-only).** Solana's BPF loader does not enforce a timelock on program upgrades. The SSS admin timelock (Section 5f of DEPLOYMENT-GUIDE.md) only applies to `admin` instructions — it does **not** block an instantaneous BPF upgrade once the multisig threshold is reached. This is a platform limitation. All signers must understand this: approving an upgrade proposal in Squads replaces the program immediately. Use a high multisig threshold (4-of-5 or 5-of-5) for upgrade proposals and monitor for upgrade authority changes via your alerting pipeline (see Section 11 below).
+> **⚠️ Audit finding H-1 — No on-chain upgrade timelock (checklist-only).** Solana's BPF loader does not enforce a timelock on program upgrades. The SSS admin timelock applies only to `admin` instructions — it does **not** block an instantaneous BPF upgrade once the multisig threshold is reached. This is a Solana platform limitation. All signers must understand this: approving an upgrade proposal in Squads replaces the program immediately. Mitigations: (1) use a high multisig threshold (4-of-5 or 5-of-5), (2) set Squads execution delay ≥ 7 days for upgrade vault, (3) monitor `expected_upgrade_authority` in config via `verify_upgrade_authority` instruction (SSS-150).
 
 ```bash
-# Transfer sss_token upgrade authority to multisig
-solana program set-upgrade-authority <SSS_TOKEN_MAINNET_ID> \
-  --new-upgrade-authority <SQUADS_MULTISIG_PUBKEY> \
-  --keypair ~/.config/solana/deployer.json
+# Step 1: Transfer sss_token upgrade authority to multisig
+# Use the automated script (verifies multisig exists before transferring):
+npx ts-node scripts/transfer-upgrade-authority.ts \
+  --program <SSS_TOKEN_MAINNET_ID> \
+  --new-authority <SQUADS_MULTISIG_PUBKEY> \
+  --keypair ~/.config/solana/deployer.json \
+  --cluster mainnet-beta \
+  --dry-run   # remove --dry-run to execute
 
-# Transfer sss_transfer_hook upgrade authority
-solana program set-upgrade-authority <TRANSFER_HOOK_MAINNET_ID> \
-  --new-upgrade-authority <SQUADS_MULTISIG_PUBKEY> \
-  --keypair ~/.config/solana/deployer.json
+# Step 2: Transfer sss_transfer_hook upgrade authority
+npx ts-node scripts/transfer-upgrade-authority.ts \
+  --program <TRANSFER_HOOK_MAINNET_ID> \
+  --new-authority <SQUADS_MULTISIG_PUBKEY> \
+  --keypair ~/.config/solana/deployer.json \
+  --cluster mainnet-beta
 
-# Verify — output must show multisig as upgrade authority
+# Step 3: Verify — output must show multisig as upgrade authority
 solana program show <SSS_TOKEN_MAINNET_ID>
 solana program show <TRANSFER_HOOK_MAINNET_ID>
+
+# Step 4: Record guard on-chain (SSS-150) — call after init_squads_authority
+# anchor client: sss_token.set_upgrade_authority_guard(config_pda, squads_multisig_pubkey)
 ```
 
 | Item | Status |
 |------|--------|
-| `sss_token` upgrade authority → Squads multisig | 🔲 |
-| `sss_transfer_hook` upgrade authority → Squads multisig | 🔲 |
-| Deployer keypair upgrade authority revoked | 🔲 |
-| `solana program show` confirms multisig on both programs | 🔲 |
-| Upgrade multisig threshold set to 4-of-5 or higher (not same as operational threshold) | 🔲 |
+| `sss_token` upgrade authority → Squads multisig (`transfer-upgrade-authority.ts`) | **🔲 BLOCKING** |
+| `sss_transfer_hook` upgrade authority → Squads multisig | **🔲 BLOCKING** |
+| Deployer keypair upgrade authority revoked | **🔲 BLOCKING** |
+| `solana program show` confirms multisig on both programs | **🔲 BLOCKING** |
+| `set_upgrade_authority_guard` called — guard recorded in config PDA (SSS-150) | **🔲 BLOCKING** |
+| `verify_upgrade_authority` passes for both programs post-deploy | **🔲 BLOCKING** |
+| Upgrade multisig threshold set to 4-of-5 or higher (dedicated upgrade vault) | **🔲 BLOCKING** |
+| Squads execution delay ≥ 7 days (604800 seconds) for upgrade proposals | 🔲 |
 | Team briefed: BPF upgrades take effect immediately with no on-chain timelock | 🔲 |
+| Monitoring alert configured for `UpgradeAuthorityGuardSet` / `UpgradeAuthorityVerified` events | 🔲 |
 | **[Regulated/SSS-4 issuers only]** Immutable deployment (`--final`) considered and decision documented | 🔲 |
 
 ---
