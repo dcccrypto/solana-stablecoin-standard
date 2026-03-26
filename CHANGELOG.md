@@ -6,6 +6,12 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### BUG-003 — Sanctions Oracle PDA Spoofing Guard (Audit C-2 refinement)
+
+- `docs/SANCTIONS-ORACLE.md` — Security section updated: new subsection _PDA Spoofing Guard + Uninitialized PDA Semantics (BUG-003)_ documenting the `require!(sr_account.key() == expected_sr_pda)` spoofing guard, uninitialized-PDA = wallet-not-in-DB = allow semantic, and updated `SanctionsRecordMissing` error message referencing BUG-003 [commit 29d285f]
+- `programs/transfer-hook/src/lib.rs` — sanctions oracle path is now fully fail-closed: missing account → `SanctionsRecordMissing`; wrong key → `SanctionsRecordMissing`; uninitialized PDA → allow; initialized + not sanctioned → allow; initialized + sanctioned + fresh → `SanctionedAddress` [commit 29d285f]
+- `tests/sss-bug-003-sanctions-wrl-fail-open.ts` — 15 Anchor tests covering missing account, wrong-key account, uninitialized PDA allow, sanctioned block, stale record, FLAG_WALLET_RATE_LIMITS fail-closed verification [commit 29d285f]
+
 ### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
 - `docs/SECURITY.md` § 9 — full risk analysis of Token-2022 hook fail-open conditions: fail-open scenarios, current mitigations (Squads multisig, PDA ownership, fail-closed flags), residual risk, recommended operational + on-chain mitigations, incident response timeline [commit 0293169]

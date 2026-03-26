@@ -216,9 +216,21 @@ Recommended: set a staleness window aligned with your oracle's update frequency 
 
 Prior to this fix the `SanctionsRecord` account was optional: if a sender did not include it in `remaining_accounts`, the hook treated the wallet as un-flagged and allowed the transfer. A sanctioned wallet could silently bypass screening by omitting the account.
 
-**Fix:** The hook now derives `expected_sr_pda` first, then requires the account be present via `.ok_or_else(HookError::SanctionsRecordMissing)`. Any transfer that omits the `SanctionsRecord` when `FLAG_SANCTIONS_ORACLE` is active is **rejected**.
+**Fix:** The hook now derives `expected_sr_pda` first, then requires the account be present via `.ok_or(HookError::SanctionsRecordMissing)`. Any transfer that omits the `SanctionsRecord` when `FLAG_SANCTIONS_ORACLE` is active is **rejected**.
 
 **Client impact:** All transfer callers must include the sender's `SanctionsRecord` PDA in `remaining_accounts[0]` whenever `FLAG_SANCTIONS_ORACLE` is set. The PDA address is deterministic — see _Computing the SanctionsRecord PDA_ above.
+
+### PDA Spoofing Guard + Uninitialized PDA Semantics (BUG-003 / Audit C-2, HIGH — fixed `29d285f`)
+
+A follow-on refinement to BUG-035. Even after BUG-035 required the account to be present, a caller could still pass an **arbitrary wrong account** in `remaining_accounts[0]` that happened to be present but did not correspond to the expected PDA. The hook would silently skip the sanctions check for any account whose key did not match the derived PDA.
+
+**Fix (`29d285f`):**
+
+1. **PDA key verified with `require!`** — `sr_account.key() == expected_sr_pda` is now enforced. Passing a wrong account rejects with `SanctionsRecordMissing` rather than silently passing.
+2. **Uninitialized PDA = wallet not in oracle DB = allow** — If the PDA is correctly addressed but the account is empty/uninitialized (`sr_data.len() < SANCTIONS_RECORD_MIN_SIZE`), the hook allows the transfer. This is the correct semantic for new wallets that have never been flagged: callers must pass the (empty) PDA slot so the hook can confirm it is not sanctioned.
+3. **`HookError::SanctionsRecordMissing` message** updated to reference BUG-003.
+
+**Client impact:** Callers must pass the correct `SanctionsRecord` PDA in `remaining_accounts[0]`. An uninitialized PDA (new wallet) is valid and allows the transfer. A missing or wrong account rejects with `SanctionsRecordMissing`.
 
 ---
 
@@ -235,6 +247,7 @@ Prior to this fix the `SanctionsRecord` account was optional: if a sender did no
 - `is_sanctioned` can flip true → false
 - Two wallets get independent PDAs
 - **BUG-035 (10 tests, `bug-035-036-transfer-hook-sanctions-zk-owner.ts`):** omitting `SanctionsRecord` in `remaining_accounts` rejects with `SanctionsRecordMissing` (fail-closed)
+- **BUG-003 (15 tests, `sss-bug-003-sanctions-wrl-fail-open.ts`):** wrong-key account rejects with `SanctionsRecordMissing`; uninitialized PDA allows transfer; correctly sanctioned wallet rejects with `SanctionedAddress`
 
 ---
 
