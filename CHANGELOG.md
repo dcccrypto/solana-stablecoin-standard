@@ -6,6 +6,9 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### Fixed
+- **BUG-021**: Aligned `FLAG_BRIDGE_ENABLED` doc comments to actual bit position (bit 17). Constant value `1 << 17` was already correct; stale `bit 13` references in `state.rs`, `bridge.rs` module header, and `docs/CROSS-CHAIN-BRIDGE.md` feature-flag table corrected. All other flag constants audited — no further mismatches found. [PR #276]
+
 ### Added
 - `docs/MARKET-MAKER-HOOKS.md` — Market Maker Hooks reference (SSS-138): MarketMakerConfig PDA, FLAG_MARKET_MAKER_HOOKS (bit 18), mm_mint/mm_burn/register_market_maker/get_mm_capacity instructions, per-slot rate limits, oracle spread check, events, errors, TypeScript example [PR #230]
 - `docs/compliance-module.md` — full SDK reference for `ComplianceModule` (SSS-017) [PR #73]
