@@ -113,6 +113,48 @@ console.log('Blacklisted:', sig);
 
 ---
 
+### `blacklistAddAndFreeze(targetTokenAccount)` *(BUG-022)*
+
+```typescript
+async blacklistAddAndFreeze(targetTokenAccount: PublicKey): Promise<TransactionSignature>
+```
+
+Atomically adds the **owner** of a token account to the on-chain blacklist **and** freezes that token account in a single transaction, closing the front-running window that existed with sequential `addToBlacklist` + `freezeAccount` calls.
+
+> **BUG-022:** Prior to this fix, a wallet could observe a pending `addToBlacklist` transaction in the mempool and move tokens to a clean wallet before confirmation. `blacklistAddAndFreeze` removes this window: both the blacklist write (via CPI to the transfer-hook program) and the Token-2022 `freeze_account` call occur atomically.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `targetTokenAccount` | `PublicKey` | The token account to freeze; its **owner** is added to the blacklist |
+
+**Requirements:**
+- Caller must be the **compliance authority** recorded in `StablecoinConfig` (not just the blacklist authority on `BlacklistState`).
+- The config PDA must be the Token-2022 **freeze authority** for this mint (set automatically at `initialize`).
+
+**What happens on-chain (in one transaction):**
+
+1. CPI to `sss-transfer-hook`: `blacklist_add(owner)` — records the owner in `BlacklistState`.
+2. Token-2022 `freeze_account` signed by the config PDA — freezes the token account.
+
+**Notes:**
+- Use this instead of sequential `addToBlacklist` + `freezeAccount` when targeting a wallet with an active token balance.
+- `addToBlacklist` (transfer-hook program directly) is still available for pre-emptive blacklisting of wallets that do not yet hold a token account (no freeze step is possible there since no token account exists).
+- The blacklist entry is for the **wallet address** (owner); the freeze is on the specific **token account**. A separate `freezeAccount` call is needed for any other token accounts the wallet holds.
+- New errors introduced: `InvalidMint` (6003), `InvalidBlacklistState` (6004), `InvalidTransferHookProgram` (6005).
+
+**Example:**
+
+```typescript
+// Target a wallet's token account — atomically blacklists owner + freezes the account
+const suspectTokenAccount = new PublicKey('SuspectTokenAccountAddress...');
+const sig = await compliance.blacklistAddAndFreeze(suspectTokenAccount);
+console.log('Blacklisted + frozen atomically:', sig);
+```
+
+---
+
 ### `removeFromBlacklist(address)`
 
 ```typescript
@@ -272,11 +314,15 @@ Freeze/thaw methods do **not** load the Anchor program; they call the `@solana/s
 
 Errors from blacklist instructions originate in the transfer-hook program:
 
-| Error | Code | Condition |
-|-------|------|-----------|
-| `SenderBlacklisted` | 6000 | Transfer hook: sender is blacklisted |
-| `ReceiverBlacklisted` | 6001 | Transfer hook: receiver is blacklisted |
-| `Unauthorized` | 6002 | Caller is not the blacklist authority |
+| Error | Code | Program | Condition |
+|-------|------|---------|-----------|
+| `SenderBlacklisted` | 6000 | transfer-hook | Transfer hook: sender is blacklisted |
+| `ReceiverBlacklisted` | 6001 | transfer-hook | Transfer hook: receiver is blacklisted |
+| `Unauthorized` | 6002 | transfer-hook | Caller is not the blacklist authority |
+| `InvalidMint` | 6003 | sss-token | Mint mismatch in `blacklistAddAndFreeze` |
+| `InvalidBlacklistState` | 6004 | sss-token | Derived `BlacklistState` PDA does not match the provided account |
+| `InvalidTransferHookProgram` | 6005 | sss-token | Provided transfer-hook program does not match `config.transfer_hook_program` |
+| `UnauthorizedCompliance` | — | sss-token | Caller is not the compliance authority in `StablecoinConfig` |
 
 ---
 
@@ -301,7 +347,7 @@ const compliance = new ComplianceModule(
 // (Skipped if using SolanaStablecoin.create() with sss2Config — it calls this automatically)
 await compliance.initializeBlacklist();
 
-// --- Blacklist a bad actor ---
+// --- Blacklist a bad actor (pre-emptive, no token account yet) ---
 const badActor = new PublicKey('BadActorWalletAddress...');
 await compliance.addToBlacklist(badActor);
 
@@ -312,12 +358,19 @@ console.log('Is blacklisted:', blocked); // true
 // --- Reinstate after review ---
 await compliance.removeFromBlacklist(badActor);
 
-// --- Freeze a specific token account (e.g., during investigation) ---
+// --- BUG-022: Atomically blacklist + freeze (prevents front-running) ---
+// Use this when the wallet has an active token balance to prevent token movement.
 const suspectTokenAccount = new PublicKey('TokenAccountAddress...');
-await compliance.freezeAccount(suspectTokenAccount);
+await compliance.blacklistAddAndFreeze(suspectTokenAccount);
+// Owner is now blacklisted AND the token account is frozen in one tx.
+
+// --- Freeze a specific token account (e.g., during investigation) ---
+// Use freezeAccount when you want to freeze without blacklisting.
+const otherTokenAccount = new PublicKey('AnotherTokenAccountAddress...');
+await compliance.freezeAccount(otherTokenAccount);
 
 // --- Thaw after investigation clears ---
-await compliance.thawAccount(suspectTokenAccount);
+await compliance.thawAccount(otherTokenAccount);
 ```
 
 ---

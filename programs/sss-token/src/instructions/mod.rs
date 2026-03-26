@@ -81,5 +81,8 @@ pub use pid_fee::*;
 pub use zk_compliance::*;
 pub use proof_of_reserves::*;
 
+pub mod blacklist;
+pub use blacklist::*;
+
 // Re-export param types from state
 pub use crate::state::{InitializeParams, UpdateRolesParams};

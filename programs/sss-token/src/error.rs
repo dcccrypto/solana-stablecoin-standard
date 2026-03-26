@@ -223,7 +223,11 @@ pub enum SssError {
     // Oracle
     #[msg("Oracle not configured — set oracle_type and oracle_feed first")]
     OracleNotConfigured,
-    // BUG-019: Appended last to avoid shifting downstream discriminants
-    #[msg("Compliance authority transfer always requires propose_timelocked_op (op_kind=10) with minimum 432_000 slot delay")]
-    ComplianceAuthorityRequiresTimelock,
+    // BUG-022: Blacklist freeze-on-blacklist
+    #[msg("Invalid mint account — does not match config.mint")]
+    InvalidMint,
+    #[msg("Invalid blacklist state PDA — expected [b\"blacklist-state\", mint] on transfer-hook program")]
+    InvalidBlacklistState,
+    #[msg("Invalid transfer hook program — expected registered transfer_hook_program")]
+    InvalidTransferHookProgram,
 }

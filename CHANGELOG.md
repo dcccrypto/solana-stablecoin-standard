@@ -7,7 +7,8 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 ## [Unreleased]
 
 ### Fixed
-- **BUG-021**: Aligned `FLAG_BRIDGE_ENABLED` doc comments to actual bit position (bit 17). Constant value `1 << 17` was already correct; stale `bit 13` references in `state.rs`, `bridge.rs` module header, and `docs/CROSS-CHAIN-BRIDGE.md` feature-flag table corrected. All other flag constants audited — no further mismatches found. [PR #276]
+
+- **BUG-022:** `blacklist_add_and_freeze` instruction added to `sss-token` program — atomically records a wallet in `BlacklistState` (via CPI to transfer-hook) and freezes the wallet's token account (config PDA as freeze authority) in a single transaction. Closes the front-running window where a wallet could move tokens between a pending `blacklist_add` and a separate `freeze_account` call. New errors: `InvalidMint`, `InvalidBlacklistState`, `InvalidTransferHookProgram`. Documented in `docs/compliance-module.md`.
 
 ### Added
 - `docs/MULTI-ORACLE-CONSENSUS.md` — Multi-Oracle Consensus reference (SSS-153): OracleConsensus PDA, FLAG_MULTI_ORACLE_CONSENSUS (bit 22), median/TWAP aggregation across up to 5 sources (Pyth/Switchboard/Custom), outlier rejection, per-source staleness guards, 3 events, 7 errors, keeper runbook [PR #258]
