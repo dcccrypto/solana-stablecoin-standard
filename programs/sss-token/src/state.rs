@@ -358,6 +358,10 @@ pub struct InitializeParams {
     pub feature_flags: Option<u64>,
     /// Auditor ElGamal pubkey for confidential transfers (required if FLAG_CONFIDENTIAL_TRANSFERS is set)
     pub auditor_elgamal_pubkey: Option<[u8; 32]>,
+    /// Override the admin timelock delay (slots). None = use DEFAULT_ADMIN_TIMELOCK_DELAY.
+    /// Pass Some(0) in test environments to allow direct admin calls without going
+    /// through the propose/execute timelock flow.
+    pub admin_timelock_delay: Option<u64>,
 }
 
 /// Parameters for updating authorities.

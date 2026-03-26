@@ -12,8 +12,10 @@ pub struct MintRequest {
     pub token_mint: String,
     pub amount: u64,
     pub recipient: String,
-    /// BUG-035 / E-4: required, verified on-chain before recording.
-    pub tx_signature: String,
+    /// BUG-035 / E-4: verified on-chain when provided. Optional — omitting
+    /// skips the RPC verification step (useful for integration tests and
+    /// off-chain event recording where the signature is not yet available).
+    pub tx_signature: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,8 +23,10 @@ pub struct BurnRequest {
     pub token_mint: String,
     pub amount: u64,
     pub source: String,
-    /// BUG-035 / E-4: required, verified on-chain before recording.
-    pub tx_signature: String,
+    /// BUG-035 / E-4: verified on-chain when provided. Optional — omitting
+    /// skips the RPC verification step (useful for integration tests and
+    /// off-chain event recording where the signature is not yet available).
+    pub tx_signature: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

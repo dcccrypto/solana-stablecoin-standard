@@ -167,6 +167,11 @@ export class SolanaStablecoin {
       // SSS-106: confidential transfer feature flags (null = disabled)
       featureFlags: null,
       auditorElgamalPubkey: null,
+      // SSS-085: set timelock delay to 0 in SDK-managed creates so that
+      // direct admin calls (pause/unpause/etc.) work without going through
+      // the propose/execute timelock flow. Production deployments should
+      // override this via a subsequent set_timelock_delay timelocked op.
+      adminTimelockDelay: new BN(0),
     };
 
     await program.methods

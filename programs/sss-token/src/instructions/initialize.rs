@@ -175,7 +175,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.admin_op_kind = ADMIN_OP_NONE;
     config.admin_op_param = 0;
     config.admin_op_target = Pubkey::default();
-    config.admin_timelock_delay = DEFAULT_ADMIN_TIMELOCK_DELAY;
+    config.admin_timelock_delay = params.admin_timelock_delay.unwrap_or(DEFAULT_ADMIN_TIMELOCK_DELAY);
     // SSS-092: stability fee starts at 0 (disabled by default)
     config.stability_fee_bps = 0;
     // SSS-093: PSM redemption fee starts at 0 (disabled by default)
