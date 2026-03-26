@@ -6,7 +6,12 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
-### BUG-024 — Permanent Delegate Consent Enforcement (AUDIT MEDIUM)
+### BUG-029 — Remove Stale Duplicate Proof Comment; Add PROOF INTENT to `proof_minter_cap_inductive`
+
+- `programs/sss-token/src/proofs.rs` — removed stale BUG-004 inline comment that described a no-longer-existing duplicate `proof_minter_cap_inductive` harness; added canonical PROOF INTENT block explaining the single surviving harness's inductive argument, uniqueness requirement, and overflow handling [commit 8c227dc]
+- `docs/formal-verification.md` — added BUG-029 section under Proof Hygiene documenting the cleanup and confirming 35/35 proofs still verified
+
+### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
 - `docs/feature-flags.md` — added `FLAG_REQUIRE_OWNER_CONSENT` (bit 15, `0x8000`) to the flag constants table and a full reference section: DelegateConsent PDA layout, transfer hook enforcement steps, error code, TypeScript integration, and opt-in semantics [commit 630ecb3]
 - `docs/transfer-hook.md` — updated `transfer_hook` behavior sequence (step 5): BUG-024 permanent delegate consent gate; added `OwnerConsentRequired` error to the error table [commit 630ecb3]
