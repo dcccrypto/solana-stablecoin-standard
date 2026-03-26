@@ -156,6 +156,7 @@ Endpoints:
 | [Deployment Wizard](scripts/deploy-wizard.ts) | Interactive 10-step deployment wizard (`npm run wizard`) — guided safe initialization with footgun protections, dry-run, and deploy manifest (SSS-155) |
 | [Deployment Checker](scripts/check-deployment.ts) | Post-deploy validation script (`npm run check-deployment`) — verifies program, mint, PDAs, Squads multisig (SSS-155) |
 | [GENIUS Act Compliance Checker](scripts/check-genius-compliance.ts) | CLI: `check-genius-compliance --mint <PUBKEY>` — verifies GENIUS Act required flags and configuration (SSS-148) |
+| [Legal Entity Registry](docs/LEGAL-ENTITY-REGISTRY.md) | `FLAG_LEGAL_REGISTRY` (bit 24) — `IssuerRegistry` PDA binding issuer legal identity on-chain: SHA-256 hashed entity + registration number, ISO jurisdiction, notary attestation, MiCA Art.68 + GENIUS Act traceability (SSS-156) |
 | [Liquidity Stress Test](scripts/liquidity-stress-test.ts) | CLI: `liquidity-stress-test --tvl <USD> --scenarios` — MiCA Art. 45 redemption rush simulation with NCA-ready JSON output (SSS-149) |
 | [Integration Testing](docs/integration-testing.md) | Running the full integration test suite and CI setup |
 | [Anchor Program Tests](docs/anchor-program-testing.md) | Running the Anchor on-chain test suite locally and in CI (SSS-015) |
