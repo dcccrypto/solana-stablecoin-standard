@@ -6,6 +6,14 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### BUG-032 — `deposit_collateral` Missing Pause Check
+
+- `docs/on-chain-sdk-cdp.md` — Key guarantees updated: `deposit_collateral` now enforces `StablecoinConfig.paused`; returns `SssError::Paused` on entry when program is halted. Error Reference table updated with `Paused` row. `depositCollateral` method description updated with BUG-032 pause-check callout.
+
+### BUG-030 — Kani Proof Extension: On-Chain State Transitions & Adversarial Scenarios
+
+- `docs/formal-verification.md` — Section 17 added: 20 new Kani proofs (commit `a385b9a`), total 75 (was 55). Sections: 17-A config-struct field isolation (5), 17-B PDA seed collision-resistance (5), 17-C adversarial AUDIT-C scenarios (10). Status line and `cargo kani` expected output updated to 75.
+
 ### Added
 - `docs/compliance-module.md` — full SDK reference for `ComplianceModule` (SSS-017) [PR #73]
 - `docs/ARCHITECTURE.md` — three-layer architecture reference
