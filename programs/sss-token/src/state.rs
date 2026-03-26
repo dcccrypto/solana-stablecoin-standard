@@ -52,6 +52,16 @@ pub const FLAG_PSM_DYNAMIC_FEES: u64 = 1 << 11;
 pub const FLAG_WALLET_RATE_LIMITS: u64 = 1 << 12;
 /// Squads V4 multisig as program authority (SSS-134, irreversible).
 pub const FLAG_SQUADS_AUTHORITY: u64 = 1 << 13;
+/// BUG-024: Require owner consent for all transfers (bit 15).
+/// When set, the transfer hook rejects any permanent-delegate transfer where
+/// the signer (ctx.accounts.owner) is not the token account owner (src_owner
+/// read from the token account data at offset 32..64).  A permanent delegate
+/// can still transfer from wallets that have explicitly whitelisted it via a
+/// DelegateConsent PDA (seeds [b"delegate-consent", mint, wallet_owner]).
+/// Issuers that need Token-2022 permanent delegate for compliance purposes
+/// should leave this flag unset; issuers who want pure owner-consent semantics
+/// should enable it.
+pub const FLAG_REQUIRE_OWNER_CONSENT: u64 = 1 << 15;
 /// Proof-of-Reserves breach halts minting (SSS-123).
 pub const FLAG_POR_HALT_ON_BREACH: u64 = 1 << 16;
 
@@ -1800,4 +1810,28 @@ pub struct CredentialRecord {
 impl CredentialRecord {
     pub const SEED: &'static [u8] = b"credential-record";
     pub const INIT_SPACE: usize = 32 + 32 + 8 + 8 + 1 + 1;
+}
+
+// ── DelegateConsent ───────────────────────────────────────────────────────
+/// BUG-024: Per-wallet permanent-delegate consent record.
+/// Seeds: [b"delegate-consent", mint, wallet_owner].
+/// Created by the wallet owner via `grant_delegate_consent`.
+/// Deleted by the wallet owner or compliance authority via `revoke_delegate_consent`.
+/// When FLAG_REQUIRE_OWNER_CONSENT (bit 15) is set on the mint, the transfer hook
+/// checks for this PDA before allowing any permanent-delegate transfer.
+#[account]
+pub struct DelegateConsent {
+    /// The SSS-2 mint this consent applies to.
+    pub sss_mint: Pubkey,
+    /// Wallet owner who granted consent.
+    pub wallet_owner: Pubkey,
+    /// Slot at which consent was granted.
+    pub granted_slot: u64,
+    /// PDA bump.
+    pub bump: u8,
+}
+impl DelegateConsent {
+    pub const SEED: &'static [u8] = b"delegate-consent";
+    /// discriminator(8) + mint(32) + wallet_owner(32) + granted_slot(8) + bump(1)
+    pub const INIT_SPACE: usize = 8 + 32 + 32 + 8 + 1;
 }

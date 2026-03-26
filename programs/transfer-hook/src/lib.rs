@@ -52,8 +52,16 @@ const FLAG_ZK_CREDENTIALS: u64 = 1 << 10;
 /// FLAG_WALLET_RATE_LIMITS bit in feature_flags (bit 14 = 1 << 14).
 const FLAG_WALLET_RATE_LIMITS: u64 = 1 << 14;
 
+/// BUG-024: FLAG_REQUIRE_OWNER_CONSENT bit in feature_flags (bit 15 = 1 << 15).
+/// When set, permanent-delegate transfers are rejected unless the wallet owner
+/// has a DelegateConsent PDA at seeds [b"delegate-consent", mint, wallet_owner].
+const FLAG_REQUIRE_OWNER_CONSENT: u64 = 1 << 15;
+
 /// PDA seed for WalletRateLimit in the sss-token program.
 const WALLET_RATE_LIMIT_SEED: &[u8] = b"wallet-rate-limit";
+
+/// BUG-024: PDA seed for DelegateConsent in the sss-token program.
+const DELEGATE_CONSENT_SEED: &[u8] = b"delegate-consent";
 
 /// Byte offsets within WalletRateLimit account data (Borsh layout):
 ///   discriminator                8  @ 0
@@ -512,6 +520,60 @@ pub mod sss_transfer_hook {
             }
         }
 
+        // BUG-024: Permanent delegate consent check.
+        // A Token-2022 permanent delegate can move tokens from any wallet without
+        // the owner's signature.  When FLAG_REQUIRE_OWNER_CONSENT is set, we detect
+        // permanent-delegate transfers (ctx.accounts.owner != src_owner read from
+        // token account data) and reject them unless the wallet owner has a
+        // DelegateConsent PDA at seeds [b"delegate-consent", mint, wallet_owner]
+        // in the sss-token program.
+        //
+        // If the signer IS the wallet owner (owner == src_owner) this check is a no-op.
+        {
+            let config_data = ctx.accounts.stablecoin_config.try_borrow_data()?;
+            if config_data.len() >= FEATURE_FLAGS_OFFSET + 8
+                && &config_data[0..8] == &STABLECOIN_CONFIG_DISCRIMINATOR
+            {
+                let feature_flags = u64::from_le_bytes(
+                    config_data[FEATURE_FLAGS_OFFSET..FEATURE_FLAGS_OFFSET + 8]
+                        .try_into()
+                        .unwrap(),
+                );
+                if feature_flags & FLAG_REQUIRE_OWNER_CONSENT != 0 {
+                    // Re-read src_owner from token account data.
+                    let src_data2 = ctx.accounts.source_token_account.try_borrow_data()?;
+                    let src_owner2 = Pubkey::try_from(&src_data2[32..64])
+                        .map_err(|_| error!(HookError::OwnerConsentRequired))?;
+
+                    // Detect permanent delegate: signer ≠ token account owner.
+                    if ctx.accounts.owner.key() != src_owner2 {
+                        // Derive expected DelegateConsent PDA for this wallet owner.
+                        let (expected_consent_pda, _bump) = Pubkey::find_program_address(
+                            &[
+                                DELEGATE_CONSENT_SEED,
+                                ctx.accounts.mint.key().as_ref(),
+                                src_owner2.as_ref(),
+                            ],
+                            &sss_token_program::ID,
+                        );
+                        // Look for the consent PDA in remaining_accounts.
+                        let consent_found = ctx
+                            .remaining_accounts
+                            .iter()
+                            .any(|a| a.key() == expected_consent_pda && a.data_len() >= 8);
+
+                        require!(consent_found, HookError::OwnerConsentRequired);
+
+                        msg!(
+                            "OwnerConsent OK: permanent-delegate {} approved by wallet owner {}",
+                            ctx.accounts.owner.key(),
+                            src_owner2
+                        );
+                    }
+                }
+            }
+        }
+
         msg!("Transfer hook: {} tokens OK", amount);
         Ok(())
     }
@@ -760,6 +822,14 @@ pub enum HookError {
     WalletRateLimitExceeded,
     #[msg("WalletRateLimit account must be passed as writable")]
     WalletRateLimitAccountNotWritable,
+    #[msg("Sanctions oracle: SanctionsRecord PDA missing from remaining_accounts — required when FLAG_SANCTIONS_ORACLE is set")]
+    SanctionsRecordMissing,
+    #[msg("Sanctions oracle: SanctionsRecord PDA must be provided in remaining_accounts when FLAG_SANCTIONS_ORACLE is active (BUG-003)")]
+    SanctionsRecordRequired,
+    /// BUG-024: Permanent delegate transfer rejected — wallet owner has not granted
+    /// DelegateConsent when FLAG_REQUIRE_OWNER_CONSENT is set.
+    #[msg("BUG-024: Permanent delegate transfer blocked — wallet owner consent required (FLAG_REQUIRE_OWNER_CONSENT). Grant consent via grant_delegate_consent instruction.")]
+    OwnerConsentRequired,
 }
 
 /// Blacklist state PDA for a given mint.
