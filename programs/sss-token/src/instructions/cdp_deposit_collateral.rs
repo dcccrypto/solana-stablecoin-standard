@@ -91,6 +91,11 @@ pub fn cdp_deposit_collateral_handler(
 ) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
 
+    // SSS-BUG-032: Intentionally NO pause check for collateral deposits.
+    // Depositing collateral improves the CDP health ratio and prevents
+    // liquidation.  Blocking deposits during pause would harm users who
+    // need to top up collateral to avoid liquidation.
+
     // ── FLAG_YIELD_COLLATERAL guard ───────────────────────────────────────────
     // When the flag is set, the deposited collateral_mint must appear in the
     // YieldCollateralConfig whitelist.  1 CU when the flag is off.

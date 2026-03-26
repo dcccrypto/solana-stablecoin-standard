@@ -50,6 +50,11 @@ pub struct DepositCollateralCtx<'info> {
 pub fn deposit_collateral_handler(ctx: Context<DepositCollateralCtx>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
 
+    // SSS-BUG-032: Intentionally NO pause check here.
+    // Depositing collateral into the reserve vault is always beneficial —
+    // it improves the reserve ratio and protocol solvency.  Blocking deposits
+    // during a pause would prevent emergency re-collateralisation.
+
     // Transfer collateral from depositor → reserve vault
     transfer_checked(
         CpiContext::new(
