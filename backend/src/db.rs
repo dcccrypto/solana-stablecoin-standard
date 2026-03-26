@@ -4,6 +4,7 @@ use uuid::Uuid;
 use chrono::Utc;
 
 use crate::error::AppError;
+#[allow(unused_imports)]
 use crate::models::{ApiKeyEntry, AuditEntry, BlacklistEntry, BurnEvent, CollateralConfigEntry, CredentialRecord, CredentialRegistry, EventLogEntry, LiquidationHistoryEntry, MintEvent, ParsedEventLogEntry, TravelRuleRecord, WebhookDeliveryLog, WebhookEntry};
 
 pub struct Database {
@@ -516,6 +517,7 @@ impl Database {
 
     /// SSS-145: Insert a webhook delivery log row (status=pending).
     /// Returns the new delivery id.
+    #[allow(dead_code)]
     pub fn insert_webhook_delivery(
         &self,
         webhook_id: &str,

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // SSS-139: MetricCollector — exports Prometheus metrics.
 // Exposes: sss_supply_total, sss_reserve_ratio, sss_active_cdps,
 //          sss_peg_deviation_bps

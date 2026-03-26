@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // SSS-139: InvariantChecker — polls on-chain state, checks invariants, fires alerts.
 
 use std::time::Duration;

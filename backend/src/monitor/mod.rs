@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 // SSS-139: Invariant monitoring bot
 // Modules: invariant_checker, alert_manager, metric_collector
 

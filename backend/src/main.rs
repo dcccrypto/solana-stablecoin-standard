@@ -49,6 +49,8 @@ use routes::{
     webhooks::{delete_webhook, list_webhooks, register_webhook},
     ws_events::ws_events_handler,
     zk_credentials::{list_credential_records, list_registries, submit_credential, upsert_registry, verify_credential},
+    travel_rule::{get_travel_rule_records, get_pid_config},
+    webhook_deliveries::list_webhook_deliveries,
 };
 use state::AppState;
 
@@ -102,7 +104,7 @@ async fn main() {
     // Allowed admin origins are read from SSS_ADMIN_ORIGINS (comma-separated).
     // Example: SSS_ADMIN_ORIGINS=https://admin.sss.finance,https://localhost:3000
     // If unset, admin CORS falls back to localhost:3000 (development default).
-    let admin_origins: Vec<HeaderValue> = std::env::var("SSS_ADMIN_ORIGINS")
+    let _admin_origins: Vec<HeaderValue> = std::env::var("SSS_ADMIN_ORIGINS")
         .unwrap_or_else(|_| "http://localhost:3000".to_string())
         .split(',')
         .filter_map(|s| {
@@ -155,6 +157,14 @@ async fn main() {
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
         .route("/api/webhooks/register", post(register_webhook))
         .route("/api/webhooks/:id", delete(delete_webhook))
+        .route("/api/alerts", get(get_alerts).post(post_alert))
+        .route("/api/webhook-deliveries", get(list_webhook_deliveries))
+        .route("/api/travel-rule/records", get(get_travel_rule_records))
+        .route("/api/pid-config", get(get_pid_config))
+        .route("/api/zk-credentials/records", get(list_credential_records))
+        .route("/api/zk-credentials/submit", post(submit_credential))
+        .route("/api/zk-credentials/verify", post(verify_credential))
+        .route("/api/zk-credentials/registry", get(list_registries).post(upsert_registry))
         .route("/api/ws/events", get(ws_events_handler))
         .merge(admin_routes)
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))

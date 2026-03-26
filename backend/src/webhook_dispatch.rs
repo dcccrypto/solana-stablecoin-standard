@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Webhook dispatcher for SSS events — SSS-142 (HMAC signing) + SSS-145 (retry log).
 //!
 //! ## Replay-Attack Prevention (SSS-BUG-025)
@@ -31,6 +32,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::db::Database;
+#[allow(unused_imports)]
 use crate::indexer_schema::hmac_sha256_hex;
 
 /// Backoff delay in seconds for attempt n (0-based index = attempt - 1).
@@ -154,7 +156,7 @@ pub fn dispatch(db: &Arc<Database>, event_type: &str, payload: Value) {
             "delivered_at": delivered_at,
             "data": payload,
         });
-        let payload_str = body.to_string();
+        let _payload_str = body.to_string();
 
         let secret_clone = secret.clone();
         let body2 = body.clone();
@@ -192,7 +194,7 @@ async fn post_json(
     use http_body_util::Full;
 
     let json_bytes = serde_json::to_vec(body)?;
-    let json_str = std::str::from_utf8(&json_bytes)?;
+    let _json_str = std::str::from_utf8(&json_bytes)?;
 
     let mut builder = Request::builder()
         .method(Method::POST)
