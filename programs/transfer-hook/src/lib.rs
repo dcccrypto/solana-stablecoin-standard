@@ -305,45 +305,60 @@ pub mod sss_transfer_hook {
 
                 // Only enforce when oracle is configured (non-default pubkey).
                 if sanctions_oracle != Pubkey::default() {
-                    // The sanctions_record is passed as remaining_accounts[0]
-                    // when FLAG_SANCTIONS_ORACLE is set.
-                    if let Some(sr_account) = ctx.remaining_accounts.first() {
-                        // Verify PDA: seeds = [b"sanctions-record", mint, src_owner]
-                        let (expected_sr_pda, _bump) = Pubkey::find_program_address(
-                            &[
-                                SANCTIONS_RECORD_SEED,
-                                ctx.accounts.mint.key().as_ref(),
-                                src_owner.as_ref(),
-                            ],
-                            &sss_token_program::ID,
-                        );
-                        // Only act if the account matches expected PDA.
-                        if sr_account.key() == expected_sr_pda {
-                            let sr_data = sr_account.try_borrow_data()?;
-                            if sr_data.len() >= SANCTIONS_RECORD_MIN_SIZE {
-                                let is_sanctioned = sr_data[SANCTIONS_IS_SANCTIONED_OFFSET] != 0;
-                                if is_sanctioned {
-                                    // Staleness check.
-                                    if sanctions_max_staleness > 0 {
-                                        let clock = Clock::get()?;
-                                        let updated_slot = u64::from_le_bytes(
-                                            sr_data[SANCTIONS_UPDATED_SLOT_OFFSET
-                                                ..SANCTIONS_UPDATED_SLOT_OFFSET + 8]
-                                                .try_into()
-                                                .unwrap(),
-                                        );
-                                        let age = clock.slot.saturating_sub(updated_slot);
-                                        if age > sanctions_max_staleness {
-                                            return Err(error!(HookError::SanctionsRecordStale));
-                                        }
-                                    }
-                                    return Err(error!(HookError::SanctionedAddress));
+                    // BUG-003 FIX: FAIL-CLOSED — SanctionsRecord PDA MUST be present in
+                    // remaining_accounts when FLAG_SANCTIONS_ORACLE is active.
+                    // Omitting remaining_accounts[0] is NOT a bypass; it is an error.
+                    // Callers that have no sanctions record for this wallet must pass the
+                    // uninitialized (empty) PDA account so the check can verify its absence.
+                    //
+                    // Derive the expected PDA: seeds = [b"sanctions-record", mint, src_owner]
+                    let (expected_sr_pda, _bump) = Pubkey::find_program_address(
+                        &[
+                            SANCTIONS_RECORD_SEED,
+                            ctx.accounts.mint.key().as_ref(),
+                            src_owner.as_ref(),
+                        ],
+                        &sss_token_program::ID,
+                    );
+
+                    // Require the PDA to be present in remaining_accounts[0].
+                    let sr_account = ctx
+                        .remaining_accounts
+                        .first()
+                        .ok_or(error!(HookError::SanctionsRecordMissing))?;
+
+                    // Require it to be the correct PDA (prevent spoofing).
+                    require!(
+                        sr_account.key() == expected_sr_pda,
+                        HookError::SanctionsRecordMissing
+                    );
+
+                    let sr_data = sr_account.try_borrow_data()?;
+                    if sr_data.len() >= SANCTIONS_RECORD_MIN_SIZE {
+                        // Account is initialized — inspect sanctions flag.
+                        let is_sanctioned = sr_data[SANCTIONS_IS_SANCTIONED_OFFSET] != 0;
+                        if is_sanctioned {
+                            // Staleness check.
+                            if sanctions_max_staleness > 0 {
+                                let clock = Clock::get()?;
+                                let updated_slot = u64::from_le_bytes(
+                                    sr_data[SANCTIONS_UPDATED_SLOT_OFFSET
+                                        ..SANCTIONS_UPDATED_SLOT_OFFSET + 8]
+                                        .try_into()
+                                        .unwrap(),
+                                );
+                                let age = clock.slot.saturating_sub(updated_slot);
+                                if age > sanctions_max_staleness {
+                                    return Err(error!(HookError::SanctionsRecordStale));
                                 }
                             }
-                            msg!("SanctionsOracle OK: sender {} not sanctioned", src_owner);
+                            return Err(error!(HookError::SanctionedAddress));
                         }
+                        msg!("SanctionsOracle OK: sender {} not sanctioned", src_owner);
+                    } else {
+                        // Account exists but is empty/uninitialized = wallet not in oracle DB = allow.
+                        msg!("SanctionsOracle OK: sender {} has no sanctions record", src_owner);
                     }
-                    // No sanctions_record passed or PDA mismatch = wallet not in oracle DB = allow.
                 }
             }
 
@@ -750,6 +765,8 @@ pub enum HookError {
     SanctionedAddress,
     #[msg("Sanctions oracle: record is stale — oracle has not updated within max_staleness_slots")]
     SanctionsRecordStale,
+    #[msg("Sanctions oracle: SanctionsRecord PDA must be provided in remaining_accounts when FLAG_SANCTIONS_ORACLE is active (BUG-003)")]
+    SanctionsRecordMissing,
     #[msg("ZK credentials: sender does not hold a valid CredentialRecord")]
     CredentialRequired,
     #[msg("ZK credentials: sender's CredentialRecord has expired")]
