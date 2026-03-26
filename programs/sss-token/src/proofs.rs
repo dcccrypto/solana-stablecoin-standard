@@ -97,10 +97,6 @@ mod proofs {
     ///       a decrease would indicate corrupted state or a re-entrancy bug.
     /// HOW:  Invariant: total_minted' > total_minted.  Holds before (any u64 value),
     ///       proved it holds after by checked_add with amount > 0.
-    // BUG-004 fix: the original duplicate named `proof_minter_cap_inductive` here
-    // was broken — it referenced undeclared variable `total_minted` in a
-    // find_program_address call that shadowed the declared `minted` binding, and
-    // would not compile under Kani.  Renamed to its actual intent and fixed.
     #[kani::proof]
     fn proof_total_minted_strictly_increases() {
         let total_minted: u64 = kani::any();
@@ -198,6 +194,15 @@ mod proofs {
     ///       multiple concurrent mints that each pass the stale-read check).
     /// HOW:  Invariant: minted ≤ cap.  After mint of amount: minted' = minted + amount ≤ cap.
     ///       Proved for all valid (cap, minted, amount) triples.
+    ///
+    /// PROOF INTENT (BUG-029): This is the canonical, single definition of the
+    /// per-minter-cap inductive proof.  A prior broken duplicate (which referenced
+    /// an undeclared `total_minted` binding and would not compile under Kani) was
+    /// removed in this fix.  Only this correct version must exist.  The proof
+    /// establishes the inductive step: assuming a valid pre-state (minted ≤ cap),
+    /// any mint that Anchor allows (i.e. new_minted ≤ cap) satisfies the post-state
+    /// invariant.  Overflow is handled by checked_add; the program aborts on
+    /// overflow via overflow-checks = true.
     #[kani::proof]
     fn proof_minter_cap_inductive() {
         let cap: u64 = kani::any();
