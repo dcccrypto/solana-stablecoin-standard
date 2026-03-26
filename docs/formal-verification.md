@@ -185,6 +185,18 @@ These proofs cover the core SSS-3 (Trustless Collateral-Backed) guarantee: colla
 
 ---
 
+## Proof Hygiene Fix — BUG-029 (2026-03-26)
+
+`proof_minter_cap_inductive` in `proofs.rs` had a stale inline comment from BUG-004 that described a now-removed duplicate proof harness. The duplicate (which had referenced an undeclared `total_minted` binding and would not compile under Kani) was renamed to `proof_total_minted_strictly_increases` during BUG-004. BUG-029 removes the stale reference comment and replaces it with a canonical **PROOF INTENT** block on the surviving `proof_minter_cap_inductive`, clarifying:
+
+- Only one definition of this harness must exist.
+- The proof establishes the inductive step: `minted ≤ cap` pre-state → `minted' ≤ cap` post-state for any Anchor-allowed mint.
+- Overflow is handled by `checked_add`; the program aborts on overflow via `overflow-checks = true`.
+
+**Commit:** `8c227dc` — no behaviour change, no proof count change (still 35/35 verified).
+
+---
+
 ## Proof Quality Audit — SSS-117 (2026-03-22)
 
 An internal audit of all 35 proofs (commit `c0a744b`) found 17 that were tautological, vacuous, or weak. All 17 were rewritten to proper inductive form. Categories fixed:

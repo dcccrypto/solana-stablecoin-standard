@@ -6,6 +6,11 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### BUG-029 — Remove Stale Duplicate Proof Comment; Add PROOF INTENT to `proof_minter_cap_inductive`
+
+- `programs/sss-token/src/proofs.rs` — removed stale BUG-004 inline comment that described a no-longer-existing duplicate `proof_minter_cap_inductive` harness; added canonical PROOF INTENT block explaining the single surviving harness's inductive argument, uniqueness requirement, and overflow handling [commit 8c227dc]
+- `docs/formal-verification.md` — added BUG-029 section under Proof Hygiene documenting the cleanup and confirming 35/35 proofs still verified
+
 ### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
 - `docs/SECURITY.md` § 9 — full risk analysis of Token-2022 hook fail-open conditions: fail-open scenarios, current mitigations (Squads multisig, PDA ownership, fail-closed flags), residual risk, recommended operational + on-chain mitigations, incident response timeline [commit 0293169]
