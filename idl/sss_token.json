@@ -147,6 +147,69 @@
       "args": []
     },
     {
+      "name": "add_authorized_keeper",
+      "docs": [
+        "BUG-015: Add a keeper pubkey to the stability-fee keeper whitelist."
+      ],
+      "discriminator": [
+        157,
+        130,
+        233,
+        134,
+        151,
+        180,
+        227,
+        203
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "keeper",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "add_yield_collateral_mint",
       "docs": [
         "Add a yield-bearing SPL token mint to the whitelist.",
@@ -250,6 +313,178 @@
       ]
     },
     {
+      "name": "attest_legal_entity",
+      "docs": [
+        "Attestor-only: co-sign the IssuerRegistry, marking it as attested."
+      ],
+      "discriminator": [
+        142,
+        145,
+        35,
+        15,
+        247,
+        34,
+        41,
+        231
+      ],
+      "accounts": [
+        {
+          "name": "attestor",
+          "docs": [
+            "Must match registry.attestor"
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "relations": [
+            "issuer_registry"
+          ]
+        },
+        {
+          "name": "issuer_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  115,
+                  115,
+                  117,
+                  101,
+                  114,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "blacklist_add_and_freeze",
+      "docs": [
+        "BUG-022: Add wallet to blacklist AND atomically freeze its token account.",
+        "",
+        "This is the primary blacklist operation for SSS-2 mints. Calling this instead",
+        "of the transfer-hook's `blacklist_add` directly ensures there is no window",
+        "between the blacklist write and the freeze — the wallet cannot front-run the",
+        "blacklist by moving tokens to a clean wallet.",
+        "",
+        "Steps performed atomically in one transaction:",
+        "1. CPI → transfer-hook `blacklist_add(wallet)` to record in BlacklistState.",
+        "2. Token-2022 `freeze_account` on the wallet's token account (config PDA signer).",
+        "",
+        "For pre-emptive blacklisting (wallet has no token account yet), call",
+        "`blacklist_add` on the transfer-hook program directly."
+      ],
+      "discriminator": [
+        208,
+        86,
+        179,
+        81,
+        108,
+        240,
+        30,
+        77
+      ],
+      "accounts": [
+        {
+          "name": "compliance_authority",
+          "docs": [
+            "Compliance authority — must match config.compliance_authority."
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "docs": [
+            "StablecoinConfig PDA — freeze authority and compliance authority validator.",
+            "The config PDA is the freeze authority on the Token-2022 mint."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "The Token-2022 mint — freeze authority is config PDA."
+          ],
+          "writable": true
+        },
+        {
+          "name": "target_token_account",
+          "docs": [
+            "Token account owned by the wallet being blacklisted.",
+            "This account is frozen atomically with the blacklist write."
+          ],
+          "writable": true
+        },
+        {
+          "name": "blacklist_state",
+          "docs": [
+            "BlacklistState PDA on the transfer-hook program.",
+            "Seeds: [b\"blacklist-state\", mint] — owned by the transfer-hook program.",
+            "We pass this as mutable so the CPI to transfer-hook can write the new entry."
+          ],
+          "writable": true
+        },
+        {
+          "name": "transfer_hook_program",
+          "docs": [
+            "The transfer-hook program — invoked via CPI to add to blacklist."
+          ]
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "burn",
       "docs": [
         "Burn tokens from source. Caller must be a registered minter."
@@ -350,6 +585,289 @@
       "args": [
         {
           "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "burn_accrued_fees",
+      "docs": [
+        "SSS-092: Burn previously accrued stability fees from debtor's token account.",
+        "BUG-012 CRIT-07: resets `accrued_fees` to 0 after burn to prevent double-count.",
+        "Requires debtor signature."
+      ],
+      "discriminator": [
+        186,
+        28,
+        51,
+        104,
+        29,
+        192,
+        63,
+        50
+      ],
+      "accounts": [
+        {
+          "name": "debtor",
+          "docs": [
+            "The CDP owner (debtor) — must sign."
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "cdp_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  100,
+                  112,
+                  45,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              },
+              {
+                "kind": "account",
+                "path": "debtor"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "cancel_redemption",
+      "docs": [
+        "Cancel a pending redemption entry. Only the original redeemer may cancel.",
+        "Returns locked stable tokens to the redeemer."
+      ],
+      "discriminator": [
+        197,
+        243,
+        101,
+        86,
+        2,
+        37,
+        105,
+        106
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "redemption_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  100,
+                  101,
+                  109,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "redemption_entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  100,
+                  101,
+                  109,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  101,
+                  110,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              },
+              {
+                "kind": "arg",
+                "path": "queue_index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow_stable",
+          "docs": [
+            "Per-entry escrow — stable tokens returned to user on cancel."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  117,
+                  101,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              },
+              {
+                "kind": "arg",
+                "path": "queue_index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_stable_ata",
+          "docs": [
+            "User's stable token ATA — receives tokens back."
+          ],
+          "writable": true
+        },
+        {
+          "name": "stable_mint"
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "queue_index",
           "type": "u64"
         }
       ]
@@ -578,6 +1096,43 @@
         },
         {
           "name": "pyth_price_feed"
+        },
+        {
+          "name": "oracle_consensus",
+          "docs": [
+            "C-1: Optional OracleConsensus PDA.  Required when FLAG_MULTI_ORACLE_CONSENSUS is set;",
+            "ignored otherwise.  PDA seeds: [b\"oracle-consensus\", sss_mint]."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  99,
+                  111,
+                  110,
+                  115,
+                  101,
+                  110,
+                  115,
+                  117,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
         },
         {
           "name": "token_program"
@@ -988,6 +1543,43 @@
               {
                 "kind": "account",
                 "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_consensus",
+          "docs": [
+            "C-1: Optional OracleConsensus PDA.  Required when FLAG_MULTI_ORACLE_CONSENSUS is set;",
+            "ignored otherwise.  PDA seeds: [b\"oracle-consensus\", sss_mint]."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  99,
+                  111,
+                  110,
+                  115,
+                  101,
+                  110,
+                  115,
+                  117,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
               }
             ]
           }
@@ -1696,8 +2288,10 @@
     {
       "name": "collect_stability_fee",
       "docs": [
-        "SSS-092: Accrue and burn stability fees on a CDP position.",
-        "Callable by the debtor (or any keeper); debtor signs to authorise the burn."
+        "SSS-092: Accrue stability fees on a CDP position (keeper-callable, no burn).",
+        "BUG-012 HIGH-05: debtor does NOT need to sign — any keeper can force accrual.",
+        "Fees are accrued to `accrued_fees`; actual burn occurs on repay or via",
+        "`burn_accrued_fees` (requires debtor signature)."
       ],
       "discriminator": [
         116,
@@ -1711,9 +2305,11 @@
       ],
       "accounts": [
         {
-          "name": "debtor",
+          "name": "caller",
           "docs": [
-            "The CDP position owner (must sign — they authorise the burn from their account)"
+            "BUG-015: caller can be authority OR a whitelisted keeper — NOT the debtor.",
+            "The debtor no longer needs to sign; keepers may call this permissionlessly",
+            "as long as they appear in `config.authorized_keepers` (or are the authority)."
           ],
           "writable": true,
           "signer": true
@@ -1757,10 +2353,15 @@
           "writable": true
         },
         {
-          "name": "cdp_position",
+          "name": "debtor",
           "docs": [
-            "CDP position to accrue fees on"
-          ],
+            "CDP position to accrue fees on — keyed by [SEED, mint, debtor_pubkey].",
+            "The `debtor` CHECK account (read-only, no signature required) is used",
+            "only to derive the PDA seeds."
+          ]
+        },
+        {
+          "name": "cdp_position",
           "writable": true,
           "pda": {
             "seeds": [
@@ -1795,7 +2396,7 @@
         {
           "name": "debtor_sss_account",
           "docs": [
-            "Debtor's SSS token account — fees are burned from here"
+            "Debtor's SSS token account — fees are burned from here."
           ],
           "writable": true
         },
@@ -2193,6 +2794,367 @@
       ]
     },
     {
+      "name": "draw_insurance",
+      "docs": [
+        "Governance-controlled: draw from the insurance vault to cover protocol losses.",
+        "Requires authority (+ DAO quorum when FLAG_DAO_COMMITTEE is set)."
+      ],
+      "discriminator": [
+        177,
+        72,
+        230,
+        39,
+        177,
+        248,
+        175,
+        215
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sss_mint"
+        },
+        {
+          "name": "insurance_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  115,
+                  117,
+                  114,
+                  97,
+                  110,
+                  99,
+                  101,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "Vault token account (source)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "destination_token_account",
+          "docs": [
+            "Destination token account (reserve vault or recovery account)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "collateral_mint"
+        },
+        {
+          "name": "vault_authority",
+          "docs": [
+            "Vault PDA — signs the transfer out of vault_token_account."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  115,
+                  117,
+                  114,
+                  97,
+                  110,
+                  99,
+                  101,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "reason_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "enqueue_redemption",
+      "docs": [
+        "Enqueue a redemption request. Caller locks `amount` stable tokens into",
+        "a per-entry escrow and records the slot for front-run protection."
+      ],
+      "discriminator": [
+        237,
+        0,
+        111,
+        126,
+        28,
+        30,
+        194,
+        145
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "redemption_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  100,
+                  101,
+                  109,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_stable_ata",
+          "docs": [
+            "User's stable token account."
+          ],
+          "writable": true
+        },
+        {
+          "name": "escrow_stable",
+          "docs": [
+            "Escrow: per-entry escrow account.",
+            "Seeds: [b\"queue-escrow\", sss_mint, queue_index.to_le_bytes()]",
+            "Authority = redemption_queue PDA."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  117,
+                  101,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              },
+              {
+                "kind": "account",
+                "path": "redemption_queue.queue_tail",
+                "account": "RedemptionQueue"
+              }
+            ]
+          }
+        },
+        {
+          "name": "redemption_entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  100,
+                  101,
+                  109,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  101,
+                  110,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              },
+              {
+                "kind": "account",
+                "path": "redemption_queue.queue_tail",
+                "account": "RedemptionQueue"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slot_hashes",
+          "docs": [
+            "SlotHashes sysvar — used to capture slot_hash_seed for front-run protection."
+          ],
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "stable_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "execute_action",
       "docs": [
         "Execute a passed governance proposal.",
@@ -2460,6 +3422,383 @@
       "args": []
     },
     {
+      "name": "guardian_lift_pause",
+      "docs": [
+        "Lift a guardian-imposed pause.",
+        "BUG-018: Authority alone cannot lift a guardian-initiated pause until",
+        "GUARDIAN_PAUSE_AUTHORITY_OVERRIDE_DELAY (24h) has elapsed.",
+        "Full guardian quorum can always lift immediately."
+      ],
+      "discriminator": [
+        121,
+        181,
+        93,
+        133,
+        8,
+        50,
+        195,
+        0
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "docs": [
+            "Either the stablecoin authority OR a guardian (for full-quorum unpause)"
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guardian_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "guardian_propose_pause",
+      "docs": [
+        "Any registered guardian proposes an emergency pause.",
+        "Creates a PauseProposal PDA.  If threshold == 1 the pause is immediate."
+      ],
+      "discriminator": [
+        58,
+        132,
+        229,
+        30,
+        114,
+        201,
+        247,
+        87
+      ],
+      "accounts": [
+        {
+          "name": "guardian",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guardian_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  117,
+                  115,
+                  101,
+                  45,
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              },
+              {
+                "kind": "account",
+                "path": "guardian_config.next_proposal_id",
+                "account": "GuardianConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "reason",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "guardian_vote_pause",
+      "docs": [
+        "Cast a YES vote on an open pause proposal.",
+        "When votes >= threshold the mint is paused immediately.",
+        "BUG-018: sets guardian_pause_active=true and starts the authority-override timelock."
+      ],
+      "discriminator": [
+        113,
+        154,
+        85,
+        151,
+        246,
+        171,
+        244,
+        95
+      ],
+      "accounts": [
+        {
+          "name": "guardian",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guardian_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  117,
+                  115,
+                  101,
+                  45,
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_id"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "proposal_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "init_dao_committee",
       "docs": [
         "Initialize the DAO committee for a stablecoin config.",
@@ -2573,6 +3912,234 @@
       ]
     },
     {
+      "name": "init_guardian_config",
+      "docs": [
+        "Initialise the guardian multisig for a stablecoin.",
+        "Registers 1–7 guardian pubkeys and a vote threshold.",
+        "Authority only; can only be called once."
+      ],
+      "discriminator": [
+        210,
+        47,
+        117,
+        186,
+        103,
+        208,
+        196,
+        63
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "guardian_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "guardians",
+          "type": {
+            "vec": "pubkey"
+          }
+        },
+        {
+          "name": "threshold",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "init_insurance_vault",
+      "docs": [
+        "Authority-only: initialise the InsuranceVault PDA and set",
+        "FLAG_INSURANCE_VAULT_REQUIRED.  Minting is blocked until the vault is",
+        "adequately seeded."
+      ],
+      "discriminator": [
+        220,
+        144,
+        119,
+        124,
+        248,
+        58,
+        225,
+        90
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sss_mint"
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "Collateral token account that will hold insurance reserves.",
+            "Must use the collateral mint matching this config."
+          ]
+        },
+        {
+          "name": "insurance_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  115,
+                  117,
+                  114,
+                  97,
+                  110,
+                  99,
+                  101,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "min_seed_bps",
+          "type": "u16"
+        },
+        {
+          "name": "max_draw_per_event_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
       "name": "init_interface_version",
       "docs": [
         "Initialize the InterfaceVersion PDA for this mint.",
@@ -2660,6 +4227,103 @@
               {
                 "kind": "account",
                 "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "init_redemption_queue",
+      "docs": [
+        "Initialise the RedemptionQueue PDA for a stablecoin.",
+        "Requires FLAG_REDEMPTION_QUEUE to be set on the StablecoinConfig."
+      ],
+      "discriminator": [
+        40,
+        31,
+        246,
+        175,
+        71,
+        246,
+        245,
+        208
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "redemption_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  100,
+                  101,
+                  109,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
               }
             ]
           }
@@ -3036,6 +4700,61 @@
       ]
     },
     {
+      "name": "migrate_config",
+      "docs": [
+        "SSS-122: Migrate a StablecoinConfig PDA from v0 → current version.",
+        "",
+        "Idempotent — safe to call on already-migrated configs.",
+        "Required before mint/burn/redeem on configs created by a pre-SSS-122 build."
+      ],
+      "discriminator": [
+        92,
+        131,
+        58,
+        105,
+        210,
+        154,
+        224,
+        193
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "The authority of the stablecoin — only they may trigger migration."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "The SSS-token mint — used to verify config PDA seeds."
+          ]
+        },
+        {
+          "name": "config",
+          "docs": [
+            "The config PDA to migrate.",
+            "",
+            "SAFETY: Declared as `UncheckedAccount` because Anchor's typed",
+            "deserialization (`Account<StablecoinConfig>`) would reject undersized",
+            "v0 accounts before realloc can run.  The handler manually verifies:",
+            "1. PDA seeds ([StablecoinConfig::SEED, mint]) match this account's key.",
+            "2. First 8 bytes match the StablecoinConfig Anchor discriminator.",
+            "3. The serialised `authority` field matches the `authority` signer.",
+            "4. Account is owned by this program (`owner` constraint below)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "mint",
       "docs": [
         "Mint tokens to a recipient. Caller must be a registered minter."
@@ -3202,6 +4921,218 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "process_redemption",
+      "docs": [
+        "Process a queued redemption entry. Keeper calls after min_delay_slots",
+        "have elapsed. Releases collateral to the redeemer and pays keeper reward."
+      ],
+      "discriminator": [
+        167,
+        54,
+        104,
+        15,
+        67,
+        90,
+        231,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "keeper",
+          "docs": [
+            "Keeper — receives lamport reward."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "redemption_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  100,
+                  101,
+                  109,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "redemption_entry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  100,
+                  101,
+                  109,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  101,
+                  110,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              },
+              {
+                "kind": "arg",
+                "path": "queue_index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow_stable",
+          "docs": [
+            "Per-entry escrow — stable tokens to burn."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  113,
+                  117,
+                  101,
+                  117,
+                  101,
+                  45,
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              },
+              {
+                "kind": "arg",
+                "path": "queue_index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "reserve_vault",
+          "docs": [
+            "Reserve vault — collateral source."
+          ],
+          "writable": true
+        },
+        {
+          "name": "reserve_vault_authority",
+          "docs": [
+            "Authority over the reserve vault (signs the collateral transfer out)."
+          ],
+          "signer": true
+        },
+        {
+          "name": "user_collateral_ata",
+          "docs": [
+            "User's collateral ATA — receives reserve payout."
+          ],
+          "writable": true
+        },
+        {
+          "name": "stable_mint",
+          "writable": true
+        },
+        {
+          "name": "collateral_mint"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "queue_index",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "propose_action",
@@ -3669,6 +5600,284 @@
       ]
     },
     {
+      "name": "register_legal_entity",
+      "docs": [
+        "Authority-only: register the issuer's legal entity on-chain.",
+        "Creates an IssuerRegistry PDA and enables FLAG_LEGAL_REGISTRY."
+      ],
+      "discriminator": [
+        94,
+        101,
+        0,
+        14,
+        207,
+        224,
+        33,
+        28
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true
+        },
+        {
+          "name": "issuer_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  115,
+                  115,
+                  117,
+                  101,
+                  114,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "legal_entity_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "jurisdiction",
+          "type": {
+            "array": [
+              "u8",
+              4
+            ]
+          }
+        },
+        {
+          "name": "registration_number_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "attestor",
+          "type": "pubkey"
+        },
+        {
+          "name": "expiry_slot",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "remove_authorized_keeper",
+      "docs": [
+        "BUG-015: Remove a keeper pubkey from the stability-fee keeper whitelist."
+      ],
+      "discriminator": [
+        137,
+        68,
+        211,
+        4,
+        118,
+        25,
+        200,
+        188
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "keeper",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "replenish_insurance_vault",
+      "docs": [
+        "Permissionless: anyone may replenish the insurance vault after a draw."
+      ],
+      "discriminator": [
+        42,
+        121,
+        170,
+        108,
+        170,
+        76,
+        170,
+        125
+      ],
+      "accounts": [
+        {
+          "name": "contributor",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sss_mint"
+        },
+        {
+          "name": "insurance_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  115,
+                  117,
+                  114,
+                  97,
+                  110,
+                  99,
+                  101,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contributor_token_account",
+          "writable": true
+        },
+        {
+          "name": "vault_token_account",
+          "writable": true
+        },
+        {
+          "name": "collateral_mint"
+        },
+        {
+          "name": "collateral_token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "revoke_minter",
       "docs": [
         "Revoke a minter. Authority only."
@@ -3764,6 +5973,124 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "seed_insurance_vault",
+      "docs": [
+        "Deposit collateral into the insurance vault (anyone may seed; issuer must",
+        "hit min_seed_bps before minting is unlocked)."
+      ],
+      "discriminator": [
+        213,
+        250,
+        236,
+        157,
+        216,
+        250,
+        120,
+        202
+      ],
+      "accounts": [
+        {
+          "name": "depositor",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sss_mint"
+        },
+        {
+          "name": "insurance_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  115,
+                  117,
+                  114,
+                  97,
+                  110,
+                  99,
+                  101,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "depositor_token_account",
+          "docs": [
+            "Depositor's collateral token account (source)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "The vault token account (destination)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "collateral_mint"
+        },
+        {
+          "name": "collateral_token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "set_backstop_params",
@@ -4573,6 +6900,7 @@
         "Trigger the bad debt backstop after a liquidation leaves collateral < debt.",
         "Draws up to `max_backstop_bps` of outstanding debt from the insurance fund.",
         "Only callable by the config PDA (i.e. via CPI from `cdp_liquidate`).",
+        "Shortfall is computed entirely on-chain from CDP position + oracle price (BUG-031).",
         "Emits `BadDebtTriggered`."
       ],
       "discriminator": [
@@ -4629,7 +6957,106 @@
           }
         },
         {
-          "name": "sss_mint"
+          "name": "sss_mint",
+          "docs": [
+            "SSS stablecoin mint — used for decimal scaling."
+          ]
+        },
+        {
+          "name": "cdp_position",
+          "docs": [
+            "CDP position of the borrower whose bad debt is being covered.",
+            "Seeds: [b\"cdp-position\", sss_mint, cdp_owner]"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  100,
+                  112,
+                  45,
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              },
+              {
+                "kind": "arg",
+                "path": "cdp_owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_vault",
+          "docs": [
+            "Collateral vault for this CDP — used to read remaining deposited_amount.",
+            "Seeds: [b\"cdp-collateral-vault\", sss_mint, cdp_owner, collateral_mint]"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  100,
+                  112,
+                  45,
+                  99,
+                  111,
+                  108,
+                  108,
+                  97,
+                  116,
+                  101,
+                  114,
+                  97,
+                  108,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              },
+              {
+                "kind": "arg",
+                "path": "cdp_owner"
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collateral_mint",
+          "docs": [
+            "The collateral token mint — used for decimal scaling."
+          ]
+        },
+        {
+          "name": "oracle_price_feed",
+          "docs": [
+            "Oracle price feed account — validated by oracle::get_oracle_price via config."
+          ]
         },
         {
           "name": "insurance_fund",
@@ -4646,12 +7073,6 @@
           "writable": true
         },
         {
-          "name": "collateral_mint",
-          "docs": [
-            "The collateral token mint (e.g. USDC)."
-          ]
-        },
-        {
           "name": "insurance_fund_authority",
           "docs": [
             "Insurance fund authority — must sign to allow transfer from insurance fund."
@@ -4664,8 +7085,8 @@
       ],
       "args": [
         {
-          "name": "shortfall_amount",
-          "type": "u64"
+          "name": "cdp_owner",
+          "type": "pubkey"
         }
       ]
     },
@@ -4959,6 +7380,107 @@
       ]
     },
     {
+      "name": "update_legal_entity",
+      "docs": [
+        "Authority-only: update the legal entity record (resets attestation)."
+      ],
+      "discriminator": [
+        79,
+        97,
+        162,
+        108,
+        184,
+        96,
+        250,
+        216
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "relations": [
+            "issuer_registry"
+          ]
+        },
+        {
+          "name": "issuer_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  115,
+                  115,
+                  117,
+                  101,
+                  114,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "legal_entity_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "jurisdiction",
+          "type": {
+            "array": [
+              "u8",
+              4
+            ]
+          }
+        },
+        {
+          "name": "registration_number_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "attestor",
+          "type": "pubkey"
+        },
+        {
+          "name": "expiry_slot",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "update_minter",
       "docs": [
         "Register or update a minter with a cap. Authority only."
@@ -5062,6 +7584,123 @@
         {
           "name": "cap",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "update_redemption_queue",
+      "docs": [
+        "Update RedemptionQueue parameters (authority-only)."
+      ],
+      "discriminator": [
+        146,
+        36,
+        127,
+        212,
+        107,
+        170,
+        126,
+        235
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        },
+        {
+          "name": "redemption_queue",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  100,
+                  101,
+                  109,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  113,
+                  117,
+                  101,
+                  117,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config.mint",
+                "account": "StablecoinConfig"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "min_delay_slots",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "max_queue_depth",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "max_redemption_per_slot_bps",
+          "type": {
+            "option": "u16"
+          }
+        },
+        {
+          "name": "keeper_reward_lamports",
+          "type": {
+            "option": "u64"
+          }
         }
       ]
     },
@@ -5336,6 +7975,32 @@
       ]
     },
     {
+      "name": "GuardianConfig",
+      "discriminator": [
+        253,
+        92,
+        160,
+        221,
+        64,
+        253,
+        141,
+        121
+      ]
+    },
+    {
+      "name": "InsuranceVault",
+      "discriminator": [
+        131,
+        200,
+        252,
+        180,
+        131,
+        202,
+        30,
+        144
+      ]
+    },
+    {
       "name": "InterfaceVersion",
       "discriminator": [
         120,
@@ -5346,6 +8011,19 @@
         58,
         96,
         219
+      ]
+    },
+    {
+      "name": "IssuerRegistry",
+      "discriminator": [
+        252,
+        217,
+        20,
+        87,
+        39,
+        96,
+        228,
+        46
       ]
     },
     {
@@ -5362,6 +8040,32 @@
       ]
     },
     {
+      "name": "OracleConsensus",
+      "discriminator": [
+        104,
+        34,
+        244,
+        89,
+        131,
+        146,
+        99,
+        207
+      ]
+    },
+    {
+      "name": "PauseProposal",
+      "discriminator": [
+        196,
+        152,
+        49,
+        97,
+        129,
+        247,
+        248,
+        192
+      ]
+    },
+    {
       "name": "ProposalPda",
       "discriminator": [
         231,
@@ -5372,6 +8076,32 @@
         243,
         132,
         22
+      ]
+    },
+    {
+      "name": "RedemptionEntry",
+      "discriminator": [
+        211,
+        140,
+        117,
+        136,
+        104,
+        139,
+        55,
+        202
+      ]
+    },
+    {
+      "name": "RedemptionQueue",
+      "discriminator": [
+        57,
+        164,
+        202,
+        114,
+        174,
+        102,
+        214,
+        153
       ]
     },
     {
@@ -5481,6 +8211,58 @@
       ]
     },
     {
+      "name": "AuthorityRotationCancelled",
+      "discriminator": [
+        130,
+        2,
+        252,
+        115,
+        135,
+        42,
+        1,
+        109
+      ]
+    },
+    {
+      "name": "AuthorityRotationCompleted",
+      "discriminator": [
+        2,
+        240,
+        167,
+        234,
+        217,
+        41,
+        69,
+        170
+      ]
+    },
+    {
+      "name": "AuthorityRotationEmergencyRecovered",
+      "discriminator": [
+        148,
+        244,
+        6,
+        35,
+        5,
+        50,
+        173,
+        252
+      ]
+    },
+    {
+      "name": "AuthorityRotationProposed",
+      "discriminator": [
+        76,
+        59,
+        57,
+        23,
+        22,
+        166,
+        253,
+        33
+      ]
+    },
+    {
       "name": "BadDebtTriggered",
       "discriminator": [
         96,
@@ -5491,6 +8273,45 @@
         219,
         233,
         192
+      ]
+    },
+    {
+      "name": "BridgeConfigInitialized",
+      "discriminator": [
+        34,
+        49,
+        6,
+        223,
+        86,
+        236,
+        131,
+        188
+      ]
+    },
+    {
+      "name": "BridgeIn",
+      "discriminator": [
+        127,
+        87,
+        5,
+        229,
+        171,
+        246,
+        125,
+        145
+      ]
+    },
+    {
+      "name": "BridgeOut",
+      "discriminator": [
+        11,
+        216,
+        37,
+        137,
+        36,
+        120,
+        176,
+        102
       ]
     },
     {
@@ -5546,6 +8367,84 @@
       ]
     },
     {
+      "name": "ChannelDisputed",
+      "discriminator": [
+        12,
+        104,
+        251,
+        60,
+        127,
+        104,
+        248,
+        19
+      ]
+    },
+    {
+      "name": "ChannelForceClosed",
+      "discriminator": [
+        156,
+        84,
+        5,
+        87,
+        168,
+        13,
+        115,
+        162
+      ]
+    },
+    {
+      "name": "ChannelOpened",
+      "discriminator": [
+        253,
+        213,
+        255,
+        96,
+        31,
+        188,
+        47,
+        170
+      ]
+    },
+    {
+      "name": "ChannelSettled",
+      "discriminator": [
+        111,
+        173,
+        122,
+        136,
+        157,
+        140,
+        206,
+        6
+      ]
+    },
+    {
+      "name": "CircuitBreakerAutoUnpaused",
+      "discriminator": [
+        77,
+        218,
+        88,
+        129,
+        173,
+        66,
+        150,
+        191
+      ]
+    },
+    {
+      "name": "CircuitBreakerTriggered",
+      "discriminator": [
+        58,
+        7,
+        35,
+        109,
+        165,
+        114,
+        119,
+        58
+      ]
+    },
+    {
       "name": "CollateralDeposited",
       "discriminator": [
         244,
@@ -5585,6 +8484,305 @@
       ]
     },
     {
+      "name": "ConfigMigrated",
+      "discriminator": [
+        115,
+        69,
+        99,
+        100,
+        192,
+        77,
+        40,
+        50
+      ]
+    },
+    {
+      "name": "CredentialIssued",
+      "discriminator": [
+        194,
+        216,
+        28,
+        159,
+        89,
+        29,
+        72,
+        177
+      ]
+    },
+    {
+      "name": "CredentialRegistryInitialised",
+      "discriminator": [
+        191,
+        18,
+        83,
+        62,
+        151,
+        153,
+        232,
+        147
+      ]
+    },
+    {
+      "name": "CredentialRegistryRootRotated",
+      "discriminator": [
+        36,
+        59,
+        197,
+        67,
+        51,
+        184,
+        125,
+        37
+      ]
+    },
+    {
+      "name": "CredentialRevoked",
+      "discriminator": [
+        127,
+        131,
+        241,
+        234,
+        50,
+        139,
+        145,
+        204
+      ]
+    },
+    {
+      "name": "GuardianPauseAuthorityOverride",
+      "discriminator": [
+        204,
+        0,
+        174,
+        154,
+        148,
+        62,
+        6,
+        20
+      ]
+    },
+    {
+      "name": "GuardianPauseLifted",
+      "discriminator": [
+        157,
+        49,
+        10,
+        243,
+        34,
+        84,
+        40,
+        148
+      ]
+    },
+    {
+      "name": "GuardianPauseProposed",
+      "discriminator": [
+        215,
+        148,
+        191,
+        42,
+        102,
+        93,
+        44,
+        79
+      ]
+    },
+    {
+      "name": "GuardianPauseVoted",
+      "discriminator": [
+        97,
+        198,
+        55,
+        116,
+        159,
+        241,
+        150,
+        226
+      ]
+    },
+    {
+      "name": "InstantRedemption",
+      "discriminator": [
+        71,
+        55,
+        45,
+        82,
+        240,
+        126,
+        119,
+        169
+      ]
+    },
+    {
+      "name": "InsuranceDrawn",
+      "discriminator": [
+        247,
+        66,
+        11,
+        63,
+        111,
+        58,
+        96,
+        84
+      ]
+    },
+    {
+      "name": "InsuranceVaultReplenished",
+      "discriminator": [
+        229,
+        94,
+        45,
+        178,
+        54,
+        89,
+        81,
+        11
+      ]
+    },
+    {
+      "name": "InsuranceVaultSeeded",
+      "discriminator": [
+        111,
+        158,
+        252,
+        215,
+        30,
+        227,
+        164,
+        106
+      ]
+    },
+    {
+      "name": "KeeperConfigInitialised",
+      "discriminator": [
+        228,
+        106,
+        54,
+        167,
+        77,
+        240,
+        209,
+        150
+      ]
+    },
+    {
+      "name": "KeeperRewarded",
+      "discriminator": [
+        90,
+        33,
+        161,
+        53,
+        189,
+        69,
+        8,
+        10
+      ]
+    },
+    {
+      "name": "LegalEntityAttested",
+      "discriminator": [
+        54,
+        231,
+        83,
+        212,
+        14,
+        37,
+        76,
+        103
+      ]
+    },
+    {
+      "name": "LegalEntityRegistered",
+      "discriminator": [
+        164,
+        212,
+        207,
+        141,
+        41,
+        243,
+        56,
+        68
+      ]
+    },
+    {
+      "name": "LegalEntityUpdated",
+      "discriminator": [
+        18,
+        26,
+        233,
+        173,
+        179,
+        85,
+        206,
+        95
+      ]
+    },
+    {
+      "name": "LiquidationBonusConfigInitialised",
+      "discriminator": [
+        23,
+        157,
+        159,
+        59,
+        103,
+        13,
+        69,
+        180
+      ]
+    },
+    {
+      "name": "LiquidationBonusConfigUpdated",
+      "discriminator": [
+        92,
+        188,
+        129,
+        127,
+        201,
+        173,
+        239,
+        161
+      ]
+    },
+    {
+      "name": "MarketMakerConfigInitialized",
+      "discriminator": [
+        245,
+        35,
+        106,
+        88,
+        80,
+        194,
+        230,
+        67
+      ]
+    },
+    {
+      "name": "MarketMakerRegistered",
+      "discriminator": [
+        125,
+        199,
+        133,
+        75,
+        43,
+        124,
+        24,
+        26
+      ]
+    },
+    {
+      "name": "MintHaltedByPoRBreach",
+      "discriminator": [
+        119,
+        44,
+        214,
+        146,
+        166,
+        191,
+        167,
+        121
+      ]
+    },
+    {
       "name": "MintPausedEvent",
       "discriminator": [
         255,
@@ -5611,6 +8809,175 @@
       ]
     },
     {
+      "name": "MmBurn",
+      "discriminator": [
+        10,
+        50,
+        132,
+        201,
+        99,
+        42,
+        64,
+        129
+      ]
+    },
+    {
+      "name": "MmCapacity",
+      "discriminator": [
+        46,
+        192,
+        61,
+        162,
+        68,
+        107,
+        204,
+        109
+      ]
+    },
+    {
+      "name": "MmMint",
+      "discriminator": [
+        207,
+        32,
+        58,
+        254,
+        31,
+        211,
+        81,
+        221
+      ]
+    },
+    {
+      "name": "OracleConsensusUpdated",
+      "discriminator": [
+        103,
+        98,
+        199,
+        173,
+        155,
+        230,
+        197,
+        174
+      ]
+    },
+    {
+      "name": "OracleOutlierRejected",
+      "discriminator": [
+        233,
+        69,
+        78,
+        150,
+        228,
+        196,
+        237,
+        89
+      ]
+    },
+    {
+      "name": "OracleStalenessDetected",
+      "discriminator": [
+        58,
+        10,
+        33,
+        41,
+        248,
+        193,
+        152,
+        130
+      ]
+    },
+    {
+      "name": "PidConfigInitialised",
+      "discriminator": [
+        41,
+        29,
+        137,
+        62,
+        58,
+        32,
+        172,
+        129
+      ]
+    },
+    {
+      "name": "PidFeeUpdated",
+      "discriminator": [
+        51,
+        72,
+        162,
+        238,
+        228,
+        251,
+        172,
+        43
+      ]
+    },
+    {
+      "name": "ProbabilisticCommitmentCreated",
+      "discriminator": [
+        59,
+        157,
+        220,
+        146,
+        175,
+        166,
+        16,
+        57
+      ]
+    },
+    {
+      "name": "ProbabilisticCommitmentResolved",
+      "discriminator": [
+        111,
+        133,
+        89,
+        177,
+        135,
+        183,
+        249,
+        242
+      ]
+    },
+    {
+      "name": "PsmCurveConfigInitialised",
+      "discriminator": [
+        23,
+        21,
+        5,
+        133,
+        187,
+        186,
+        17,
+        158
+      ]
+    },
+    {
+      "name": "PsmCurveConfigUpdated",
+      "discriminator": [
+        224,
+        253,
+        178,
+        243,
+        241,
+        113,
+        231,
+        80
+      ]
+    },
+    {
+      "name": "PsmDynamicSwapEvent",
+      "discriminator": [
+        206,
+        143,
+        188,
+        156,
+        207,
+        231,
+        73,
+        191
+      ]
+    },
+    {
       "name": "PsmFeeUpdated",
       "discriminator": [
         64,
@@ -5624,6 +8991,19 @@
       ]
     },
     {
+      "name": "PsmQuoteEvent",
+      "discriminator": [
+        124,
+        132,
+        183,
+        173,
+        35,
+        17,
+        51,
+        3
+      ]
+    },
+    {
       "name": "PsmSwapEvent",
       "discriminator": [
         185,
@@ -5634,6 +9014,188 @@
         190,
         155,
         253
+      ]
+    },
+    {
+      "name": "RedemptionCancelled",
+      "discriminator": [
+        22,
+        106,
+        118,
+        26,
+        83,
+        110,
+        71,
+        174
+      ]
+    },
+    {
+      "name": "RedemptionFulfilled",
+      "discriminator": [
+        73,
+        134,
+        70,
+        2,
+        131,
+        17,
+        134,
+        141
+      ]
+    },
+    {
+      "name": "RedemptionFulfilledQueued",
+      "discriminator": [
+        222,
+        255,
+        222,
+        148,
+        184,
+        224,
+        177,
+        95
+      ]
+    },
+    {
+      "name": "RedemptionPoolDrained",
+      "discriminator": [
+        30,
+        212,
+        82,
+        61,
+        98,
+        218,
+        115,
+        111
+      ]
+    },
+    {
+      "name": "RedemptionPoolReplenished",
+      "discriminator": [
+        135,
+        99,
+        193,
+        197,
+        217,
+        77,
+        180,
+        166
+      ]
+    },
+    {
+      "name": "RedemptionPoolSeeded",
+      "discriminator": [
+        107,
+        73,
+        100,
+        72,
+        212,
+        166,
+        251,
+        249
+      ]
+    },
+    {
+      "name": "RedemptionQueued",
+      "discriminator": [
+        242,
+        135,
+        121,
+        68,
+        166,
+        77,
+        90,
+        127
+      ]
+    },
+    {
+      "name": "RedemptionSLABreached",
+      "discriminator": [
+        108,
+        126,
+        241,
+        119,
+        249,
+        220,
+        231,
+        223
+      ]
+    },
+    {
+      "name": "ReserveCompositionUpdated",
+      "discriminator": [
+        56,
+        207,
+        230,
+        141,
+        133,
+        248,
+        2,
+        32
+      ]
+    },
+    {
+      "name": "SanctionsOracleCleared",
+      "discriminator": [
+        182,
+        8,
+        93,
+        99,
+        249,
+        74,
+        76,
+        177
+      ]
+    },
+    {
+      "name": "SanctionsOracleSet",
+      "discriminator": [
+        49,
+        69,
+        36,
+        228,
+        95,
+        5,
+        31,
+        2
+      ]
+    },
+    {
+      "name": "SanctionsRecordUpdated",
+      "discriminator": [
+        110,
+        180,
+        25,
+        115,
+        114,
+        41,
+        178,
+        17
+      ]
+    },
+    {
+      "name": "SquadsAuthorityInitialized",
+      "discriminator": [
+        36,
+        168,
+        108,
+        146,
+        174,
+        34,
+        50,
+        160
+      ]
+    },
+    {
+      "name": "SquadsAuthorityVerified",
+      "discriminator": [
+        215,
+        145,
+        208,
+        181,
+        217,
+        84,
+        59,
+        93
       ]
     },
     {
@@ -5673,6 +9235,84 @@
         54,
         64,
         24
+      ]
+    },
+    {
+      "name": "TravelRuleRecordSubmitted",
+      "discriminator": [
+        76,
+        169,
+        218,
+        67,
+        128,
+        110,
+        51,
+        239
+      ]
+    },
+    {
+      "name": "UpgradeAuthorityGuardSet",
+      "discriminator": [
+        178,
+        162,
+        183,
+        86,
+        86,
+        54,
+        4,
+        143
+      ]
+    },
+    {
+      "name": "UpgradeAuthorityVerified",
+      "discriminator": [
+        82,
+        128,
+        133,
+        225,
+        155,
+        224,
+        95,
+        86
+      ]
+    },
+    {
+      "name": "WalletRateLimitRemoved",
+      "discriminator": [
+        176,
+        116,
+        183,
+        17,
+        86,
+        88,
+        131,
+        144
+      ]
+    },
+    {
+      "name": "WalletRateLimitSet",
+      "discriminator": [
+        239,
+        223,
+        20,
+        96,
+        193,
+        159,
+        114,
+        81
+      ]
+    },
+    {
+      "name": "WorkProofSubmitted",
+      "discriminator": [
+        65,
+        248,
+        238,
+        23,
+        38,
+        12,
+        235,
+        13
       ]
     }
   ],
@@ -5949,108 +9589,758 @@
     },
     {
       "code": 6054,
+      "name": "TimelockRequired",
+      "msg": "Direct admin call blocked — timelock is active; use propose_timelocked_op + execute_timelocked_op"
+    },
+    {
+      "code": 6055,
+      "name": "InvalidTimelockOpKind",
+      "msg": "Invalid timelock op kind — unrecognised ADMIN_OP_* constant"
+    },
+    {
+      "code": 6056,
+      "name": "InvalidTimelockDelay",
+      "msg": "Invalid timelock delay — minimum 216_000 slots (1 epoch) required"
+    },
+    {
+      "code": 6057,
+      "name": "InvalidStabilityFee",
+      "msg": "Invalid stability fee — max 10_000 bps (100% p.a.)"
+    },
+    {
+      "code": 6058,
+      "name": "InvalidBackstopParams",
+      "msg": "Invalid backstop params — max_backstop_bps must be ≤ 10_000"
+    },
+    {
+      "code": 6059,
+      "name": "InvalidReserveRatio",
+      "msg": "Invalid min reserve ratio — max 20_000 bps (200%)"
+    },
+    {
+      "code": 6060,
       "name": "DuplicateMember",
       "msg": "Duplicate pubkey in DAO committee member list"
     },
     {
-      "code": 6055,
+      "code": 6061,
       "name": "SlippageExceeded",
       "msg": "Liquidation slippage: collateral received is below caller-specified minimum"
     },
     {
-      "code": 6056,
+      "code": 6062,
       "name": "InvalidTokenProgram",
       "msg": "Token program must be Token-2022 (spl-token-2022 program)"
     },
     {
-      "code": 6057,
+      "code": 6063,
       "name": "StabilityFeeTooHigh",
       "msg": "Stability fee bps exceeds maximum allowed (2000 = 20% p.a.)"
     },
     {
-      "code": 6058,
+      "code": 6064,
       "name": "MintVelocityExceeded",
       "msg": "Minter epoch velocity limit exceeded — too much minted in this epoch"
     },
     {
-      "code": 6059,
+      "code": 6065,
       "name": "InvalidPsmFee",
       "msg": "PSM redemption fee too high — max 1000 bps (10%)"
     },
     {
-      "code": 6060,
+      "code": 6066,
       "name": "BackstopNotConfigured",
       "msg": "Bad debt backstop is not configured — set insurance_fund_pubkey first"
     },
     {
-      "code": 6061,
+      "code": 6067,
       "name": "NoBadDebt",
       "msg": "No bad debt detected — collateral covers outstanding debt"
     },
     {
-      "code": 6062,
+      "code": 6068,
       "name": "InsuranceFundEmpty",
       "msg": "Insurance fund balance is zero — cannot backstop"
     },
     {
-      "code": 6063,
+      "code": 6069,
       "name": "InvalidBackstopBps",
       "msg": "max_backstop_bps exceeds maximum allowed (10000 = 100%)"
     },
     {
-      "code": 6064,
+      "code": 6070,
       "name": "UnauthorizedBackstopCaller",
       "msg": "Caller is not the liquidation handler — only cdp_liquidate may trigger backstop"
     },
     {
-      "code": 6065,
+      "code": 6071,
       "name": "CollateralNotWhitelisted",
       "msg": "Collateral mint is not whitelisted in CollateralConfig"
     },
     {
-      "code": 6066,
+      "code": 6072,
       "name": "DepositCapExceeded",
       "msg": "CollateralConfig deposit cap exceeded"
     },
     {
-      "code": 6067,
+      "code": 6073,
       "name": "InvalidCollateralThreshold",
       "msg": "liquidation_threshold_bps must be > max_ltv_bps"
     },
     {
-      "code": 6068,
+      "code": 6074,
       "name": "InvalidLiquidationBonus",
       "msg": "liquidation_bonus_bps cannot exceed 5000 (50%)"
     },
     {
-      "code": 6069,
-      "name": "PartialLiquidationInsufficientRepay",
-      "msg": "partial_repay_amount would not restore CDP to healthy ratio — increase repay amount"
-    },
-    {
-      "code": 6070,
-      "name": "InvalidAmount",
-      "msg": "invalid amount: partial_repay_amount exceeds total debt"
-    },
-    {
-      "code": 6071,
+      "code": 6075,
       "name": "ConfidentialTransferNotEnabled",
       "msg": "Confidential transfer not enabled for this mint"
     },
     {
-      "code": 6072,
+      "code": 6076,
       "name": "MissingAuditorKey",
       "msg": "Auditor ElGamal pubkey required for confidential transfers"
     },
     {
-      "code": 6073,
-      "name": "InvalidElGamalKey",
-      "msg": "Auditor ElGamal pubkey must be non-zero (all-zero key is invalid)"
+      "code": 6077,
+      "name": "InvalidAmount",
+      "msg": "Invalid amount"
     },
     {
-      "code": 6074,
-      "name": "UnexpectedCtConfig",
-      "msg": "ct_config account must be omitted when FLAG_CONFIDENTIAL_TRANSFERS is not set"
+      "code": 6078,
+      "name": "PartialLiquidationInsufficientRepay",
+      "msg": "Insufficient repayment amount for partial liquidation"
+    },
+    {
+      "code": 6079,
+      "name": "FeatureNotEnabled",
+      "msg": "Feature flag not enabled on this config"
+    },
+    {
+      "code": 6080,
+      "name": "ProofHashMismatch",
+      "msg": "Proof hash does not match the committed condition hash"
+    },
+    {
+      "code": 6081,
+      "name": "VaultAlreadyTerminal",
+      "msg": "Vault is already in a terminal state (Resolved or Expired)"
+    },
+    {
+      "code": 6082,
+      "name": "VaultNotExpired",
+      "msg": "Vault has not yet expired (current slot < expiry_slot)"
+    },
+    {
+      "code": 6083,
+      "name": "InvalidExpirySlot",
+      "msg": "Expiry slot must be in the future"
+    },
+    {
+      "code": 6084,
+      "name": "ChannelAlreadyClosed",
+      "msg": "Channel is already closed (settled or force-closed)"
+    },
+    {
+      "code": 6085,
+      "name": "InvalidSettleAmount",
+      "msg": "Settle amount exceeds channel deposit"
+    },
+    {
+      "code": 6086,
+      "name": "SettlementAlreadyProposed",
+      "msg": "A settlement has already been proposed for this channel"
+    },
+    {
+      "code": 6087,
+      "name": "SettlementNotMatching",
+      "msg": "Counter-sign amount does not match proposed settlement amount"
+    },
+    {
+      "code": 6088,
+      "name": "ChannelNotExpired",
+      "msg": "Channel timeout has not elapsed yet"
+    },
+    {
+      "code": 6089,
+      "name": "UseTimelockForAuthorityTransfer",
+      "msg": "Authority transfer must use the admin timelock path when a timelock delay is configured"
+    },
+    {
+      "code": 6090,
+      "name": "UnauthorizedBackstopTrigger",
+      "msg": "Caller is not authorized to trigger the backstop (authority only)"
+    },
+    {
+      "code": 6091,
+      "name": "OracleNotConfigured",
+      "msg": "Oracle adapter not configured — Switchboard V2 crate not yet integrated"
+    },
+    {
+      "code": 6092,
+      "name": "InvalidOracleType",
+      "msg": "oracle_type must be 0 (Pyth), 1 (Switchboard), or 2 (Custom)"
+    },
+    {
+      "code": 6093,
+      "name": "RotationNewAuthorityIsCurrent",
+      "msg": "Rotation new_authority must differ from current authority"
+    },
+    {
+      "code": 6094,
+      "name": "RotationBackupIsCurrent",
+      "msg": "Rotation backup_authority must differ from current authority"
+    },
+    {
+      "code": 6095,
+      "name": "RotationBackupEqualsNew",
+      "msg": "Rotation backup_authority must differ from new_authority"
+    },
+    {
+      "code": 6096,
+      "name": "RotationZeroPubkey",
+      "msg": "Rotation pubkeys must be non-zero"
+    },
+    {
+      "code": 6097,
+      "name": "EmergencyRecoveryNotReady",
+      "msg": "Emergency recovery window has not elapsed (7 days required)"
+    },
+    {
+      "code": 6098,
+      "name": "InsuranceFundNotConfigured",
+      "msg": "Insurance fund not configured — set insurance_fund_pubkey first"
+    },
+    {
+      "code": 6099,
+      "name": "InvalidMint",
+      "msg": "Invalid mint account — does not match config.mint"
+    },
+    {
+      "code": 6100,
+      "name": "InvalidBlacklistState",
+      "msg": "Invalid blacklist state PDA — expected [b\\blacklist-state\\, mint] on transfer-hook program"
+    },
+    {
+      "code": 6101,
+      "name": "InvalidTransferHookProgram",
+      "msg": "Invalid transfer hook program — expected registered transfer_hook_program"
+    },
+    {
+      "code": 6102,
+      "name": "DaoFlagProtected",
+      "msg": "FLAG_DAO_COMMITTEE cannot be cleared via timelock — requires an explicit DAO governance vote"
+    },
+    {
+      "code": 6103,
+      "name": "NotAuthorizedToPropose",
+      "msg": "Caller is not the authority nor a registered committee member — cannot propose"
+    },
+    {
+      "code": 6104,
+      "name": "ComplianceAuthorityRequiresTimelock",
+      "msg": "Compliance authority changes require a timelocked operation"
+    },
+    {
+      "code": 6105,
+      "name": "TravelRuleRecordInvalid",
+      "msg": "Travel Rule record is invalid or does not match the transfer"
+    },
+    {
+      "code": 6106,
+      "name": "TravelRuleThresholdNotSet",
+      "msg": "Travel Rule threshold not set — call set_travel_rule_threshold first"
+    },
+    {
+      "code": 6107,
+      "name": "TravelRuleRequired",
+      "msg": "Travel Rule threshold requires a travel rule record for this amount"
+    },
+    {
+      "code": 6108,
+      "name": "SanctionedAddress",
+      "msg": "Sanctioned address — transfer blocked by sanctions oracle"
+    },
+    {
+      "code": 6109,
+      "name": "SanctionsRecordStale",
+      "msg": "Sanctions record is stale — oracle has not attested recently"
+    },
+    {
+      "code": 6110,
+      "name": "SanctionsRecordMissing",
+      "msg": "Sanctions record account is required when FLAG_SANCTIONS_ORACLE is set"
+    },
+    {
+      "code": 6111,
+      "name": "RedemptionPoolEmpty",
+      "msg": "Redemption pool is empty — no liquidity available"
+    },
+    {
+      "code": 6112,
+      "name": "RedemptionPoolFull",
+      "msg": "Redemption pool is full — liquidity exceeds max_pool_size"
+    },
+    {
+      "code": 6113,
+      "name": "RedemptionPoolMintMismatch",
+      "msg": "Redemption pool mint mismatch — pool does not match the stablecoin mint"
+    },
+    {
+      "code": 6114,
+      "name": "RedemptionPoolVaultMismatch",
+      "msg": "Redemption pool vault mismatch — vault does not match the pool's vault_token_account"
+    },
+    {
+      "code": 6115,
+      "name": "RedemptionAlreadyFulfilled",
+      "msg": "Redemption already fulfilled — cannot fulfill twice"
+    },
+    {
+      "code": 6116,
+      "name": "RedemptionNotExpired",
+      "msg": "Redemption not expired — SLA window has not elapsed"
+    },
+    {
+      "code": 6117,
+      "name": "RedemptionDailyLimitExceeded",
+      "msg": "Redemption daily limit exceeded — try again in the next window"
+    },
+    {
+      "code": 6118,
+      "name": "RedemptionFeeTooHigh",
+      "msg": "Redemption fee too high — max 500 bps (5%)"
+    },
+    {
+      "code": 6119,
+      "name": "RedemptionSLABreached",
+      "msg": "SLA has been breached — use claim_expired_redemption instead"
+    },
+    {
+      "code": 6120,
+      "name": "BridgeNotEnabled",
+      "msg": "Bridge is not enabled — FLAG_BRIDGE_ENABLED is not set"
+    },
+    {
+      "code": 6121,
+      "name": "BridgeConfigMintMismatch",
+      "msg": "Bridge config mint mismatch"
+    },
+    {
+      "code": 6122,
+      "name": "InvalidBridgeType",
+      "msg": "Bridge type invalid — must be 0 (Wormhole) or 1 (LayerZero)"
+    },
+    {
+      "code": 6123,
+      "name": "BridgeFeeTooHigh",
+      "msg": "Bridge fee too high — max 1000 bps (10%)"
+    },
+    {
+      "code": 6124,
+      "name": "BridgeAmountExceedsLimit",
+      "msg": "Bridge amount exceeds the per-tx limit"
+    },
+    {
+      "code": 6125,
+      "name": "BridgeProofEmpty",
+      "msg": "Bridge proof is empty"
+    },
+    {
+      "code": 6126,
+      "name": "BridgeRecipientMismatch",
+      "msg": "Bridge recipient mismatch"
+    },
+    {
+      "code": 6127,
+      "name": "BridgeRelayerUnauthorized",
+      "msg": "Bridge relayer is not authorized"
+    },
+    {
+      "code": 6128,
+      "name": "TokenAccountOwnerMismatch",
+      "msg": "Token account owner mismatch"
+    },
+    {
+      "code": 6129,
+      "name": "TokenAccountMintMismatch",
+      "msg": "Token account mint mismatch"
+    },
+    {
+      "code": 6130,
+      "name": "FeeVaultMismatch",
+      "msg": "Fee vault does not match the configured fee vault"
+    },
+    {
+      "code": 6131,
+      "name": "InvalidCompositionBps",
+      "msg": "Invalid composition — bps components must sum to 10_000"
+    },
+    {
+      "code": 6132,
+      "name": "MarketMakerHooksDisabled",
+      "msg": "Market maker hooks disabled — FLAG_MARKET_MAKER_HOOKS not set"
+    },
+    {
+      "code": 6133,
+      "name": "MarketMakerHooksNotEnabled",
+      "msg": "Market maker hooks not enabled"
+    },
+    {
+      "code": 6134,
+      "name": "NotWhitelistedMarketMaker",
+      "msg": "Caller is not a whitelisted market maker"
+    },
+    {
+      "code": 6135,
+      "name": "MarketMakerListFull",
+      "msg": "Market maker list is full (max 8)"
+    },
+    {
+      "code": 6136,
+      "name": "MarketMakerAlreadyRegistered",
+      "msg": "Market maker is already registered"
+    },
+    {
+      "code": 6137,
+      "name": "MmMintLimitExceeded",
+      "msg": "MM mint limit exceeded for this slot"
+    },
+    {
+      "code": 6138,
+      "name": "MmBurnLimitExceeded",
+      "msg": "MM burn limit exceeded for this slot"
+    },
+    {
+      "code": 6139,
+      "name": "OraclePriceOutsideSpread",
+      "msg": "Oracle price is outside spread threshold — mm_mint/mm_burn not permitted"
+    },
+    {
+      "code": 6140,
+      "name": "KeeperConfigMintMismatch",
+      "msg": "Keeper config mint mismatch"
+    },
+    {
+      "code": 6141,
+      "name": "CircuitBreakerNotArmed",
+      "msg": "Circuit breaker is not armed — deviation is within threshold"
+    },
+    {
+      "code": 6142,
+      "name": "PegStillDeviating",
+      "msg": "Peg is still deviating — cannot auto-unpause yet"
+    },
+    {
+      "code": 6143,
+      "name": "PegWithinThreshold",
+      "msg": "Peg is within threshold — no action needed"
+    },
+    {
+      "code": 6144,
+      "name": "KeeperCooldownActive",
+      "msg": "Keeper cooldown is active — wait before triggering again"
+    },
+    {
+      "code": 6145,
+      "name": "KeeperRecoveryWindowNotMet",
+      "msg": "Recovery window not met — peg must stay stable for sustained_recovery_slots"
+    },
+    {
+      "code": 6146,
+      "name": "InvalidKeeperDeviation",
+      "msg": "Invalid keeper deviation threshold"
+    },
+    {
+      "code": 6147,
+      "name": "InvalidKeeperCooldown",
+      "msg": "Invalid keeper cooldown — must be > 0"
+    },
+    {
+      "code": 6148,
+      "name": "InvalidKeeperRecovery",
+      "msg": "Invalid keeper recovery — sustained_recovery_slots must be > 0"
+    },
+    {
+      "code": 6149,
+      "name": "NotPaused",
+      "msg": "Mint is not paused"
+    },
+    {
+      "code": 6150,
+      "name": "RedemptionQueueNotInitialized",
+      "msg": "Redemption queue not initialized — call init_redemption_queue first"
+    },
+    {
+      "code": 6151,
+      "name": "RedemptionQueueFull",
+      "msg": "Redemption queue is full"
+    },
+    {
+      "code": 6152,
+      "name": "RedemptionAlreadyProcessed",
+      "msg": "Redemption already processed"
+    },
+    {
+      "code": 6153,
+      "name": "RedemptionNotReady",
+      "msg": "Redemption not ready — min_delay_slots not elapsed"
+    },
+    {
+      "code": 6154,
+      "name": "RedemptionNotOwner",
+      "msg": "Caller is not the owner of this redemption entry"
+    },
+    {
+      "code": 6155,
+      "name": "RedemptionSlotCapExceeded",
+      "msg": "Redemption slot cap exceeded — too many redeemed this slot"
+    },
+    {
+      "code": 6156,
+      "name": "UpgradeAuthorityGuardNotSet",
+      "msg": "Upgrade authority guard is not set"
+    },
+    {
+      "code": 6157,
+      "name": "UpgradeAuthorityGuardAlreadySet",
+      "msg": "Upgrade authority guard is already set (irreversible)"
+    },
+    {
+      "code": 6158,
+      "name": "UpgradeAuthorityGuardInvalidKey",
+      "msg": "Upgrade authority guard key is invalid (zero or mismatches squads_multisig)"
+    },
+    {
+      "code": 6159,
+      "name": "UpgradeAuthorityMismatch",
+      "msg": "Upgrade authority mismatch — actual BPF upgrade authority differs from guard"
+    },
+    {
+      "code": 6160,
+      "name": "GuardianListEmpty",
+      "msg": "Guardian list is empty — add at least one guardian before setting threshold"
+    },
+    {
+      "code": 6161,
+      "name": "GuardianListFull",
+      "msg": "Guardian list is full (max 7)"
+    },
+    {
+      "code": 6162,
+      "name": "InvalidGuardianThreshold",
+      "msg": "Invalid guardian threshold — must be >= 1 and <= guardians.len()"
+    },
+    {
+      "code": 6163,
+      "name": "DuplicateGuardian",
+      "msg": "Duplicate guardian pubkey in list"
+    },
+    {
+      "code": 6164,
+      "name": "NotAGuardian",
+      "msg": "Caller is not a registered guardian"
+    },
+    {
+      "code": 6165,
+      "name": "GuardianPauseTimelockActive",
+      "msg": "Guardian-initiated pause timelock is still active"
+    },
+    {
+      "code": 6166,
+      "name": "ConfigVersionTooOld",
+      "msg": "Config version is too old — upgrade the config before calling this instruction"
+    },
+    {
+      "code": 6167,
+      "name": "OracleConsensusNotFound",
+      "msg": "OracleConsensus PDA not found — call init_oracle_consensus first"
+    },
+    {
+      "code": 6168,
+      "name": "PoRNotAttested",
+      "msg": "Proof-of-Reserves has not been attested yet"
+    },
+    {
+      "code": 6169,
+      "name": "PoRBreachHaltsMinting",
+      "msg": "Proof-of-Reserves breach: reserve ratio below minimum — minting halted"
+    },
+    {
+      "code": 6170,
+      "name": "SupplyCapRequired",
+      "msg": "Supply cap is required for SSS-3 preset — set max_supply > 0"
+    },
+    {
+      "code": 6171,
+      "name": "CredentialRegistryNotFound",
+      "msg": "CredentialRegistry not found — call init_credential_registry first"
+    },
+    {
+      "code": 6172,
+      "name": "InsufficientOracles",
+      "msg": "Insufficient valid oracle sources for consensus"
+    },
+    {
+      "code": 6173,
+      "name": "InvalidLegalEntityAttestor",
+      "msg": "Invalid legal entity attestor — attestor pubkey does not match registry"
+    },
+    {
+      "code": 6174,
+      "name": "InvalidLegalEntityHash",
+      "msg": "Invalid legal entity hash — hash must be 32 non-zero bytes"
+    },
+    {
+      "code": 6175,
+      "name": "InvalidLegalEntityJurisdiction",
+      "msg": "Invalid jurisdiction — must be a 2-character ISO 3166-1 alpha-2 code"
+    },
+    {
+      "code": 6176,
+      "name": "InvalidLiquidationTierConfig",
+      "msg": "Invalid liquidation tier config — thresholds must be ordered and bonuses within bounds"
+    },
+    {
+      "code": 6177,
+      "name": "InvalidOracleConsensusConfig",
+      "msg": "Invalid oracle consensus config — check num_sources and max_age_slots"
+    },
+    {
+      "code": 6178,
+      "name": "InvalidOracleSourceIndex",
+      "msg": "Invalid oracle source index — index out of range"
+    },
+    {
+      "code": 6179,
+      "name": "InvalidPidFeeRange",
+      "msg": "Invalid PID fee range — min_fee_bps must be <= max_fee_bps"
+    },
+    {
+      "code": 6180,
+      "name": "InvalidPsmCurveBaseFee",
+      "msg": "Invalid PSM curve base fee — must be <= max_fee_bps"
+    },
+    {
+      "code": 6181,
+      "name": "InvalidPsmCurveMaxFee",
+      "msg": "Invalid PSM curve max fee — exceeds maximum allowed (1000 bps)"
+    },
+    {
+      "code": 6182,
+      "name": "InvalidRateLimitAmount",
+      "msg": "Invalid rate limit amount — must be > 0"
+    },
+    {
+      "code": 6183,
+      "name": "InvalidRateLimitWindow",
+      "msg": "Invalid rate limit window — window_slots must be > 0"
+    },
+    {
+      "code": 6184,
+      "name": "InvalidZkProof",
+      "msg": "Invalid ZK proof — proof verification failed"
+    },
+    {
+      "code": 6185,
+      "name": "LegalEntityAlreadyAttested",
+      "msg": "Legal entity has already been attested — cannot attest twice"
+    },
+    {
+      "code": 6186,
+      "name": "LegalEntityExpired",
+      "msg": "Legal entity record has expired"
+    },
+    {
+      "code": 6187,
+      "name": "MultiOracleNotEnabled",
+      "msg": "Multi-oracle consensus not enabled — FLAG_MULTI_ORACLE_CONSENSUS is not set"
+    },
+    {
+      "code": 6188,
+      "name": "OracleNoSourcesConfigured",
+      "msg": "No oracle sources configured for consensus"
+    },
+    {
+      "code": 6189,
+      "name": "OracleRemainingAccountsMismatch",
+      "msg": "Oracle remaining accounts count does not match num_sources"
+    },
+    {
+      "code": 6190,
+      "name": "PidConfigNotFound",
+      "msg": "PID config not found — call init_pid_config first"
+    },
+    {
+      "code": 6191,
+      "name": "PsmCurveConfigNotFound",
+      "msg": "PSM curve config not found — call init_psm_curve_config first"
+    },
+    {
+      "code": 6192,
+      "name": "PsmDynamicFeesNotEnabled",
+      "msg": "PSM dynamic fees not enabled — FLAG_PSM_DYNAMIC_FEES is not set"
+    },
+    {
+      "code": 6193,
+      "name": "PsmSwapOutputZero",
+      "msg": "PSM dynamic swap output is zero after fee deduction"
+    },
+    {
+      "code": 6194,
+      "name": "SquadsAuthorityAlreadySet",
+      "msg": "Squads authority already set — FLAG_SQUADS_AUTHORITY is irreversible"
+    },
+    {
+      "code": 6195,
+      "name": "SquadsAuthorityNotSet",
+      "msg": "Squads authority not set — FLAG_SQUADS_AUTHORITY is not enabled"
+    },
+    {
+      "code": 6196,
+      "name": "SquadsDuplicateMember",
+      "msg": "Duplicate member in Squads member list"
+    },
+    {
+      "code": 6197,
+      "name": "SquadsMembersEmpty",
+      "msg": "Squads member list is empty — provide at least one member"
+    },
+    {
+      "code": 6198,
+      "name": "SquadsMembersTooMany",
+      "msg": "Squads member list is too large — max 10 members"
+    },
+    {
+      "code": 6199,
+      "name": "SquadsMultisigPdaInvalid",
+      "msg": "Squads multisig PDA is invalid — does not match expected derivation"
+    },
+    {
+      "code": 6200,
+      "name": "SquadsSignerMismatch",
+      "msg": "Squads signer does not match the configured multisig_pda"
+    },
+    {
+      "code": 6201,
+      "name": "SquadsThresholdExceedsMembers",
+      "msg": "Squads threshold exceeds member count"
+    },
+    {
+      "code": 6202,
+      "name": "SquadsThresholdZero",
+      "msg": "Squads threshold must be >= 1"
+    },
+    {
+      "code": 6203,
+      "name": "WalletRateLimitExceeded",
+      "msg": "Wallet rate limit exceeded — transfer would exceed window allowance"
+    },
+    {
+      "code": 6204,
+      "name": "WalletRateLimitsNotEnabled",
+      "msg": "Wallet rate limits not enabled — FLAG_WALLET_RATE_LIMITS is not set"
     }
   ],
   "types": [
@@ -6127,6 +10417,110 @@
       }
     },
     {
+      "name": "AuthorityRotationCancelled",
+      "docs": [
+        "Emitted when the current authority cancels an in-flight rotation proposal."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "cancelled_new_authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AuthorityRotationCompleted",
+      "docs": [
+        "Emitted when the new_authority accepts the rotation after the timelock."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "prev_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AuthorityRotationEmergencyRecovered",
+      "docs": [
+        "Emitted when the backup_authority claims authority via emergency recovery."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "prev_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "backup_authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AuthorityRotationProposed",
+      "docs": [
+        "Emitted when an authority rotation is proposed."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "current_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "backup_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "proposed_slot",
+            "type": "u64"
+          },
+          {
+            "name": "timelock_slots",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "BadDebtTriggered",
       "docs": [
         "Emitted when a bad-debt backstop draw occurs."
@@ -6149,6 +10543,13 @@
             "type": "u64"
           },
           {
+            "name": "computed_shortfall",
+            "docs": [
+              "Computed on-chain shortfall (debt − collateral value, in SSS native units)."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "remaining_shortfall",
             "docs": [
               "Remaining shortfall after backstop draw (0 if fully covered)."
@@ -6161,6 +10562,103 @@
               "Net supply (outstanding debt) at trigger time."
             ],
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BridgeConfigInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "bridge_type",
+            "type": "u8"
+          },
+          {
+            "name": "bridge_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "max_bridge_amount_per_tx",
+            "type": "u64"
+          },
+          {
+            "name": "bridge_fee_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BridgeIn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "source_chain",
+            "type": "u16"
+          },
+          {
+            "name": "bridge_type",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BridgeOut",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "sender",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "fee_amount",
+            "type": "u64"
+          },
+          {
+            "name": "target_chain",
+            "type": "u16"
+          },
+          {
+            "name": "recipient_address",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "bridge_type",
+            "type": "u8"
           }
         ]
       }
@@ -6392,6 +10890,199 @@
           },
           {
             "name": "remaining_debt",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ChannelDisputed",
+      "docs": [
+        "Emitted when a channel is placed in dispute."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "channel_id",
+            "type": "u64"
+          },
+          {
+            "name": "initiator",
+            "type": "pubkey"
+          },
+          {
+            "name": "counterparty",
+            "type": "pubkey"
+          },
+          {
+            "name": "evidence_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ChannelForceClosed",
+      "docs": [
+        "Emitted when a channel is force-closed by the initiator after timeout."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "channel_id",
+            "type": "u64"
+          },
+          {
+            "name": "initiator",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount_returned",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ChannelOpened",
+      "docs": [
+        "Emitted when a new agent payment channel is opened."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "channel_id",
+            "type": "u64"
+          },
+          {
+            "name": "initiator",
+            "type": "pubkey"
+          },
+          {
+            "name": "counterparty",
+            "type": "pubkey"
+          },
+          {
+            "name": "stable_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "initiator_deposit",
+            "type": "u64"
+          },
+          {
+            "name": "dispute_policy",
+            "type": "u8"
+          },
+          {
+            "name": "timeout_slots",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ChannelSettled",
+      "docs": [
+        "Emitted when a channel is mutually settled."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "channel_id",
+            "type": "u64"
+          },
+          {
+            "name": "initiator",
+            "type": "pubkey"
+          },
+          {
+            "name": "counterparty",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount_to_counterparty",
+            "type": "u64"
+          },
+          {
+            "name": "amount_to_initiator",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CircuitBreakerAutoUnpaused",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "caller",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle_price",
+            "type": "i64"
+          },
+          {
+            "name": "target_price",
+            "type": "u64"
+          },
+          {
+            "name": "deviation_bps",
+            "type": "u64"
+          },
+          {
+            "name": "recovery_slots",
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CircuitBreakerTriggered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "keeper",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle_price",
+            "type": "i64"
+          },
+          {
+            "name": "target_price",
+            "type": "u64"
+          },
+          {
+            "name": "deviation_bps",
+            "type": "u64"
+          },
+          {
+            "name": "slot",
             "type": "u64"
           }
         ]
@@ -6690,6 +11381,128 @@
       }
     },
     {
+      "name": "ConfigMigrated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "from_version",
+            "type": "u8"
+          },
+          {
+            "name": "to_version",
+            "type": "u8"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CredentialIssued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "issued_slot",
+            "type": "u64"
+          },
+          {
+            "name": "expires_slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CredentialRegistryInitialised",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "issuer",
+            "type": "pubkey"
+          },
+          {
+            "name": "merkle_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "credential_ttl_slots",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CredentialRegistryRootRotated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_merkle_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CredentialRevoked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "holder",
+            "type": "pubkey"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "DaoCommitteeConfig",
       "docs": [
         "DAO Committee Config PDA — tracks committee members and proposal counter.",
@@ -6732,6 +11545,194 @@
           },
           {
             "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardianConfig",
+      "docs": [
+        "GuardianConfig PDA — one per stablecoin config.",
+        "Seeds: [b\"guardian-config\", config_pubkey]",
+        "",
+        "Stores up to 7 guardian pubkeys and a threshold.  Guardians may only",
+        "pause or unpause the mint — they cannot mint, burn, or alter fees."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "docs": [
+              "The StablecoinConfig this guardian set governs."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "guardians",
+            "docs": [
+              "Registered guardian pubkeys (1–7)."
+            ],
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "threshold",
+            "docs": [
+              "Minimum votes required to execute a pause proposal."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "next_proposal_id",
+            "docs": [
+              "Auto-incrementing ID assigned to the next PauseProposal."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "pending_lift_votes",
+            "docs": [
+              "Votes accumulated for lifting the current pause via full-quorum path.",
+              "Reset to empty when the pause is lifted."
+            ],
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "guardian_pause_active",
+            "docs": [
+              "BUG-018: Set to true when a guardian-quorum pause is active.",
+              "Authority alone CANNOT lift the pause while this is true + timelock active."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "guardian_pause_unlocks_at",
+            "docs": [
+              "BUG-018: Unix timestamp after which authority may lift a guardian-initiated",
+              "pause unilaterally (GUARDIAN_PAUSE_AUTHORITY_OVERRIDE_DELAY seconds after pause).",
+              "Zero when no guardian pause is active."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardianPauseAuthorityOverride",
+      "docs": [
+        "Emitted when authority lifts a guardian pause after the timelock has expired."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp when override occurred."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardianPauseLifted",
+      "docs": [
+        "Emitted when a guardian-imposed pause is lifted."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "lifted_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "by_quorum",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardianPauseProposed",
+      "docs": [
+        "Emitted when a guardian opens a new pause proposal."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "proposer",
+            "type": "pubkey"
+          },
+          {
+            "name": "proposal_id",
+            "type": "u64"
+          },
+          {
+            "name": "reason",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardianPauseVoted",
+      "docs": [
+        "Emitted when a guardian votes on an open pause proposal."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "guardian",
+            "type": "pubkey"
+          },
+          {
+            "name": "proposal_id",
+            "type": "u64"
+          },
+          {
+            "name": "votes_so_far",
+            "type": "u8"
+          },
+          {
+            "name": "threshold",
             "type": "u8"
           }
         ]
@@ -6838,6 +11839,204 @@
                 ]
               }
             }
+          },
+          {
+            "name": "admin_timelock_delay",
+            "docs": [
+              "Override the admin timelock delay (slots). None = use DEFAULT_ADMIN_TIMELOCK_DELAY.",
+              "Pass Some(0) in test environments to allow direct admin calls without going",
+              "through the propose/execute timelock flow."
+            ],
+            "type": {
+              "option": "u64"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "InstantRedemption",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "burned",
+            "type": "u64"
+          },
+          {
+            "name": "received",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          },
+          {
+            "name": "remaining_liquidity",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InsuranceDrawn",
+      "docs": [
+        "Emitted when the insurance vault is drawn to cover protocol losses."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "reason_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "remaining_balance",
+            "type": "u64"
+          },
+          {
+            "name": "total_drawn",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InsuranceVault",
+      "docs": [
+        "First-loss insurance vault PDA — holds collateral seeded by the issuer.",
+        "Seeds: [b\"insurance-vault\", sss_mint]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "docs": [
+              "The SSS stablecoin mint this vault protects."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "vault_token_account",
+            "docs": [
+              "The token account holding the vault's collateral."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "min_seed_bps",
+            "docs": [
+              "Minimum seed as basis points of net_supply (e.g. 200 = 2%)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "current_balance",
+            "docs": [
+              "Current token balance in the vault (in collateral native units)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_drawn",
+            "docs": [
+              "Total tokens drawn from the vault to cover bad debt."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_draw_per_event_bps",
+            "docs": [
+              "Per-event draw cap in bps of net_supply (0 = no cap)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "adequately_seeded",
+            "docs": [
+              "True when current_balance >= required seed amount."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InsuranceVaultReplenished",
+      "docs": [
+        "Emitted when the insurance vault is replenished."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "contributor",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_balance",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InsuranceVaultSeeded",
+      "docs": [
+        "Emitted when the insurance vault is seeded."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "current_balance",
+            "type": "u64"
+          },
+          {
+            "name": "adequately_seeded",
+            "type": "bool"
           }
         ]
       }
@@ -6896,6 +12095,453 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "IssuerRegistry",
+      "docs": [
+        "On-chain issuer registry for regulatory traceability.",
+        "",
+        "Seeds: [b\"issuer_registry\", config_pubkey]",
+        "",
+        "Optional PDA enabled by FLAG_LEGAL_REGISTRY (bit 24). Allows regulators",
+        "and on-chain programs to verify the issuer's legal entity details without",
+        "trusting off-chain data. The `attestor` is a notary or lawyer whose Pubkey",
+        "co-signs the record via `attest_legal_entity`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "docs": [
+              "StablecoinConfig this registry belongs to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "legal_entity_hash",
+            "docs": [
+              "SHA-256 hash of the legal entity document (e.g. articles of incorporation)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "jurisdiction",
+            "docs": [
+              "ISO 3166-1 alpha-2 country code encoded as UTF-8 bytes, zero-padded to 4."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                4
+              ]
+            }
+          },
+          {
+            "name": "registration_number_hash",
+            "docs": [
+              "SHA-256 hash of the jurisdiction registration number (for privacy)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "attestor",
+            "docs": [
+              "Pubkey of the notary/lawyer who will attest this record."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "attested_slot",
+            "docs": [
+              "Slot at which the attestor signed (0 = not yet attested)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "expiry_slot",
+            "docs": [
+              "Slot after which this record is considered expired (0 = no expiry)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "attested",
+            "docs": [
+              "True after `attest_legal_entity` succeeds."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "KeeperConfigInitialised",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "deviation_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "keeper_reward_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "min_cooldown_slots",
+            "type": "u64"
+          },
+          {
+            "name": "sustained_recovery_slots",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "KeeperRewarded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "keeper",
+            "type": "pubkey"
+          },
+          {
+            "name": "reward_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LegalEntityAttested",
+      "docs": [
+        "Emitted when the attestor co-signs the registry record."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "attestor",
+            "type": "pubkey"
+          },
+          {
+            "name": "attested_slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LegalEntityRegistered",
+      "docs": [
+        "Emitted when a legal entity record is first registered."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "legal_entity_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "jurisdiction",
+            "type": {
+              "array": [
+                "u8",
+                4
+              ]
+            }
+          },
+          {
+            "name": "registration_number_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "attestor",
+            "type": "pubkey"
+          },
+          {
+            "name": "expiry_slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LegalEntityUpdated",
+      "docs": [
+        "Emitted when the authority updates the registry (resets attestation)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "legal_entity_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "jurisdiction",
+            "type": {
+              "array": [
+                "u8",
+                4
+              ]
+            }
+          },
+          {
+            "name": "registration_number_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "attestor",
+            "type": "pubkey"
+          },
+          {
+            "name": "expiry_slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LiquidationBonusConfigInitialised",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "tier1_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "tier1_bonus_bps",
+            "type": "u16"
+          },
+          {
+            "name": "tier2_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "tier2_bonus_bps",
+            "type": "u16"
+          },
+          {
+            "name": "tier3_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "tier3_bonus_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_bonus_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LiquidationBonusConfigUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_tier1_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "old_tier1_bonus_bps",
+            "type": "u16"
+          },
+          {
+            "name": "new_tier1_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "new_tier1_bonus_bps",
+            "type": "u16"
+          },
+          {
+            "name": "old_tier2_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "old_tier2_bonus_bps",
+            "type": "u16"
+          },
+          {
+            "name": "new_tier2_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "new_tier2_bonus_bps",
+            "type": "u16"
+          },
+          {
+            "name": "old_tier3_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "old_tier3_bonus_bps",
+            "type": "u16"
+          },
+          {
+            "name": "new_tier3_threshold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "new_tier3_bonus_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketMakerConfigInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "mm_mint_limit_per_slot",
+            "type": "u64"
+          },
+          {
+            "name": "mm_burn_limit_per_slot",
+            "type": "u64"
+          },
+          {
+            "name": "spread_bps",
+            "type": "u16"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketMakerRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "market_maker",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MintHaltedByPoRBreach",
+      "docs": [
+        "Emitted when minting is halted because the reserve ratio breaches the minimum."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "current_ratio_bps",
+            "type": "u64"
+          },
+          {
+            "name": "min_ratio_bps",
+            "type": "u64"
+          },
+          {
+            "name": "last_attestation_slot",
+            "type": "u64"
+          },
+          {
+            "name": "attempted_amount",
+            "type": "u64"
           }
         ]
       }
@@ -7005,6 +12651,563 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MmBurn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "market_maker",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MmCapacity",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint_remaining",
+            "type": "u64"
+          },
+          {
+            "name": "burn_remaining",
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MmMint",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "market_maker",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleConsensus",
+      "docs": [
+        "Multi-oracle consensus PDA — aggregates N price sources into a single",
+        "median/TWAP consensus price.",
+        "Seeds: [b\"oracle-consensus\", sss_mint]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "docs": [
+              "The SSS stablecoin mint this consensus belongs to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "min_oracles",
+            "docs": [
+              "Minimum number of valid sources required for consensus."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "outlier_threshold_bps",
+            "docs": [
+              "Maximum deviation in bps before a source is considered an outlier."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "source_count",
+            "docs": [
+              "Number of currently active sources (non-default feed)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "max_age_slots",
+            "docs": [
+              "Maximum age in slots for a source price to be included in consensus."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "sources",
+            "docs": [
+              "Fixed-size array of oracle sources (MAX_SOURCES slots)."
+            ],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "OracleSource"
+                }
+              }
+            }
+          },
+          {
+            "name": "last_consensus_price",
+            "docs": [
+              "The last computed consensus price (median of valid sources)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_consensus_slot",
+            "docs": [
+              "Slot at which the consensus was last updated."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "twap_price",
+            "docs": [
+              "Running TWAP price (exponential moving average)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "twap_last_slot",
+            "docs": [
+              "Slot of last TWAP update."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleConsensusUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "consensus_price",
+            "type": "u64"
+          },
+          {
+            "name": "source_count",
+            "type": "u8"
+          },
+          {
+            "name": "used_twap",
+            "type": "bool"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleOutlierRejected",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "source_index",
+            "type": "u8"
+          },
+          {
+            "name": "feed",
+            "type": "pubkey"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "median",
+            "type": "u64"
+          },
+          {
+            "name": "deviation_bps",
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleSource",
+      "docs": [
+        "A single oracle source entry stored inline in OracleConsensus.",
+        "oracle_type: 0=Pyth, 1=Switchboard, 2=Custom."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "oracle_type",
+            "docs": [
+              "Oracle type: 0=Pyth, 1=Switchboard, 2=Custom."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "feed",
+            "docs": [
+              "The oracle feed account address (Pubkey::default = empty slot)."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleStalenessDetected",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "source_index",
+            "type": "u8"
+          },
+          {
+            "name": "feed",
+            "type": "pubkey"
+          },
+          {
+            "name": "last_slot",
+            "type": "u64"
+          },
+          {
+            "name": "current_slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PauseProposal",
+      "docs": [
+        "PauseProposal PDA — one per proposal.",
+        "Seeds: [b\"pause-proposal\", config_pubkey, proposal_id.to_le_bytes()]",
+        "",
+        "Tracks YES votes on a pending emergency-pause proposal.",
+        "Once `votes.len() >= threshold` the proposal is auto-executed and",
+        "`executed` is set to `true`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "docs": [
+              "The StablecoinConfig this proposal targets."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "proposal_id",
+            "docs": [
+              "Sequential ID matching the `GuardianConfig.next_proposal_id` at creation."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "proposer",
+            "docs": [
+              "Guardian who opened the proposal (already counted as 1 vote)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "reason",
+            "docs": [
+              "Freeform reason bytes (e.g. incident hash or ASCII string)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "votes",
+            "docs": [
+              "Guardians who have voted YES (no duplicates)."
+            ],
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "threshold",
+            "docs": [
+              "Voting threshold copied from GuardianConfig at proposal creation."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "executed",
+            "docs": [
+              "True when the threshold was reached and the pause was applied."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PidConfigInitialised",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "kp",
+            "type": "i64"
+          },
+          {
+            "name": "ki",
+            "type": "i64"
+          },
+          {
+            "name": "kd",
+            "type": "i64"
+          },
+          {
+            "name": "target_price",
+            "type": "u64"
+          },
+          {
+            "name": "min_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_fee_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PidFeeUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "new_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "current_price",
+            "type": "u64"
+          },
+          {
+            "name": "target_price",
+            "type": "u64"
+          },
+          {
+            "name": "error",
+            "type": "i64"
+          },
+          {
+            "name": "integral",
+            "type": "i64"
+          },
+          {
+            "name": "derivative",
+            "type": "i64"
+          },
+          {
+            "name": "delta_bps",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProbabilisticCommitmentCreated",
+      "docs": [
+        "Emitted when a new probabilistic commitment is created (funds locked in escrow)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "docs": [
+              "StablecoinConfig PDA this commitment belongs to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "commitment_id",
+            "docs": [
+              "Unique commitment id (caller-provided, scoped to config)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "issuer",
+            "docs": [
+              "Account that locked the funds."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "claimant",
+            "docs": [
+              "Account authorised to claim on proof."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "stable_mint",
+            "docs": [
+              "SSS stablecoin mint."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "committed_amount",
+            "docs": [
+              "Total tokens committed."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "condition_hash",
+            "docs": [
+              "Condition hash the proof must match."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "expiry_slot",
+            "docs": [
+              "Slot after which issuer may claim a refund."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProbabilisticCommitmentResolved",
+      "docs": [
+        "Emitted on every resolution (full or partial) of a probabilistic commitment."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "docs": [
+              "StablecoinConfig PDA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "commitment_id",
+            "docs": [
+              "Commitment id being resolved."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "claimant",
+            "docs": [
+              "Claimant who received the tokens."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "amount_released",
+            "docs": [
+              "Amount released to claimant in this resolution."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "partial",
+            "docs": [
+              "True if this was a partial resolution (remainder returned to issuer)."
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -7136,6 +13339,114 @@
       }
     },
     {
+      "name": "PsmCurveConfigInitialised",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "base_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "curve_k",
+            "type": "u64"
+          },
+          {
+            "name": "max_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PsmCurveConfigUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_base_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "new_base_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "old_curve_k",
+            "type": "u64"
+          },
+          {
+            "name": "new_curve_k",
+            "type": "u64"
+          },
+          {
+            "name": "old_max_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "new_max_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PsmDynamicSwapEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "redeemer",
+            "type": "pubkey"
+          },
+          {
+            "name": "sss_burned",
+            "type": "u64"
+          },
+          {
+            "name": "collateral_out",
+            "type": "u64"
+          },
+          {
+            "name": "fee_collected",
+            "type": "u64"
+          },
+          {
+            "name": "fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "vault_amount_before",
+            "type": "u64"
+          },
+          {
+            "name": "total_reserves",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "PsmFeeUpdated",
       "docs": [
         "SSS-093: Emitted when the PSM redemption fee is updated."
@@ -7158,6 +13469,38 @@
           {
             "name": "authority",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PsmQuoteEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount_in",
+            "type": "u64"
+          },
+          {
+            "name": "expected_out",
+            "type": "u64"
+          },
+          {
+            "name": "expected_fee",
+            "type": "u64"
+          },
+          {
+            "name": "fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "vault_amount",
+            "type": "u64"
           }
         ]
       }
@@ -7210,6 +13553,392 @@
       }
     },
     {
+      "name": "RedemptionCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "queue_index",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "cancel_slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedemptionEntry",
+      "docs": [
+        "Individual entry in the redemption queue.",
+        "Seeds: [b\"redemption-entry\", sss_mint, queue_index.to_le_bytes()]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "queue_index",
+            "docs": [
+              "Index within the queue (matches queue_tail at enqueue time)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "owner",
+            "docs": [
+              "The wallet that submitted this redemption."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Amount of SSS tokens to redeem."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "enqueue_slot",
+            "docs": [
+              "Slot at which the request was enqueued."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "slot_hash_seed",
+            "docs": [
+              "Hash seed used for front-run protection (first 8 bytes of slot hash)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "fulfilled",
+            "docs": [
+              "True when the redemption has been fulfilled."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "cancelled",
+            "docs": [
+              "True when the redemption was cancelled by the owner."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedemptionFulfilled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "requested_slot",
+            "type": "u64"
+          },
+          {
+            "name": "fulfilled_slot",
+            "type": "u64"
+          },
+          {
+            "name": "sla_slots_used",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedemptionFulfilledQueued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "queue_index",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "enqueue_slot",
+            "type": "u64"
+          },
+          {
+            "name": "fulfilled_slot",
+            "type": "u64"
+          },
+          {
+            "name": "keeper",
+            "type": "pubkey"
+          },
+          {
+            "name": "keeper_reward_lamports",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedemptionPoolDrained",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedemptionPoolReplenished",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "replenisher",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "new_liquidity",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedemptionPoolSeeded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "new_liquidity",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedemptionQueue",
+      "docs": [
+        "Redemption queue PDA — front-run-protected FIFO queue.",
+        "Seeds: [b\"redemption-queue\", sss_mint]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "docs": [
+              "The SSS stablecoin mint this queue serves."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "queue_head",
+            "docs": [
+              "Index of the next entry to be fulfilled (FIFO head)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "queue_tail",
+            "docs": [
+              "Index of the next entry to be enqueued (tail)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "min_delay_slots",
+            "docs": [
+              "Minimum slots a request must wait before it can be fulfilled."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_queue_depth",
+            "docs": [
+              "Maximum number of pending entries."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_redemption_per_slot_bps",
+            "docs": [
+              "Maximum redemption per slot expressed as bps of net_supply (0 = no cap)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "last_slot_processed",
+            "docs": [
+              "Slot at which the last fulfillment occurred (for slot-cap tracking)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "slot_redemption_total",
+            "docs": [
+              "Total amount redeemed in `last_slot_processed`."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "keeper_reward_lamports",
+            "docs": [
+              "SOL reward paid to the keeper who fulfills a redemption entry."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedemptionQueued",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sss_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "queue_index",
+            "type": "u64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "enqueue_slot",
+            "type": "u64"
+          },
+          {
+            "name": "slot_hash_seed",
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "earliest_process_slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedemptionSLABreached",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "requested_slot",
+            "type": "u64"
+          },
+          {
+            "name": "expiry_slot",
+            "type": "u64"
+          },
+          {
+            "name": "claim_slot",
+            "type": "u64"
+          },
+          {
+            "name": "penalty_paid",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "RegisterCollateralParams",
       "type": {
         "kind": "struct",
@@ -7236,6 +13965,146 @@
               "0 = unlimited"
             ],
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReserveCompositionUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "updated_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "cash_bps",
+            "type": "u16"
+          },
+          {
+            "name": "t_bills_bps",
+            "type": "u16"
+          },
+          {
+            "name": "crypto_bps",
+            "type": "u16"
+          },
+          {
+            "name": "other_bps",
+            "type": "u16"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SanctionsOracleCleared",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SanctionsOracleSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle",
+            "type": "pubkey"
+          },
+          {
+            "name": "max_staleness_slots",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SanctionsRecordUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_sanctioned",
+            "type": "bool"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SquadsAuthorityInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "multisig_pda",
+            "type": "pubkey"
+          },
+          {
+            "name": "threshold",
+            "type": "u8"
+          },
+          {
+            "name": "member_count",
+            "type": "u8"
+          },
+          {
+            "name": "old_authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SquadsAuthorityVerified",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "multisig_pda",
+            "type": "pubkey"
+          },
+          {
+            "name": "verified",
+            "type": "bool"
           }
         ]
       }
@@ -7477,6 +14346,98 @@
             }
           },
           {
+            "name": "oracle_type",
+            "docs": [
+              "SSS-119: Oracle type discriminant. 0=Pyth (default), 1=Switchboard, 2=Custom.",
+              "Set via `set_oracle_config` (authority-only)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "oracle_feed",
+            "docs": [
+              "SSS-119: Generic oracle feed account address used by the oracle abstraction layer.",
+              "For Pyth: the Pyth price feed account (overrides expected_pyth_feed when set).",
+              "For Custom: the CustomPriceFeed PDA address.",
+              "Pubkey::default() = validation deferred to expected_pyth_feed (backward compat)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "supply_cap_locked",
+            "docs": [
+              "SSS-147: When true (set at initialize for preset==3), the max_supply / supply_cap",
+              "is immutable after initialization.  Prevents the authority from later expanding",
+              "the supply cap to defeat the SSS-3 trust-minimized minting invariant."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "version",
+            "docs": [
+              "Config version — incremented when breaking changes are made to the config layout.",
+              "Instructions that require a minimum version check against this field."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "min_reserve_ratio_bps",
+            "docs": [
+              "SSS-BUG-008: Minimum reserve ratio in basis points (0 = no minimum).",
+              "CDP minting is blocked when the reserve ratio drops below this threshold."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "travel_rule_threshold",
+            "docs": [
+              "SSS-127: Travel Rule transfer threshold in native token units.",
+              "0 = Travel Rule disabled regardless of FLAG_TRAVEL_RULE."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "sanctions_oracle",
+            "docs": [
+              "SSS-128: Sanctions oracle pubkey (compliance provider).",
+              "Pubkey::default() = sanctions oracle not configured."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "sanctions_max_staleness_slots",
+            "docs": [
+              "SSS-128: Maximum age in slots for a SanctionsRecord to be considered fresh.",
+              "0 = use hardcoded default."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "authorized_keepers",
+            "docs": [
+              "BUG-015: Whitelisted stability-fee / circuit-breaker keeper pubkeys (max 8)."
+            ],
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "squads_multisig",
+            "docs": [
+              "SSS-134: Squads V4 multisig PDA address when FLAG_SQUADS_AUTHORITY is set.",
+              "Pubkey::default() = squads authority not configured."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "expected_upgrade_authority",
+            "docs": [
+              "SSS-150: Expected BPF upgrade authority pubkey for upgrade guard enforcement.",
+              "Pubkey::default() = guard not set."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -7560,6 +14521,38 @@
       }
     },
     {
+      "name": "TravelRuleRecordSubmitted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "originator_vasp",
+            "type": "pubkey"
+          },
+          {
+            "name": "beneficiary_vasp",
+            "type": "pubkey"
+          },
+          {
+            "name": "transfer_amount",
+            "type": "u64"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "UpdateCollateralConfigParams",
       "type": {
         "kind": "struct",
@@ -7614,6 +14607,46 @@
       }
     },
     {
+      "name": "UpgradeAuthorityGuardSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "expected_upgrade_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UpgradeAuthorityVerified",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "expected_upgrade_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "VerificationRecord",
       "docs": [
         "Per-user ZK verification record PDA — one per (mint, user).",
@@ -7653,6 +14686,95 @@
           },
           {
             "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WalletRateLimitRemoved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WalletRateLimitSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "max_transfer_per_window",
+            "type": "u64"
+          },
+          {
+            "name": "window_slots",
+            "type": "u64"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WorkProofSubmitted",
+      "docs": [
+        "Emitted when a work proof is submitted to a channel."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "channel_id",
+            "type": "u64"
+          },
+          {
+            "name": "initiator",
+            "type": "pubkey"
+          },
+          {
+            "name": "task_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "output_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proof_type",
             "type": "u8"
           }
         ]
