@@ -217,18 +217,13 @@ pub enum SssError {
     RotationZeroPubkey,
     #[msg("Emergency recovery window has not elapsed (7 days required)")]
     EmergencyRecoveryNotReady,
-    // SSS-121: Guardian Multisig Emergency Pause
-    #[msg("Caller is not a registered guardian")]
-    NotAGuardian,
-    #[msg("Guardian list cannot be empty")]
-    GuardianListEmpty,
-    #[msg("Guardian list is full (max 7)")]
-    GuardianListFull,
-    #[msg("Guardian threshold must be ≥1 and ≤ guardians.len()")]
-    InvalidGuardianThreshold,
-    #[msg("Duplicate guardian pubkey in list")]
-    DuplicateGuardian,
-    // BUG-018: Guardian pause override timelock
-    #[msg("Guardian-initiated pause cannot be lifted by authority alone until timelock expires; use guardian quorum instead")]
-    GuardianPauseTimelockActive,
+    // Insurance fund
+    #[msg("Insurance fund not configured — set insurance_fund_pubkey first")]
+    InsuranceFundNotConfigured,
+    // Oracle
+    #[msg("Oracle not configured — set oracle_type and oracle_feed first")]
+    OracleNotConfigured,
+    // BUG-019: Appended last to avoid shifting downstream discriminants
+    #[msg("Compliance authority transfer always requires propose_timelocked_op (op_kind=10) with minimum 432_000 slot delay")]
+    ComplianceAuthorityRequiresTimelock,
 }

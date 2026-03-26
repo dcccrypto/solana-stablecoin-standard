@@ -2955,6 +2955,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "sss-backend"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "axum-extra",
+ "base64 0.22.1",
+ "bs58",
+ "chrono",
+ "futures",
+ "hex",
+ "hmac",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "solana-program",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-tungstenite 0.21.0",
+ "tower",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "sss-cpi"
 version = "0.1.0"
 dependencies = [

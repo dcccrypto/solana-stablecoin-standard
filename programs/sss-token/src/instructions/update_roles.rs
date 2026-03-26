@@ -25,11 +25,19 @@ pub struct UpdateRoles<'info> {
 
 pub fn handler(ctx: Context<UpdateRoles>, params: UpdateRolesParams) -> Result<()> {
     let config = &mut ctx.accounts.config;
+    // BUG-019: Compliance authority transfer ALWAYS requires the admin timelock
+    // (minimum 432_000 slots), regardless of admin_timelock_delay setting.
+    // This check is placed FIRST to ensure a combined call (new_authority +
+    // new_compliance_authority) never partially succeeds before hitting this guard.
+    // Direct update_roles call is permanently blocked for compliance authority.
+    // Use propose_timelocked_op (op_kind=10) + execute_timelocked_op instead.
+    if params.new_compliance_authority.is_some() {
+        return err!(SssError::ComplianceAuthorityRequiresTimelock);
+    }
     if let Some(proposed) = params.new_authority {
         // SSS-113 CRIT-01: When an admin timelock delay is configured (> 0), authority
         // transfers MUST go through propose_timelocked_op / execute_timelocked_op to
         // prevent a compromised key from instantly hijacking the protocol.
-        // Compliance authority transfers are exempt (no timelock variant exists for that role).
         require!(
             config.admin_timelock_delay == 0,
             SssError::UseTimelockForAuthorityTransfer
@@ -41,21 +49,6 @@ pub fn handler(ctx: Context<UpdateRoles>, params: UpdateRolesParams) -> Result<(
             is_compliance: false,
         });
         msg!("Authority transfer proposed to {}", proposed);
-    }
-    if let Some(proposed) = params.new_compliance_authority {
-        // BUG-010: Compliance authority transfer must also go through the timelock
-        // when admin_timelock_delay > 0.  Use ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY
-        // (op_kind=10) in propose_timelocked_op / execute_timelocked_op.
-        if config.admin_timelock_delay > 0 {
-            return err!(SssError::UseTimelockForAuthorityTransfer);
-        }
-        config.pending_compliance_authority = proposed;
-        emit!(AuthorityProposed {
-            mint: config.mint,
-            proposed,
-            is_compliance: true,
-        });
-        msg!("Compliance authority transfer proposed to {}", proposed);
     }
     Ok(())
 }
