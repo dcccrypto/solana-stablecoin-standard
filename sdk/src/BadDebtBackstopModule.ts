@@ -41,6 +41,16 @@ export interface SetBackstopParamsArgs {
 export interface TriggerBackstopArgs {
   /** The SSS-3 stablecoin mint (preset 3 only). */
   mint: PublicKey;
+  /**
+   * The CDP owner whose position generated the bad debt.
+   * Used to derive the CdpPosition and CollateralVault PDAs on-chain.
+   */
+  cdpOwner: PublicKey;
+  /**
+   * Oracle price feed account — Pyth, Switchboard, or custom feed registered
+   * in StablecoinConfig.  The on-chain handler validates this against config.
+   */
+  oraclePriceFeed: PublicKey;
   /** Insurance fund token account (source of backstop collateral). */
   insuranceFund: PublicKey;
   /** Reserve vault token account (destination for backstop collateral). */
@@ -51,11 +61,6 @@ export interface TriggerBackstopArgs {
   insuranceFundAuthority: PublicKey;
   /** Token program for the collateral (usually TOKEN_PROGRAM_ID or TOKEN_2022_PROGRAM_ID). */
   collateralTokenProgram: PublicKey;
-  /**
-   * Post-liquidation shortfall in collateral native units.
-   * Must be > 0.
-   */
-  shortfallAmount: bigint;
 }
 
 /**
@@ -258,50 +263,71 @@ export class BadDebtBackstopModule {
    * Draws `min(maxDraw, insuranceFundBalance)` from the insurance fund into the
    * reserve vault.  Emits `BadDebtTriggered`.
    *
+   * BUG-031 fix: the shortfall is now computed entirely on-chain from the CDP
+   * position and oracle price feed — callers no longer supply `shortfallAmount`.
+   *
    * @param args.mint                   - The SSS-3 stablecoin mint.
+   * @param args.cdpOwner               - CDP owner whose position has bad debt.
+   * @param args.oraclePriceFeed        - Oracle price feed account.
+   * @param args.oracleConsensus        - Optional OracleConsensus PDA (when FLAG_MULTI_ORACLE_CONSENSUS set).
    * @param args.insuranceFund          - Insurance fund token account (source).
    * @param args.reserveVault           - Reserve vault token account (destination).
    * @param args.collateralMint         - Collateral token mint.
    * @param args.insuranceFundAuthority - Signer authorising the insurance fund transfer.
    * @param args.collateralTokenProgram - Token program for collateral.
-   * @param args.shortfallAmount        - Post-liquidation shortfall (must be > 0).
    * @returns Transaction signature.
-   * @throws When `shortfallAmount` is zero.
    */
   async triggerBackstop(args: TriggerBackstopArgs): Promise<TransactionSignature> {
     const {
       mint,
+      cdpOwner,
+      oraclePriceFeed,
       insuranceFund,
       reserveVault,
       collateralMint,
       insuranceFundAuthority,
       collateralTokenProgram,
-      shortfallAmount,
     } = args;
-
-    if (shortfallAmount <= 0n) {
-      throw new Error('shortfallAmount must be greater than zero');
-    }
 
     const [configPda] = this.configPda(mint);
 
-    // Instruction data: discriminator(8) + shortfall_amount(u64 LE)
-    const data = Buffer.alloc(16);
+    // Derive CdpPosition PDA: ["cdp-position", mint, cdpOwner]
+    const CDP_POSITION_SEED = Buffer.from('cdp-position');
+    const [cdpPositionPda] = PublicKey.findProgramAddressSync(
+      [CDP_POSITION_SEED, mint.toBuffer(), cdpOwner.toBuffer()],
+      this.programId,
+    );
+
+    // Derive CollateralVault PDA: ["cdp-collateral-vault", mint, cdpOwner, collateralMint]
+    const COLLATERAL_VAULT_SEED = Buffer.from('cdp-collateral-vault');
+    const [collateralVaultPda] = PublicKey.findProgramAddressSync(
+      [COLLATERAL_VAULT_SEED, mint.toBuffer(), cdpOwner.toBuffer(), collateralMint.toBuffer()],
+      this.programId,
+    );
+
+    // Instruction data: discriminator(8) + cdp_owner Pubkey (32 bytes)
+    const data = Buffer.alloc(40);
     DISCRIMINATOR_TRIGGER_BACKSTOP.copy(data, 0);
-    data.writeBigUInt64LE(shortfallAmount, 8);
+    cdpOwner.toBuffer().copy(data, 8);
+
+    // Build account keys in the order defined by TriggerBackstop<'info>
+    const keys = [
+      { pubkey: configPda, isSigner: true, isWritable: false },              // liquidation_authority (config PDA)
+      { pubkey: configPda, isSigner: false, isWritable: true },              // config (mut)
+      { pubkey: mint, isSigner: false, isWritable: false },                  // sss_mint
+      { pubkey: cdpPositionPda, isSigner: false, isWritable: false },        // cdp_position
+      { pubkey: collateralVaultPda, isSigner: false, isWritable: false },    // collateral_vault
+      { pubkey: collateralMint, isSigner: false, isWritable: false },        // collateral_mint
+      { pubkey: oraclePriceFeed, isSigner: false, isWritable: false },       // oracle_price_feed
+      { pubkey: insuranceFund, isSigner: false, isWritable: true },          // insurance_fund (mut)
+      { pubkey: reserveVault, isSigner: false, isWritable: true },           // reserve_vault (mut)
+      { pubkey: insuranceFundAuthority, isSigner: true, isWritable: false }, // insurance_fund_authority
+      { pubkey: collateralTokenProgram, isSigner: false, isWritable: false },// collateral_token_program
+    ];
 
     const ix = new TransactionInstruction({
       programId: this.programId,
-      keys: [
-        { pubkey: configPda, isSigner: true, isWritable: false },  // liquidation_authority (config PDA)
-        { pubkey: configPda, isSigner: false, isWritable: true },   // config (mut)
-        { pubkey: mint, isSigner: false, isWritable: false },
-        { pubkey: insuranceFund, isSigner: false, isWritable: true },
-        { pubkey: reserveVault, isSigner: false, isWritable: true },
-        { pubkey: collateralMint, isSigner: false, isWritable: false },
-        { pubkey: insuranceFundAuthority, isSigner: true, isWritable: false },
-        { pubkey: collateralTokenProgram, isSigner: false, isWritable: false },
-      ],
+      keys,
       data,
     });
 

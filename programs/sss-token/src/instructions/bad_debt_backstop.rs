@@ -2,7 +2,8 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked};
 
 use crate::error::SssError;
-use crate::state::StablecoinConfig;
+use crate::oracle;
+use crate::state::{CdpPosition, CollateralVault, StablecoinConfig};
 
 // ─── Events ──────────────────────────────────────────────────────────────────
 
@@ -13,6 +14,8 @@ pub struct BadDebtTriggered {
     pub sss_mint: Pubkey,
     /// Amount of collateral transferred from the insurance fund (native token units).
     pub backstop_amount: u64,
+    /// Computed on-chain shortfall (debt − collateral value, in SSS native units).
+    pub computed_shortfall: u64,
     /// Remaining shortfall after backstop draw (0 if fully covered).
     pub remaining_shortfall: u64,
     /// Net supply (outstanding debt) at trigger time.
@@ -82,18 +85,25 @@ pub fn set_backstop_params_handler(
 /// Draws up to `max_backstop_bps` of outstanding debt from the insurance fund
 /// to cover the shortfall.  Emits `BadDebtTriggered`.
 ///
+/// # BUG-031 Fix: on-chain shortfall computation
+///
+/// The shortfall is now computed entirely from on-chain state:
+///   shortfall = cdp_position.debt_amount − collateral_value_in_sss_units
+///
+/// where collateral_value_in_sss_units is derived from the oracle price:
+///   collateral_value = deposited_amount * oracle_price / 10^(coll_decimals + expo_abs - sss_decimals)
+///
+/// If collateral_value >= debt the position is no longer under-water and the
+/// instruction reverts with `NoBadDebt`.  This prevents any caller from inflating
+/// the shortfall to drain more from the insurance fund than the actual deficit.
+///
 /// Access control: only the CDP liquidation PDA (`cdp_liquidate` signer) may call
 /// this.  In practice this means the instruction must be invoked *by the caller of
 /// `cdp_liquidate`* in the same transaction, with the config PDA as the signer
 /// authority.  We enforce this by requiring `liquidation_authority` == `config` key,
 /// which only the on-chain `cdp_liquidate` handler can supply.
-///
-/// Note: we accept `shortfall_amount` as an instruction argument (computed by the
-/// caller from post-liquidation state) to avoid re-running the oracle here.  The
-/// instruction independently verifies that bad debt is plausible (net_supply > 0,
-/// backstop configured) but does NOT re-validate the oracle price — that validation
-/// already occurred inside `cdp_liquidate`.
 #[derive(Accounts)]
+#[instruction(cdp_owner: Pubkey)]
 pub struct TriggerBackstop<'info> {
     /// Must be the config PDA — enforces that only the liquidation handler (which
     /// holds a mutable borrow of config) can invoke trigger_backstop via CPI.
@@ -109,7 +119,43 @@ pub struct TriggerBackstop<'info> {
     )]
     pub config: Box<Account<'info, StablecoinConfig>>,
 
+    /// SSS stablecoin mint — used for decimal scaling.
     pub sss_mint: InterfaceAccount<'info, Mint>,
+
+    /// CDP position of the borrower whose bad debt is being covered.
+    /// Seeds: [b"cdp-position", sss_mint, cdp_owner]
+    #[account(
+        seeds = [CdpPosition::SEED, sss_mint.key().as_ref(), cdp_owner.as_ref()],
+        bump = cdp_position.bump,
+        constraint = cdp_position.sss_mint == sss_mint.key() @ SssError::Unauthorized,
+        constraint = cdp_position.collateral_mint == collateral_mint.key() @ SssError::WrongCollateralMint,
+    )]
+    pub cdp_position: Box<Account<'info, CdpPosition>>,
+
+    /// Collateral vault for this CDP — used to read remaining deposited_amount.
+    /// Seeds: [b"cdp-collateral-vault", sss_mint, cdp_owner, collateral_mint]
+    #[account(
+        seeds = [
+            CollateralVault::SEED,
+            sss_mint.key().as_ref(),
+            cdp_owner.as_ref(),
+            collateral_mint.key().as_ref(),
+        ],
+        bump = collateral_vault.bump,
+        constraint = collateral_vault.owner == cdp_owner @ SssError::Unauthorized,
+        constraint = collateral_vault.collateral_mint == collateral_mint.key() @ SssError::WrongCollateralMint,
+    )]
+    pub collateral_vault: Box<Account<'info, CollateralVault>>,
+
+    /// The collateral token mint — used for decimal scaling.
+    #[account(
+        constraint = collateral_mint.key() == config.collateral_mint @ SssError::WrongCollateralMint,
+    )]
+    pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    /// Oracle price feed account — validated by oracle::get_oracle_price via config.
+    /// CHECK: validated via config.oracle_feed / config.expected_pyth_feed inside oracle module.
+    pub oracle_price_feed: AccountInfo<'info>,
 
     /// Insurance fund token account — source of backstop collateral.
     #[account(
@@ -127,12 +173,6 @@ pub struct TriggerBackstop<'info> {
     )]
     pub reserve_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The collateral token mint (e.g. USDC).
-    #[account(
-        constraint = collateral_mint.key() == config.collateral_mint,
-    )]
-    pub collateral_mint: InterfaceAccount<'info, Mint>,
-
     /// Insurance fund authority — must sign to allow transfer from insurance fund.
     pub insurance_fund_authority: Signer<'info>,
 
@@ -141,7 +181,7 @@ pub struct TriggerBackstop<'info> {
 
 pub fn trigger_backstop_handler(
     ctx: Context<TriggerBackstop>,
-    shortfall_amount: u64,
+    _cdp_owner: Pubkey,
 ) -> Result<()> {
     let config = &ctx.accounts.config;
 
@@ -151,8 +191,55 @@ pub fn trigger_backstop_handler(
         SssError::BackstopNotConfigured
     );
 
-    // Shortfall must be non-zero.
-    require!(shortfall_amount > 0, SssError::NoBadDebt);
+    // ── BUG-031: Compute shortfall entirely on-chain ──────────────────────────
+    //
+    // shortfall (in SSS native units) = debt_amount − floor(collateral_value / oracle_price)
+    //
+    // collateral_value_in_sss = deposited_collateral * oracle_price * 10^sss_decimals
+    //                           / (10^coll_decimals * 10^price_expo_abs)
+    //
+    // If collateral_value_in_sss >= debt_amount → no bad debt → revert.
+
+    let clock = Clock::get()?;
+
+    // Use the base oracle price (no multi-oracle consensus for backstop CPI path).
+    // The oracle validity was already checked by cdp_liquidate in the same transaction.
+    let oracle_price = oracle::get_oracle_price(
+        &ctx.accounts.oracle_price_feed,
+        config,
+        &clock,
+    )?;
+
+    let deposited = ctx.accounts.collateral_vault.deposited_amount;
+    let debt = ctx.accounts.cdp_position.debt_amount;
+    let accrued_fees = ctx.accounts.cdp_position.accrued_fees;
+    let effective_debt = debt.checked_add(accrued_fees).unwrap_or(debt);
+
+    let collateral_decimals = ctx.accounts.collateral_mint.decimals as u32;
+    let sss_decimals = ctx.accounts.sss_mint.decimals as u32;
+    let price_val = oracle_price.price as u128;
+    let price_expo_abs = oracle_price.expo.unsigned_abs();
+
+    // collateral_value_in_sss_native (same units as debt_amount):
+    //   = deposited * price_val * 10^sss_decimals
+    //     / (10^coll_decimals * 10^price_expo_abs)
+    //
+    // We compute in u128 to avoid overflow.
+    let collateral_value_in_sss: u128 = (deposited as u128)
+        .checked_mul(price_val)
+        .ok_or(error!(SssError::InvalidPrice))?
+        .checked_mul(10u128.pow(sss_decimals))
+        .ok_or(error!(SssError::InvalidPrice))?
+        / 10u128.pow(collateral_decimals)
+        / 10u128.pow(price_expo_abs);
+
+    // If collateral covers the full debt → no bad debt.
+    require!(
+        (effective_debt as u128) > collateral_value_in_sss,
+        SssError::NoBadDebt
+    );
+
+    let shortfall_amount = ((effective_debt as u128).saturating_sub(collateral_value_in_sss)) as u64;
 
     // Insurance fund must have a balance.
     let fund_balance = ctx.accounts.insurance_fund.amount;
@@ -200,12 +287,14 @@ pub fn trigger_backstop_handler(
     emit!(BadDebtTriggered {
         sss_mint: ctx.accounts.sss_mint.key(),
         backstop_amount,
+        computed_shortfall: shortfall_amount,
         remaining_shortfall,
         net_supply,
     });
 
     msg!(
-        "BadDebt backstop triggered: drew {} collateral from insurance fund; remaining shortfall={}; net_supply={}",
+        "BadDebt backstop triggered (on-chain shortfall={}): drew {} collateral from insurance fund; remaining shortfall={}; net_supply={}",
+        shortfall_amount,
         backstop_amount,
         remaining_shortfall,
         net_supply,

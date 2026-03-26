@@ -246,34 +246,45 @@ describe('SSS-100: BadDebtBackstopModule — contribute / withdraw / socializati
 
   // ─── triggerBadDebtSocialization ──────────────────────────────────────────
 
-  it('11. triggerBadDebtSocialization delegates to triggerBackstop', async () => {
+  it('11. triggerBadDebtSocialization delegates to triggerBackstop (BUG-031: no shortfallAmount)', async () => {
+    // BUG-031: shortfall is now computed on-chain — callers pass cdpOwner + oracle accounts instead.
     const spy = vi.spyOn(module, 'triggerBackstop').mockResolvedValue('socializedTxSig');
+    const CDP_OWNER = Keypair.generate().publicKey;
+    const ORACLE_FEED = Keypair.generate().publicKey;
     const args = {
       mint: MINT,
+      cdpOwner: CDP_OWNER,
+      oraclePriceFeed: ORACLE_FEED,
       insuranceFund: INSURANCE_FUND,
       reserveVault: RESERVE_VAULT,
       collateralMint: COLLATERAL_MINT,
       insuranceFundAuthority: FUND_AUTHORITY,
       collateralTokenProgram: TOKEN_PROGRAM_ID,
-      shortfallAmount: 300_000n,
     };
     const sig = await module.triggerBadDebtSocialization(args);
     expect(sig).toBe('socializedTxSig');
     expect(spy).toHaveBeenCalledWith(args);
   });
 
-  it('12. triggerBadDebtSocialization passes shortfallAmount through', async () => {
+  it('12. triggerBadDebtSocialization passes cdpOwner and oraclePriceFeed through (BUG-031)', async () => {
+    // BUG-031: verify the new required fields are forwarded correctly.
     const spy = vi.spyOn(module, 'triggerBackstop').mockResolvedValue('ok');
+    const CDP_OWNER = Keypair.generate().publicKey;
+    const ORACLE_FEED = Keypair.generate().publicKey;
     await module.triggerBadDebtSocialization({
       mint: MINT,
+      cdpOwner: CDP_OWNER,
+      oraclePriceFeed: ORACLE_FEED,
       insuranceFund: INSURANCE_FUND,
       reserveVault: RESERVE_VAULT,
       collateralMint: COLLATERAL_MINT,
       insuranceFundAuthority: FUND_AUTHORITY,
       collateralTokenProgram: TOKEN_PROGRAM_ID,
-      shortfallAmount: 999n,
     });
-    expect(spy.mock.calls[0][0].shortfallAmount).toBe(999n);
+    expect(spy.mock.calls[0][0].cdpOwner.toBase58()).toBe(CDP_OWNER.toBase58());
+    expect(spy.mock.calls[0][0].oraclePriceFeed.toBase58()).toBe(ORACLE_FEED.toBase58());
+    // Confirm no shortfallAmount field present
+    expect((spy.mock.calls[0][0] as any).shortfallAmount).toBeUndefined();
   });
 
   // ─── fetchBackstopFundState ───────────────────────────────────────────────
