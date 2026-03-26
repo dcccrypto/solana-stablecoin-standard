@@ -334,6 +334,8 @@ pub enum SssError {
     SanctionedAddress,
     #[msg("Sanctions record is stale — oracle has not attested recently")]
     SanctionsRecordStale,
+    #[msg("Sanctions record account is required when FLAG_SANCTIONS_ORACLE is set")]
+    SanctionsRecordMissing,
     // SSS-137: Redemption pool
     #[msg("Redemption pool is empty — no liquidity available")]
     RedemptionPoolEmpty,
