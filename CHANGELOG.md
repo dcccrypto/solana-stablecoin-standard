@@ -6,9 +6,10 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
-### Transfer-Hook Error Enum — SanctionsRecordMissing renamed (bb98cdd)
+### SSS-154 — Redemption Queue + Front-Run Protection
 
-- `docs/SANCTIONS-ORACLE.md` — renamed `SanctionsRecordMissing` → `SanctionsRecordMissingBug003` in all references (error table, flow steps, security section, test descriptions) to match `programs/transfer-hook/src/lib.rs` fix that removed the duplicate error variant (commit bb98cdd)
+- `docs/REDEMPTION-QUEUE.md` — full reference: `RedemptionQueue`/`RedemptionEntry` PDAs, 5 instructions (`init_redemption_queue`, `enqueue_redemption`, `process_redemption`, `cancel_redemption`, `update_redemption_queue`), 3 events, 6 errors, default parameters, TypeScript example, keeper runbook, security notes [PR #295]
+- `FLAG_REDEMPTION_QUEUE` (bit 23) — FIFO slot-delayed redemption with `min_delay_slots` (default 50), per-slot cap `max_redemption_per_slot_bps` (default 500 bps = 5%), SlotHashes seed for MEV unpredictability, keeper reward 5,000 lamports/entry
 
 ### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
