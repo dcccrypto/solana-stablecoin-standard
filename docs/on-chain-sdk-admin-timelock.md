@@ -43,6 +43,20 @@ import {
   ADMIN_OP_TRANSFER_AUTHORITY,
   ADMIN_OP_SET_FEATURE_FLAG,
   ADMIN_OP_CLEAR_FEATURE_FLAG,
+  ADMIN_OP_SET_PYTH_FEED,
+  ADMIN_OP_SET_ORACLE_PARAMS,
+  ADMIN_OP_SET_STABILITY_FEE,
+  ADMIN_OP_SET_PSM_FEE,
+  ADMIN_OP_SET_BACKSTOP_PARAMS,
+  ADMIN_OP_SET_SPEND_LIMIT,
+  ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY,
+  ADMIN_OP_SET_ORACLE_CONFIG,
+  ADMIN_OP_SET_MIN_RESERVE_RATIO,
+  ADMIN_OP_SET_TRAVEL_RULE_THRESHOLD,
+  ADMIN_OP_SET_SANCTIONS_PARAMS,
+  ADMIN_OP_SET_TIMELOCK_DELAY,
+  ADMIN_OP_PAUSE,
+  ADMIN_OP_UNPAUSE,
   DEFAULT_ADMIN_TIMELOCK_DELAY,
 } from '@stbr/sss-token';
 ```
@@ -51,13 +65,31 @@ import {
 
 ## Constants
 
+> **BUG-010 (AUDIT-A CRIT-04/HIGH-06/07):** Previously only 3 operations were timelocked (authority transfer, set/clear feature flag). As of this fix, all ~17 privileged admin operations require the propose → wait → execute flow when `admin_timelock_delay > 0`. The only exception is `register_collateral` / `update_collateral_config` when executed via Squads multisig — Squads itself provides multi-party timelock controls.
+
 | Constant | Value | Description |
 |---|---|---|
 | `ADMIN_OP_NONE` | `0` | No pending operation |
 | `ADMIN_OP_TRANSFER_AUTHORITY` | `1` | Pending authority transfer |
 | `ADMIN_OP_SET_FEATURE_FLAG` | `2` | Pending feature-flag enable |
 | `ADMIN_OP_CLEAR_FEATURE_FLAG` | `3` | Pending feature-flag disable |
+| `ADMIN_OP_SET_PYTH_FEED` | `4` | Register canonical Pyth price feed |
+| `ADMIN_OP_SET_ORACLE_PARAMS` | `5` | Update oracle parameters |
+| `ADMIN_OP_SET_STABILITY_FEE` | `6` | Change stability fee rate |
+| `ADMIN_OP_SET_PSM_FEE` | `7` | Change PSM fee rate |
+| `ADMIN_OP_SET_BACKSTOP_PARAMS` | `8` | Update bad-debt backstop parameters |
+| `ADMIN_OP_SET_SPEND_LIMIT` | `9` | Update spend policy limit |
+| `ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` | `10` | Transfer compliance authority key |
+| `ADMIN_OP_SET_ORACLE_CONFIG` | `11` | Update oracle config |
+| `ADMIN_OP_SET_MIN_RESERVE_RATIO` | `12` | Change minimum reserve ratio |
+| `ADMIN_OP_SET_TRAVEL_RULE_THRESHOLD` | `13` | Change travel rule threshold |
+| `ADMIN_OP_SET_SANCTIONS_PARAMS` | `14` | Update sanctions oracle parameters |
+| `ADMIN_OP_SET_TIMELOCK_DELAY` | `15` | Change the timelock delay itself (min 216 000 slots to prevent self-reset) |
+| `ADMIN_OP_PAUSE` | `16` | Emergency pause via timelock path |
+| `ADMIN_OP_UNPAUSE` | `17` | Unpause via timelock path |
 | `DEFAULT_ADMIN_TIMELOCK_DELAY` | `432_000n` slots | ≈ 2 Solana epochs ≈ 2 days |
+
+> **Note on compliance authority transfer:** When `admin_timelock_delay > 0`, calling `update_roles` to transfer the compliance authority is blocked on-chain. Use `ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` (op kind `10`) via the propose → execute flow instead.
 
 ---
 
@@ -322,6 +354,13 @@ waitAndExecute();
 | `TimelockNotMature` | `executeTimelockOp` called before `mature_slot` reached |
 | `NoTimelockPending` | `executeTimelockOp` or `cancelTimelockOp` with no pending op |
 | `Unauthorized` | Caller is not the current admin authority |
+| `TimelockRequired` | Direct handler called for an op kind that requires the timelock propose → execute path (when `admin_timelock_delay > 0`) |
+| `InvalidTimelockOpKind` | `proposeTimelockOp` called with an unrecognised `opKind` value |
+| `InvalidTimelockDelay` | `ADMIN_OP_SET_TIMELOCK_DELAY` proposed with a value below the minimum (216 000 slots) |
+| `InvalidStabilityFee` | `ADMIN_OP_SET_STABILITY_FEE` proposed with an out-of-range fee value |
+| `InvalidBackstopParams` | `ADMIN_OP_SET_BACKSTOP_PARAMS` proposed with invalid parameters |
+| `InvalidReserveRatio` | `ADMIN_OP_SET_MIN_RESERVE_RATIO` proposed with an invalid ratio |
+| `DaoFlagProtected` | Attempted to clear `FLAG_DAO_COMMITTEE` via the timelock execute path (blocked on-chain — use DAO governance) |
 
 ---
 
@@ -335,6 +374,20 @@ waitAndExecute();
 ---
 
 ## Audit Findings
+
+### BUG-010 (AUDIT-A CRIT-04 / HIGH-06 / HIGH-07) — Timelock Coverage Extended to All Privileged Ops
+
+**Fixed in:** on-chain program (2026-03-25)
+
+**Description:** Previously only 3 on-chain operations were protected by the timelock mechanism (`ADMIN_OP_TRANSFER_AUTHORITY`, `ADMIN_OP_SET_FEATURE_FLAG`, `ADMIN_OP_CLEAR_FEATURE_FLAG`). The remaining ~14 privileged operations — including oracle feed registration, stability fee, PSM fee, backstop params, spend limit, reserve ratio, travel rule threshold, sanctions params, pause/unpause, and the timelock delay itself — could be executed immediately by the authority key with no delay. An adversary controlling the authority key could instantly change critical protocol parameters.
+
+**Fix:** All critical admin operations now call `require_timelock_executed()` when `admin_timelock_delay > 0`, returning `TimelockRequired` if the op was not pre-approved via the propose → wait → execute path. The timelock delay itself (`ADMIN_OP_SET_TIMELOCK_DELAY`, op kind 15) has a hardcoded minimum of 216 000 slots (~1 day) to prevent the authority from reducing the delay to zero in a single pass.
+
+**Exception:** `register_collateral` and `update_collateral_config` are still allowed directly when the caller is a Squads multisig PDA, because Squads provides equivalent multi-party controls.
+
+**Upgrade action:** Integrators who call any of the newly-timelocked instructions directly must migrate to the propose → execute flow. Direct calls return `TimelockRequired` on-chain when `admin_timelock_delay > 0`.
+
+---
 
 ### AUDIT-F2 (HIGH) — `ADMIN_OP_NONE` Denial-of-Service via `proposeTimelockOp`
 
