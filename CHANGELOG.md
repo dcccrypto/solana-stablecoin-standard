@@ -6,6 +6,10 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### Transfer-Hook Error Enum — SanctionsRecordMissing renamed (bb98cdd)
+
+- `docs/SANCTIONS-ORACLE.md` — renamed `SanctionsRecordMissing` → `SanctionsRecordMissingBug003` in all references (error table, flow steps, security section, test descriptions) to match `programs/transfer-hook/src/lib.rs` fix that removed the duplicate error variant (commit bb98cdd)
+
 ### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
 - `docs/SECURITY.md` § 9 — full risk analysis of Token-2022 hook fail-open conditions: fail-open scenarios, current mitigations (Squads multisig, PDA ownership, fail-closed flags), residual risk, recommended operational + on-chain mitigations, incident response timeline [commit 0293169]
