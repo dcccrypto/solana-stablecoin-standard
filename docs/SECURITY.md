@@ -141,3 +141,81 @@ Until then, responsible disclosure via GitHub Security Advisory is the correct p
 - [compliance-module.md](./compliance-module.md) — compliance module details
 - [MAINNET-CHECKLIST.md](./MAINNET-CHECKLIST.md) — pre-mainnet requirements
 - [INCIDENT-RESPONSE.md](./INCIDENT-RESPONSE.md) — incident response procedures
+- [HOOK-MONITORING.md](./HOOK-MONITORING.md) — transfer hook program monitoring and alerting
+
+---
+
+## 9. Transfer Hook Fail-Open Risk (BUG-023)
+
+> **Severity: MEDIUM** — Documented risk; not currently exploitable with correct deployment, but requires active monitoring.
+
+### 9.1 The Risk
+
+SSS-2 and SSS-3 mints enforce compliance checks (blacklist, sanctions, ZK credentials, wallet rate limits) via a Token-2022 transfer hook registered at `sss-transfer-hook` program ID `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp`.
+
+Token-2022's hook dispatch has two fail-open conditions:
+
+| Condition | What happens | Compliance impact |
+|-----------|-------------|-------------------|
+| The `sss-transfer-hook` program account does not exist on-chain | Token-2022 skips the hook silently | ALL compliance checks (blacklist, sanctions, ZK, rate limits) stop firing |
+| The hook program was upgraded with a bad binary that does not export the `Execute` discriminator | Hook is called but returns immediately with `Ok(())` | Same as above |
+
+This is a **property of the Token-2022 runtime**, not a bug in SSS code. However, it means that if the hook program is ever undeployed or fatally corrupted, the mint continues to allow transfers with no compliance enforcement.
+
+### 9.2 Current Mitigations
+
+The following safeguards reduce the probability and impact of this risk:
+
+1. **Upgrade authority is a Squads multisig** (FLAG_SQUADS_AUTHORITY). No single key can unilaterally upgrade or close the hook program.
+2. **The `ExtraAccountMetaList` PDA is owned by the hook program** — any attempt to overwrite it via a bad upgrade would fail the PDA ownership check.
+3. **The `BlacklistState` PDA is initialized at hook setup** — a redeployed hook program at the same program ID inherits the existing blacklist state via PDA re-derivation (PDAs are independent of program binary).
+4. **FLAG_SANCTIONS_ORACLE and FLAG_WALLET_RATE_LIMITS are fail-closed** — if their respective PDAs are omitted from `remaining_accounts`, the hook rejects the transfer (not silently skipped). This protects against *caller omission* but not against a completely absent hook program.
+
+### 9.3 Residual Risk
+
+If the hook program binary at `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` is absent or non-functional:
+- All token transfers succeed without compliance checks.
+- The blacklist, sanctions oracle, ZK credentials, and wallet rate limits are all bypassed.
+- Frozen accounts can still not transfer (Token-2022 freeze authority is independent of hooks).
+- The `DefaultAccountState=Frozen` extension still requires explicit `thaw_account` before new ATAs can receive.
+
+**Worst-case scenario:** An attacker who could unilaterally close or corrupt the hook program (requiring compromise of the Squads multisig) could move tokens from sanctioned or blacklisted addresses until the incident is detected and the program redeployed.
+
+### 9.4 Recommended Mitigations
+
+#### Operational
+
+1. **Continuous hook program existence monitoring** — Run a validator node or off-chain monitor that polls `getAccountInfo(hook_program_id)` every epoch. Alert immediately if the account disappears or the `executable` flag becomes false. See [HOOK-MONITORING.md](./HOOK-MONITORING.md) for implementation guidance.
+
+2. **Automated upgrade smoke test** — After any hook program upgrade, run the SSS integration test suite against the deployed program ID (devnet/mainnet-beta) within one hour. Confirm the Execute discriminator is still reachable.
+
+3. **On-call escalation path** — Define a pager-duty flow: if hook program monitoring fires, the on-call engineer's first action is to pause the mint (`authority.pause()`) and open a Squads proposal to redeploy the hook binary.
+
+#### On-Chain (future work)
+
+4. **Self-check instruction** — Add a `verify_hook_live()` instruction to `sss-token` that performs `getAccountInfo` on the hook program ID via CPI to System Program and returns an error if the program is absent. This can be called by monitoring bots or integrated into periodic crank transactions.
+
+5. **Fail-closed default initialization** — For new deployments: initialize the `ExtraAccountMetaList` with a sentinel extra account that always resolves to a non-existent PDA. If Token-2022 resolves the account list and the sentinel is missing, the transfer fails. This inverts the default from fail-open to fail-closed at the cost of requiring the sentinel to be passed by all callers. Evaluate for SSS-4 preset.
+
+### 9.5 Hook Program Account Details
+
+| Field | Value |
+|-------|-------|
+| Hook program ID | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
+| Upgrade authority | Squads multisig (via FLAG_SQUADS_AUTHORITY) |
+| ExtraAccountMetaList PDA | `[b"extra-account-metas", mint_pubkey]` |
+| BlacklistState PDA | `[b"blacklist-state", mint_pubkey]` |
+| Monitoring cadence | Every epoch (~2 days) minimum; every slot recommended for mainnet |
+
+### 9.6 Incident Response
+
+If hook program monitoring fires:
+
+1. **T+0 min**: Page on-call engineer.
+2. **T+5 min**: On-call calls `authority.pause()` via Squads UI. Mint is paused — no new mints/burns. Existing frozen accounts remain frozen.
+3. **T+15 min**: Squads proposal created to redeploy hook binary from verified build.
+4. **T+60 min**: Proposal reaches quorum, hook redeployed. Integration tests run.
+5. **T+90 min**: On-call calls `authority.unpause()` after tests pass.
+6. **Post-incident**: Review all transfers during the outage window for compliance violations.
+
+See [INCIDENT-RESPONSE.md](./INCIDENT-RESPONSE.md) for the full incident response playbook.

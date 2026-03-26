@@ -6,9 +6,11 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
-### Fixed
+### BUG-023 — Transfer Hook Fail-Open Risk Documentation
 
-- **BUG-022:** `blacklist_add_and_freeze` instruction added to `sss-token` program — atomically records a wallet in `BlacklistState` (via CPI to transfer-hook) and freezes the wallet's token account (config PDA as freeze authority) in a single transaction. Closes the front-running window where a wallet could move tokens between a pending `blacklist_add` and a separate `freeze_account` call. New errors: `InvalidMint`, `InvalidBlacklistState`, `InvalidTransferHookProgram`. Documented in `docs/compliance-module.md`.
+- `docs/SECURITY.md` § 9 — full risk analysis of Token-2022 hook fail-open conditions: fail-open scenarios, current mitigations (Squads multisig, PDA ownership, fail-closed flags), residual risk, recommended operational + on-chain mitigations, incident response timeline [commit 0293169]
+- `docs/HOOK-MONITORING.md` — new monitoring runbook: off-chain TypeScript `checkHookProgramLive()` monitor (10-second polling), `ExtraAccountMetaList` PDA integrity checks, on-chain `verify_hook_live` self-check instruction spec (planned SSS-4), step-by-step alert triage runbook [commit 0293169]
+- `tests/sss-bug-023-hook-fail-open.ts` — 10 Anchor tests verifying hook program liveness, PDA ownership, blacklist enforcement, and `checkHookProgramLive()` helper behaviour [commit 0293169]
 
 ### Added
 - `docs/MULTI-ORACLE-CONSENSUS.md` — Multi-Oracle Consensus reference (SSS-153): OracleConsensus PDA, FLAG_MULTI_ORACLE_CONSENSUS (bit 22), median/TWAP aggregation across up to 5 sources (Pyth/Switchboard/Custom), outlier rejection, per-source staleness guards, 3 events, 7 errors, keeper runbook [PR #258]
