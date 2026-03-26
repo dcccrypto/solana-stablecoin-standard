@@ -6,6 +6,15 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### fix/compile-errors-round2-v2 — CI Fix: Instructions Wired + IDL Sync (PR #298, commit fffa44f)
+
+- `programs/sss-token/src/lib.rs` — wired up 5 redemption queue instructions (`init_redemption_queue`, `enqueue_redemption`, `process_redemption`, `cancel_redemption`, `update_redemption_queue`) and `migrate_config` (SSS-122: idempotent v0→current StablecoinConfig migration, required before mint/burn/redeem on pre-SSS-122 configs)
+- `InitializeParams` — added `admin_timelock_delay: Option<u64>` field; pass `Some(0)` in test environments to bypass the propose/execute timelock flow
+- `idl/sss_token.json` + `sdk/src/idl/sss_token.json` — fully regenerated to reflect all SSS-137 state structs and new instructions
+- `backend/` — fixed compile errors in `burn.rs`, `mint.rs`, `circuit_breaker.rs`; added missing `webhook_dispatch.rs` imports; fixed `apikeys.rs` role handling; added `mod.rs` for alerts route; updated `db.rs` and `models.rs` for full schema alignment
+- `sdk/src/SolanaStablecoin.ts` — added 5 new method stubs for redemption queue SDK surface
+- `tests/redemption_queue.ts` — fixed PDA seed derivation (hyphen → underscore), fixed `initRedemptionQueue` call signature, aligned with updated IDL
+
 ### SSS-137 — On-Chain State Structs & Error Variants (commit f179dc3)
 
 - `programs/sss-token/src/state.rs` — added 23 missing `#[account]` structs formalizing all PDAs previously described only in docs: `ProofOfReserves`, `OracleConsensus`, `OracleSource`, `SanctionsRecord`, `InsuranceVault`, `KeeperConfig`, `MarketMakerConfig`, `BridgeConfig`, `ConsumedMessageId`, `CredentialRecord`, `CredentialRegistry`, `LiquidationBonusConfig`, `PidConfig`, `PsmCurveConfig`, `RedemptionEntry`, `RedemptionGuarantee`, `RedemptionPool`, `RedemptionQueue`, `RedemptionRequest`, `ReserveComposition`, `SquadsMultisigConfig`, `TravelRuleRecord`, `WalletRateLimit`
