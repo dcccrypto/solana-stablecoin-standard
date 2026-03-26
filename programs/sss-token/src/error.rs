@@ -165,23 +165,70 @@ pub enum SssError {
     InvalidCollateralThreshold,
     #[msg("liquidation_bonus_bps cannot exceed 5000 (50%)")]
     InvalidLiquidationBonus,
-    // SSS-100: Multi-collateral / partial liquidation
-    #[msg("partial_repay_amount would not restore CDP to healthy ratio — increase repay amount")]
-    PartialLiquidationInsufficientRepay,
-    #[msg("invalid amount: partial_repay_amount exceeds total debt")]
-    InvalidAmount,
     // SSS-106: Confidential Transfers
     #[msg("Confidential transfer not enabled for this mint")]
     ConfidentialTransferNotEnabled,
     #[msg("Auditor ElGamal pubkey required for confidential transfers")]
     MissingAuditorKey,
-    #[msg("Auditor ElGamal pubkey must be non-zero (all-zero key is invalid)")]
-    InvalidElGamalKey,
-    #[msg("ct_config account must be omitted when FLAG_CONFIDENTIAL_TRANSFERS is not set")]
-    UnexpectedCtConfig,
-    // SSS-BUG-008 / AUDIT-G6 / AUDIT-H4: Proof-of-Reserves breach halt
-    #[msg("PoR not attested: proof-of-reserves account missing or attestation not yet submitted")]
-    PoRNotAttested,
-    #[msg("Minting halted: on-chain reserve ratio is below the configured minimum (FLAG_POR_HALT_ON_BREACH)")]
-    PoRBreachHaltsMinting,
+    #[msg("Invalid amount")]
+    InvalidAmount,
+    #[msg("Insufficient repayment amount for partial liquidation")]
+    PartialLiquidationInsufficientRepay,
+    // SSS-109: Probabilistic Balance Standard
+    #[msg("Feature flag not enabled on this config")]
+    FeatureNotEnabled,
+    #[msg("Proof hash does not match the committed condition hash")]
+    ProofHashMismatch,
+    #[msg("Vault is already in a terminal state (Resolved or Expired)")]
+    VaultAlreadyTerminal,
+    #[msg("Vault has not yet expired (current slot < expiry_slot)")]
+    VaultNotExpired,
+    #[msg("Expiry slot must be in the future")]
+    InvalidExpirySlot,
+    // SSS-110: Agent Payment Channel
+    #[msg("Channel is already closed (settled or force-closed)")]
+    ChannelAlreadyClosed,
+    #[msg("Settle amount exceeds channel deposit")]
+    InvalidSettleAmount,
+    #[msg("A settlement has already been proposed for this channel")]
+    SettlementAlreadyProposed,
+    #[msg("Counter-sign amount does not match proposed settlement amount")]
+    SettlementNotMatching,
+    #[msg("Channel timeout has not elapsed yet")]
+    ChannelNotExpired,
+    // SSS-113: Security audit fixes
+    #[msg("Authority transfer must use the admin timelock path when a timelock delay is configured")]
+    UseTimelockForAuthorityTransfer,
+    #[msg("Caller is not authorized to trigger the backstop (authority only)")]
+    UnauthorizedBackstopTrigger,
+    // SSS-119: Oracle abstraction layer
+    #[msg("Oracle adapter not configured — Switchboard V2 crate not yet integrated")]
+    OracleNotConfigured,
+    #[msg("oracle_type must be 0 (Pyth), 1 (Switchboard), or 2 (Custom)")]
+    InvalidOracleType,
+    // SSS-120: Authority rotation
+    #[msg("Rotation new_authority must differ from current authority")]
+    RotationNewAuthorityIsCurrent,
+    #[msg("Rotation backup_authority must differ from current authority")]
+    RotationBackupIsCurrent,
+    #[msg("Rotation backup_authority must differ from new_authority")]
+    RotationBackupEqualsNew,
+    #[msg("Rotation pubkeys must be non-zero")]
+    RotationZeroPubkey,
+    #[msg("Emergency recovery window has not elapsed (7 days required)")]
+    EmergencyRecoveryNotReady,
+    // SSS-121: Guardian Multisig Emergency Pause
+    #[msg("Caller is not a registered guardian")]
+    NotAGuardian,
+    #[msg("Guardian list cannot be empty")]
+    GuardianListEmpty,
+    #[msg("Guardian list is full (max 7)")]
+    GuardianListFull,
+    #[msg("Guardian threshold must be ≥1 and ≤ guardians.len()")]
+    InvalidGuardianThreshold,
+    #[msg("Duplicate guardian pubkey in list")]
+    DuplicateGuardian,
+    // BUG-018: Guardian pause override timelock
+    #[msg("Guardian-initiated pause cannot be lifted by authority alone until timelock expires; use guardian quorum instead")]
+    GuardianPauseTimelockActive,
 }

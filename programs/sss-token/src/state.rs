@@ -91,6 +91,14 @@ pub const FLAG_REDEMPTION_QUEUE: u64 = 1 << 23;
 /// Recommended for issuers holding > $1 M in reserves.
 pub const PRESET_INSTITUTIONAL: u8 = 4;
 
+/// SSS-109: Probabilistic Balance Standard — enables commit_probabilistic and
+/// related PBS instructions for conditional "pay on proof" transfers.
+pub const FLAG_PROBABILISTIC_MONEY: u64 = 1 << 6;
+/// SSS-110: Agent Payment Channel — enables open_channel and related APC instructions
+/// for trustless agent-to-agent payment channels with work proof and dispute resolution.
+pub const FLAG_AGENT_PAYMENT_CHANNEL: u64 = 1 << 7;
+
+
 // ---------------------------------------------------------------------------
 // SSS-085: Admin timelock operation kinds
 // ---------------------------------------------------------------------------
@@ -219,48 +227,14 @@ pub struct StablecoinConfig {
     /// SSS-106: Auditor ElGamal pubkey for confidential transfers.
     /// All-zero if FLAG_CONFIDENTIAL_TRANSFERS is not enabled.
     pub auditor_elgamal_pubkey: [u8; 32],
-    /// SSS-BUG-008 / AUDIT-G6 / AUDIT-H4: Minimum reserve ratio in basis points required
-    /// when FLAG_POR_HALT_ON_BREACH is set. Minting is blocked when the attested
-    /// `ProofOfReserves.last_verified_ratio_bps` drops below this threshold.
-    /// 0 = check disabled (flag should not be set without configuring this).
-    pub min_reserve_ratio_bps: u16,
-    /// SSS-119: Whitelisted custodian pubkeys allowed to submit reserve attestations.
-    /// Up to MAX_RESERVE_ATTESTORS entries; unused slots are Pubkey::default().
-    pub reserve_attestor_whitelist: [Pubkey; StablecoinConfig::MAX_RESERVE_ATTESTORS],
-    /// SSS-127: Minimum transfer amount (in token native units) that requires a
-    /// TravelRuleRecord PDA when FLAG_TRAVEL_RULE is set.  0 = Travel Rule disabled.
-    pub travel_rule_threshold: u64,
-    /// SSS-128: Pubkey of the registered sanctions oracle signer.
-    /// When non-default, the oracle calls `update_sanctions_record` to write
-    /// `SanctionsRecord` PDAs. Transfer hook rejects sanctioned senders when
-    /// FLAG_SANCTIONS_ORACLE is set.  Pubkey::default() = sanctions oracle disabled.
-    pub sanctions_oracle: Pubkey,
-    /// SSS-128: Maximum age in slots for a SanctionsRecord to be considered fresh.
-    /// 0 = staleness check disabled (is_sanctioned is authoritative regardless of age).
-    /// Recommended: 150 slots (~1 min at 400 ms/slot).
-    pub sanctions_max_staleness_slots: u64,
-    /// SSS-119: Program config schema version, incremented by `upgrade_config`.
-    /// Instructions that require a minimum schema version (e.g. CDP borrow, burn)
-    /// check this against `MIN_SUPPORTED_VERSION`.
-    pub version: u8,
-    /// SSS-119: Oracle type for CDP price reads.
-    /// 0 = Pyth, 1 = Switchboard (stub), 2 = Custom (CustomPriceFeed PDA).
+    /// SSS-119: Oracle type discriminant. 0=Pyth (default), 1=Switchboard, 2=Custom.
     /// Set via `set_oracle_config` (authority-only).
     pub oracle_type: u8,
-    /// SSS-119: Oracle feed account address.
-    /// For Pyth: the Pyth price feed pubkey.
-    /// For Custom: the CustomPriceFeed PDA pubkey.
-    /// Pubkey::default() = feed address enforcement disabled.
+    /// SSS-119: Generic oracle feed account address used by the oracle abstraction layer.
+    /// For Pyth: the Pyth price feed account (overrides expected_pyth_feed when set).
+    /// For Custom: the CustomPriceFeed PDA address.
+    /// Pubkey::default() = validation deferred to expected_pyth_feed (backward compat).
     pub oracle_feed: Pubkey,
-    /// SSS-134: Squads Protocol V4 multisig PDA acting as program authority.
-    /// Pubkey::default() = Squads authority not configured.
-    /// Set by `init_squads_authority` (irreversible); also sets FLAG_SQUADS_AUTHORITY.
-    pub squads_multisig: Pubkey,
-    /// BUG-015: Whitelisted keeper pubkeys allowed to call `collect_stability_fee`
-    /// on behalf of any debtor without requiring their signature.
-    /// Up to MAX_AUTHORIZED_KEEPERS slots; unused entries are Pubkey::default().
-    /// Managed via `add_authorized_keeper` / `remove_authorized_keeper` (authority-only).
-    pub authorized_keepers: [Pubkey; StablecoinConfig::MAX_AUTHORIZED_KEEPERS],
     pub bump: u8,
 }
 
@@ -696,28 +670,143 @@ impl ConfidentialTransferConfig {
 }
 
 // ---------------------------------------------------------------------------
-// SSS-BUG-008 / AUDIT-G6 / AUDIT-H4: Proof-of-Reserves on-chain record
+// SSS-119: CustomPriceFeed — on-chain price maintained by the admin
 // ---------------------------------------------------------------------------
-/// On-chain attestation record written by an authorised PoR oracle/keeper.
-/// When FLAG_POR_HALT_ON_BREACH is set, mint and cpi_mint instructions read
-/// this account and block execution whenever
-/// `last_verified_ratio_bps < StablecoinConfig.min_reserve_ratio_bps`.
+
+/// Custom oracle price feed PDA — one per SSS-3 stablecoin mint.
+/// Seeds: [b"custom-price-feed", sss_mint]
 ///
-/// Seeds: `[b"proof-of-reserves", mint]`
+/// Only the stablecoin authority may update prices via `update_custom_price`.
+/// The `custom` oracle adapter verifies `feed.authority == config.authority`
+/// (admin signature verification) before trusting the stored price.
 #[account]
 #[derive(InitSpace)]
-pub struct ProofOfReserves {
-    /// The stablecoin mint this record belongs to.
-    pub mint: Pubkey,
-    /// Slot at which the most recent attestation was submitted.
-    pub last_attestation_slot: u64,
-    /// Attested reserve ratio in basis points (e.g. 10_000 = 100% fully backed).
-    pub last_verified_ratio_bps: u64,
-    /// Authority allowed to submit attestations.
-    pub attester: Pubkey,
+pub struct CustomPriceFeed {
+    /// The authority (stablecoin config authority) who may update this feed.
+    pub authority: Pubkey,
+    /// Price value — same semantics as Pyth: raw integer, scaled by 10^expo.
+    pub price: i64,
+    /// Price exponent — typically negative (e.g. -8 means price in 10^-8 USD).
+    pub expo: i32,
+    /// Confidence half-interval in the same units as price.
+    pub conf: u64,
+    /// Slot at which the price was last updated (informational).
+    pub last_update_slot: u64,
+    /// Unix timestamp (seconds) at which the price was last updated.
+    /// Used by the custom oracle adapter to enforce max_oracle_age_secs staleness check.
+    pub last_update_unix_timestamp: i64,
     pub bump: u8,
 }
 
-impl ProofOfReserves {
-    pub const SEED: &'static [u8] = b"proof-of-reserves";
+impl CustomPriceFeed {
+    pub const SEED: &'static [u8] = b"custom-price-feed";
+}
+
+// ---------------------------------------------------------------------------
+// SSS-120: AuthorityRotationRequest PDA
+// ---------------------------------------------------------------------------
+/// Stores an in-flight authority rotation proposal.
+/// Seeds: [b"authority-rotation", mint.key().as_ref()]
+///
+/// Lifecycle:
+///   propose_authority_rotation → AuthorityRotationRequest created
+///   accept_authority_rotation  → PDA closed (after 48-hr timelock)
+///   emergency_recover_authority→ PDA closed (after 7-day window)
+///   cancel_authority_rotation  → PDA closed immediately (current authority only)
+#[account]
+pub struct AuthorityRotationRequest {
+    /// The stablecoin mint this rotation belongs to.
+    pub config_mint: Pubkey,
+    /// The authority at proposal time — must still match config.authority at accept/emergency/cancel.
+    pub current_authority: Pubkey,
+    /// The new authority that must sign `accept_authority_rotation`.
+    pub new_authority: Pubkey,
+    /// Fallback authority: can claim after `EMERGENCY_RECOVERY_SLOTS` if acceptance never happens.
+    pub backup_authority: Pubkey,
+    /// Slot at which the proposal was made.
+    pub proposed_slot: u64,
+    /// Slots that must elapse before `accept_authority_rotation` is valid (≈48 hr).
+    pub timelock_slots: u64,
+    /// PDA bump.
+    pub bump: u8,
+}
+
+impl AuthorityRotationRequest {
+    pub const SEED: &'static [u8] = b"authority-rotation";
+    /// Discriminator(8) + 3×Pubkey(96) + 2×u64(16) + u8(1) + padding(7) = 128
+    pub const SPACE: usize = 96 + 16 + 1 + 7;
+}
+
+// SSS-121: Guardian Multisig Emergency Pause
+// ---------------------------------------------------------------------------
+
+/// GuardianConfig PDA — one per stablecoin config.
+/// Seeds: [b"guardian-config", config_pubkey]
+///
+/// Stores up to 7 guardian pubkeys and a threshold.  Guardians may only
+/// pause or unpause the mint — they cannot mint, burn, or alter fees.
+#[account]
+#[derive(InitSpace)]
+pub struct GuardianConfig {
+    /// The StablecoinConfig this guardian set governs.
+    pub config: Pubkey,
+    /// Registered guardian pubkeys (1–7).
+    #[max_len(7)]
+    pub guardians: Vec<Pubkey>,
+    /// Minimum votes required to execute a pause proposal.
+    pub threshold: u8,
+    /// Auto-incrementing ID assigned to the next PauseProposal.
+    pub next_proposal_id: u64,
+    /// Votes accumulated for lifting the current pause via full-quorum path.
+    /// Reset to empty when the pause is lifted.
+    #[max_len(7)]
+    pub pending_lift_votes: Vec<Pubkey>,
+    /// BUG-018: Set to true when a guardian-quorum pause is active.
+    /// Authority alone CANNOT lift the pause while this is true + timelock active.
+    pub guardian_pause_active: bool,
+    /// BUG-018: Unix timestamp after which authority may lift a guardian-initiated
+    /// pause unilaterally (GUARDIAN_PAUSE_AUTHORITY_OVERRIDE_DELAY seconds after pause).
+    /// Zero when no guardian pause is active.
+    pub guardian_pause_unlocks_at: i64,
+    pub bump: u8,
+}
+
+impl GuardianConfig {
+    pub const SEED: &'static [u8] = b"guardian-config";
+    pub const MAX_GUARDIANS: usize = 7;
+    /// Authority must wait this many seconds after a guardian-initiated pause
+    /// before they can unilaterally override it (BUG-018 fix).
+    pub const GUARDIAN_PAUSE_AUTHORITY_OVERRIDE_DELAY: i64 = 86_400; // 24 hours
+}
+
+/// PauseProposal PDA — one per proposal.
+/// Seeds: [b"pause-proposal", config_pubkey, proposal_id.to_le_bytes()]
+///
+/// Tracks YES votes on a pending emergency-pause proposal.
+/// Once `votes.len() >= threshold` the proposal is auto-executed and
+/// `executed` is set to `true`.
+#[account]
+#[derive(InitSpace)]
+pub struct PauseProposal {
+    /// The StablecoinConfig this proposal targets.
+    pub config: Pubkey,
+    /// Sequential ID matching the `GuardianConfig.next_proposal_id` at creation.
+    pub proposal_id: u64,
+    /// Guardian who opened the proposal (already counted as 1 vote).
+    pub proposer: Pubkey,
+    /// Freeform reason bytes (e.g. incident hash or ASCII string).
+    pub reason: [u8; 32],
+    /// Guardians who have voted YES (no duplicates).
+    #[max_len(7)]
+    pub votes: Vec<Pubkey>,
+    /// Voting threshold copied from GuardianConfig at proposal creation.
+    pub threshold: u8,
+    /// True when the threshold was reached and the pause was applied.
+    pub executed: bool,
+    pub bump: u8,
+}
+
+impl PauseProposal {
+    pub const SEED: &'static [u8] = b"pause-proposal";
+    pub const MAX_VOTES: usize = 7;
 }
