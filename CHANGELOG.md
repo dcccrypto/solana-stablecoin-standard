@@ -6,19 +6,12 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
-### BUG-016 — Stability Fee `accrued_fees` Reset After Burn (commit d276b85)
+### BUG-024 — Permanent Delegate Consent Enforcement (AUDIT MEDIUM)
 
-- `docs/stability-fee.md` — updated BUG-016 section to document the full fix:
-  - `cdp_position.accrued_fees` is now **reset to `0`** after each successful burn (previously it was never cleared, causing settled fees to persist as outstanding debt across collection rounds)
-  - Burn amount uses `total_to_burn = accrued_fees + fee_amount` (full pending balance cleared atomically per round)
-  - `StablecoinConfig.total_burned` now increments by `total_to_burn` (was using wrong variable `fee_amount` — compile error in prior attempt)
-  - State table, header, and accounting notes updated to reflect reset semantics
+- `docs/feature-flags.md` — added `FLAG_REQUIRE_OWNER_CONSENT` (bit 15, `0x8000`) to the flag constants table and a full reference section: DelegateConsent PDA layout, transfer hook enforcement steps, error code, TypeScript integration, and opt-in semantics [commit 630ecb3]
+- `docs/transfer-hook.md` — updated `transfer_hook` behavior sequence (step 5): BUG-024 permanent delegate consent gate; added `OwnerConsentRequired` error to the error table [commit 630ecb3]
 
-### BUG-023 — Transfer Hook Fail-Open Risk Documentation
-
-- `docs/SECURITY.md` § 9 — full risk analysis of Token-2022 hook fail-open conditions: fail-open scenarios, current mitigations (Squads multisig, PDA ownership, fail-closed flags), residual risk, recommended operational + on-chain mitigations, incident response timeline [commit 0293169]
-- `docs/HOOK-MONITORING.md` — new monitoring runbook: off-chain TypeScript `checkHookProgramLive()` monitor (10-second polling), `ExtraAccountMetaList` PDA integrity checks, on-chain `verify_hook_live` self-check instruction spec (planned SSS-4), step-by-step alert triage runbook [commit 0293169]
-- `tests/sss-bug-023-hook-fail-open.ts` — 10 Anchor tests verifying hook program liveness, PDA ownership, blacklist enforcement, and `checkHookProgramLive()` helper behaviour [commit 0293169]
+**Security context:** Token-2022 permanent delegates could silently transfer tokens from any non-blacklisted wallet without owner knowledge. Fix adds `FLAG_REQUIRE_OWNER_CONSENT` (OPT-IN) which enforces a `DelegateConsent` PDA (`["delegate-consent", mint, wallet_owner]`) for any non-owner-signed transfer. Owner-signed transfers take a zero-overhead early-return path. 12 tests (BUG-024-01..12) cover all acceptance criteria.
 
 ### Added
 - `docs/MULTI-ORACLE-CONSENSUS.md` — Multi-Oracle Consensus reference (SSS-153): OracleConsensus PDA, FLAG_MULTI_ORACLE_CONSENSUS (bit 22), median/TWAP aggregation across up to 5 sources (Pyth/Switchboard/Custom), outlier rejection, per-source staleness guards, 3 events, 7 errors, keeper runbook [PR #258]
