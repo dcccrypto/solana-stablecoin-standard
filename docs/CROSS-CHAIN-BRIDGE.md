@@ -19,7 +19,7 @@ All bridge operations respect existing protocol safeguards: circuit breaker, pau
 
 | Constant | Bit | Value |
 |---|---|---|
-| `FLAG_BRIDGE_ENABLED` | 13 | `1 << 13` = `0x2000` |
+| `FLAG_BRIDGE_ENABLED` | 17 | `1 << 17` = `0x20000` |
 
 Enable via `set_feature_flag` (subject to admin timelock):
 
