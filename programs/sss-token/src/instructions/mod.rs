@@ -98,5 +98,8 @@ pub use market_maker::*;
 pub mod upgrade;
 pub use upgrade::*;
 
+pub mod blacklist;
+pub use blacklist::*;
+
 // Re-export param types from state
 pub use crate::state::{InitializeParams, UpdateRolesParams};

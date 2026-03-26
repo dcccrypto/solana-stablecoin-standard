@@ -370,4 +370,11 @@ pub enum SssError {
     // Oracle
     #[msg("Oracle not configured — set oracle_type and oracle_feed first")]
     OracleNotConfigured,
+    // BUG-022: Blacklist freeze-on-blacklist
+    #[msg("Invalid mint account — does not match config.mint")]
+    InvalidMint,
+    #[msg("Invalid blacklist state PDA — expected [b\"blacklist-state\", mint] on transfer-hook program")]
+    InvalidBlacklistState,
+    #[msg("Invalid transfer hook program — expected registered transfer_hook_program")]
+    InvalidTransferHookProgram,
 }

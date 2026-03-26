@@ -636,7 +636,11 @@ pub mod sss_transfer_hook {
         Ok(())
     }
 
-    /// Add an address to the blacklist.
+    /// Add an address to the blacklist (no token account freeze).
+    ///
+    /// For atomic freeze-on-blacklist, use `blacklist_add_and_freeze` on the
+    /// sss-token program (BUG-022 fix). This instruction is kept for
+    /// pre-emptive blacklisting of wallets that do not yet have a token account.
     pub fn blacklist_add(ctx: Context<ManageBlacklist>, address: Pubkey) -> Result<()> {
         let bl = &mut ctx.accounts.blacklist_state;
         if !bl.blacklisted.contains(&address) {

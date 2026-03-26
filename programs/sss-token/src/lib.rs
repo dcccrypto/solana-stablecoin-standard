@@ -48,6 +48,23 @@ pub mod sss_token {
         instructions::thaw::handler(ctx)
     }
 
+    /// BUG-022: Add wallet to blacklist AND atomically freeze its token account.
+    ///
+    /// This is the primary blacklist operation for SSS-2 mints. Calling this instead
+    /// of the transfer-hook's `blacklist_add` directly ensures there is no window
+    /// between the blacklist write and the freeze — the wallet cannot front-run the
+    /// blacklist by moving tokens to a clean wallet.
+    ///
+    /// Steps performed atomically in one transaction:
+    ///   1. CPI → transfer-hook `blacklist_add(wallet)` to record in BlacklistState.
+    ///   2. Token-2022 `freeze_account` on the wallet's token account (config PDA signer).
+    ///
+    /// For pre-emptive blacklisting (wallet has no token account yet), call
+    /// `blacklist_add` on the transfer-hook program directly.
+    pub fn blacklist_add_and_freeze(ctx: Context<BlacklistAddAndFreeze>) -> Result<()> {
+        instructions::blacklist::handler(ctx)
+    }
+
     /// Pause the entire mint (SSS-2). No minting/burning while paused.
     pub fn pause(ctx: Context<Pause>) -> Result<()> {
         instructions::pause::handler(ctx, true)
