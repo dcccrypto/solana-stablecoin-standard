@@ -13,7 +13,7 @@ pub struct BurnTokens<'info> {
         seeds = [StablecoinConfig::SEED, mint.key().as_ref()],
         bump = config.bump,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     #[account(
         mut,

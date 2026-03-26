@@ -89,42 +89,22 @@ pub async fn require_api_key(
             .into_response();
     }
 
-            match state.db.validate_api_key(&key_str) {
-                Ok(Some(is_admin)) => {
-                    // Key is valid — check rate limit before proceeding.
-                    match state.rate_limiter.check(&key_str) {
-                        Ok(()) => {
-                            // Attach key info as a request extension for downstream middleware.
-                            req.extensions_mut().insert(ApiKeyInfo { is_admin });
-                            next.run(req).await
-                        }
-                        Err(retry_after_secs) => {
-                            let mut resp = (
-                                StatusCode::TOO_MANY_REQUESTS,
-                                Json(json!({"success": false, "error": "Rate limit exceeded"})),
-                            )
-                                .into_response();
-                            if retry_after_secs < u64::MAX {
-                                if let Ok(val) = HeaderValue::from_str(&retry_after_secs.to_string()) {
-                                    resp.headers_mut().insert("Retry-After", val);
-                                }
-                            }
-                            resp
-                        }
-                    }
-                }
-                Ok(None) => (
-                    StatusCode::UNAUTHORIZED,
-                    Json(json!({"success": false, "error": "Invalid API key"})),
-                )
-                    .into_response(),
-                Err(e) => {
-                    let msg: String = e.to_string();
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({"success": false, "error": msg})),
-                    )
-                        .into_response()
+    // Key is valid — check rate limit before proceeding.
+    match state.rate_limiter.check(&key_str) {
+        Ok(()) => {
+            // Attach key info as a request extension for downstream middleware.
+            req.extensions_mut().insert(ApiKeyInfo { is_admin: role == "admin" });
+            next.run(req).await
+        }
+        Err(retry_after_secs) => {
+            let mut resp = (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(json!({"success": false, "error": "Rate limit exceeded"})),
+            )
+                .into_response();
+            if retry_after_secs < u64::MAX {
+                if let Ok(val) = HeaderValue::from_str(&retry_after_secs.to_string()) {
+                    resp.headers_mut().insert("Retry-After", val);
                 }
             }
             resp

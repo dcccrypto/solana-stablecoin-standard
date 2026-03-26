@@ -162,7 +162,7 @@ pub fn dispatch(db: &Arc<Database>, event_type: &str, payload: Value) {
             } else {
                 info!(url = %url, delivery_id = %delivery_id, "Webhook delivered");
             }
-        };
+        });
 
         let db_clone = Arc::clone(db);
         let url = wh.url.clone();

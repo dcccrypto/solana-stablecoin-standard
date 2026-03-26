@@ -32,7 +32,7 @@ pub struct RegisterRedemptionPool<'info> {
         bump = config.bump,
         constraint = config.authority == authority.key() @ SssError::Unauthorized,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     /// Reserve vault token account used for collateral payouts.
     /// CHECK: pubkey is stored; actual validation happens in fulfill.
@@ -45,7 +45,7 @@ pub struct RegisterRedemptionPool<'info> {
         seeds = [RedemptionGuarantee::SEED, config.mint.as_ref()],
         bump,
     )]
-    pub redemption_guarantee: Account<'info, RedemptionGuarantee>,
+    pub redemption_guarantee: Box<Account<'info, RedemptionGuarantee>>,
 
     pub system_program: Program<'info, System>,
 }
@@ -105,7 +105,7 @@ pub struct RequestRedemption<'info> {
         seeds = [StablecoinConfig::SEED, config.mint.as_ref()],
         bump = config.bump,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     #[account(
         mut,
@@ -113,7 +113,7 @@ pub struct RequestRedemption<'info> {
         bump = redemption_guarantee.bump,
         constraint = redemption_guarantee.sss_mint == config.mint @ SssError::InvalidVault,
     )]
-    pub redemption_guarantee: Account<'info, RedemptionGuarantee>,
+    pub redemption_guarantee: Box<Account<'info, RedemptionGuarantee>>,
 
     /// User's stable token account.
     #[account(
@@ -142,7 +142,7 @@ pub struct RequestRedemption<'info> {
         seeds = [RedemptionRequest::SEED, config.mint.as_ref(), user.key().as_ref()],
         bump,
     )]
-    pub redemption_request: Account<'info, RedemptionRequest>,
+    pub redemption_request: Box<Account<'info, RedemptionRequest>>,
 
     pub stable_mint: Box<InterfaceAccount<'info, Mint>>,
     pub token_program: Interface<'info, TokenInterface>,
@@ -222,14 +222,14 @@ pub struct FulfillRedemption<'info> {
         seeds = [StablecoinConfig::SEED, config.mint.as_ref()],
         bump = config.bump,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     #[account(
         seeds = [RedemptionGuarantee::SEED, config.mint.as_ref()],
         bump = redemption_guarantee.bump,
         constraint = redemption_guarantee.sss_mint == config.mint @ SssError::InvalidVault,
     )]
-    pub redemption_guarantee: Account<'info, RedemptionGuarantee>,
+    pub redemption_guarantee: Box<Account<'info, RedemptionGuarantee>>,
 
     #[account(
         mut,
@@ -238,7 +238,7 @@ pub struct FulfillRedemption<'info> {
         constraint = !redemption_request.fulfilled @ SssError::RedemptionAlreadyFulfilled,
         constraint = !redemption_request.sla_breached @ SssError::RedemptionSLABreached,
     )]
-    pub redemption_request: Account<'info, RedemptionRequest>,
+    pub redemption_request: Box<Account<'info, RedemptionRequest>>,
 
     /// Escrow: must match PDA seeds.
     #[account(
@@ -368,14 +368,14 @@ pub struct ClaimExpiredRedemption<'info> {
         seeds = [StablecoinConfig::SEED, config.mint.as_ref()],
         bump = config.bump,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     #[account(
         seeds = [RedemptionGuarantee::SEED, config.mint.as_ref()],
         bump = redemption_guarantee.bump,
         constraint = redemption_guarantee.sss_mint == config.mint @ SssError::InvalidVault,
     )]
-    pub redemption_guarantee: Account<'info, RedemptionGuarantee>,
+    pub redemption_guarantee: Box<Account<'info, RedemptionGuarantee>>,
 
     #[account(
         mut,
@@ -385,7 +385,7 @@ pub struct ClaimExpiredRedemption<'info> {
         constraint = !redemption_request.fulfilled @ SssError::RedemptionAlreadyFulfilled,
         constraint = !redemption_request.sla_breached @ SssError::RedemptionSLABreached,
     )]
-    pub redemption_request: Account<'info, RedemptionRequest>,
+    pub redemption_request: Box<Account<'info, RedemptionRequest>>,
 
     /// Escrow: stable tokens returned to user on breach.
     #[account(

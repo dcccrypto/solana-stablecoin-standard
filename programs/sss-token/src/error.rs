@@ -391,4 +391,26 @@ pub enum SssError {
     /// M-2: FLAG_MULTI_ORACLE_CONSENSUS set but no sources configured.
     #[msg("FLAG_MULTI_ORACLE_CONSENSUS is set but no oracle sources are configured")]
     OracleNoSourcesConfigured,
+    // Pre-existing missing errors (used by bridge.rs, market_maker.rs, wallet_rate_limit.rs)
+    #[msg("Fee vault does not match the expected vault pubkey")]
+    FeeVaultMismatch,
+    #[msg("Bridge relayer is not authorized for this operation")]
+    BridgeRelayerUnauthorized,
+    #[msg("Market maker hooks are disabled — FLAG_MARKET_MAKER_HOOKS not set")]
+    MarketMakerHooksDisabled,
+    #[msg("Wallet transfer rate limit exceeded for this window")]
+    WalletRateLimitExceeded,
+    // SSS-154: Redemption queue errors
+    #[msg("Redemption queue is full — wait for entries to be processed or cancelled")]
+    RedemptionQueueFull,
+    #[msg("Redemption entry is not yet ready — min_delay_slots have not elapsed")]
+    RedemptionNotReady,
+    #[msg("Redemption entry has already been processed or cancelled")]
+    RedemptionAlreadyProcessed,
+    #[msg("Slot redemption cap exceeded — too many tokens redeemed in this slot")]
+    RedemptionSlotCapExceeded,
+    #[msg("Only the entry owner may cancel this redemption")]
+    RedemptionNotOwner,
+    #[msg("Redemption queue not initialized — call init_redemption_queue first")]
+    RedemptionQueueNotInitialized,
 }

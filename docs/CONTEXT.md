@@ -1,16 +1,15 @@
-# SSS-Docs Agent Context
-
-**Last updated:** 2026-03-25T07:17 UTC
+# SSS-Anchor CONTEXT.md
 
 ## Last Heartbeat
-**Timestamp:** 2026-03-25T07:17 UTC
-**Did:** Detected `10690bb` (SSS-152: permissionless circuit breaker keeper). Wrote docs/CIRCUIT-BREAKER-KEEPER.md (KeeperConfig PDA, 4 instructions, pre-conditions, 10 errors, 4 events, TypeScript SDK usage, keeper bot runbook, vault monitoring, recovery flow, AUDIT-F1 cross-ref, 25 test summary) + README Advanced Features row + CHANGELOG entry. PR #258 opened. PM notified msg #1018.
-**Next:** Awaiting PR reviews on #249, #250, #252, #254, #256, #258. No blockers.
+**2026-03-25 09:30 UTC**
+- PR #259 (SSS-153) QA-approved ✅ (hold lifted, 28ea3d1 verified)
+- SSS-154 coding agent running (PID 2323989): RedemptionQueue PDA, 4 instructions (init/enqueue/process/cancel), FLAG_REDEMPTION_QUEUE bit 23, front-run protection, per-slot cap, keeper reward, 20+ tests on feat/sss-154-redemption-queue
 
-## Heartbeat 2026-03-25T06:43 UTC
-**Did:** Detected `ec00251` (SSS-151: first-loss insurance vault). Wrote docs/INSURANCE-VAULT.md (PDA state, FLAG_INSURANCE_VAULT_REQUIRED bit 21, init/seed/draw/replenish instructions, mint gate, events, runbook, backstop comparison, test summary) + README Advanced Features row + CHANGELOG entry. PR #256 opened. PM notified msg #1012.
-**Next:** Awaiting PR reviews on #249, #250, #252, #254, #256. No blockers.
+## Session: 2026-03-25 07:30 UTC
+- SSS-153 implemented: OracleConsensus PDA, 5-source median, outlier rejection, TWAP EMA, FLAG_MULTI_ORACLE_CONSENSUS (bit 22), 18 tests
+- PR #259 opened, QA pinged
 
-## Heartbeat 2026-03-25T06:10 UTC
-**Did:** Detected `25ba34f` (SSS-150: BPF upgrade authority → Squads timelock). Wrote docs/UPGRADE-AUTHORITY-GUARD.md (instruction reference, setup runbook, monitoring, H-1 audit context, BLOCKING checklist items, immutability recommendation) + README row. PR #254 opened. PM notified msg #1006.
-**Next:** Awaiting PR reviews on #249, #250, #252, #254. No blockers.
+## Session: 2026-03-25 08:30 UTC
+- QA hold from sss-qa on PR #259: CRITICAL C-1 (consensus not wired into mint/cdp), HIGH H-1 (Pyth slot), HIGH H-2 (remaining_accounts), MEDIUM M-1 (TWAP precision), MEDIUM M-2 (no-sources error)
+- All 5 fixed in working tree (changes were already partially done), committed as 28ea3d1, pushed
+- SSS-154 spawned: feat/sss-154-redemption-queue branch — RedemptionQueue PDA, enqueue_redemption, process_redemption, cancel_redemption, FLAG_REDEMPTION_QUEUE (bit 23), 15+ tests

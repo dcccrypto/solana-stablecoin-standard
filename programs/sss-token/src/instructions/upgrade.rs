@@ -16,17 +16,35 @@ pub const MIN_SUPPORTED_VERSION: u8 = 1;
 
 // Byte offsets into a StablecoinConfig account (including 8-byte discriminator).
 // Layout matches Borsh serialization order in state.rs:
-//   [0..8]   Anchor discriminator
-//   [8..40]  mint       (Pubkey, 32 bytes)
-//   [40]     version    (u8, 1 byte)
-//   [41..73] authority  (Pubkey, 32 bytes)
+//   [0..8]     Anchor discriminator (8 bytes)
+//   [8..40]    mint                 (Pubkey, 32 bytes)
+//   [40..72]   authority            (Pubkey, 32 bytes)
+//   ...many fields...
+//   [657]      version              (u8, 1 byte)
+//
+// authority offset = disc(8) + mint(32) = 40
+// version offset   = 40 + authority(32) + compliance_authority(32) + preset(1) +
+//                    paused(1) + total_minted(8) + total_burned(8) +
+//                    transfer_hook_program(32) + collateral_mint(32) +
+//                    reserve_vault(32) + total_collateral(8) + max_supply(8) +
+//                    pending_authority(32) + pending_compliance_authority(32) +
+//                    feature_flags(8) + max_transfer_amount(8) +
+//                    expected_pyth_feed(32) + admin_op_mature_slot(8) +
+//                    admin_op_kind(1) + admin_op_param(8) + admin_op_target(32) +
+//                    admin_timelock_delay(8) + max_oracle_age_secs(4) +
+//                    max_oracle_conf_bps(2) + stability_fee_bps(2) +
+//                    redemption_fee_bps(2) + insurance_fund_pubkey(32) +
+//                    max_backstop_bps(2) + auditor_elgamal_pubkey(32) +
+//                    min_reserve_ratio_bps(2) + reserve_attestor_whitelist(32*4) +
+//                    travel_rule_threshold(8) + sanctions_oracle(32) +
+//                    sanctions_max_staleness_slots(8) = 657
 //
 // These offsets must stay in sync with StablecoinConfig field declaration order.
 const DISC_LEN: usize = 8;
 const OFFSET_MINT: usize = DISC_LEN;                    // 8
-const OFFSET_VERSION: usize = DISC_LEN + 32;            // 40
-const OFFSET_AUTHORITY: usize = DISC_LEN + 32 + 1;      // 41
-const V0_MIN_READ: usize = DISC_LEN + 32 + 1 + 32;      // 73 bytes minimum
+const OFFSET_AUTHORITY: usize = DISC_LEN + 32;          // 40
+const OFFSET_VERSION: usize = 657;                      // after all preceding fields
+const V0_MIN_READ: usize = DISC_LEN + 32 + 32;          // 72 bytes minimum (disc+mint+authority)
 
 /// Anchor discriminator for StablecoinConfig.
 /// = sha256("account:StablecoinConfig")[0..8]
@@ -108,7 +126,7 @@ pub fn migrate_config_handler(ctx: Context<MigrateConfig>) -> Result<()> {
         // Actually feature_flags comes after bump. Let's use Borsh deserialization of just that field.
         // Safest: deserialize the whole struct since we know the account is full-size.
         use anchor_lang::AnchorDeserialize;
-        let config = StablecoinConfig::try_deserialize(&mut &data[8..])?;  // skip 8-byte disc
+        let config = StablecoinConfig::try_deserialize(&mut &data[..])?;
         drop(data);
         if config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
             crate::instructions::squads_authority::verify_squads_signer(

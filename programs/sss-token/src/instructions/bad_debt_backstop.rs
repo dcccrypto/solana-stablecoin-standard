@@ -107,7 +107,7 @@ pub struct TriggerBackstop<'info> {
         // Only the config PDA itself is authorised to trigger the backstop.
         constraint = liquidation_authority.key() == config.key() @ SssError::UnauthorizedBackstopCaller,
     )]
-    pub config: Account<'info, StablecoinConfig>,
+    pub config: Box<Account<'info, StablecoinConfig>>,
 
     pub sss_mint: InterfaceAccount<'info, Mint>,
 
@@ -117,7 +117,7 @@ pub struct TriggerBackstop<'info> {
         constraint = insurance_fund.key() == config.insurance_fund_pubkey @ SssError::BackstopNotConfigured,
         constraint = insurance_fund.mint == collateral_mint.key(),
     )]
-    pub insurance_fund: InterfaceAccount<'info, TokenAccount>,
+    pub insurance_fund: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// Reserve vault — destination for backstop collateral (same vault used by CDP).
     #[account(
@@ -125,7 +125,7 @@ pub struct TriggerBackstop<'info> {
         constraint = reserve_vault.key() == config.reserve_vault,
         constraint = reserve_vault.mint == collateral_mint.key(),
     )]
-    pub reserve_vault: InterfaceAccount<'info, TokenAccount>,
+    pub reserve_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// The collateral token mint (e.g. USDC).
     #[account(
