@@ -3,7 +3,7 @@ use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInte
 
 use crate::error::SssError;
 use crate::events::MintHaltedByPoRBreach;
-use crate::state::{MinterInfo, ProofOfReserves, StablecoinConfig, FLAG_CIRCUIT_BREAKER, FLAG_POR_HALT_ON_BREACH};
+use crate::state::{InsuranceVault, MinterInfo, ProofOfReserves, StablecoinConfig, FLAG_CIRCUIT_BREAKER, FLAG_INSURANCE_VAULT_REQUIRED, FLAG_POR_HALT_ON_BREACH};
 
 // Solana clock is available via Clock::get() in Anchor instructions.
 
@@ -55,6 +55,29 @@ pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, MintTokens<'info>>, amo
         ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
         SssError::CircuitBreakerActive
     );
+
+    // SSS-151: Insurance vault gate — block minting until vault is adequately seeded.
+    // When FLAG_INSURANCE_VAULT_REQUIRED is set, the caller must pass the
+    // InsuranceVault PDA as the LAST remaining_account.  We look it up by PDA
+    // derivation and check adequately_seeded.
+    {
+        let config = &ctx.accounts.config;
+        if config.feature_flags & FLAG_INSURANCE_VAULT_REQUIRED != 0 {
+            // Find the InsuranceVault PDA in remaining_accounts.
+            let (expected_pda, _bump) = Pubkey::find_program_address(
+                &[InsuranceVault::SEED, ctx.accounts.mint.key().as_ref()],
+                ctx.program_id,
+            );
+            let vault_info = ctx
+                .remaining_accounts
+                .iter()
+                .find(|a| a.key() == expected_pda)
+                .ok_or(error!(SssError::FeatureNotEnabled))?; // vault PDA not provided
+            let vault: Account<InsuranceVault> =
+                Account::try_from(vault_info).map_err(|_| error!(SssError::FeatureNotEnabled))?;
+            require!(vault.adequately_seeded, SssError::InsuranceFundEmpty);
+        }
+    }
 
     // SSS-145: Supply cap enforcement.
     // Invariant: at least one of (max_supply, minter_info.cap) must be > 0.

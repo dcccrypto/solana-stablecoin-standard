@@ -98,8 +98,8 @@ pub use market_maker::*;
 pub mod upgrade;
 pub use upgrade::*;
 
-pub mod upgrade_authority_guard;
-pub use upgrade_authority_guard::*;
+pub mod insurance_vault;
+pub use insurance_vault::*;
 
 // Re-export param types from state
 pub use crate::state::{InitializeParams, UpdateRolesParams};
