@@ -203,6 +203,12 @@ pub fn execute_timelocked_op_handler(ctx: Context<ExecuteTimelockOp>) -> Result<
             );
         }
         ADMIN_OP_CLEAR_FEATURE_FLAG => {
+            // BUG-011: FLAG_DAO_COMMITTEE cannot be cleared via timelock admin op.
+            // Removing the DAO committee guard requires an explicit DAO governance vote.
+            require!(
+                param & crate::state::FLAG_DAO_COMMITTEE == 0,
+                SssError::DaoFlagProtected
+            );
             config.feature_flags &= !param;
             msg!(
                 "Timelock: CLEAR feature_flags mask=0x{:016x} -> 0x{:016x}",
