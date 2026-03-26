@@ -787,7 +787,7 @@ pub enum HookError {
     #[msg("Sanctions oracle: record is stale — oracle has not updated within max_staleness_slots")]
     SanctionsRecordStale,
     #[msg("Sanctions oracle: SanctionsRecord PDA must be provided in remaining_accounts when FLAG_SANCTIONS_ORACLE is active (BUG-003)")]
-    SanctionsRecordMissing,
+    SanctionsRecordMissingBug003,
     #[msg("ZK credentials: sender does not hold a valid CredentialRecord")]
     CredentialRequired,
     #[msg("ZK credentials: sender's CredentialRecord has expired")]
