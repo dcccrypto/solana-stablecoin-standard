@@ -6,6 +6,12 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### BUG-023 — Transfer Hook Fail-Open Risk Documentation
+
+- `docs/SECURITY.md` § 9 — full risk analysis of Token-2022 hook fail-open conditions: fail-open scenarios, current mitigations (Squads multisig, PDA ownership, fail-closed flags), residual risk, recommended operational + on-chain mitigations, incident response timeline [commit 0293169]
+- `docs/HOOK-MONITORING.md` — new monitoring runbook: off-chain TypeScript `checkHookProgramLive()` monitor (10-second polling), `ExtraAccountMetaList` PDA integrity checks, on-chain `verify_hook_live` self-check instruction spec (planned SSS-4), step-by-step alert triage runbook [commit 0293169]
+- `tests/sss-bug-023-hook-fail-open.ts` — 10 Anchor tests verifying hook program liveness, PDA ownership, blacklist enforcement, and `checkHookProgramLive()` helper behaviour [commit 0293169]
+
 ### Added
 - `docs/MARKET-MAKER-HOOKS.md` — Market Maker Hooks reference (SSS-138): MarketMakerConfig PDA, FLAG_MARKET_MAKER_HOOKS (bit 18), mm_mint/mm_burn/register_market_maker/get_mm_capacity instructions, per-slot rate limits, oracle spread check, events, errors, TypeScript example [PR #230]
 - `docs/compliance-module.md` — full SDK reference for `ComplianceModule` (SSS-017) [PR #73]

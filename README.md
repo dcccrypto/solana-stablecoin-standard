@@ -142,6 +142,8 @@ Endpoints:
 | [On-Chain SDK: Core Methods](docs/on-chain-sdk-core.md) | `SolanaStablecoin` class — create, load, mintTo, burnFrom, freeze/thaw, supply query |
 | [ComplianceModule](docs/compliance-module.md) | `ComplianceModule` SDK — blacklist management (addToBlacklist, removeFromBlacklist, isBlacklisted) + freeze/thaw |
 | [Transfer Hook Program](docs/transfer-hook.md) | On-chain blacklist enforcement via Token-2022 transfer hook (SSS-2) |
+| [Security](docs/SECURITY.md) | Security model, threat analysis, audit findings, and BUG-* disclosures |
+| [Hook Program Monitoring](docs/HOOK-MONITORING.md) | Transfer hook program liveness monitoring — off-chain TypeScript monitor, ExtraAccountMetaList checks, alert runbook (BUG-023) |
 | [Preset: SSS-1 Minimal](docs/SSS-1.md) | SSS-1 preset specification |
 | [Preset: SSS-2 Compliant](docs/SSS-2.md) | SSS-2 preset specification |
 | [Preset: SSS-3 Trustless](docs/SSS-3.md) | SSS-3 trustless collateral-backed reference design |
