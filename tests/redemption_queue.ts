@@ -236,16 +236,9 @@ describe("SSS-154: redemption_queue", () => {
       .signers([stableMintKp])
       .rpc({ commitment: "confirmed", skipPreflight: true });
 
-    // SSS-122: migrate config from v0 → v1 so mint/burn version guards pass
-    await program.methods
-      .migrateConfig()
-      .accounts({
-        authority: authority.publicKey,
-        mint: stableMint,
-        config: configPda,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc({ commitment: "confirmed" });
+    // SSS-122: migrateConfig is a no-op for freshly-initialized configs
+    // (initialize() already sets version = CURRENT_VERSION). Removed to avoid
+    // IDL lookup issues in CI where the idl-build pass may not emit migrate_config.
 
     // Register authority as minter
     await program.methods
@@ -334,16 +327,7 @@ describe("SSS-154: redemption_queue", () => {
       .signers([collateralMintKp])
       .rpc({ commitment: "confirmed", skipPreflight: true });
 
-    // SSS-122: migrate collateral config v0 → v1
-    await program.methods
-      .migrateConfig()
-      .accounts({
-        authority: authority.publicKey,
-        mint: collateralMint,
-        config: collateralConfigPda,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc({ commitment: "confirmed" });
+    // SSS-122: migrateConfig no-op — initialize() sets CURRENT_VERSION already.
 
     await program.methods
       .updateMinter(new BN(0))
@@ -446,16 +430,7 @@ describe("SSS-154: redemption_queue", () => {
       .signers([mintKp2])
       .rpc({ commitment: "confirmed", skipPreflight: true });
 
-    // SSS-122: migrate secondary config v0 → v1
-    await program.methods
-      .migrateConfig()
-      .accounts({
-        authority: authority.publicKey,
-        mint: mintKp2.publicKey,
-        config: configPda2,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc({ commitment: "confirmed" });
+    // SSS-122: migrateConfig no-op — initialize() sets CURRENT_VERSION already.
 
     // ── Tertiary mint (FLAG_REDEMPTION_QUEUE — for non-authority test #3) ────
     // Use a separate mint so PDA does not collide with the primary redemptionQueuePda.
@@ -489,16 +464,7 @@ describe("SSS-154: redemption_queue", () => {
       .signers([mintKp3])
       .rpc({ commitment: "confirmed", skipPreflight: true });
 
-    // SSS-122: migrate tertiary config v0 → v1
-    await program.methods
-      .migrateConfig()
-      .accounts({
-        authority: authority.publicKey,
-        mint: mintKp3.publicKey,
-        config: configPda3,
-        systemProgram: SystemProgram.programId,
-      } as any)
-      .rpc({ commitment: "confirmed" });
+    // SSS-122: migrateConfig no-op — initialize() sets CURRENT_VERSION already.
   });
 
   // ---------------------------------------------------------------------------
