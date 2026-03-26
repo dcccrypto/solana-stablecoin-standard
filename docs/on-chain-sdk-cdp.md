@@ -19,7 +19,7 @@ Key guarantees:
 - **Partial liquidation (SSS-100):** `cdp_liquidate` accepts a `partial_repay_amount`; only enough debt is burned to restore the position to the liquidation threshold, seizing the minimum required collateral — full liquidation remains the default when `partial_repay_amount = 0`
 - **`CollateralLiquidated` event (SSS-100):** emitted on every liquidation with `collateral_mint`, `debt_burned`, `collateral_seized`, `ratio_before_bps`, `partial`, and `bonus_bps` fields
 - **TypeScript liquidation SDK (SSS-101):** `MultiCollateralLiquidationModule` wraps `cdp_liquidate`, exposes `fetchLiquidatableCDPs`, `calcLiquidationAmount`, and full PDA helpers — see [`on-chain-sdk-liquidation.md`](./on-chain-sdk-liquidation.md)
-- **Circuit breaker parity (BUG-014 / AUDIT-A HIGH-11):** `cdp_liquidate_v2` now enforces `FLAG_CIRCUIT_BREAKER` (bit 0) as step 0, identical to V1. When the breaker is active, both V1 and V2 return `CircuitBreakerActive` — neither version can be used to bypass an emergency halt.
+- **Circuit breaker on V2 liquidations (BUG-020):** `cdp_liquidate_v2` now enforces the same `FLAG_CIRCUIT_BREAKER` guard as V1. Prior to commit `041b4b8`, the V2 path bypassed the circuit breaker entirely; liquidators could still trigger V2 liquidations during an emergency halt. The guard now fires at the top of the V2 handler (before the Pyth feed check), returning `SssError::CircuitBreakerActive` when the flag is set.
 
 ---
 
@@ -373,6 +373,7 @@ Errors originate from the on-chain Anchor program. Common causes:
 | `CollateralMintLocked` | Borrow attempted with a different collateral mint than the locked one |
 | `InvalidPythFeed` | Pyth price feed account doesn't match expected collateral mint |
 | `StaleOraclePrice` | Pyth price is too old (confidence interval exceeded) |
+| `CircuitBreakerActive` | `FLAG_CIRCUIT_BREAKER` is set — halts `cdp_liquidate` (V1, SSS-110) and `cdp_liquidate_v2` (V2, BUG-020) |
 | `SlippageExceeded` | `cdp_liquidate` seized collateral is less than `min_collateral_amount` (SSS-085 Fix 5; pass `0` to disable) |
 | `CdpNotLiquidatable` | Position collateral ratio is at or above the liquidation threshold |
 | `PartialLiquidationInsufficientRepay` | Partial repay amount is too small — post-liquidation ratio would still be below the liquidation threshold (SSS-100) |

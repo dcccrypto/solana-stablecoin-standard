@@ -63,6 +63,9 @@ When `FLAG_CIRCUIT_BREAKER` is set in `StablecoinConfig.feature_flags`:
 
 - The token program **rejects** all `mintTo` and `burnFrom` instructions with
   `SssError::CircuitBreakerActive`.
+- **`cdp_liquidate` (V1) and `cdp_liquidate_v2` (V2) are both halted** with
+  `SssError::CircuitBreakerActive` — BUG-020 closed the V2 bypass that existed
+  before commit `041b4b8`. V1 had the guard since SSS-110; V2 now matches.
 - `pause()` / `unpause()` continue to work normally (they are orthogonal).
 - Transfer and freeze instructions are **not** affected.
 - The flag persists until explicitly cleared by the admin authority.
@@ -615,7 +618,8 @@ import { AnchorProvider } from '@coral-xyz/anchor';
 // Provider wallet = admin authority
 const ff = new FeatureFlagsModule(provider, programId);
 
-// 1. Halt all minting/burning (use FLAG_CIRCUIT_BREAKER_V2, not FLAG_CIRCUIT_BREAKER)
+// 1. Halt all minting/burning AND cdp_liquidate / cdp_liquidate_v2 (BUG-020)
+//    (use FLAG_CIRCUIT_BREAKER_V2, not FLAG_CIRCUIT_BREAKER)
 const sig = await ff.setFeatureFlag({ mint, flag: FLAG_CIRCUIT_BREAKER_V2 });
 console.log('Circuit breaker set:', sig);
 

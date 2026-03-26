@@ -6,6 +6,25 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+#### BUG-020 — `cdp_liquidate_v2` Circuit Breaker Bypass [PR #274]
+
+`cdp_liquidate_v2` did not enforce `FLAG_CIRCUIT_BREAKER`. The V1 `cdp_liquidate`
+path acquired the guard in SSS-110 but the V2 path was omitted, allowing liquidators
+to continue executing V2 liquidations during an emergency halt.
+
+- `cdp_liquidate_v2.rs`: `FLAG_CIRCUIT_BREAKER` guard added at the top of the handler
+  (before the Pyth feed pubkey check), mirroring V1. Returns `SssError::CircuitBreakerActive`
+  when `feature_flags & FLAG_CIRCUIT_BREAKER != 0`.
+- `docs/feature-flags.md`: updated `FLAG_CIRCUIT_BREAKER` effect table and circuit-breaker
+  workflow to document that V2 liquidations are now also halted (BUG-020).
+- `docs/on-chain-sdk-cdp.md`: added BUG-020 bullet in the feature summary and
+  `CircuitBreakerActive` row in the errors table covering both V1 and V2.
+- `tests/sss-bug-020-cdp-liquidate-v2-circuit-breaker.ts`: 8 tests covering full
+  liquidation, partial liquidation, toggle behaviour, V1 regression, non-authority
+  clear attempt, slippage guard path, and flag bit verification.
+
 ### Added
 - `docs/MULTI-ORACLE-CONSENSUS.md` — Multi-Oracle Consensus reference (SSS-153): OracleConsensus PDA, FLAG_MULTI_ORACLE_CONSENSUS (bit 22), median/TWAP aggregation across up to 5 sources (Pyth/Switchboard/Custom), outlier rejection, per-source staleness guards, 3 events, 7 errors, keeper runbook [PR #258]
 - `docs/MARKET-MAKER-HOOKS.md` — Market Maker Hooks reference (SSS-138): MarketMakerConfig PDA, FLAG_MARKET_MAKER_HOOKS (bit 18), mm_mint/mm_burn/register_market_maker/get_mm_capacity instructions, per-slot rate limits, oracle spread check, events, errors, TypeScript example [PR #230]
