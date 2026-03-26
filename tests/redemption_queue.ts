@@ -223,6 +223,7 @@ describe("SSS-154: redemption_queue", () => {
         maxSupply: new BN(1_000_000_000_000),
         featureFlags: FLAG_REDEMPTION_QUEUE,
         auditorElgamalPubkey: null,
+        adminTimelockDelay: new BN(0),
       })
       .accounts({
         payer: authority.publicKey,
@@ -314,6 +315,7 @@ describe("SSS-154: redemption_queue", () => {
         maxSupply: new BN(1_000_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+        adminTimelockDelay: new BN(0),
       })
       .accounts({
         payer: authority.publicKey,
@@ -417,6 +419,7 @@ describe("SSS-154: redemption_queue", () => {
         maxSupply: null,
         featureFlags: null,
         auditorElgamalPubkey: null,
+        adminTimelockDelay: new BN(0),
       })
       .accounts({
         payer: authority.publicKey,
@@ -451,6 +454,7 @@ describe("SSS-154: redemption_queue", () => {
         maxSupply: null,
         featureFlags: FLAG_REDEMPTION_QUEUE,
         auditorElgamalPubkey: null,
+        adminTimelockDelay: new BN(0),
       })
       .accounts({
         payer: authority.publicKey,
