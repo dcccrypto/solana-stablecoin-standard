@@ -201,9 +201,11 @@ Returns indexed TravelRuleRecord events, newest first.
 
 | Parameter | Type   | Required | Description                                                              |
 |-----------|--------|----------|--------------------------------------------------------------------------|
-| `wallet`  | string | No       | Filter by VASP pubkey — matches `originator_vasp` OR `beneficiary_vasp` |
+| `wallet`  | string | **Yes**  | VASP pubkey to query — matches `originator_vasp` OR `beneficiary_vasp`. Must be non-empty. |
 | `mint`    | string | No       | Filter by SSS stablecoin mint address                                    |
 | `limit`   | u32    | No       | Max rows to return (default: 100, max: 1 000)                            |
+
+> **Security note (AUDIT3C-M3):** The `wallet` parameter is **required**. Omitting it or passing an empty/whitespace value returns HTTP `400 BAD_REQUEST`. This prevents cross-VASP data leakage that would occur if all records were returned without scoping by VASP identity.
 
 **Response:**
 ```json
@@ -226,13 +228,19 @@ Returns indexed TravelRuleRecord events, newest first.
 }
 ```
 
+**Error response (missing/empty wallet):**
+```json
+{ "success": false, "error": "wallet parameter is required and must not be empty" }
+```
+HTTP status: `400 BAD_REQUEST`
+
 **Example:**
 ```bash
-# All records for a VASP wallet
+# Records for a VASP wallet (wallet is required)
 curl "https://api.example.com/api/travel-rule/records?wallet=<originatorVasp>&limit=50"
 
-# Records for a specific mint
-curl "https://api.example.com/api/travel-rule/records?mint=AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat"
+# With mint filter
+curl "https://api.example.com/api/travel-rule/records?wallet=<originatorVasp>&mint=AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat"
 ```
 
 ---
