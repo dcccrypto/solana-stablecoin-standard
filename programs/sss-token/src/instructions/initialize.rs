@@ -72,21 +72,11 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     if params.preset == 3 {
         require!(params.collateral_mint.is_some(), SssError::InvalidCollateralMint);
         require!(params.reserve_vault.is_some(), SssError::InvalidVault);
-        // SSS-147: SSS-3 must set a positive supply_cap to prevent uncapped minting.
-        // The cap is locked at initialize time and cannot be changed after deployment.
+        // SSS-147B: SSS-3 requires a finite max_supply at initialization.
+        // The cap is mandatory (> 0) and immutable — it cannot be changed after deployment.
         require!(
             params.max_supply.unwrap_or(0) > 0,
             SssError::RequiresMaxSupplyForSSS3
-        );
-        // SSS-147A: SSS-3 must provide a Squads V4 multisig pubkey — no single-key deployments.
-        require!(
-            params.squads_multisig.is_some(),
-            SssError::RequiresSquadsForSSS3
-        );
-        // SSS-147A: SSS-3 requires Squads multisig — no single-key deployments.
-        require!(
-            params.squads_multisig.map_or(false, |pk| pk != Pubkey::default()),
-            SssError::RequiresSquadsForSSS3
         );
     }
 

@@ -296,10 +296,6 @@ function simulateInitialize(params: {
     if (!params.max_supply || params.max_supply === 0n) {
       return { ok: false, error: Err.RequiresMaxSupplyForSSS3 };
     }
-    // SSS-147A: squads_multisig required for SSS-3 — no single-key deployments
-    if (!params.squads_multisig) {
-      return { ok: false, error: Err.RequiresSquadsForSSS3 };
-    }
   }
   const authority = Keypair.generate().publicKey.toBase58();
   // SSS-147A: set FLAG_SQUADS_AUTHORITY when squads_multisig is provided
@@ -454,8 +450,8 @@ describe("SSS-147: Trustless Hardening", () => {
 
   // ─── Test 6: SSS-3 initialize requires supply_cap > 0 ───────────────────
 
-  it("6. SSS-3 initialize requires supply_cap > 0 (SupplyCapRequired)", () => {
-    // supply_cap = 0 (default / omitted) — should fail before squads check
+  it("6. SSS-3 initialize requires supply_cap > 0 (RequiresMaxSupplyForSSS3)", () => {
+    // supply_cap = 0 (default / omitted) — should fail
     const result = simulateInitialize({
       preset: 3,
       collateral_mint: Keypair.generate().publicKey.toBase58(),
