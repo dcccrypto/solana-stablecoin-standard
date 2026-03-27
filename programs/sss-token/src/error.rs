@@ -484,4 +484,6 @@ pub enum SssError {
     WalletRateLimitExceeded,
     #[msg("Wallet rate limits not enabled — FLAG_WALLET_RATE_LIMITS is not set")]
     WalletRateLimitsNotEnabled,
+    #[msg("DAO proposal amount exhausted — cumulative draws have consumed the full approved amount")]
+    DaoProposalExhausted,
 }

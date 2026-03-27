@@ -548,6 +548,9 @@ pub struct ProposalPda {
     pub executed: bool,
     /// Whether this proposal has been cancelled.
     pub cancelled: bool,
+    /// Cumulative amount already consumed by draw_insurance calls against this proposal.
+    /// Prevents replay: once cumulative_consumed >= param, no further draws are allowed.
+    pub cumulative_consumed: u64,
     pub bump: u8,
 }
 

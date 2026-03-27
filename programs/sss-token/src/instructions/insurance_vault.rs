@@ -284,7 +284,9 @@ pub struct DrawInsurance<'info> {
 
     /// Optional DAO proposal — REQUIRED when FLAG_DAO_COMMITTEE is active.
     /// Must be an executed DrawInsurance proposal with approved amount >= `amount`.
+    /// Mutable so we can track cumulative_consumed and prevent replay attacks.
     /// CHECK: validated in handler logic (action, executed, amount, config match).
+    #[account(mut)]
     pub dao_proposal: Option<Account<'info, ProposalPda>>,
 
     pub collateral_token_program: Interface<'info, TokenInterface>,
@@ -301,16 +303,16 @@ pub fn draw_insurance_handler(
     let vault = &ctx.accounts.insurance_vault;
 
     if config.feature_flags & FLAG_DAO_COMMITTEE != 0 {
-        // BUG-AUDIT3-005: DAO active — MUST verify on-chain quorum evidence.
+        // BUG-AUDIT3-005 fix: DAO active — MUST verify on-chain quorum evidence.
+        // BUG (CRITICAL): authority check + replay prevention.
         // Require a ProposalPda that:
         //   1. belongs to this config
         //   2. has action == DrawInsurance
         //   3. has been executed (quorum reached + execute_action called)
-        //   4. approved amount (param) >= requested draw amount
-        //
-        // This closes the bypass: previously `config.authority` could call
-        // draw_insurance directly without any DAO vote.
-        match &ctx.accounts.dao_proposal {
+        //   4. approved amount (param) >= (cumulative_consumed + amount)
+        //   5. proposal.target matches authority key (prevents any-signer exploit)
+        // cumulative_consumed is incremented on each draw to prevent replay.
+        match &mut ctx.accounts.dao_proposal {
             None => {
                 return err!(SssError::DaoProposalRequired);
             }
@@ -325,14 +327,28 @@ pub fn draw_insurance_handler(
                 );
                 require!(proposal.executed, SssError::DaoProposalNotExecuted);
                 require!(!proposal.cancelled, SssError::ProposalCancelled);
+                // MAJOR fix: verify the authority signer matches the proposal target.
+                // This prevents any arbitrary signer with a valid ProposalPda from drawing.
                 require!(
-                    proposal.param >= amount,
-                    SssError::DaoProposalInsufficientAmount
+                    proposal.target == ctx.accounts.authority.key(),
+                    SssError::Unauthorized
                 );
+                // CRITICAL fix: replay prevention — check remaining budget on proposal.
+                let new_consumed = proposal
+                    .cumulative_consumed
+                    .checked_add(amount)
+                    .ok_or(error!(SssError::InvalidAmount))?;
+                require!(
+                    new_consumed <= proposal.param,
+                    SssError::DaoProposalExhausted
+                );
+                // Update cumulative_consumed to prevent replay in future draws.
+                proposal.cumulative_consumed = new_consumed;
                 msg!(
-                    "DAO committee active: draw authorised by proposal #{} (approved={})",
+                    "DAO committee active: draw authorised by proposal #{} (approved={}, consumed={})",
                     proposal.proposal_id,
-                    proposal.param
+                    proposal.param,
+                    new_consumed,
                 );
             }
         }

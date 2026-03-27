@@ -51,7 +51,7 @@ use routes::{
     webhooks::{delete_webhook, list_webhooks, register_webhook},
     ws_events::ws_events_handler,
     zk_credentials::{list_credential_records, list_registries, submit_credential, upsert_registry, verify_credential},
-    travel_rule::{get_travel_rule_records, get_pid_config},
+    travel_rule::{get_travel_rule_records, get_pid_config, post_travel_rule_record},
     webhook_deliveries::list_webhook_deliveries,
 };
 use state::AppState;
@@ -129,6 +129,8 @@ async fn main() {
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
         .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+        // AUDIT3C: POST travel-rule records is admin-only (VASP registry write path)
+        .route("/api/admin/travel-rule/records", post(post_travel_rule_record))
         .layer(middleware::from_fn(require_admin))
         .with_state(state.clone());
 

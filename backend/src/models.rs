@@ -350,6 +350,18 @@ pub struct TravelRuleRecord {
     pub created_at: String,
 }
 
+/// AUDIT3C-H1: POST /api/travel-rule/records request body.
+#[derive(Debug, Deserialize)]
+pub struct CreateTravelRuleRecord {
+    pub originator_vasp: String,
+    pub beneficiary_vasp: String,
+    pub mint: String,
+    pub amount: i64,
+    pub threshold: i64,
+    pub compliant: bool,
+    pub tx_signature: Option<String>,
+}
+
 /// GET /api/pid-config response.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PidConfigResponse {
