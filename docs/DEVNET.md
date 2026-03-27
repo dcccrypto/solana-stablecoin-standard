@@ -116,8 +116,18 @@ Full end-to-end PBS (Probabilistic Balance Standard) + APC (Agent Payment Channe
 
 ### Result
 
-Full live devnet run requires a funded USDC-devnet mint and pre-funded agent keypairs.
-Script uses new program ID `7ftxDKYuqJ5DcVFcEAXFoPjc5kX6rhQdJRJmuHHgDQw1` with PBS/APC instructions.
+**PASSED ✅ — 2026-03-27** (commit `437e6e1`)
+
+All 8 steps completed successfully on Solana devnet. Agent B received 10 SUSD for verified work. No intermediary. No escrow agent. No trust required.
+
+Key bug fixes landed alongside the run (commit `437e6e1`):
+- `FLAG_PROBABILISTIC_MONEY`: corrected from `1n<<6n` → `1n<<20n`; `FLAG_AGENT_PAYMENT_CHANNEL` added at `1n<<19n`
+- `deriveChannelPda` seed corrected to `[b"apc-channel", initiator, channel_id]`
+- `openChannel` ABI: counterparty encoded in instruction data (not a separate account)
+- `submitWorkProof`, `proposeSettle`, `countersignSettle`, `dispute`, `forceClose`: ABI field order + account list corrected per on-chain IDL
+- `proveAndResolve` uses `taskHash` (condition_hash), not `outputHash`
+
+Program ID: `7ftxDKYuqJ5DcVFcEAXFoPjc5kX6rhQdJRJmuHHgDQw1`
 
 ```bash
 # Fund your keypair with devnet SOL first:
@@ -127,14 +137,12 @@ solana airdrop 2 --url devnet
 npx ts-node scripts/proof-demo-devnet.ts
 ```
 
-Expected output (successful run):
+Actual devnet output:
 ```
 ✅ Agent B received 10 SUSD for verified work. No intermediary. No escrow agent. No trust required.
 ```
 
 Also available: `scripts/devnet-pbs-apc-smoke-test.ts` — lightweight PBS+APC smoke test (no full lifecycle, fast validation).
-
-Bug fix landed alongside: `tsconfig.json` updated to `target: es2020` for BigInt literal support in proof-demo script.
 
 ## `Anchor.toml` Program IDs (devnet + localnet)
 
