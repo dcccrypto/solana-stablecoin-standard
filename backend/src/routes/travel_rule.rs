@@ -21,12 +21,16 @@ use crate::feature_flags::FLAG_TRAVEL_RULE;
 use crate::models::{ApiResponse, PidConfigResponse, TravelRuleQuery, TravelRuleRecord};
 use crate::state::AppState;
 
+/// Convenience alias: structured error response matching the ApiResponse contract.
+type ApiError = (StatusCode, Json<ApiResponse<()>>);
+
 /// Known SSS program IDs (mirrors WATCHED_PROGRAMS in indexer.rs).
 const SSS_TOKEN_PROGRAM_ID: &str = "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat";
 const SSS_TRANSFER_HOOK_PROGRAM_ID: &str = "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp";
 
 /// AUDIT3C-M3: Validate that a wallet query param is present and non-empty.
-/// Returns `Some(&str)` with the trimmed value on success, or `None` to signal 400.
+/// Returns `Some(&str)` with the **original** (untrimmed) value when the trimmed
+/// form is non-empty, or `None` to signal a 400 Bad Request.
 pub(crate) fn require_wallet_param(wallet: Option<&str>) -> Option<&str> {
     match wallet {
         Some(w) if !w.trim().is_empty() => Some(w),
@@ -46,11 +50,14 @@ pub(crate) fn require_wallet_param(wallet: Option<&str>) -> Option<&str> {
 pub async fn get_travel_rule_records(
     State(state): State<AppState>,
     Query(params): Query<TravelRuleQuery>,
-) -> Result<Json<ApiResponse<Vec<TravelRuleRecord>>>, StatusCode> {
+) -> Result<Json<ApiResponse<Vec<TravelRuleRecord>>>, ApiError> {
     // AUDIT2-C: gate on FLAG_TRAVEL_RULE
     if !state.feature_flags.is_set(FLAG_TRAVEL_RULE) {
         tracing::warn!("travel-rule/records: FLAG_TRAVEL_RULE is not set — returning 503");
-        return Err(StatusCode::SERVICE_UNAVAILABLE);
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::err("travel rule feature is not enabled")),
+        ));
     }
 
     // AUDIT3C-M3: require non-empty wallet param to prevent bulk data exposure.
@@ -58,7 +65,10 @@ pub async fn get_travel_rule_records(
         Some(w) => w,
         None => {
             tracing::warn!("travel-rule/records: missing or empty wallet param — returning 400");
-            return Err(StatusCode::BAD_REQUEST);
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::err("wallet param is required and must be non-empty")),
+            ));
         }
     };
 
@@ -73,7 +83,10 @@ pub async fn get_travel_rule_records(
         )
         .map_err(|e| {
             tracing::error!("travel_rule_records query error: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::err("internal server error")),
+            )
         })?;
 
     Ok(Json(ApiResponse {
@@ -92,11 +105,14 @@ pub async fn get_travel_rule_records(
 /// Requires FLAG_TRAVEL_RULE (bit 6) in StablecoinConfig.feature_flags.
 pub async fn get_pid_config(
     State(state): State<AppState>,
-) -> Result<Json<PidConfigResponse>, StatusCode> {
+) -> Result<Json<PidConfigResponse>, ApiError> {
     // AUDIT2-C: gate on FLAG_TRAVEL_RULE
     if !state.feature_flags.is_set(FLAG_TRAVEL_RULE) {
         tracing::warn!("pid-config: FLAG_TRAVEL_RULE is not set — returning 503");
-        return Err(StatusCode::SERVICE_UNAVAILABLE);
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ApiResponse::err("travel rule feature is not enabled")),
+        ));
     }
 
     let threshold: i64 = std::env::var("TRAVEL_RULE_THRESHOLD")
@@ -133,17 +149,15 @@ mod tests {
         assert!(require_wallet_param(Some("   ")).is_none());
     }
 
+    /// Non-empty wallet param returns `Some` with the original (untrimmed) value.
     #[test]
-    fn wallet_param_valid_address_returns_some() {
-        let addr = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
-        assert_eq!(require_wallet_param(Some(addr)), Some(addr));
-    }
-
-    #[test]
-    fn wallet_param_valid_address_preserves_value() {
-        let addr = "vasp-001";
-        let result = require_wallet_param(Some(addr));
-        assert_eq!(result, Some("vasp-001"));
+    fn wallet_param_valid_address_returns_original_value() {
+        // Base58 address — long form
+        let base58 = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
+        assert_eq!(require_wallet_param(Some(base58)), Some(base58));
+        // Short identifier — different format to exercise the same code path distinctly
+        let short = "vasp-001";
+        assert_eq!(require_wallet_param(Some(short)), Some(short));
     }
 
     #[test]
