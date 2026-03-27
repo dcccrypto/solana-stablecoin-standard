@@ -6,6 +6,12 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### BUG-036/037/028 — SDK Docs: Admin Key Warnings, Off-Chain Mint/Burn Clarification, Amount Guard
+
+- `docs/sdk-cli.md` — `mint`/`burn` SDK sections now explicitly state these are **off-chain event-recording calls** (POST /api/mint|burn, not on-chain Solana transactions); `tx_signature`/`--tx-sig` marked **required** (was optional); `amount > 0` guard noted with `SSSError` callout (BUG-028/BUG-037)
+- `docs/sdk-cli.md` — API Key Management section: `createApiKey()`/`deleteApiKey()` now carry `⚠️ Admin key required` warning block — standard keys return 403 (BUG-036)
+- `docs/sdk-cli.md` — CLI `mint`/`burn` command reference updated to reflect required `--tx-sig` and off-chain nature
+
 ### fix/compile-errors-round2-v2 — CI Fix: Instructions Wired + IDL Sync (PR #298, commit fffa44f)
 
 - `programs/sss-token/src/lib.rs` — wired up 5 redemption queue instructions (`init_redemption_queue`, `enqueue_redemption`, `process_redemption`, `cancel_redemption`, `update_redemption_queue`) and `migrate_config` (SSS-122: idempotent v0→current StablecoinConfig migration, required before mint/burn/redeem on pre-SSS-122 configs)

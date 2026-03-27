@@ -85,28 +85,44 @@ const health = await client.health();
 
 ### Mint
 
-Record a stablecoin mint event.
+Record an **off-chain** mint event in the SSS backend database.
+
+> ⚠️ **This does NOT perform any on-chain Solana transaction.** It only POSTs
+> a record to `POST /api/mint`. To actually mint tokens on-chain, submit a
+> Solana transaction via the SSS Anchor program separately.
+>
+> `amount` must be a positive integer (throws `SSSError` if `<= 0`).
+> `tx_signature` is **required** — pass the confirmed on-chain transaction
+> signature; the backend rejects requests without one.
 
 ```typescript
 const event = await client.mint({
   token_mint: "So11111111111111111111111111111111111111112",
-  amount: 1_000_000,          // raw token units
+  amount: 1_000_000,          // raw token units; must be > 0
   recipient: "RecipientPubkey...",
-  tx_signature: "5KtP9x...",  // optional
+  tx_signature: "5KtP9x...",  // required: confirmed on-chain tx signature
 });
 // → MintEvent { id, token_mint, amount, recipient, tx_signature, created_at }
 ```
 
 ### Burn
 
-Record a stablecoin burn event.
+Record an **off-chain** burn event in the SSS backend database.
+
+> ⚠️ **This does NOT perform any on-chain Solana transaction.** It only POSTs
+> a record to `POST /api/burn`. To actually burn tokens on-chain, submit a
+> Solana transaction via the SSS Anchor program separately.
+>
+> `amount` must be a positive integer (throws `SSSError` if `<= 0`).
+> `tx_signature` is **required** — pass the confirmed on-chain transaction
+> signature; the backend rejects requests without one.
 
 ```typescript
 const event = await client.burn({
   token_mint: "So11111111111111111111111111111111111111112",
-  amount: 500_000,
+  amount: 500_000,            // must be > 0
   source: "SourcePubkey...",
-  tx_signature: "3Yz8Ab...", // optional
+  tx_signature: "3Yz8Ab...", // required: confirmed on-chain tx signature
 });
 // → BurnEvent { id, token_mint, amount, source, tx_signature, created_at }
 ```
@@ -183,16 +199,23 @@ const result = await client.deleteWebhook(hook.id);
 
 ### API Key Management
 
+> ⚠️ **Admin key required for create/delete.** `createApiKey()` and
+> `deleteApiKey()` both require the `SSSClient` to be initialised with an
+> **admin-level** API key (`X-Api-Key` header). Calling either method with a
+> standard read/write key returns `403 Forbidden`. Treat admin keys as highly
+> sensitive credentials and never expose them in client-side code.
+
 ```typescript
 // List (key values are redacted; only prefix shown)
 const keys = await client.listApiKeys();
 // → ApiKeyListEntry[] { id, label, key_prefix, created_at }
 
 // Create (full key returned only at creation time — store it securely)
+// Requires admin-level API key
 const newKey = await client.createApiKey("my-service");
 // → ApiKeyEntry { id, key, label, created_at }
 
-// Delete
+// Delete — requires admin-level API key
 const result = await client.deleteApiKey(newKey.id);
 // → { deleted: true }
 ```
@@ -228,22 +251,26 @@ sss-token health
 
 ### `mint`
 
+Records an **off-chain** mint event (does not submit an on-chain transaction). `--tx-sig` is **required**.
+
 ```bash
 sss-token mint \
   --token-mint So11111111111111111111111111111111111111112 \
   --amount 1000000 \
   --recipient RecipientPubkey... \
-  --tx-sig 5KtP9x...          # optional
+  --tx-sig 5KtP9x...          # required: confirmed on-chain tx signature
 ```
 
 ### `burn`
+
+Records an **off-chain** burn event (does not submit an on-chain transaction). `--tx-sig` is **required**.
 
 ```bash
 sss-token burn \
   --token-mint So11111111111111111111111111111111111111112 \
   --amount 500000 \
   --source SourcePubkey... \
-  --tx-sig 3Yz8Ab...          # optional
+  --tx-sig 3Yz8Ab...          # required: confirmed on-chain tx signature
 ```
 
 ### `supply`
