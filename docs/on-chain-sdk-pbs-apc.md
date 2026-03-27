@@ -12,7 +12,9 @@ The Probabilistic Balance Standard lets an **issuer** lock stablecoins in a hash
 
 ### Prerequisites
 
-The `FLAG_PROBABILISTIC_MONEY` feature flag (`1 << 6 = 0x40`) must be set on the `StablecoinConfig` PDA at initialization time. Check with `feature-flags.md`.
+The `FLAG_PROBABILISTIC_MONEY` feature flag (`1 << 20 = 0x100000`, bit 20) must be set on the `StablecoinConfig` PDA at initialization time. Check with `feature-flags.md`.
+
+> **AUDIT3-B fix (2026-03-27):** The flag constant was previously documented and coded as `1 << 6 = 0x40` (bit 6), which is actually `FLAG_TRAVEL_RULE`. The correct on-chain constant in `state.rs` is bit 20. `ProbabilisticModule.ts` has been updated accordingly. `commitProbabilistic()` now performs an explicit SDK-level guard — it fetches the config and throws a clear error if `FLAG_PROBABILISTIC_MONEY` is not set, rather than allowing an opaque on-chain revert.
 
 ### Quick Start
 
@@ -50,7 +52,7 @@ await pbs.proveAndResolve(conditionHash, {
 
 | Method | Signer | Description |
 |--------|--------|-------------|
-| `commitProbabilistic(params)` | Issuer | Lock tokens; creates `ProbabilisticVault` PDA |
+| `commitProbabilistic(params)` | Issuer | Lock tokens; creates `ProbabilisticVault` PDA. Throws if `FLAG_PROBABILISTIC_MONEY` (bit 20) is not set. |
 | `proveAndResolve(proofHash, params)` | Claimant | Full release on hash match |
 | `partialResolve(proofHash, params)` | Claimant | Partial release; remainder to issuer |
 | `expireAndRefund(params)` | Anyone | Refund issuer after `expirySlot` |
