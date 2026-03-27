@@ -12,6 +12,9 @@
  *  8.  SSS-2 initialize allows supply_cap == 0
  *  9.  supply_cap_locked is set to true for SSS-3 at initialize time
  * 10.  Proposal from member reaches quorum and can be executed (pause action)
+ * 11.  SSS-3 initialize without squads_multisig is rejected (RequiresSquadsForSSS3)
+ * 12.  SSS-3 initialize with squads_multisig succeeds + FLAG_SQUADS_AUTHORITY set
+ * 13.  SSS-1/SSS-2 initialize without squads_multisig still succeeds
  *
  * These tests simulate the on-chain logic in pure TypeScript for CI speed and
  * to avoid requiring a running validator.  The simulation closely mirrors the
@@ -31,8 +34,9 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 // ---------------------------------------------------------------------------
 // Constants (mirrors Rust state.rs)
 // ---------------------------------------------------------------------------
-const FLAG_DAO_COMMITTEE = BigInt(1) << BigInt(2); // bit 2 = 4
+const FLAG_DAO_COMMITTEE = BigInt(1) << BigInt(2);   // bit 2 = 4
 const FLAG_CIRCUIT_BREAKER = BigInt(1) << BigInt(0); // bit 0 = 1
+const FLAG_SQUADS_AUTHORITY = BigInt(1) << BigInt(13); // bit 13 — SSS-147A
 
 // ---------------------------------------------------------------------------
 // Error codes (mirrors SssError enum)
@@ -53,6 +57,7 @@ const Err = {
   ProposalAlreadyExecuted: "ProposalAlreadyExecuted",
   AlreadyVoted: "AlreadyVoted",
   NotACommitteeMember: "NotACommitteeMember",
+  RequiresSquadsForSSS3: "RequiresSquadsForSSS3",
 };
 
 // ---------------------------------------------------------------------------
@@ -276,6 +281,7 @@ function simulateInitialize(params: {
   collateral_mint?: string;
   reserve_vault?: string;
   max_supply?: bigint;
+  squads_multisig?: string;
 }): { ok: true; config: StablecoinConfig } | { ok: false; error: string } {
   if (params.preset !== 1 && params.preset !== 2 && params.preset !== 3) {
     return { ok: false, error: Err.InvalidPreset };
@@ -290,13 +296,19 @@ function simulateInitialize(params: {
     if (!params.max_supply || params.max_supply === 0n) {
       return { ok: false, error: Err.RequiresMaxSupplyForSSS3 };
     }
+    // SSS-147A: squads_multisig required for SSS-3 — no single-key deployments
+    if (!params.squads_multisig) {
+      return { ok: false, error: Err.RequiresSquadsForSSS3 };
+    }
   }
   const authority = Keypair.generate().publicKey.toBase58();
+  // SSS-147A: set FLAG_SQUADS_AUTHORITY when squads_multisig is provided
+  const feature_flags = params.squads_multisig ? FLAG_SQUADS_AUTHORITY : 0n;
   return {
     ok: true,
     config: {
       authority,
-      feature_flags: 0n,
+      feature_flags,
       paused: false,
       max_supply: params.max_supply ?? 0n,
       supply_cap_locked: params.preset === 3,  // SSS-147
@@ -442,13 +454,14 @@ describe("SSS-147: Trustless Hardening", () => {
 
   // ─── Test 6: SSS-3 initialize requires supply_cap > 0 ───────────────────
 
-  it("6. SSS-3 initialize requires supply_cap > 0 (RequiresMaxSupplyForSSS3)", () => {
-    // supply_cap = 0 (default / omitted) — should fail
+  it("6. SSS-3 initialize requires supply_cap > 0 (SupplyCapRequired)", () => {
+    // supply_cap = 0 (default / omitted) — should fail before squads check
     const result = simulateInitialize({
       preset: 3,
       collateral_mint: Keypair.generate().publicKey.toBase58(),
       reserve_vault: Keypair.generate().publicKey.toBase58(),
       max_supply: 0n,
+      squads_multisig: Keypair.generate().publicKey.toBase58(),
     });
     assert.isFalse(result.ok, "SSS-3 with supply_cap=0 should be rejected");
     if (!result.ok) {
@@ -494,8 +507,9 @@ describe("SSS-147: Trustless Hardening", () => {
       collateral_mint: Keypair.generate().publicKey.toBase58(),
       reserve_vault: Keypair.generate().publicKey.toBase58(),
       max_supply: 1_000_000n,
+      squads_multisig: Keypair.generate().publicKey.toBase58(),
     });
-    assert.isTrue(result.ok, "SSS-3 with supply_cap > 0 should succeed");
+    assert.isTrue(result.ok, "SSS-3 with supply_cap > 0 and squads_multisig should succeed");
     if (result.ok) {
       assert.isTrue(
         result.config.supply_cap_locked,
@@ -567,6 +581,63 @@ describe("SSS-147: Trustless Hardening", () => {
     assert.isFalse(reExec.ok, "re-execution of already-executed proposal should fail");
     if (!reExec.ok) {
       assert.equal(reExec.error, Err.ProposalAlreadyExecuted);
+    }
+  });
+
+  // ─── Test 11: SSS-147A — SSS-3 without squads_multisig is rejected ───────
+
+  it("11. SSS-3 initialize without squads_multisig is rejected (RequiresSquadsForSSS3)", () => {
+    const result = simulateInitialize({
+      preset: 3,
+      collateral_mint: Keypair.generate().publicKey.toBase58(),
+      reserve_vault: Keypair.generate().publicKey.toBase58(),
+      max_supply: 1_000_000n,
+      // squads_multisig intentionally omitted
+    });
+    assert.isFalse(result.ok, "SSS-3 without squads_multisig should be rejected");
+    if (!result.ok) {
+      assert.equal(result.error, Err.RequiresSquadsForSSS3);
+    }
+  });
+
+  // ─── Test 12: SSS-147A — SSS-3 with squads_multisig succeeds ─────────────
+
+  it("12. SSS-3 initialize with squads_multisig succeeds + FLAG_SQUADS_AUTHORITY set", () => {
+    const squadsPk = Keypair.generate().publicKey.toBase58();
+    const result = simulateInitialize({
+      preset: 3,
+      collateral_mint: Keypair.generate().publicKey.toBase58(),
+      reserve_vault: Keypair.generate().publicKey.toBase58(),
+      max_supply: 1_000_000n,
+      squads_multisig: squadsPk,
+    });
+    assert.isTrue(result.ok, "SSS-3 with squads_multisig should succeed");
+    if (result.ok) {
+      assert.isTrue(
+        (result.config.feature_flags & FLAG_SQUADS_AUTHORITY) !== 0n,
+        "FLAG_SQUADS_AUTHORITY must be set when squads_multisig is provided"
+      );
+    }
+  });
+
+  // ─── Test 13: SSS-147A — SSS-1/SSS-2 without squads_multisig still succeeds
+
+  it("13. SSS-1/SSS-2 initialize without squads_multisig still succeeds", () => {
+    const sss1 = simulateInitialize({ preset: 1 });
+    assert.isTrue(sss1.ok, "SSS-1 without squads_multisig should succeed");
+    if (sss1.ok) {
+      assert.equal(sss1.config.feature_flags & FLAG_SQUADS_AUTHORITY, 0n,
+        "FLAG_SQUADS_AUTHORITY must NOT be set for SSS-1 without squads_multisig");
+    }
+
+    const sss2 = simulateInitialize({
+      preset: 2,
+      transfer_hook_program: Keypair.generate().publicKey.toBase58(),
+    });
+    assert.isTrue(sss2.ok, "SSS-2 without squads_multisig should succeed");
+    if (sss2.ok) {
+      assert.equal(sss2.config.feature_flags & FLAG_SQUADS_AUTHORITY, 0n,
+        "FLAG_SQUADS_AUTHORITY must NOT be set for SSS-2 without squads_multisig");
     }
   });
 });

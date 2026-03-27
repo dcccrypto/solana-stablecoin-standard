@@ -83,6 +83,11 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
             params.squads_multisig.is_some(),
             SssError::RequiresSquadsForSSS3
         );
+        // SSS-147A: SSS-3 requires Squads multisig — no single-key deployments.
+        require!(
+            params.squads_multisig.map_or(false, |pk| pk != Pubkey::default()),
+            SssError::RequiresSquadsForSSS3
+        );
     }
 
     // SSS-106: Validate and store confidential transfer config if FLAG is set.
@@ -186,10 +191,10 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     // SSS-106: confidential transfers; SSS-147A: set FLAG_SQUADS_AUTHORITY if squads_multisig is provided
     let mut feature_flags = params.feature_flags.unwrap_or(0);
     if let Some(squads_pk) = params.squads_multisig {
-        config.squads_multisig = squads_pk;
-        feature_flags |= FLAG_SQUADS_AUTHORITY;
-    } else {
-        config.squads_multisig = Pubkey::default();
+        if squads_pk != Pubkey::default() {
+            config.squads_multisig = squads_pk;
+            feature_flags |= FLAG_SQUADS_AUTHORITY;
+        }
     }
     config.feature_flags = feature_flags;
     config.auditor_elgamal_pubkey = if ct_enabled {
