@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use tokio::sync::broadcast;
@@ -9,6 +10,42 @@ use crate::rate_limit::RateLimiter;
 /// Slow clients that fall too far behind will receive a lag error on reconnect.
 pub const WS_BROADCAST_CAPACITY: usize = 256;
 
+/// Atomically-updated cache of the on-chain `StablecoinConfig.feature_flags`
+/// bitmask. Updated by the background `flag_refresh` worker; read by API
+/// handlers to gate flag-guarded endpoints.
+pub struct FeatureFlagsCache {
+    flags: AtomicU64,
+}
+
+impl FeatureFlagsCache {
+    pub fn new() -> Self {
+        Self {
+            flags: AtomicU64::new(0),
+        }
+    }
+
+    /// Return the current cached flag bitmask.
+    pub fn get(&self) -> u64 {
+        self.flags.load(Ordering::Relaxed)
+    }
+
+    /// Overwrite the cached flag bitmask (called by the refresh worker).
+    pub fn set(&self, v: u64) {
+        self.flags.store(v, Ordering::Relaxed);
+    }
+
+    /// Returns `true` if the given flag bit (or combination) is set.
+    pub fn is_set(&self, flag: u64) -> bool {
+        self.get() & flag != 0
+    }
+}
+
+impl Default for FeatureFlagsCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Shared application state threaded through Axum's router.
 #[derive(Clone)]
 pub struct AppState {
@@ -18,6 +55,10 @@ pub struct AppState {
     /// The sender is stored in AppState; each WS handler receives a clone of
     /// the `Receiver` via `tx.subscribe()`.
     pub ws_tx: broadcast::Sender<serde_json::Value>,
+    /// SSS-AUDIT2-C: Cached on-chain feature_flags bitmask.
+    /// Updated every 30 s by the flag_refresh background worker.
+    /// All handlers that gate on feature flags read from here.
+    pub feature_flags: Arc<FeatureFlagsCache>,
 }
 
 impl AppState {
@@ -27,6 +68,7 @@ impl AppState {
             db: Arc::new(db),
             rate_limiter: Arc::new(RateLimiter::from_env()),
             ws_tx,
+            feature_flags: Arc::new(FeatureFlagsCache::new()),
         }
     }
 
@@ -39,6 +81,7 @@ impl AppState {
             db: Arc::new(db),
             rate_limiter: Arc::new(rate_limiter),
             ws_tx,
+            feature_flags: Arc::new(FeatureFlagsCache::new()),
         }
     }
 }

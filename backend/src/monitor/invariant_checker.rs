@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 // SSS-139: InvariantChecker — polls on-chain state, checks invariants, fires alerts.
+// SSS-AUDIT2-C: Added check_incompatible_flags invariant.
 
 use std::time::Duration;
 use tracing::{info, warn};
@@ -181,6 +182,19 @@ async fn check_circuit_breaker(state: &AppState) -> InvariantStatus {
     InvariantStatus::Ok
 }
 
+/// SSS-AUDIT2-C: Check for incompatible on-chain feature flag combinations.
+async fn check_incompatible_flags(state: &AppState) -> InvariantStatus {
+    let flags = state.feature_flags.get();
+    if let Some(msg) = crate::feature_flags::check_incompatible_combos(flags) {
+        InvariantStatus::Violated {
+            invariant: "incompatible_flag_combo".into(),
+            detail: msg.to_string(),
+        }
+    } else {
+        InvariantStatus::Ok
+    }
+}
+
 /// Main invariant checker loop — runs every POLL_INTERVAL_SECS seconds.
 pub async fn run_invariant_checker(state: AppState) {
     let alert_mgr = AlertManager::new(state.clone());
@@ -194,6 +208,7 @@ pub async fn run_invariant_checker(state: AppState) {
             ("reserve_ratio", check_reserve_ratio(&state).await),
             ("sanctioned_transactions", check_sanctioned_transactions(&state).await),
             ("circuit_breaker", check_circuit_breaker(&state).await),
+            ("incompatible_flag_combo", check_incompatible_flags(&state).await),
         ];
 
         for (name, result) in checks {

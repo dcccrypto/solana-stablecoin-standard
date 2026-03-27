@@ -1,6 +1,8 @@
 mod auth;
 mod db;
 mod error;
+mod feature_flags;
+mod flag_refresh;
 mod indexer;
 mod indexer_schema;
 mod models;
@@ -182,6 +184,9 @@ async fn main() {
 
     // SSS-145: start webhook retry worker
     tokio::spawn(webhook_retry_worker::start_retry_worker(state.clone()));
+
+    // SSS-AUDIT2-C: start feature flags refresh worker (reads on-chain StablecoinConfig)
+    tokio::spawn(flag_refresh::start_flag_refresh_worker(state.clone()));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!("SSS Backend listening on {}", addr);
