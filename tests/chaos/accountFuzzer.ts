@@ -19,8 +19,12 @@ import {
   Keypair,
   PublicKey,
   SystemProgram,
+  Transaction,
+  SystemProgram as SP,
+  sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { expect } from "chai";
+import * as fs from "fs";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,13 +58,40 @@ function containsError(err: unknown, fragment: string): boolean {
   );
 }
 
+/**
+ * Fund `pk` with `lamports`.
+ *
+ * Strategy (in priority order):
+ *   1. CHAOS_PAYER_KEYPAIR env var set → load that keypair and transfer from it.
+ *      This avoids devnet airdrop rate limits (429) and works on localnet
+ *      without a pre-funded faucet.
+ *   2. Fallback → requestAirdrop (original behavior, works on localnet/devnet
+ *      when rate limits are not a concern).
+ *
+ * Setup:
+ *   export CHAOS_PAYER_KEYPAIR=~/.config/solana/id.json
+ *   (or point to any funded keypair on the target network)
+ */
 async function airdrop(
   connection: anchor.web3.Connection,
   pk: PublicKey,
   lamports = 2_000_000_000
 ) {
-  const sig = await connection.requestAirdrop(pk, lamports);
-  await connection.confirmTransaction(sig, "confirmed");
+  const payerPath = process.env["CHAOS_PAYER_KEYPAIR"];
+  if (payerPath) {
+    // Use pre-funded keypair via SOL transfer
+    const raw = JSON.parse(fs.readFileSync(payerPath.replace(/^~/, process.env["HOME"] ?? ""), "utf8")) as number[];
+    const funder = Keypair.fromSecretKey(Uint8Array.from(raw));
+    const tx = new Transaction().add(
+      SystemProgram.transfer({ fromPubkey: funder.publicKey, toPubkey: pk, lamports })
+    );
+    const sig = await sendAndConfirmTransaction(connection, tx, [funder], { commitment: "confirmed" });
+    await connection.confirmTransaction(sig, "confirmed");
+  } else {
+    // Fallback: requestAirdrop (may hit rate limits on devnet)
+    const sig = await connection.requestAirdrop(pk, lamports);
+    await connection.confirmTransaction(sig, "confirmed");
+  }
 }
 
 function randomPda(programId: PublicKey): PublicKey {

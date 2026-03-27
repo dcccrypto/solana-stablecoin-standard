@@ -24,8 +24,10 @@ import {
   PublicKey,
   Transaction,
   SystemProgram,
+  sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { expect } from "chai";
+import * as fs from "fs";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -58,13 +60,34 @@ function containsError(err: unknown, fragment: string): boolean {
   );
 }
 
+/**
+ * Fund `pk` with `lamports`.
+ *
+ * Strategy (in priority order):
+ *   1. CHAOS_PAYER_KEYPAIR env var set → load that keypair and transfer from it.
+ *      Avoids devnet airdrop rate limits (429) and localnet faucet issues.
+ *   2. Fallback → requestAirdrop (original behavior).
+ *
+ * Setup: export CHAOS_PAYER_KEYPAIR=~/.config/solana/id.json
+ */
 async function airdrop(
   connection: anchor.web3.Connection,
   pk: PublicKey,
   lamports = 2_000_000_000
 ) {
-  const sig = await connection.requestAirdrop(pk, lamports);
-  await connection.confirmTransaction(sig, "confirmed");
+  const payerPath = process.env["CHAOS_PAYER_KEYPAIR"];
+  if (payerPath) {
+    const raw = JSON.parse(fs.readFileSync(payerPath.replace(/^~/, process.env["HOME"] ?? ""), "utf8")) as number[];
+    const funder = Keypair.fromSecretKey(Uint8Array.from(raw));
+    const tx = new Transaction().add(
+      SystemProgram.transfer({ fromPubkey: funder.publicKey, toPubkey: pk, lamports })
+    );
+    const sig = await sendAndConfirmTransaction(connection, tx, [funder], { commitment: "confirmed" });
+    await connection.confirmTransaction(sig, "confirmed");
+  } else {
+    const sig = await connection.requestAirdrop(pk, lamports);
+    await connection.confirmTransaction(sig, "confirmed");
+  }
 }
 
 /**

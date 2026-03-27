@@ -172,6 +172,7 @@ export class SolanaStablecoin {
       // the propose/execute timelock flow. Production deployments should
       // override this via a subsequent set_timelock_delay timelocked op.
       adminTimelockDelay: new BN(0),
+      squadsMultisig: null,
     };
 
     await program.methods
