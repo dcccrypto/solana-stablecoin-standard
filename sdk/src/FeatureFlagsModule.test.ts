@@ -11,16 +11,32 @@ const MINT = new PublicKey('8SDDdSsYRrHRZknJ9Ep358R4zDWMLpwQzmtDwNvrpkge');
 /**
  * Build a minimal raw StablecoinConfig account data buffer.
  *
- * Layout:
- *   [0..8]    discriminator (8 bytes, zeroed here)
- *   [8..168]  5 Pubkeys (5 × 32 = 160 bytes, zeroed)
- *   [168]     preset (u8)
- *   [169..177] feature_flags (u64 LE)
+ * Must match the current on-chain StablecoinConfig layout as read by
+ * FeatureFlagsModule._readFeatureFlags (offset 298):
+ *
+ *   [0..8]     discriminator              (8 bytes)
+ *   [8..40]    mint (Pubkey)              (32 bytes)
+ *   [40..72]   authority (Pubkey)         (32 bytes)
+ *   [72..104]  compliance_authority       (32 bytes)
+ *   [104..105] preset (u8)                (1 byte)
+ *   [105..106] paused (bool)              (1 byte)
+ *   [106..114] total_minted (u64)         (8 bytes)
+ *   [114..122] total_burned (u64)         (8 bytes)
+ *   [122..154] transfer_hook_program      (32 bytes)
+ *   [154..186] collateral_mint (Pubkey)   (32 bytes)
+ *   [186..218] reserve_vault (Pubkey)     (32 bytes)
+ *   [218..226] total_collateral (u64)     (8 bytes)
+ *   [226..234] max_supply (u64)           (8 bytes)
+ *   [234..266] pending_authority (Pubkey) (32 bytes)
+ *   [266..298] pending_comp_authority     (32 bytes)
+ *   [298..306] feature_flags (u64 LE)     (8 bytes)
+ *
+ * FEATURE_FLAGS_OFFSET = 8 + 32 + 32 + 32 + 1 + 1 + 8 + 8 + 32 + 32 + 32 + 8 + 8 + 32 + 32 = 298
  */
 function buildConfigData(featureFlags: bigint, preset = 1): Buffer {
-  const FEATURE_FLAGS_OFFSET = 8 + 5 * 32 + 1; // 169
-  const buf = Buffer.alloc(FEATURE_FLAGS_OFFSET + 8 + 64); // extra room
-  buf[168] = preset;
+  const FEATURE_FLAGS_OFFSET = 298; // matches FeatureFlagsModule._readFeatureFlags
+  const buf = Buffer.alloc(FEATURE_FLAGS_OFFSET + 8 + 32); // extra room for fields after flags
+  buf[104] = preset; // preset field at correct offset
   buf.writeBigUInt64LE(featureFlags, FEATURE_FLAGS_OFFSET);
   return buf;
 }

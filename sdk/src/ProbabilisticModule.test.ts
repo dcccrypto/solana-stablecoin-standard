@@ -21,16 +21,44 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function mockProvider(accountData?: Buffer) {
+/**
+ * Build a minimal StablecoinConfig buffer with `feature_flags` at offset 298.
+ * Used so FeatureFlagsModule.isFeatureFlagSet() sees the correct flag bits
+ * when commitProbabilistic() calls the flag guard.
+ *
+ * Layout mirrors FeatureFlagsModule._readFeatureFlags (FEATURE_FLAGS_OFFSET=298).
+ */
+function buildStablecoinConfigData(featureFlags: bigint): Buffer {
+  const FEATURE_FLAGS_OFFSET = 298;
+  const buf = Buffer.alloc(FEATURE_FLAGS_OFFSET + 8 + 32);
+  buf.writeBigUInt64LE(featureFlags, FEATURE_FLAGS_OFFSET);
+  return buf;
+}
+
+/**
+ * Build a mock provider.
+ *
+ * - When `vaultData` is provided: `getAccountInfo` returns vault data
+ *   (used for read tests).
+ * - Otherwise: `getAccountInfo` returns a StablecoinConfig with
+ *   FLAG_PROBABILISTIC_MONEY (bit 20) set, so write-path tests pass
+ *   the flag guard in commitProbabilistic().
+ */
+function mockProvider(vaultData?: Buffer) {
+  // Config data with FLAG_PROBABILISTIC_MONEY (1n << 20n) set
+  const configData = buildStablecoinConfigData(1n << 20n);
+
+  const getAccountInfo = vaultData
+    ? vi.fn().mockResolvedValue(
+        { data: vaultData, lamports: 1_000_000, owner: PublicKey.default },
+      )
+    : vi.fn().mockResolvedValue(
+        { data: configData, lamports: 1_000_000, owner: PublicKey.default },
+      );
+
   return {
     wallet: { publicKey: Keypair.generate().publicKey },
-    connection: {
-      getAccountInfo: vi.fn().mockResolvedValue(
-        accountData
-          ? { data: accountData, lamports: 1_000_000, owner: PublicKey.default }
-          : null,
-      ),
-    },
+    connection: { getAccountInfo },
     sendAndConfirm: vi.fn().mockResolvedValue('mockedTxSig'),
   } as any;
 }
@@ -114,8 +142,10 @@ describe('ProbabilisticModule', () => {
 
   // ── Constants ──
 
-  it('FLAG_PROBABILISTIC_MONEY equals 1n << 6n = 0x40n', () => {
-    expect(FLAG_PROBABILISTIC_MONEY).toBe(0x40n);
+  it('FLAG_PROBABILISTIC_MONEY equals 1n << 20n = 0x100000n (AUDIT3-B fix)', () => {
+    // AUDIT3-B: prior value was 1n << 6n (0x40) matching FLAG_TRAVEL_RULE, not PBS.
+    // Correct value is bit 20 per state.rs: FLAG_PROBABILISTIC_MONEY = 1 << 20.
+    expect(FLAG_PROBABILISTIC_MONEY).toBe(1n << 20n);
   });
 
   it('PBS_VAULT_SEED is "pbs-vault"', () => {
@@ -230,6 +260,35 @@ describe('ProbabilisticModule', () => {
       });
       // sendAndConfirm called once regardless of whether we provide the ATA
       expect(provider.sendAndConfirm).toHaveBeenCalledOnce();
+    });
+
+    it('throws when FLAG_PROBABILISTIC_MONEY is not set on-chain (AUDIT3-B flag guard)', async () => {
+      // Provider returns config data with NO flags set
+      const noFlagsConfigData = buildStablecoinConfigData(0n);
+      const providerNoFlags = {
+        wallet: { publicKey: Keypair.generate().publicKey },
+        connection: {
+          getAccountInfo: vi.fn().mockResolvedValue(
+            { data: noFlagsConfigData, lamports: 1_000_000, owner: PublicKey.default },
+          ),
+        },
+        sendAndConfirm: vi.fn().mockResolvedValue('mockedTxSig'),
+      } as any;
+
+      const pbsNoFlags = new ProbabilisticModule(providerNoFlags, PROGRAM_ID);
+      await expect(
+        pbsNoFlags.commitProbabilistic({
+          mint: MINT,
+          amount: AMOUNT,
+          conditionHash: CONDITION_HASH,
+          expirySlot: EXPIRY_SLOT,
+          claimant: CLAIMANT,
+          commitmentId: COMMITMENT_ID,
+          escrowTokenAccount: ESCROW_TOKEN_ACCOUNT,
+        }),
+      ).rejects.toThrow('FLAG_PROBABILISTIC_MONEY (bit 20) is not set');
+      // sendAndConfirm must NOT have been called (guard fires before TX build)
+      expect(providerNoFlags.sendAndConfirm).not.toHaveBeenCalled();
     });
   });
 
