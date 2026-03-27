@@ -88,18 +88,32 @@ Extends SSS-1 with on-chain transfer enforcement via the Token-2022 Transfer Hoo
 
 ---
 
-### 3.3 SSS-3 — Reserve-Backed (Trustless Collateral)
+### 3.3 SSS-3 — Reserve-Backed (Trust-Minimized Collateral)
 
 **Preset discriminant:** `3`
 
-Extends SSS-2 with on-chain collateral reserve enforcement. SSS-3 is the reference design for a trustlessly over-collateralized stablecoin: the collateral ratio is enforced inside the `mint` instruction itself, with no oracle and no off-chain step the issuer can bypass.
+Extends SSS-2 with on-chain collateral reserve enforcement. SSS-3 is the reference design for a trust-minimized over-collateralized stablecoin: the collateral ratio is enforced inside the `mint` instruction itself, with no oracle and no off-chain step the issuer can bypass.
 
-**Trust model (v1 accuracy):**
-- **Collateral ratio enforcement is trustless** — the on-chain math cannot be circumvented.
-- **Reserve attestation is trust-minimized** — `reserve_amount` is submitted by an on-chain-verifiable whitelisted attestor keypair, not read directly from a vault. The attestor is auditable but permissioned.
-- **Authority actions use timelocks** for critical operations; guardian multisig controls emergency pause.
-- **You must trust the authority key** for `set_reserve_attestor_whitelist` (no timelock in v1) and for non-timelocked admin ops.
-- ZK credentials and cross-chain bridge collateral are v1 stubs.
+**Trust Assumptions (post SSS-147 hardening):**
+
+| Assumption | On-chain verifiable? | Notes |
+|-----------|----------------------|-------|
+| Reserve attestor is authority-whitelisted | ✅ Yes | Attestor keypair is permissioned; not a direct vault-balance read (v1) |
+| Pyth oracle feed is authority-set | ✅ Yes — timelocked (SSS-147D) | `ADMIN_OP_SET_PYTH_FEED` enforced by `require_timelock_executed()` |
+| Guardian multisig provides emergency controls | ✅ Yes | Pause/unpause requires multisig quorum |
+| Squads multisig holds upgrade authority | ✅ Yes — mandatory (SSS-147A) | `RequiresSquadsForSSS3` enforced at `initialize`; `FLAG_SQUADS_AUTHORITY` auto-set |
+
+**SSS-147 hardening summary:**
+- **SSS-147A:** Squads multisig mandatory at `initialize` — SSS-3 rejects without valid `squads_multisig`
+- **SSS-147B:** `max_supply` mandatory and immutable — SSS-3 rejects `supply_cap == 0`; cap cannot change post-init
+- **SSS-147C:** Any DAO committee member can propose; `FLAG_DAO_COMMITTEE` cannot be disabled without DAO quorum
+- **SSS-147D:** Oracle feed and compliance authority changes covered by `require_timelock_executed()`
+
+**Remaining trust surface (v1):**
+- `set_reserve_attestor_whitelist` is not yet timelocked — attestor changes are immediate
+- ZK credential verification and cross-chain bridge collateral checks are v1 stubs
+
+> **Do not describe SSS-3 as "trustless."** Use "trust-minimized with documented assumptions."
 
 See [TRUST-MODEL.md](./TRUST-MODEL.md) for the full per-tier breakdown.
 

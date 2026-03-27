@@ -1,4 +1,4 @@
-# SSS-3: Trustless Collateral-Backed Stablecoin
+# SSS-3: Trust-Minimized Collateral-Backed Stablecoin
 
 > **Preset identifier:** `3`
 > **Status:** Specification — reference design for the next SSS extension
@@ -162,6 +162,36 @@ The redemption value is: `amount × (total_collateral / circulating_supply)` —
 
 ---
 
+## Trust Assumptions (SSS-147 post-hardening)
+
+SSS-3 is **trust-minimized**, not trustless. After the SSS-147A/B/C/D hardening round, the remaining trust assumptions are:
+
+| # | Assumption | On-chain verifiable? | Notes |
+|---|-----------|----------------------|-------|
+| 1 | **Reserve attestor is authority-whitelisted** | ✅ Yes — whitelist is stored on-chain | Attestor keypair is permissioned; future versions will use direct vault-balance reads instead |
+| 2 | **Pyth oracle feed is authority-set** | ✅ Yes — feed change covered by `admin_timelock.rs` (SSS-147D) | Timelock enforces minimum delay before feed changes take effect |
+| 3 | **Guardian multisig provides emergency controls** | ✅ Yes — pause/unpause requires multisig quorum | Controlled by the registered Guardian multisig; no single key can pause unilaterally |
+| 4 | **Squads multisig holds upgrade authority** | ✅ Yes — mandatory for SSS-3 at `initialize` (SSS-147A) | `RequiresSquadsForSSS3` error enforced in Anchor; `FLAG_SQUADS_AUTHORITY` auto-set |
+
+### What SSS-147 eliminated
+
+| Hardening | Before | After |
+|-----------|--------|-------|
+| **SSS-147A** — Squads multisig required | SSS-3 could be initialized without a multisig | Initialization rejects if `squads_multisig` is missing or default pubkey |
+| **SSS-147B** — Immutable `max_supply` | `max_supply = 0` (uncapped) was silently accepted | SSS-3 rejects `supply_cap == 0`; `max_supply` cannot be changed post-init (`MaxSupplyImmutable`) |
+| **SSS-147C** — DAO member proposals | Only authority could propose admin operations | Any committee member can propose; `FLAG_DAO_COMMITTEE` cannot be disabled without DAO quorum |
+| **SSS-147D** — Oracle + compliance timelocks | Oracle feed and compliance authority changes untimed | `ADMIN_OP_SET_PYTH_FEED`, `ADMIN_OP_SET_ORACLE_PARAMS`, `ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY` all covered by `require_timelock_executed()` |
+
+### Remaining trust surface
+
+- `set_reserve_attestor_whitelist` is not yet timelocked in v1 — attestor changes are immediate
+- ZK credential verification is a v1 stub — do not rely on it for production compliance
+- Cross-chain bridge collateral checks are a v1 stub
+
+> **Do not describe SSS-3 as "trustless."** Use "trust-minimized with documented assumptions." The on-chain collateral enforcement math is trustless; the surrounding authority management is trust-minimized via timelocks and multisig, not fully permissionless.
+
+---
+
 ## Security Model
 
 ### What cannot go wrong
@@ -230,21 +260,23 @@ await stablecoin.redeem({
 
 **SSS-1** gives Solana projects a clean, minimal way to issue tokens.
 **SSS-2** gives regulated issuers a compliant path.
-**SSS-3** gives DeFi protocols a trustless, privacy-preserving stablecoin where the collateral ratio is enforced on-chain — no oracle, no off-chain step, no way for the issuer to mint beyond the collateral. The ratio math is in the Anchor instruction; it cannot be disabled.
+**SSS-3** gives DeFi protocols a trust-minimized, privacy-preserving stablecoin where the collateral ratio is enforced on-chain — no oracle, no off-chain step, no way for the issuer to mint beyond the collateral. The ratio math is in the Anchor instruction; it cannot be disabled.
 
-This is the arc: from centralized trust (USDC) → algorithmic (Terra, broken) → trustless on-chain collateral with ZK privacy (SSS-3). Solana has the throughput, the ZK infrastructure (Token-2022 confidential transfers), and the composability to make this work. SSS-3 is the blueprint.
+This is the arc: from centralized trust (USDC) → algorithmic (Terra, broken) → trust-minimized on-chain collateral with ZK privacy (SSS-3). Solana has the throughput, the ZK infrastructure (Token-2022 confidential transfers), and the composability to make this work. SSS-3 is the blueprint.
 
-> **What "trustless" means here (and what it doesn't):**
+> **SSS-3 is trust-minimized, not trustless:**
 >
 > - ✅ **Collateral ratio enforcement is trustless** — the `mint` instruction checks on-chain state; the math cannot be bypassed.
-> - ✅ **Authority actions on critical operations use timelocks** — `admin_timelock.rs` enforces delay on key admin operations.
+> - ✅ **Squads multisig is mandatory** — SSS-3 `initialize` rejects without a valid `squads_multisig` (SSS-147A). `FLAG_SQUADS_AUTHORITY` is auto-set.
+> - ✅ **`max_supply` is mandatory and immutable** — SSS-3 rejects `supply_cap == 0`; supply cap cannot be changed post-init (SSS-147B).
+> - ✅ **DAO members can propose** — not just the authority; `FLAG_DAO_COMMITTEE` cannot be disabled without DAO quorum (SSS-147C).
+> - ✅ **Oracle and compliance timelocks** — Pyth feed and compliance authority changes enforced by `require_timelock_executed()` (SSS-147D).
 > - ✅ **Guardian multisig provides emergency controls** — pause/unpause requires multisig approval.
-> - ⚠️ **Reserve attestation is trust-minimized, not fully trustless (v1)** — `reserve_amount` is submitted by a whitelisted, on-chain-verifiable attestor keypair. The attestor is permissioned, not a direct vault-balance read. Future versions will move to direct vault verification.
-> - ⚠️ **You must trust the authority key for non-timelocked ops** — specifically `set_reserve_attestor_whitelist` (not yet timelocked in v1). Attestor changes take effect immediately.
+> - ⚠️ **Reserve attestation is trust-minimized (v1)** — `reserve_amount` is submitted by a whitelisted, on-chain-verifiable attestor keypair. The attestor is permissioned, not a direct vault-balance read. Future versions will move to direct vault verification.
+> - ⚠️ **`set_reserve_attestor_whitelist` is not yet timelocked** — attestor changes take effect immediately in v1.
 > - ⚠️ **v1 stubs:** ZK credential verification and cross-chain bridge collateral checks are not fully implemented. Do not rely on them for production compliance.
-> - ⚠️ **`max_supply = 0` means uncapped** — always set explicitly for production deployments.
 >
-> See [TRUST-MODEL.md](./TRUST-MODEL.md) for the complete per-tier trust-assumption breakdown.
+> See [Trust Assumptions](#trust-assumptions-sss-147-post-hardening) above and [TRUST-MODEL.md](./TRUST-MODEL.md) for the complete per-tier breakdown.
 
 ---
 

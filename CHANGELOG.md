@@ -6,6 +6,12 @@ All notable changes to the Solana Stablecoin Standard are documented here.
 
 ## [Unreleased]
 
+### SSS-147E — Trust Model Docs: Trust-Minimized Framing for SSS-3 (SSS-147 post-hardening)
+
+- `docs/SSS-3.md` — Renamed from "Trustless" to "Trust-Minimized Collateral-Backed Stablecoin"; added formal **Trust Assumptions** section documenting the 4 remaining trust assumptions (reserve attestor, Pyth oracle, Guardian multisig, Squads multisig) and what SSS-147A/B/C/D hardening eliminated; updated "What trustless means" callout box to reflect new mandatory controls
+- `docs/SSS-SPEC.md` — Section 3.3 renamed to "Trust-Minimized Collateral"; replaced informal trust model bullets with formal Trust Assumptions table; added SSS-147 hardening summary; added explicit "Do not describe SSS-3 as trustless" warning
+- `README.md` — Updated SSS-3 column header and description to "Trust-Minimized"; added dedicated **SSS-3 Trust Assumptions** section with table of 4 remaining assumptions and SSS-147 hardening summary
+
 ### BUG-036/037/028 — SDK Docs: Admin Key Warnings, Off-Chain Mint/Burn Clarification, Amount Guard
 
 - `docs/sdk-cli.md` — `mint`/`burn` SDK sections now explicitly state these are **off-chain event-recording calls** (POST /api/mint|burn, not on-chain Solana transactions); `tx_signature`/`--tx-sig` marked **required** (was optional); `amount > 0` guard noted with `SSSError` callout (BUG-028/BUG-037)
