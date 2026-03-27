@@ -145,8 +145,16 @@ export class SolanaStablecoin {
     const program = new AnchorProgram({ ...idl as any, address: programId.toBase58() }, provider) as any;
 
     // Build InitializeParams matching the IDL struct
+    // Detect which fields the deployed IDL supports
+    const idlAny = idl as any;
+    const initParamType = idlAny.types?.find((t: any) => t.name === 'InitializeParams');
+    const idlFieldNames: Set<string> = new Set(
+      initParamType?.type?.fields?.map((f: any) => f.name) ?? []
+    );
+    const hasField = (snake: string) => idlFieldNames.has(snake);
+
     const presetNum = config.preset === 'SSS-1' ? 1 : config.preset === 'SSS-2' ? 2 : 3;
-    const initParams = {
+    const initParams: Record<string, any> = {
       preset: presetNum,
       decimals,
       name: config.name,
@@ -164,16 +172,23 @@ export class SolanaStablecoin {
       maxSupply: config.maxSupply !== undefined && config.maxSupply > 0n
         ? new BN(config.maxSupply.toString())
         : null,
-      // SSS-106: confidential transfer feature flags (null = disabled)
-      featureFlags: null,
-      auditorElgamalPubkey: null,
-      // SSS-085: set timelock delay to 0 in SDK-managed creates so that
-      // direct admin calls (pause/unpause/etc.) work without going through
-      // the propose/execute timelock flow. Production deployments should
-      // override this via a subsequent set_timelock_delay timelocked op.
-      adminTimelockDelay: new BN(0),
-      squadsMultisig: null,
+
     };
+    // SSS-106: only include if deployed IDL supports these fields
+    if (hasField('feature_flags')) {
+      initParams['featureFlags'] = null;
+    }
+    if (hasField('auditor_elgamal_pubkey')) {
+      initParams['auditorElgamalPubkey'] = null;
+    }
+    // SSS-085: timelock delay — only if deployed IDL supports it
+    if (hasField('admin_timelock_delay')) {
+      initParams['adminTimelockDelay'] = new BN(0);
+    }
+    // SSS-147a: squads multisig — only if deployed IDL supports it
+    if (hasField('squads_multisig')) {
+      initParams['squadsMultisig'] = null;
+    }
 
     await program.methods
       .initialize(initParams)

@@ -57,6 +57,9 @@ export const APC_CHANNEL_SEED = Buffer.from('apc-channel');
 /** PDA seed for StablecoinConfig (shared with PBS module). */
 export const APC_CONFIG_SEED = Buffer.from('stablecoin-config');
 
+/** PDA seed for ProposedSettlement account. Seeds: [b"apc-settle", channel_pda]. */
+export const APC_SETTLE_SEED = Buffer.from('apc-settle');
+
 // ─── Anchor discriminators ────────────────────────────────────────────────────
 // SHA-256("global:<instruction_name>")[0..8]
 
@@ -169,8 +172,6 @@ export interface OpenChannelParams {
   escrowTokenAccount?: PublicKey;
   /** Token program (default: TOKEN_2022_PROGRAM_ID). */
   tokenProgram?: PublicKey;
-  /** Optional arbitrator pubkey (only relevant for DisputePolicy.ArbitratorKey). */
-  arbitrator?: PublicKey;
 }
 
 /**
@@ -191,6 +192,8 @@ export interface SubmitWorkProofParams {
   mint: PublicKey;
   /** Config PDA (optional — derived from mint if omitted). */
   config?: PublicKey;
+  /** Channel initiator/opener public key (required to derive channel PDA). Defaults to signer. */
+  initiator?: PublicKey;
   /** 32-byte hash of the task specification (e.g. sha256 of task description). */
   taskHash: Uint8Array | Buffer;
   /** 32-byte hash of the output (e.g. sha256 of result). */
@@ -207,6 +210,8 @@ export interface ProposeSettleParams {
   mint: PublicKey;
   /** Config PDA (optional). */
   config?: PublicKey;
+  /** Channel initiator/opener public key (required to derive channel PDA). Defaults to signer. */
+  initiator?: PublicKey;
   /** Amount the counterparty proposes to receive. */
   amount: BN;
   /** Escrow token account (if deposit > 0). */
@@ -223,6 +228,10 @@ export interface CountersignSettleParams {
   mint: PublicKey;
   /** Config PDA (optional). */
   config?: PublicKey;
+  /** Channel initiator/opener public key (required to derive channel PDA). Defaults to signer. */
+  initiator?: PublicKey;
+  /** Settlement amount (must match the proposed_settlement.amount on-chain). Defaults to 0. */
+  amount?: number;
   /** Opener's token account (receives opener's portion). */
   openerTokenAccount?: PublicKey;
   /** Counterparty's token account (receives counterparty's portion). */
@@ -241,6 +250,8 @@ export interface DisputeParams {
   mint: PublicKey;
   /** Config PDA (optional). */
   config?: PublicKey;
+  /** Channel initiator/opener public key (required to derive channel PDA). Defaults to signer. */
+  initiator?: PublicKey;
   /** 32-byte hash of evidence supporting the dispute. */
   evidenceHash: Uint8Array | Buffer;
 }
@@ -253,6 +264,8 @@ export interface ForceCloseParams {
   mint: PublicKey;
   /** Config PDA (optional). */
   config?: PublicKey;
+  /** Channel initiator/opener public key (required to derive channel PDA). Defaults to signer. */
+  initiator?: PublicKey;
   /** Opener's token account (receives full deposit refund on force close). */
   openerTokenAccount?: PublicKey;
   /** Escrow token account (source of funds). */
@@ -279,14 +292,15 @@ export function deriveApcConfigPda(mint: PublicKey, programId: PublicKey): [Publ
  * Seeds: `[b"apc-channel", config, channel_id_le8]`
  */
 export function deriveChannelPda(
-  config: PublicKey,
+  initiator: PublicKey,
   channelId: BN,
   programId: PublicKey,
 ): [PublicKey, number] {
+  // On-chain seeds: [b"apc-channel", initiator.key(), channel_id.to_le_bytes()]
   const idBuf = Buffer.alloc(8);
   idBuf.writeBigUInt64LE(BigInt(channelId.toString()));
   return PublicKey.findProgramAddressSync(
-    [APC_CHANNEL_SEED, config.toBuffer(), idBuf],
+    [APC_CHANNEL_SEED, initiator.toBuffer(), idBuf],
     programId,
   );
 }
@@ -336,51 +350,44 @@ export class AgentPaymentChannelModule {
     }
 
     const [configPda] = deriveApcConfigPda(mint, this.programId);
-    const [channelPda] = deriveChannelPda(configPda, channelId, this.programId);
     const opener = this.provider.wallet.publicKey;
+    // On-chain seeds: [b"apc-channel", initiator, channel_id] — use opener (initiator) not configPda
+    const [channelPda] = deriveChannelPda(opener, channelId, this.programId);
 
-    // OpenChannelParams ABI:
+    // OpenChannelParams ABI (Anchor-serialized, matches Rust struct field order):
+    //   counterparty: Pubkey  [32]  — stored in params, not as a separate account
     //   deposit: u64          [8]
+    //   channel_id: u64       [8]
     //   dispute_policy: u8    [1]
     //   timeout_slots: u64    [8]
-    //   channel_id: u64       [8]
-    //   arbitrator: Pubkey    [32]  (zero pubkey if not used)
-    // Total: 8 (disc) + 8 + 1 + 8 + 8 + 32 = 65
-
-    const arbitrator = params.arbitrator ?? PublicKey.default;
+    // Total: 8 (disc) + 32 + 8 + 8 + 1 + 8 = 65
 
     const data = Buffer.alloc(65);
     DISC_OPEN_CHANNEL.copy(data, 0);
-    data.writeBigUInt64LE(BigInt(deposit.toString()), 8);
-    data.writeUInt8(disputePolicy, 16);
-    data.writeBigUInt64LE(BigInt(timeoutSlots.toString()), 17);
-    data.writeBigUInt64LE(BigInt(channelId.toString()), 25);
-    arbitrator.toBuffer().copy(data, 33);
+    counterparty.toBuffer().copy(data, 8);                             // counterparty: Pubkey
+    data.writeBigUInt64LE(BigInt(deposit.toString()), 40);             // deposit: u64
+    data.writeBigUInt64LE(BigInt(channelId.toString()), 48);           // channel_id: u64
+    data.writeUInt8(disputePolicy, 56);                                // dispute_policy: u8
+    data.writeBigUInt64LE(BigInt(timeoutSlots.toString()), 57);        // timeout_slots: u64
+
+    // On-chain OpenChannel always requires escrow_token_account and initiator_token_account
+    const openerTokenAccount =
+      params.openerTokenAccount ??
+      (await this._deriveAta(mint, opener, tokenProgram));
+    const escrowTokenAccount =
+      params.escrowTokenAccount ??
+      (await this._deriveAta(mint, channelPda, tokenProgram));
 
     const keys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [
-      { pubkey: opener, isSigner: true, isWritable: true },                    // opener
+      { pubkey: opener, isSigner: true, isWritable: true },                    // initiator
       { pubkey: configPda, isSigner: false, isWritable: false },               // config
       { pubkey: mint, isSigner: false, isWritable: false },                    // stable_mint
       { pubkey: channelPda, isSigner: false, isWritable: true },               // channel (init)
-      { pubkey: counterparty, isSigner: false, isWritable: false },            // counterparty
+      { pubkey: escrowTokenAccount, isSigner: false, isWritable: true },       // escrow_token_account
+      { pubkey: openerTokenAccount, isSigner: false, isWritable: true },       // initiator_token_account
+      { pubkey: tokenProgram, isSigner: false, isWritable: false },            // token_program
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
     ];
-
-    // Append token accounts only if a deposit is being made
-    if (!deposit.isZero()) {
-      const openerTokenAccount =
-        params.openerTokenAccount ??
-        (await this._deriveAta(mint, opener, tokenProgram));
-      const escrowTokenAccount =
-        params.escrowTokenAccount ??
-        (await this._deriveAta(mint, channelPda, tokenProgram));
-
-      keys.push(
-        { pubkey: openerTokenAccount, isSigner: false, isWritable: true },
-        { pubkey: escrowTokenAccount, isSigner: false, isWritable: true },
-        { pubkey: tokenProgram, isSigner: false, isWritable: false },
-      );
-    }
 
     const ix = new TransactionInstruction({ programId: this.programId, keys, data });
     const tx = new Transaction().add(ix);
@@ -409,28 +416,24 @@ export class AgentPaymentChannelModule {
     if (taskHash.length !== 32) throw new Error('taskHash must be 32 bytes');
     if (outputHash.length !== 32) throw new Error('outputHash must be 32 bytes');
 
-    const [configPda] = deriveApcConfigPda(mint, this.programId);
-    const config = params.config ?? configPda;
-    const [channelPda] = deriveChannelPda(config, channelId, this.programId);
+    // Channel PDA uses initiator pubkey as seed (not configPda)
+    const initiator = params.initiator ?? this.provider.wallet.publicKey;
+    const [channelPda] = deriveChannelPda(initiator, channelId, this.programId);
 
-    // SubmitWorkProof params ABI:
-    //   task_hash: [u8;32]    [32]
-    //   output_hash: [u8;32]  [32]
-    //   proof_type: u8        [1]
-    // Total: 8 (disc) + 32 + 32 + 1 = 73
-
-    const data = Buffer.alloc(73);
+    // SubmitWorkProof ABI: disc(8) + _channel_id(8) + task_hash(32) + output_hash(32) + proof_type(1) = 81
+    // On-chain accounts: [submitter, channel] — NO mint account
+    const data = Buffer.alloc(81);
     DISC_SUBMIT_WORK_PROOF.copy(data, 0);
-    Buffer.from(taskHash).copy(data, 8);
-    Buffer.from(outputHash).copy(data, 40);
-    data.writeUInt8(proofType, 72);
+    data.writeBigUInt64LE(BigInt(channelId.toString()), 8); // _channel_id
+    Buffer.from(taskHash).copy(data, 16);
+    Buffer.from(outputHash).copy(data, 48);
+    data.writeUInt8(proofType, 80);
 
     const ix = new TransactionInstruction({
       programId: this.programId,
       keys: [
-        { pubkey: this.provider.wallet.publicKey, isSigner: true, isWritable: false }, // counterparty
+        { pubkey: this.provider.wallet.publicKey, isSigner: true, isWritable: false }, // submitter
         { pubkey: channelPda, isSigner: false, isWritable: true },                     // channel
-        { pubkey: mint, isSigner: false, isWritable: false },                          // stable_mint
       ],
       data,
     });
@@ -459,24 +462,30 @@ export class AgentPaymentChannelModule {
   async proposeSettle(channelId: BN, params: ProposeSettleParams): Promise<TransactionSignature> {
     const { mint, amount } = params;
 
-    const [configPda] = deriveApcConfigPda(mint, this.programId);
-    const config = params.config ?? configPda;
-    const [channelPda] = deriveChannelPda(config, channelId, this.programId);
+    // Channel PDA uses initiator pubkey as seed (not configPda)
+    const initiator = params.initiator ?? this.provider.wallet.publicKey;
+    const [channelPda] = deriveChannelPda(initiator, channelId, this.programId);
 
-    // ProposeSettle params ABI:
-    //   amount: u64 [8]
-    // Total: 8 (disc) + 8 = 16
+    // Derive the proposed_settlement PDA: [b"apc-settle", channel_pda]
+    const [proposedSettlementPda] = PublicKey.findProgramAddressSync(
+      [APC_SETTLE_SEED, channelPda.toBuffer()],
+      this.programId,
+    );
 
-    const data = Buffer.alloc(16);
+    // ProposeSettle ABI: disc(8) + _channel_id(8) + amount(8) = 24
+    // On-chain accounts: [proposer(mut), channel(mut), proposed_settlement(init,mut), system_program]
+    const data = Buffer.alloc(24);
     DISC_PROPOSE_SETTLE.copy(data, 0);
-    data.writeBigUInt64LE(BigInt(amount.toString()), 8);
+    data.writeBigUInt64LE(BigInt(channelId.toString()), 8); // _channel_id
+    data.writeBigUInt64LE(BigInt(amount.toString()), 16);   // amount
 
     const ix = new TransactionInstruction({
       programId: this.programId,
       keys: [
-        { pubkey: this.provider.wallet.publicKey, isSigner: true, isWritable: false }, // proposer (opener or counterparty)
+        { pubkey: this.provider.wallet.publicKey, isSigner: true, isWritable: true },  // proposer
         { pubkey: channelPda, isSigner: false, isWritable: true },                     // channel
-        { pubkey: mint, isSigner: false, isWritable: false },                          // stable_mint
+        { pubkey: proposedSettlementPda, isSigner: false, isWritable: true },          // proposed_settlement (init)
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },       // system_program
       ],
       data,
     });
@@ -506,31 +515,45 @@ export class AgentPaymentChannelModule {
       tokenProgram = TOKEN_2022_PROGRAM_ID,
     } = params;
 
-    const [configPda] = deriveApcConfigPda(mint, this.programId);
-    const config = params.config ?? configPda;
-    const [channelPda] = deriveChannelPda(config, channelId, this.programId);
     const signer = this.provider.wallet.publicKey;
+    // Channel PDA uses initiator pubkey as seed (not configPda)
+    const initiator = params.initiator ?? signer;
+    const [channelPda] = deriveChannelPda(initiator, channelId, this.programId);
+
+    // Derive the proposed_settlement PDA
+    const [proposedSettlementPda] = PublicKey.findProgramAddressSync(
+      [APC_SETTLE_SEED, channelPda.toBuffer()],
+      this.programId,
+    );
 
     const openerTokenAccount =
-      params.openerTokenAccount ?? (await this._deriveAta(mint, signer, tokenProgram));
+      params.openerTokenAccount ?? (await this._deriveAta(mint, initiator, tokenProgram));
     const counterpartyTokenAccount =
       params.counterpartyTokenAccount ?? (await this._deriveAta(mint, signer, tokenProgram));
     const escrowTokenAccount =
       params.escrowTokenAccount ?? (await this._deriveAta(mint, channelPda, tokenProgram));
 
-    // CountersignSettle has no extra params; only discriminator.
-    const data = Buffer.alloc(8);
+    // CountersignSettle ABI: disc(8) + _channel_id(8) + amount(8) = 24
+    // On-chain accounts: [countersigner(mut), channel(mut), proposed_settlement(mut,close=countersigner),
+    //                     stable_mint, escrow_token_account(mut), counterparty_token_account(mut),
+    //                     initiator_token_account(mut), token_program]
+    // Note: amount must match proposed_settlement.amount
+    const amount = params.amount ?? 0;
+    const data = Buffer.alloc(24);
     DISC_COUNTERSIGN_SETTLE.copy(data, 0);
+    data.writeBigUInt64LE(BigInt(channelId.toString()), 8); // _channel_id
+    data.writeBigUInt64LE(BigInt(amount.toString()), 16);   // amount
 
     const ix = new TransactionInstruction({
       programId: this.programId,
       keys: [
-        { pubkey: signer, isSigner: true, isWritable: false },                         // countersigner
+        { pubkey: signer, isSigner: true, isWritable: true },                          // countersigner
         { pubkey: channelPda, isSigner: false, isWritable: true },                     // channel
+        { pubkey: proposedSettlementPda, isSigner: false, isWritable: true },          // proposed_settlement (close=countersigner)
         { pubkey: mint, isSigner: false, isWritable: false },                          // stable_mint
         { pubkey: escrowTokenAccount, isSigner: false, isWritable: true },             // escrow_token_account
-        { pubkey: openerTokenAccount, isSigner: false, isWritable: true },             // opener_token_account
         { pubkey: counterpartyTokenAccount, isSigner: false, isWritable: true },       // counterparty_token_account
+        { pubkey: openerTokenAccount, isSigner: false, isWritable: true },             // initiator_token_account
         { pubkey: tokenProgram, isSigner: false, isWritable: false },                  // token_program
       ],
       data,
@@ -563,24 +586,22 @@ export class AgentPaymentChannelModule {
 
     if (evidenceHash.length !== 32) throw new Error('evidenceHash must be 32 bytes');
 
-    const [configPda] = deriveApcConfigPda(mint, this.programId);
-    const config = params.config ?? configPda;
-    const [channelPda] = deriveChannelPda(config, channelId, this.programId);
+    // Channel PDA uses initiator pubkey as seed (not configPda)
+    const initiator = params.initiator ?? this.provider.wallet.publicKey;
+    const [channelPda] = deriveChannelPda(initiator, channelId, this.programId);
 
-    // Dispute params ABI:
-    //   evidence_hash: [u8;32] [32]
-    // Total: 8 (disc) + 32 = 40
-
-    const data = Buffer.alloc(40);
+    // Dispute ABI: disc(8) + _channel_id(8) + evidence_hash(32) = 48
+    // On-chain accounts: [disputer, channel] — NO mint account
+    const data = Buffer.alloc(48);
     DISC_DISPUTE.copy(data, 0);
-    Buffer.from(evidenceHash).copy(data, 8);
+    data.writeBigUInt64LE(BigInt(channelId.toString()), 8); // _channel_id
+    Buffer.from(evidenceHash).copy(data, 16);
 
     const ix = new TransactionInstruction({
       programId: this.programId,
       keys: [
         { pubkey: this.provider.wallet.publicKey, isSigner: true, isWritable: false }, // disputer
         { pubkey: channelPda, isSigner: false, isWritable: true },                     // channel
-        { pubkey: mint, isSigner: false, isWritable: false },                          // stable_mint
       ],
       data,
     });
@@ -610,28 +631,31 @@ export class AgentPaymentChannelModule {
       tokenProgram = TOKEN_2022_PROGRAM_ID,
     } = params;
 
-    const [configPda] = deriveApcConfigPda(mint, this.programId);
-    const config = params.config ?? configPda;
-    const [channelPda] = deriveChannelPda(config, channelId, this.programId);
     const opener = this.provider.wallet.publicKey;
+    // Channel PDA uses initiator pubkey as seed (not configPda)
+    const initiator = params.initiator ?? opener;
+    const [channelPda] = deriveChannelPda(initiator, channelId, this.programId);
 
     const openerTokenAccount =
       params.openerTokenAccount ?? (await this._deriveAta(mint, opener, tokenProgram));
     const escrowTokenAccount =
       params.escrowTokenAccount ?? (await this._deriveAta(mint, channelPda, tokenProgram));
 
-    // ForceClose has no extra params; only discriminator.
-    const data = Buffer.alloc(8);
+    // ForceClose ABI: disc(8) + _channel_id(8) = 16
+    // On-chain accounts: [initiator, channel(mut), stable_mint, escrow_token_account(mut),
+    //                     initiator_token_account(mut), token_program]
+    const data = Buffer.alloc(16);
     DISC_FORCE_CLOSE.copy(data, 0);
+    data.writeBigUInt64LE(BigInt(channelId.toString()), 8); // _channel_id
 
     const ix = new TransactionInstruction({
       programId: this.programId,
       keys: [
-        { pubkey: opener, isSigner: true, isWritable: false },                         // opener
+        { pubkey: opener, isSigner: true, isWritable: false },                         // initiator
         { pubkey: channelPda, isSigner: false, isWritable: true },                     // channel
         { pubkey: mint, isSigner: false, isWritable: false },                          // stable_mint
         { pubkey: escrowTokenAccount, isSigner: false, isWritable: true },             // escrow_token_account
-        { pubkey: openerTokenAccount, isSigner: false, isWritable: true },             // opener_token_account
+        { pubkey: openerTokenAccount, isSigner: false, isWritable: true },             // initiator_token_account
         { pubkey: tokenProgram, isSigner: false, isWritable: false },                  // token_program
       ],
       data,
@@ -651,9 +675,9 @@ export class AgentPaymentChannelModule {
    * @returns Decoded {@link PaymentChannel}.
    * @throws When the channel account is not found.
    */
-  async getChannel(mint: PublicKey, channelId: BN): Promise<PaymentChannel> {
-    const [configPda] = deriveApcConfigPda(mint, this.programId);
-    const [channelPda] = deriveChannelPda(configPda, channelId, this.programId);
+  async getChannel(mint: PublicKey, channelId: BN, initiator?: PublicKey): Promise<PaymentChannel> {
+    const opener = initiator ?? this.provider.wallet.publicKey;
+    const [channelPda] = deriveChannelPda(opener, channelId, this.programId);
 
     const accountInfo = await this.provider.connection.getAccountInfo(channelPda);
     if (!accountInfo) {
@@ -696,9 +720,9 @@ export class AgentPaymentChannelModule {
     return deriveApcConfigPda(mint, this.programId);
   }
 
-  /** Derive the `PaymentChannel` PDA for a config + channel id. */
-  channelPda(config: PublicKey, channelId: BN): [PublicKey, number] {
-    return deriveChannelPda(config, channelId, this.programId);
+  /** Derive the `PaymentChannel` PDA for an initiator + channel id. */
+  channelPda(initiator: PublicKey, channelId: BN): [PublicKey, number] {
+    return deriveChannelPda(initiator, channelId, this.programId);
   }
 
   // ─── Static decode helper ───────────────────────────────────────────────
