@@ -9,7 +9,7 @@ use spl_token_2022::state::{AccountState, Mint};
 use crate::error::SssError;
 use crate::state::{
     ConfidentialTransferConfig, InitializeParams, StablecoinConfig, ADMIN_OP_NONE,
-    DEFAULT_ADMIN_TIMELOCK_DELAY, FLAG_CONFIDENTIAL_TRANSFERS,
+    DEFAULT_ADMIN_TIMELOCK_DELAY, FLAG_CONFIDENTIAL_TRANSFERS, FLAG_SQUADS_AUTHORITY,
 };
 
 // SSS-091: Mint space = base Mint size + DefaultAccountState extension.
@@ -74,11 +74,14 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
         require!(params.reserve_vault.is_some(), SssError::InvalidVault);
         // SSS-147: SSS-3 must set a positive supply_cap to prevent uncapped minting.
         // The cap is locked at initialize time and cannot be changed after deployment.
-        // TODO SSS-147: When squads_authority module is implemented, require FLAG_SQUADS_AUTHORITY
-        // for SSS-3 preset at initialize time (no single-key SSS-3 deployments).
         require!(
             params.max_supply.unwrap_or(0) > 0,
             SssError::SupplyCapRequired
+        );
+        // SSS-147A: SSS-3 must provide a Squads V4 multisig pubkey — no single-key deployments.
+        require!(
+            params.squads_multisig.is_some(),
+            SssError::RequiresSquadsForSSS3
         );
     }
 
@@ -180,8 +183,15 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.stability_fee_bps = 0;
     // SSS-093: PSM redemption fee starts at 0 (disabled by default)
     config.redemption_fee_bps = 0;
-    // SSS-106: confidential transfers
-    config.feature_flags = params.feature_flags.unwrap_or(0);
+    // SSS-106: confidential transfers; SSS-147A: set FLAG_SQUADS_AUTHORITY if squads_multisig is provided
+    let mut feature_flags = params.feature_flags.unwrap_or(0);
+    if let Some(squads_pk) = params.squads_multisig {
+        config.squads_multisig = squads_pk;
+        feature_flags |= FLAG_SQUADS_AUTHORITY;
+    } else {
+        config.squads_multisig = Pubkey::default();
+    }
+    config.feature_flags = feature_flags;
     config.auditor_elgamal_pubkey = if ct_enabled {
         params.auditor_elgamal_pubkey.unwrap()
     } else {
