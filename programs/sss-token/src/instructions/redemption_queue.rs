@@ -635,3 +635,78 @@ pub fn cancel_redemption_handler(
 
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// compact_redemption_head
+//
+// CRITICAL fix (BUG-AUDIT3 CodeRabbit #1):
+//
+// Strict FIFO + cancel creates a deadlock: if a non-head entry is cancelled
+// and later becomes the head, `process_redemption` blocks because its entry
+// constraint `!redemption_entry.cancelled` fails.  The FIFO guard
+// (queue_index == rq.queue_head) means no later entry can be processed either.
+//
+// Fix: a permissionless `compact_redemption_head` instruction advances the
+// queue head by one slot when the current head entry is cancelled (or absent).
+// Keepers call this repeatedly until the head points to a live entry, then
+// call `process_redemption` as normal.
+//
+// This is the correct Anchor pattern: static accounts per instruction, keepers
+// sequence the compaction calls as needed.
+// ---------------------------------------------------------------------------
+
+#[derive(Accounts)]
+#[instruction(head_index: u64)]
+pub struct CompactRedemptionHead<'info> {
+    /// Permissionless caller — anyone may compact stale cancelled heads.
+    pub caller: Signer<'info>,
+
+    #[account(
+        seeds = [StablecoinConfig::SEED, config.mint.as_ref()],
+        bump = config.bump,
+        constraint = config.feature_flags & FLAG_REDEMPTION_QUEUE != 0 @ SssError::FeatureNotEnabled,
+    )]
+    pub config: Box<Account<'info, StablecoinConfig>>,
+
+    #[account(
+        mut,
+        seeds = [RedemptionQueue::SEED, config.mint.as_ref()],
+        bump = redemption_queue.bump,
+        constraint = redemption_queue.sss_mint == config.mint @ SssError::RedemptionQueueNotInitialized,
+    )]
+    pub redemption_queue: Box<Account<'info, RedemptionQueue>>,
+
+    /// The cancelled head entry to skip.  Seeds are derived from head_index.
+    /// Must be marked cancelled (or fulfilled) for the compaction to proceed.
+    #[account(
+        seeds = [RedemptionEntry::SEED, config.mint.as_ref(), &head_index.to_le_bytes()],
+        bump = head_entry.bump,
+        // Only allow compaction for cancelled or fulfilled entries.
+        constraint = head_entry.cancelled || head_entry.fulfilled @ SssError::RedemptionQueueOutOfOrder,
+    )]
+    pub head_entry: Box<Account<'info, RedemptionEntry>>,
+}
+
+pub fn compact_redemption_head_handler(
+    ctx: Context<CompactRedemptionHead>,
+    head_index: u64,
+) -> Result<()> {
+    let rq = &mut ctx.accounts.redemption_queue;
+
+    // Verify head_index matches the current queue_head — only compact the actual head.
+    require!(
+        head_index == rq.queue_head,
+        SssError::RedemptionQueueOutOfOrder
+    );
+
+    // Advance head past this cancelled/fulfilled entry.
+    rq.queue_head = rq.queue_head.saturating_add(1);
+
+    msg!(
+        "CompactRedemptionHead: advanced head from {} to {}",
+        head_index,
+        rq.queue_head,
+    );
+
+    Ok(())
+}

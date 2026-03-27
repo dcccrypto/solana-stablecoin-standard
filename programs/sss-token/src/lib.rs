@@ -627,6 +627,16 @@ pub mod sss_token {
         instructions::redemption_queue::cancel_redemption_handler(ctx, queue_index)
     }
 
+    /// Advance queue_head past a cancelled or fulfilled entry (permissionless).
+    /// Keepers call this to compact stale cancelled heads that would otherwise
+    /// deadlock the strict-FIFO queue (BUG-AUDIT3 CodeRabbit CRITICAL fix).
+    pub fn compact_redemption_head(
+        ctx: Context<CompactRedemptionHead>,
+        head_index: u64,
+    ) -> Result<()> {
+        instructions::redemption_queue::compact_redemption_head_handler(ctx, head_index)
+    }
+
     /// Update RedemptionQueue parameters (authority-only).
     pub fn update_redemption_queue(
         ctx: Context<UpdateRedemptionQueue>,

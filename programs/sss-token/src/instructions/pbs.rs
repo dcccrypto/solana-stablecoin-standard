@@ -70,8 +70,11 @@ impl ProbabilisticVault {
     pub const SEED: &'static [u8] = b"pbs-vault";
 
     /// True when the vault is in a terminal state (no further mutations allowed).
+    /// MAJOR fix (BUG-AUDIT3 CodeRabbit): PartiallyResolved with zero remaining is
+    /// also terminal — prevents re-entry via expire_and_refund after full partial draw.
     pub fn is_terminal(&self) -> bool {
         matches!(self.status, VaultStatus::Resolved | VaultStatus::Expired)
+            || (self.status == VaultStatus::PartiallyResolved && self.remaining() == 0)
     }
 
     /// Remaining unlocked amount.
@@ -513,6 +516,9 @@ pub fn expire_and_refund_handler(ctx: Context<ExpireAndRefund>) -> Result<()> {
     }
 
     let vault = &mut ctx.accounts.vault;
+    // MAJOR fix: always set Expired as terminal state, even if vault was PartiallyResolved.
+    // This closes the race: a PartiallyResolved vault with remaining > 0 is non-terminal
+    // by is_terminal(), but once expire_and_refund runs, it must become terminal.
     vault.status = VaultStatus::Expired;
 
     msg!(
