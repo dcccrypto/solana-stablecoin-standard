@@ -100,14 +100,14 @@ describe('SolanaStablecoin#mint()', () => {
       status: 200,
       json: async () => ({
         success: true,
-        data: { id: 'x', token_mint: 'M', amount: 50, recipient: 'R', tx_signature: null, created_at: '' },
+        data: { id: 'x', token_mint: 'M', amount: 50, recipient: 'R', tx_signature: 'SigXX', created_at: '' },
         error: null,
       }),
     });
     vi.stubGlobal('fetch', fetchSpy);
 
     const sss = SolanaStablecoin.create({ baseUrl: 'http://localhost:8080', apiKey: 'k' });
-    await sss.mint({ tokenMint: 'M', amount: 50, recipient: 'R' });
+    await sss.mint({ tokenMint: 'M', amount: 50, recipient: 'R', txSignature: 'SigXX' });
 
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(init.body as string);
@@ -116,12 +116,32 @@ describe('SolanaStablecoin#mint()', () => {
     expect(body).toHaveProperty('amount', 50);
   });
 
+  it('throws when amount <= 0 (BUG-028)', async () => {
+    const sss = SolanaStablecoin.create({ baseUrl: 'http://localhost:8080', apiKey: 'k' });
+    await expect(
+      sss.mint({ tokenMint: 'M', amount: 0, recipient: 'R', txSignature: 'SigYY' })
+    ).rejects.toThrow(/amount must be > 0/);
+    await expect(
+      sss.mint({ tokenMint: 'M', amount: -5, recipient: 'R', txSignature: 'SigYY' })
+    ).rejects.toThrow(/amount must be > 0/);
+  });
+
+  it('throws when txSignature is missing or blank (BUG-037)', async () => {
+    const sss = SolanaStablecoin.create({ baseUrl: 'http://localhost:8080', apiKey: 'k' });
+    await expect(
+      sss.mint({ tokenMint: 'M', amount: 1, recipient: 'R', txSignature: '' })
+    ).rejects.toThrow(/txSignature is required/);
+    await expect(
+      sss.mint({ tokenMint: 'M', amount: 1, recipient: 'R', txSignature: '   ' })
+    ).rejects.toThrow(/txSignature is required/);
+  });
+
   it('throws SSSError when mint is rejected (blacklisted recipient)', async () => {
     mockFetchError('Recipient is blacklisted', 400);
 
     const sss = SolanaStablecoin.create({ baseUrl: 'http://localhost:8080', apiKey: 'k' });
     await expect(
-      sss.mint({ tokenMint: 'M', amount: 1, recipient: 'blocked' })
+      sss.mint({ tokenMint: 'M', amount: 1, recipient: 'blocked', txSignature: 'SigZZ' })
     ).rejects.toBeInstanceOf(SSSError);
   });
 
@@ -131,7 +151,7 @@ describe('SolanaStablecoin#mint()', () => {
     const sss = SolanaStablecoin.create({ baseUrl: 'http://localhost:8080', apiKey: 'bad' });
     let err: SSSError | null = null;
     try {
-      await sss.mint({ tokenMint: 'M', amount: 1, recipient: 'R' });
+      await sss.mint({ tokenMint: 'M', amount: 1, recipient: 'R', txSignature: 'SigAA' });
     } catch (e) {
       err = e as SSSError;
     }
@@ -149,7 +169,7 @@ describe('SolanaStablecoin#burn()', () => {
       token_mint: 'TokenBurnBB',
       amount: 500_000,
       source: 'SourceBB',
-      tx_signature: null,
+      tx_signature: 'SigBurnBB',
       created_at: '2026-03-13T20:00:00Z',
     };
     mockFetchOnce(event);
@@ -159,12 +179,13 @@ describe('SolanaStablecoin#burn()', () => {
       tokenMint: 'TokenBurnBB',
       amount: 500_000,
       source: 'SourceBB',
+      txSignature: 'SigBurnBB',
     });
 
     expect(result.id).toBe('uuid-burn-1');
     expect(result.amount).toBe(500_000);
     expect(result.source).toBe('SourceBB');
-    expect(result.tx_signature).toBeNull();
+    expect(result.tx_signature).toBe('SigBurnBB');
   });
 
   it('passes camelCase params as snake_case to the API', async () => {
@@ -173,14 +194,14 @@ describe('SolanaStablecoin#burn()', () => {
       status: 200,
       json: async () => ({
         success: true,
-        data: { id: 'y', token_mint: 'M', amount: 99, source: 'S', tx_signature: null, created_at: '' },
+        data: { id: 'y', token_mint: 'M', amount: 99, source: 'S', tx_signature: 'SigBurn', created_at: '' },
         error: null,
       }),
     });
     vi.stubGlobal('fetch', fetchSpy);
 
     const sss = SolanaStablecoin.create({ baseUrl: 'http://localhost:8080', apiKey: 'k' });
-    await sss.burn({ tokenMint: 'M', amount: 99, source: 'S' });
+    await sss.burn({ tokenMint: 'M', amount: 99, source: 'S', txSignature: 'SigBurn' });
 
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(init.body as string);
@@ -189,11 +210,25 @@ describe('SolanaStablecoin#burn()', () => {
     expect(body).toHaveProperty('amount', 99);
   });
 
+  it('throws when amount <= 0 (BUG-028)', async () => {
+    const sss = SolanaStablecoin.create({ baseUrl: 'http://localhost:8080', apiKey: 'k' });
+    await expect(
+      sss.burn({ tokenMint: 'M', amount: 0, source: 'S', txSignature: 'SigXX' })
+    ).rejects.toThrow(/amount must be > 0/);
+  });
+
+  it('throws when txSignature is missing or blank (BUG-037)', async () => {
+    const sss = SolanaStablecoin.create({ baseUrl: 'http://localhost:8080', apiKey: 'k' });
+    await expect(
+      sss.burn({ tokenMint: 'M', amount: 1, source: 'S', txSignature: '' })
+    ).rejects.toThrow(/txSignature is required/);
+  });
+
   it('throws SSSError on failure', async () => {
     mockFetchError('burn failed', 500);
     const sss = SolanaStablecoin.create({ baseUrl: 'http://localhost:8080', apiKey: 'k' });
     await expect(
-      sss.burn({ tokenMint: 'M', amount: 1, source: 'S' })
+      sss.burn({ tokenMint: 'M', amount: 1, source: 'S', txSignature: 'SigErr' })
     ).rejects.toBeInstanceOf(SSSError);
   });
 });

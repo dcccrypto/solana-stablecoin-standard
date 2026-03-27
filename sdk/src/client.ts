@@ -197,12 +197,32 @@ export class SSSClient {
     return data.api_keys;
   }
 
+  /**
+   * Create a new API key.
+   *
+   * @warning **Admin key required.** This endpoint requires an API key with
+   * admin-level privileges (`X-Api-Key` must be an admin key, not a standard
+   * read/write key). Calling this with a non-admin key will result in a 403
+   * Forbidden error. Treat admin keys as highly sensitive credentials and
+   * never expose them in client-side code.
+   *
+   * @param label - Optional human-readable label for the new key.
+   */
   async createApiKey(label?: string): Promise<ApiKeyEntry> {
     return this.request<ApiKeyEntry>("POST", "/api/admin/keys", {
       label: label ?? "unnamed",
     });
   }
 
+  /**
+   * Delete an API key by ID.
+   *
+   * @warning **Admin key required.** This endpoint requires an API key with
+   * admin-level privileges (`X-Api-Key` must be an admin key). Calling this
+   * with a non-admin key will result in a 403 Forbidden error.
+   *
+   * @param id - The ID of the API key to delete.
+   */
   async deleteApiKey(id: string): Promise<{ deleted: boolean }> {
     return this.request<{ deleted: boolean }>(
       "DELETE",
