@@ -7,7 +7,7 @@
  *  3.  Authority can still propose (is_authority path)
  *  4.  FLAG_DAO_COMMITTEE cannot be cleared via clear_feature_flag (DaoCommitteeRequired)
  *  5.  FLAG_DAO_COMMITTEE cannot be cleared via timelock (DaoFlagProtected)
- *  6.  SSS-3 initialize requires supply_cap > 0 (SupplyCapRequired)
+ *  6.  SSS-3 initialize requires supply_cap > 0 (RequiresMaxSupplyForSSS3)
  *  7.  SSS-1 initialize allows supply_cap == 0
  *  8.  SSS-2 initialize allows supply_cap == 0
  *  9.  supply_cap_locked is set to true for SSS-3 at initialize time
@@ -43,6 +43,8 @@ const Err = {
   DaoCommitteeRequired: "DaoCommitteeRequired",
   DaoFlagProtected: "DaoFlagProtected",
   SupplyCapRequired: "SupplyCapRequired",
+  RequiresMaxSupplyForSSS3: "RequiresMaxSupplyForSSS3",
+  MaxSupplyImmutable: "MaxSupplyImmutable",
   InvalidPreset: "InvalidPreset",
   MissingTransferHook: "MissingTransferHook",
   InvalidCollateralMint: "InvalidCollateralMint",
@@ -284,9 +286,9 @@ function simulateInitialize(params: {
   if (params.preset === 3) {
     if (!params.collateral_mint) return { ok: false, error: Err.InvalidCollateralMint };
     if (!params.reserve_vault) return { ok: false, error: Err.InvalidVault };
-    // SSS-147: supply_cap must be > 0 for SSS-3
+    // SSS-147B: supply_cap must be > 0 for SSS-3 (RequiresMaxSupplyForSSS3)
     if (!params.max_supply || params.max_supply === 0n) {
-      return { ok: false, error: Err.SupplyCapRequired };
+      return { ok: false, error: Err.RequiresMaxSupplyForSSS3 };
     }
   }
   const authority = Keypair.generate().publicKey.toBase58();
@@ -440,7 +442,7 @@ describe("SSS-147: Trustless Hardening", () => {
 
   // ─── Test 6: SSS-3 initialize requires supply_cap > 0 ───────────────────
 
-  it("6. SSS-3 initialize requires supply_cap > 0 (SupplyCapRequired)", () => {
+  it("6. SSS-3 initialize requires supply_cap > 0 (RequiresMaxSupplyForSSS3)", () => {
     // supply_cap = 0 (default / omitted) — should fail
     const result = simulateInitialize({
       preset: 3,
@@ -450,7 +452,7 @@ describe("SSS-147: Trustless Hardening", () => {
     });
     assert.isFalse(result.ok, "SSS-3 with supply_cap=0 should be rejected");
     if (!result.ok) {
-      assert.equal(result.error, Err.SupplyCapRequired);
+      assert.equal(result.error, Err.RequiresMaxSupplyForSSS3);
     }
   });
 
