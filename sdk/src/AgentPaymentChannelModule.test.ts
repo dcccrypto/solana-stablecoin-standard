@@ -17,22 +17,49 @@ import {
   DisputePolicy,
   ApcProofType,
   APC_CHANNEL_SEED,
+  FLAG_AGENT_PAYMENT_CHANNEL,
   deriveApcConfigPda,
   deriveChannelPda,
 } from './AgentPaymentChannelModule';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function mockProvider(accountData?: Buffer) {
+/**
+ * Build a minimal StablecoinConfig account buffer with the given feature_flags value.
+ * feature_flags is at offset 298 (u64 LE). See FeatureFlagsModule._readFeatureFlags.
+ */
+function buildConfigData(featureFlags: bigint = FLAG_AGENT_PAYMENT_CHANNEL): Buffer {
+  const buf = Buffer.alloc(400, 0);
+  buf.writeBigUInt64LE(featureFlags, 298);
+  return buf;
+}
+
+/**
+ * Mock provider where getAccountInfo returns different data depending on what's
+ * requested. If configData is provided, the first call (config PDA check in
+ * openChannel) returns that; subsequent calls return channelData (or null).
+ */
+function mockProvider(channelData?: Buffer, configData?: Buffer) {
+  // Default: provide a config with FLAG_AGENT_PAYMENT_CHANNEL set so existing
+  // openChannel tests pass without modification.
+  const defaultConfigData = buildConfigData(FLAG_AGENT_PAYMENT_CHANNEL);
+  const resolvedConfigData = configData ?? defaultConfigData;
+
+  const getAccountInfo = vi.fn()
+    .mockResolvedValueOnce(
+      // First call = config PDA (for flag guard in openChannel)
+      { data: resolvedConfigData, lamports: 1_000_000, owner: PublicKey.default },
+    )
+    .mockResolvedValue(
+      // Subsequent calls = channel account (for getChannel / read tests)
+      channelData
+        ? { data: channelData, lamports: 1_000_000, owner: PublicKey.default }
+        : null,
+    );
+
   return {
     wallet: { publicKey: Keypair.generate().publicKey },
-    connection: {
-      getAccountInfo: vi.fn().mockResolvedValue(
-        accountData
-          ? { data: accountData, lamports: 1_000_000, owner: PublicKey.default }
-          : null,
-      ),
-    },
+    connection: { getAccountInfo },
     sendAndConfirm: vi.fn().mockResolvedValue('mockedTxSig'),
   } as any;
 }
@@ -361,6 +388,8 @@ describe('AgentPaymentChannelModule', () => {
   });
 
   // ── getChannel ──
+  // getChannel is a pure read — no flag guard. Use a separate provider
+  // instance so the config-preflight mock slots are not consumed.
 
   describe('getChannel', () => {
     it('decodes channel from account data', async () => {
@@ -371,13 +400,21 @@ describe('AgentPaymentChannelModule', () => {
         timeoutSlots: 500n,
       });
 
-      provider.connection.getAccountInfo.mockResolvedValueOnce({
-        data: channelData,
-        lamports: 1_000_000,
-        owner: PROGRAM_ID,
-      });
+      // Dedicated provider: first (and only) call returns channel data.
+      const readProvider = {
+        wallet: { publicKey: Keypair.generate().publicKey },
+        connection: {
+          getAccountInfo: vi.fn().mockResolvedValue({
+            data: channelData,
+            lamports: 1_000_000,
+            owner: PROGRAM_ID,
+          }),
+        },
+        sendAndConfirm: vi.fn(),
+      } as any;
+      const apcRead = new AgentPaymentChannelModule(readProvider, PROGRAM_ID);
 
-      const channel = await apc.getChannel(MINT, CHANNEL_ID);
+      const channel = await apcRead.getChannel(MINT, CHANNEL_ID);
       expect(channel.counterparty.toBase58()).toBe(COUNTERPARTY.toBase58());
       expect(channel.deposit).toBe(10_000_000n);
       expect(channel.status).toBe(ChannelStatus.Open);
@@ -385,8 +422,14 @@ describe('AgentPaymentChannelModule', () => {
     });
 
     it('throws when channel account is not found', async () => {
-      provider.connection.getAccountInfo.mockResolvedValueOnce(null);
-      await expect(apc.getChannel(MINT, CHANNEL_ID)).rejects.toThrow(
+      const nullProvider = {
+        wallet: { publicKey: Keypair.generate().publicKey },
+        connection: { getAccountInfo: vi.fn().mockResolvedValue(null) },
+        sendAndConfirm: vi.fn(),
+      } as any;
+      const apcNull = new AgentPaymentChannelModule(nullProvider, PROGRAM_ID);
+
+      await expect(apcNull.getChannel(MINT, CHANNEL_ID)).rejects.toThrow(
         /PaymentChannel not found/,
       );
     });
@@ -529,6 +572,106 @@ describe('AgentPaymentChannelModule', () => {
       const [a] = apc.channelPda(config, CHANNEL_ID);
       const [b] = deriveChannelPda(config, CHANNEL_ID, PROGRAM_ID);
       expect(a.toBase58()).toBe(b.toBase58());
+    });
+  });
+
+  // ── BUG-NEW-2: FLAG_AGENT_PAYMENT_CHANNEL guard in openChannel ──
+
+  describe('FLAG_AGENT_PAYMENT_CHANNEL guard (BUG-NEW-2)', () => {
+    it('FLAG_AGENT_PAYMENT_CHANNEL constant is bit 19', () => {
+      expect(FLAG_AGENT_PAYMENT_CHANNEL).toBe(1n << 19n);
+      expect(FLAG_AGENT_PAYMENT_CHANNEL).toBe(0x80000n);
+    });
+
+    it('throws a descriptive error when StablecoinConfig account is not found', async () => {
+      // getAccountInfo returns null (config not initialized)
+      const noConfigProvider = {
+        wallet: { publicKey: Keypair.generate().publicKey },
+        connection: { getAccountInfo: vi.fn().mockResolvedValue(null) },
+        sendAndConfirm: vi.fn(),
+      } as any;
+      const apcNoConfig = new AgentPaymentChannelModule(noConfigProvider, PROGRAM_ID);
+
+      await expect(
+        apcNoConfig.openChannel({
+          mint: MINT,
+          counterparty: COUNTERPARTY,
+          deposit: new BN(0),
+          disputePolicy: DisputePolicy.TimeoutFallback,
+          timeoutSlots: new BN(500),
+          channelId: CHANNEL_ID,
+        }),
+      ).rejects.toThrow('StablecoinConfig not found');
+
+      // sendAndConfirm must NOT be called — no tx should be built
+      expect(noConfigProvider.sendAndConfirm).not.toHaveBeenCalled();
+    });
+
+    it('throws a descriptive error when FLAG_AGENT_PAYMENT_CHANNEL is not set', async () => {
+      // Config exists but feature flag bit 19 is not set (flags = 0)
+      const noFlagProvider = mockProvider(undefined, buildConfigData(0n));
+      const apcNoFlag = new AgentPaymentChannelModule(noFlagProvider, PROGRAM_ID);
+
+      await expect(
+        apcNoFlag.openChannel({
+          mint: MINT,
+          counterparty: COUNTERPARTY,
+          deposit: new BN(0),
+          disputePolicy: DisputePolicy.TimeoutFallback,
+          timeoutSlots: new BN(500),
+          channelId: CHANNEL_ID,
+        }),
+      ).rejects.toThrow('FLAG_AGENT_PAYMENT_CHANNEL (bit 19) is not set');
+
+      expect(noFlagProvider.sendAndConfirm).not.toHaveBeenCalled();
+    });
+
+    it('throws when other flags are set but not FLAG_AGENT_PAYMENT_CHANNEL', async () => {
+      // All flags except bit 19
+      const otherFlags = 0xFFFFFFFFFFFFFFFn ^ FLAG_AGENT_PAYMENT_CHANNEL;
+      const otherFlagProvider = mockProvider(undefined, buildConfigData(otherFlags));
+      const apcOtherFlag = new AgentPaymentChannelModule(otherFlagProvider, PROGRAM_ID);
+
+      await expect(
+        apcOtherFlag.openChannel({
+          mint: MINT,
+          counterparty: COUNTERPARTY,
+          deposit: new BN(0),
+          disputePolicy: DisputePolicy.TimeoutFallback,
+          timeoutSlots: new BN(500),
+          channelId: CHANNEL_ID,
+        }),
+      ).rejects.toThrow('FLAG_AGENT_PAYMENT_CHANNEL (bit 19) is not set');
+    });
+
+    it('proceeds to build tx when FLAG_AGENT_PAYMENT_CHANNEL is set', async () => {
+      // Default mockProvider sets FLAG_AGENT_PAYMENT_CHANNEL — should succeed
+      const result = await apc.openChannel({
+        mint: MINT,
+        counterparty: COUNTERPARTY,
+        deposit: new BN(0),
+        disputePolicy: DisputePolicy.TimeoutFallback,
+        timeoutSlots: new BN(500),
+        channelId: CHANNEL_ID,
+      });
+      expect(provider.sendAndConfirm).toHaveBeenCalledOnce();
+      expect(result.txSig).toBe('mockedTxSig');
+    });
+
+    it('proceeds when FLAG_AGENT_PAYMENT_CHANNEL is combined with other flags', async () => {
+      const combinedFlags = FLAG_AGENT_PAYMENT_CHANNEL | (1n << 5n) | (1n << 17n);
+      const combinedProvider = mockProvider(undefined, buildConfigData(combinedFlags));
+      const apcCombined = new AgentPaymentChannelModule(combinedProvider, PROGRAM_ID);
+
+      const result = await apcCombined.openChannel({
+        mint: MINT,
+        counterparty: COUNTERPARTY,
+        deposit: new BN(0),
+        disputePolicy: DisputePolicy.TimeoutFallback,
+        timeoutSlots: new BN(500),
+        channelId: new BN(42),
+      });
+      expect(result.txSig).toBe('mockedTxSig');
     });
   });
 });

@@ -60,6 +60,39 @@ export const APC_CONFIG_SEED = Buffer.from('stablecoin-config');
 /** PDA seed for ProposedSettlement account. Seeds: [b"apc-settle", channel_pda]. */
 export const APC_SETTLE_SEED = Buffer.from('apc-settle');
 
+/**
+ * Feature flag bit for the Agent Payment Channel primitive.
+ *
+ * Matches `FLAG_AGENT_PAYMENT_CHANNEL` in `state.rs` (bit 19 = 1 << 19).
+ * Must be set on `StablecoinConfig.feature_flags` before any APC channel
+ * may be opened. `openChannel()` checks this pre-flight.
+ */
+export const FLAG_AGENT_PAYMENT_CHANNEL = 1n << 19n; // 0x0008_0000
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Read `feature_flags` (u64 LE) from raw `StablecoinConfig` account data.
+ *
+ * StablecoinConfig layout offsets (matches FeatureFlagsModule._readFeatureFlags):
+ *   [0..8]   discriminator
+ *   [8..40]  authority (Pubkey)
+ *   [40..72] mint (Pubkey)
+ *   [72..104] compliance_authority (Pubkey)
+ *   [104]    decimals (u8)
+ *   [105]    is_frozen (bool)
+ *   [106..114] total_supply (u64)
+ *   [114..122] max_supply (u64)
+ *   [122..154] supply_cap_locked (... wait — see FeatureFlagsModule: feature_flags @ 298)
+ *
+ * The canonical offset is 298, as computed in FeatureFlagsModule._readFeatureFlags.
+ */
+function _readConfigFeatureFlags(data: Buffer): bigint {
+  const FEATURE_FLAGS_OFFSET = 298; // mirrors FeatureFlagsModule._readFeatureFlags
+  if (data.length < FEATURE_FLAGS_OFFSET + 8) return 0n;
+  return data.readBigUInt64LE(FEATURE_FLAGS_OFFSET);
+}
+
 // ─── Anchor discriminators ────────────────────────────────────────────────────
 // SHA-256("global:<instruction_name>")[0..8]
 
@@ -342,6 +375,26 @@ export class AgentPaymentChannelModule {
       channelId,
       tokenProgram = TOKEN_2022_PROGRAM_ID,
     } = params;
+
+    // BUG-NEW-2: verify FLAG_AGENT_PAYMENT_CHANNEL is set before building any
+    // APC instruction.  Without this check, SDK callers receive an opaque
+    // on-chain FeatureNotEnabled error instead of a clear SDK-level message.
+    // Pattern mirrors ConfidentialTransferModule flag guard.
+    const [configPdaCheck] = deriveApcConfigPda(mint, this.programId);
+    const configAccountInfo = await this.provider.connection.getAccountInfo(configPdaCheck);
+    if (!configAccountInfo) {
+      throw new Error(
+        `AgentPaymentChannel: StablecoinConfig not found for mint ${mint.toBase58()} — ` +
+        'was the stablecoin initialized?',
+      );
+    }
+    const featureFlags = _readConfigFeatureFlags(configAccountInfo.data);
+    if ((featureFlags & FLAG_AGENT_PAYMENT_CHANNEL) === 0n) {
+      throw new Error(
+        `AgentPaymentChannel: FLAG_AGENT_PAYMENT_CHANNEL (bit 19) is not set on this mint. ` +
+        'Enable the feature via FeatureFlagsModule.setFeatureFlag() before opening a channel.',
+      );
+    }
 
     // SSS-114 M-001: reject zero-address counterparty — a channel with a
     // zero pubkey counterparty can never be settled cooperatively.
