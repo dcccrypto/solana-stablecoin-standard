@@ -6,6 +6,10 @@
 //!   POST /api/zk-credentials/verify      — check compliance status for (mint, user, type)
 //!   GET  /api/zk-credentials/registry    — list CredentialRegistry entries
 //!   POST /api/zk-credentials/registry    — upsert a CredentialRegistry entry
+//!
+//! SSS-AUDIT2-C: All endpoints require FLAG_ZK_CREDENTIALS to be set in the
+//! on-chain StablecoinConfig.  Returns 503 Service Unavailable when the flag
+//! is off.
 
 use axum::{
     extract::{Query, State},
@@ -15,6 +19,7 @@ use axum::{
 use chrono::Utc;
 use tracing::{error, info};
 
+use crate::feature_flags::FLAG_ZK_CREDENTIALS;
 use crate::models::{
     ApiResponse, CredentialQuery, CredentialRecord, RegistryQuery, SubmitCredentialRequest,
     UpsertRegistryRequest, VerifyCredentialRequest, VerifyCredentialResponse,
@@ -26,10 +31,18 @@ use crate::state::AppState;
 // ---------------------------------------------------------------------------
 
 /// Return indexed CredentialRecords with optional filters.
+///
+/// Requires FLAG_ZK_CREDENTIALS (bit 8) in StablecoinConfig.feature_flags.
 pub async fn list_credential_records(
     State(state): State<AppState>,
     Query(params): Query<CredentialQuery>,
 ) -> Result<Json<ApiResponse<Vec<CredentialRecord>>>, StatusCode> {
+    // AUDIT2-C: gate on FLAG_ZK_CREDENTIALS
+    if !state.feature_flags.is_set(FLAG_ZK_CREDENTIALS) {
+        tracing::warn!("zk-credentials/records: FLAG_ZK_CREDENTIALS is not set — returning 503");
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+
     let limit = params.limit.unwrap_or(100).min(1000);
     let valid_only = params.valid_only.unwrap_or(false);
 
@@ -64,10 +77,18 @@ pub async fn list_credential_records(
 /// Groth16 proof.  The backend indexes the resulting CredentialRecord PDA data.
 /// The `proof_data` field is validated for non-empty base64 content (structural
 /// check; full on-chain verification is done by the Solana program).
+///
+/// Requires FLAG_ZK_CREDENTIALS (bit 8) in StablecoinConfig.feature_flags.
 pub async fn submit_credential(
     State(state): State<AppState>,
     Json(req): Json<SubmitCredentialRequest>,
 ) -> Result<Json<ApiResponse<CredentialRecord>>, StatusCode> {
+    // AUDIT2-C: gate on FLAG_ZK_CREDENTIALS
+    if !state.feature_flags.is_set(FLAG_ZK_CREDENTIALS) {
+        tracing::warn!("zk-credentials/submit: FLAG_ZK_CREDENTIALS is not set — returning 503");
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+
     // Structural validation
     if req.mint.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
@@ -144,10 +165,18 @@ pub async fn submit_credential(
 
 /// Check whether a user has a valid (non-expired) CredentialRecord for the
 /// requested credential type on the given mint.
+///
+/// Requires FLAG_ZK_CREDENTIALS (bit 8) in StablecoinConfig.feature_flags.
 pub async fn verify_credential(
     State(state): State<AppState>,
     Json(req): Json<VerifyCredentialRequest>,
 ) -> Result<Json<VerifyCredentialResponse>, StatusCode> {
+    // AUDIT2-C: gate on FLAG_ZK_CREDENTIALS
+    if !state.feature_flags.is_set(FLAG_ZK_CREDENTIALS) {
+        tracing::warn!("zk-credentials/verify: FLAG_ZK_CREDENTIALS is not set — returning 503");
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+
     if req.mint.is_empty() || req.user.is_empty() || req.credential_type.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -197,10 +226,17 @@ pub async fn verify_credential(
 // GET /api/zk-credentials/registry
 // ---------------------------------------------------------------------------
 
+/// Requires FLAG_ZK_CREDENTIALS (bit 8) in StablecoinConfig.feature_flags.
 pub async fn list_registries(
     State(state): State<AppState>,
     Query(params): Query<RegistryQuery>,
 ) -> Result<Json<ApiResponse<Vec<crate::models::CredentialRegistry>>>, StatusCode> {
+    // AUDIT2-C: gate on FLAG_ZK_CREDENTIALS
+    if !state.feature_flags.is_set(FLAG_ZK_CREDENTIALS) {
+        tracing::warn!("zk-credentials/registry GET: FLAG_ZK_CREDENTIALS is not set — returning 503");
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+
     let registries = state
         .db
         .list_credential_registries(params.mint.as_deref(), params.credential_type.as_deref())
@@ -220,10 +256,17 @@ pub async fn list_registries(
 // POST /api/zk-credentials/registry
 // ---------------------------------------------------------------------------
 
+/// Requires FLAG_ZK_CREDENTIALS (bit 8) in StablecoinConfig.feature_flags.
 pub async fn upsert_registry(
     State(state): State<AppState>,
     Json(req): Json<UpsertRegistryRequest>,
 ) -> Result<Json<ApiResponse<crate::models::CredentialRegistry>>, StatusCode> {
+    // AUDIT2-C: gate on FLAG_ZK_CREDENTIALS
+    if !state.feature_flags.is_set(FLAG_ZK_CREDENTIALS) {
+        tracing::warn!("zk-credentials/registry POST: FLAG_ZK_CREDENTIALS is not set — returning 503");
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+
     if req.mint.is_empty() || req.credential_type.is_empty() || req.issuer_pubkey.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }

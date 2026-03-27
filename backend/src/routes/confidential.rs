@@ -41,12 +41,35 @@
 /// # Status codes
 /// 501 Not Implemented — stub; confidential transfer submission pending
 /// Token-2022 ConfidentialTransfer integration (SSS-033 direction).
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
 use serde_json::json;
 
-pub async fn initiate_confidential_transfer() -> impl IntoResponse {
+use crate::feature_flags::FLAG_CONFIDENTIAL_TRANSFERS;
+use crate::state::AppState;
+
+/// POST /api/confidential/transfer
+///
+/// SSS-AUDIT2-C: Returns 503 Service Unavailable when FLAG_CONFIDENTIAL_TRANSFERS
+/// is not set.  When the flag is set but the integration is still pending,
+/// returns 501 Not Implemented (stub until Token-2022 CT integration is complete).
+pub async fn initiate_confidential_transfer(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    // AUDIT2-C: gate on FLAG_CONFIDENTIAL_TRANSFERS
+    if !state.feature_flags.is_set(FLAG_CONFIDENTIAL_TRANSFERS) {
+        tracing::warn!("confidential/transfer: FLAG_CONFIDENTIAL_TRANSFERS is not set — returning 503");
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "success": false,
+                "error": "FLAG_CONFIDENTIAL_TRANSFERS is not enabled on this deployment"
+            })),
+        );
+    }
+
     (
         StatusCode::NOT_IMPLEMENTED,
         Json(json!({
