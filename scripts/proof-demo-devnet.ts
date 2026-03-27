@@ -37,9 +37,11 @@ import { AgentPaymentChannelModule, DisputePolicy, ApcProofType } from '../sdk/s
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
-const PROGRAM_ID = SSS_TOKEN_PROGRAM_ID; // AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat
+// Use new program ID with PBS/APC instructions wired in
+const PROGRAM_ID = new PublicKey('2KbayFFangd1NxVsWshVxjxCigcUrVJqJkNM5YSKTjVr');
 const RPC_URL = 'https://api.devnet.solana.com';
-const FLAG_PROBABILISTIC_MONEY = 1n << 6n;
+const FLAG_PROBABILISTIC_MONEY   = 1n << 20n; // matches Rust: FLAG_PROBABILISTIC_MONEY = 1 << 20
+const FLAG_AGENT_PAYMENT_CHANNEL = 1n << 19n; // matches Rust: FLAG_AGENT_PAYMENT_CHANNEL = 1 << 19
 const AMOUNT_10_SUSD = new BN(10_000_000); // 10 SUSD (6 decimals)
 const MINTER_CAP = new BN('1000000000000000'); // 1B SUSD
 
@@ -123,8 +125,9 @@ async function main() {
       name: 'SSS Demo SUSD',
       symbol: 'SUSD',
       decimals: 6,
-      featureFlags: FLAG_PROBABILISTIC_MONEY,
+      featureFlags: FLAG_PROBABILISTIC_MONEY | FLAG_AGENT_PAYMENT_CHANNEL,
     }),
+    { programId: PROGRAM_ID },
   );
 
   const mint = stablecoin.mint;
@@ -135,8 +138,25 @@ async function main() {
 
   // Verify PBS feature flag was set during initialization
   const ff = new FeatureFlagsModule(providerPayer, PROGRAM_ID);
-  const pbsFlagSet = await ff.isFeatureFlagSet(mint, FLAG_PROBABILISTIC_MONEY);
-  console.log(`  ✓ FLAG_PROBABILISTIC_MONEY verified at init: ${pbsFlagSet}`);
+  let pbsFlagSet = await ff.isFeatureFlagSet(mint, FLAG_PROBABILISTIC_MONEY);
+  console.log(`  FLAG_PROBABILISTIC_MONEY at init: ${pbsFlagSet}`);
+  let apcFlagSet = await ff.isFeatureFlagSet(mint, FLAG_AGENT_PAYMENT_CHANNEL);
+  console.log(`  FLAG_AGENT_PAYMENT_CHANNEL at init: ${apcFlagSet}`);
+
+  if (!pbsFlagSet) {
+    const setFlagSig = await ff.setFeatureFlag({ mint, flag: FLAG_PROBABILISTIC_MONEY });
+    console.log(`  ✓ FLAG_PROBABILISTIC_MONEY enabled: ${solscan(setFlagSig)}`);
+    await sleep(2000);
+    pbsFlagSet = await ff.isFeatureFlagSet(mint, FLAG_PROBABILISTIC_MONEY);
+    console.log(`  ✓ FLAG_PROBABILISTIC_MONEY verified: ${pbsFlagSet}`);
+  }
+  if (!apcFlagSet) {
+    const setApcSig = await ff.setFeatureFlag({ mint, flag: FLAG_AGENT_PAYMENT_CHANNEL });
+    console.log(`  ✓ FLAG_AGENT_PAYMENT_CHANNEL enabled: ${solscan(setApcSig)}`);
+    await sleep(2000);
+    apcFlagSet = await ff.isFeatureFlagSet(mint, FLAG_AGENT_PAYMENT_CHANNEL);
+    console.log(`  ✓ FLAG_AGENT_PAYMENT_CHANNEL verified: ${apcFlagSet}`);
+  }
 
   // ── 5. Register payer as minter + mint 100 SUSD to Agent A ────────────────
   sep('Step 0c — Register minter + mint SUSD to Agent A');
@@ -198,8 +218,8 @@ async function main() {
   // ── 8. Derive PDAs ────────────────────────────────────────────────────────
   const [configPda] = pbsA.configPda(mint);
   const [vaultPda]  = pbsA.vaultPda(configPda, commitmentId);
-  const [apcConfigPda] = apcB.configPda(mint);
-  const [channelPda]   = apcB.channelPda(apcConfigPda, channelId);
+  // Channel PDA seeds: [b"apc-channel", initiator(agentB), channelId]
+  const [channelPda] = apcB.channelPda(agentB.publicKey, channelId);
 
   // Create escrow token accounts (owned by PDAs)
   const escrowVaultAccount = await getOrCreateAssociatedTokenAccount(
@@ -248,6 +268,8 @@ async function main() {
     disputePolicy: DisputePolicy.TimeoutFallback,
     timeoutSlots: new BN(500),
     channelId,
+    escrowTokenAccount: escrowChannelAccount.address, // pre-created + thawed
+    openerTokenAccount: agentBToken.address,          // agentB's token account (initiator)
   });
 
   console.log(`\n  ✓ APC opened (zero-deposit, timeout=500 slots)`);
@@ -287,7 +309,9 @@ async function main() {
   sep('Step 6 — Agent B: proveAndResolve (PBS → 10 SUSD to Agent B)');
 
   const pbsB = new ProbabilisticModule(providerB, PROGRAM_ID);
-  const resolveTx = await pbsB.proveAndResolve(computedOutputHash, {
+  // proveAndResolve checks proof_hash == vault.condition_hash
+  // vault.condition_hash was set to taskHash (sha256(TASK_DESCRIPTION)) at commit time
+  const resolveTx = await pbsB.proveAndResolve(taskHash, {
     mint,
     commitmentId: cid,
     escrowTokenAccount: escrowVaultAccount.address,
@@ -308,6 +332,8 @@ async function main() {
 
   const counterTx = await apcA.countersignSettle(channelId, {
     mint,
+    initiator: agentB.publicKey,          // channel was opened by agentB
+    amount: 0,                            // must match proposed amount (0 for zero-deposit channel)
     openerTokenAccount: agentBToken.address,
     counterpartyTokenAccount: agentAToken.address,
     escrowTokenAccount: escrowChannelAccount.address,
