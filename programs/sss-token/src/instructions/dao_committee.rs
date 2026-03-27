@@ -384,6 +384,16 @@ pub fn execute_action_handler(ctx: Context<ExecuteAction>, _proposal_id: u64) ->
                 proposal.target
             );
         }
+        ProposalAction::DrawInsurance => {
+            // Insurance draw approval: no config mutation here — draw_insurance
+            // validates this executed ProposalPda directly before transferring.
+            // `param` = approved draw amount (informational, enforced in draw_insurance).
+            msg!(
+                "Proposal #{} EXECUTED — DrawInsurance approved amount={}",
+                proposal.proposal_id,
+                proposal.param,
+            );
+        }
     }
 
     Ok(())

@@ -68,6 +68,15 @@ pub struct PaymentChannel {
     /// Monotonic channel id (caller-provided, unique per initiator).
     pub channel_id: u64,
     /// Dispute resolution policy: 0=OracleAttestation, 1=PeerQuorum, 2=TimeoutFallback.
+    ///
+    /// BUG-AUDIT3-004 (MEDIUM, documented): `dispute_policy` is stored on-chain
+    /// as an advisory field only — the on-chain program does **not** enforce it.
+    /// The `dispute` instruction moves the channel to Disputed state regardless of
+    /// the policy value, and no on-chain arbitrator, oracle, or quorum is invoked.
+    /// Actual dispute resolution is expected to be handled off-chain by the parties
+    /// (or an integrated arbitration layer).  Protocol integrators MUST NOT assume
+    /// that the on-chain program enforces oracle attestation or peer quorum; those
+    /// mechanisms must be implemented at the application / SDK layer.
     pub dispute_policy: u8,
     /// Slots after open_slot before force_close is permitted.
     pub timeout_slots: u64,
@@ -178,8 +187,13 @@ pub fn open_channel_handler(
     params: OpenChannelParams,
 ) -> Result<()> {
     require!(params.timeout_slots > 0, SssError::InvalidExpirySlot);
+    // BUG-AUDIT3-003: require a non-zero deposit to prevent 0-cost channel
+    // griefing (an attacker could spam open_channel with deposit=0, creating
+    // thousands of zero-value PDAs that consume storage and block counterparty
+    // key lookups without locking any funds).
+    require!(params.deposit > 0, SssError::ZeroAmount);
 
-    // Transfer deposit initiator → escrow (only if deposit > 0).
+    // Transfer deposit initiator → escrow.
     if params.deposit > 0 {
         transfer_checked(
             CpiContext::new(

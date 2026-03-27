@@ -321,6 +321,16 @@ pub fn process_redemption_handler(
         let rq = &mut ctx.accounts.redemption_queue;
         let re = &ctx.accounts.redemption_entry;
 
+        // BUG-AUDIT3-007: enforce strict FIFO ordering.
+        // Without this check a keeper (or attacker) could skip queue_head and
+        // process any arbitrary queue_index, allowing queue ordering to be
+        // manipulated (e.g. front-running large redemptions or skipping a
+        // temporarily-delayed entry to process a later one first).
+        require!(
+            queue_index == rq.queue_head,
+            SssError::RedemptionQueueOutOfOrder
+        );
+
         // Front-run protection: enforce min delay
         require!(
             current_slot >= re.enqueue_slot.saturating_add(rq.min_delay_slots),
@@ -349,10 +359,8 @@ pub fn process_redemption_handler(
 
         rq.slot_redemption_total = rq.slot_redemption_total.saturating_add(amount);
 
-        // Advance head past this entry if it's the head (FIFO ordering)
-        if queue_index == rq.queue_head {
-            rq.queue_head = rq.queue_head.saturating_add(1);
-        }
+        // Advance head: always safe now since queue_index == queue_head is enforced above.
+        rq.queue_head = rq.queue_head.saturating_add(1);
 
         let keeper_reward = rq.keeper_reward_lamports;
         let rq_bump = rq.bump;
