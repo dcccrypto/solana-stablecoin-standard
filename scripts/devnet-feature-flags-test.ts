@@ -93,16 +93,23 @@ async function readFeatureFlags(connection: Connection, mint: PublicKey): Promis
   const info = await connection.getAccountInfo(configPda);
   if (!info) throw new Error(`Config PDA not found for mint ${mint.toBase58()}`);
   // StablecoinConfig layout (after discriminator):
-  // [0..8]  discriminator
-  // [8..40] mint (Pubkey)
-  // [40..72] authority
-  // [72..104] comp_authority
-  // [104..136] pending_authority
-  // [136..168] pending_comp_authority
-  // [168] preset (u8)
-  // [169] paused (bool)
-  // [170..178] feature_flags (u64 LE)
-  const flagsOffset = 8 + 32 + 32 + 32 + 32 + 32 + 1 + 1;
+  // [0..8]    discriminator
+  // [8..40]   mint (Pubkey)
+  // [40..72]  authority (Pubkey)
+  // [72..104] compliance_authority (Pubkey)
+  // [104]     preset (u8)
+  // [105]     paused (bool)
+  // [106..114] total_minted (u64)
+  // [114..122] total_burned (u64)
+  // [122..154] transfer_hook_program (Pubkey)
+  // [154..186] collateral_mint (Pubkey)
+  // [186..218] reserve_vault (Pubkey)
+  // [218..226] total_collateral (u64)
+  // [226..234] max_supply (u64)
+  // [234..266] pending_authority (Pubkey)
+  // [266..298] pending_compliance_authority (Pubkey)
+  // [298..306] feature_flags (u64 LE)
+  const flagsOffset = 8 + 32 + 32 + 32 + 1 + 1 + 8 + 8 + 32 + 32 + 32 + 8 + 8 + 32 + 32; // = 298
   const flagsBuf = info.data.slice(flagsOffset, flagsOffset + 8);
   let flags = 0n;
   for (let i = 7; i >= 0; i--) {
