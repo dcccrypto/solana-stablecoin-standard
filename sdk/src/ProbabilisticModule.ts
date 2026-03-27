@@ -6,7 +6,7 @@
  * SSS-109.
  *
  * ProbabilisticVault PDA seeds: [b"pbs-vault", config, commitment_id_le8]
- * Feature flag: FLAG_PROBABILISTIC_MONEY (1 << 6) must be set on StablecoinConfig.
+ * Feature flag: FLAG_PROBABILISTIC_MONEY (1 << 20) must be set on StablecoinConfig.
  *
  * @example
  * ```ts
@@ -41,7 +41,7 @@ import { TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Bit flag for the probabilistic money feature (bit 6 = 0x40). */
-export const FLAG_PROBABILISTIC_MONEY = 1n << 6n; // 0x40
+export const FLAG_PROBABILISTIC_MONEY = 1n << 20n; // 0x100000 — matches FLAG_PROBABILISTIC_MONEY in state.rs (bit 20)
 
 /** PDA seed for ProbabilisticVault accounts. */
 export const PBS_VAULT_SEED = Buffer.from('pbs-vault');
@@ -242,7 +242,7 @@ export function derivePbsVaultPda(
 /**
  * SDK wrapper for the SSS-109 Probabilistic Balance Standard on-chain program.
  *
- * Requires the `FLAG_PROBABILISTIC_MONEY` feature flag (`1 << 6`) to be set
+ * Requires the `FLAG_PROBABILISTIC_MONEY` feature flag (`1 << 20`) to be set
  * on the `StablecoinConfig` PDA at initialize time.
  */
 export class ProbabilisticModule {

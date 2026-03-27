@@ -88,12 +88,18 @@ export class SSSClient {
   // ─── Mint ────────────────────────────────────────────────────────────────
 
   async mint(req: MintRequest): Promise<MintEvent> {
+    if (req.amount <= 0) {
+      throw new SSSError(`mint amount must be > 0, got ${req.amount}`, 400);
+    }
     return this.request<MintEvent>("POST", "/api/mint", req);
   }
 
   // ─── Burn ────────────────────────────────────────────────────────────────
 
   async burn(req: BurnRequest): Promise<BurnEvent> {
+    if (req.amount <= 0) {
+      throw new SSSError(`burn amount must be > 0, got ${req.amount}`, 400);
+    }
     return this.request<BurnEvent>("POST", "/api/burn", req);
   }
 

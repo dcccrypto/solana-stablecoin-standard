@@ -163,7 +163,7 @@ async fn main() {
         .route("/api/webhooks/:id", delete(delete_webhook))
         .route("/api/alerts", get(get_alerts).post(post_alert))
         .route("/api/webhook-deliveries", get(list_webhook_deliveries))
-        .route("/api/travel-rule/records", get(get_travel_rule_records))
+        .route("/api/travel-rule/records", get(get_travel_rule_records).post(post_travel_rule_record))
         .route("/api/pid-config", get(get_pid_config))
         .route("/api/zk-credentials/records", get(list_credential_records))
         .route("/api/zk-credentials/submit", post(submit_credential))

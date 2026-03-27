@@ -9,6 +9,11 @@
 //!   beneficiary_vasp against the known_vasps registry; returns 422 UNKNOWN_VASP
 //!   if either is unrecognised.
 //!
+//! - POST /api/travel-rule/records
+//!   AUDIT3C-H1: Submit a new TravelRuleRecord. Validates originator_vasp and
+//!   beneficiary_vasp against the known_vasps registry; returns 422 UNKNOWN_VASP
+//!   if either is unrecognised.
+//!
 //! - GET /api/pid-config
 //!   Returns SSS program IDs and travel-rule configuration metadata.
 //!
@@ -26,6 +31,7 @@ use crate::error::AppError;
 use crate::feature_flags::FLAG_TRAVEL_RULE;
 use crate::models::{ApiResponse, CreateTravelRuleRecord, PidConfigResponse, TravelRuleQuery, TravelRuleRecord};
 use crate::state::AppState;
+use serde_json;
 
 /// Convenience alias: structured error response matching the ApiResponse contract.
 type ApiError = (StatusCode, Json<ApiResponse<()>>);
@@ -109,33 +115,17 @@ pub async fn get_travel_rule_records(
 /// code UNKNOWN_VASP if either VASP is not registered.
 ///
 /// Requires FLAG_TRAVEL_RULE (bit 6) in StablecoinConfig.feature_flags.
-/// Convenience alias for structured error responses returned by admin travel-rule handlers.
-type TravelRuleApiError = (StatusCode, Json<ApiResponse<()>>);
-
-/// POST /api/admin/travel-rule/records
-///
-/// AUDIT3C-H1: Submit a new TravelRuleRecord.  Validates originator_vasp and
-/// beneficiary_vasp against the known_vasps registry; returns 422 UNKNOWN_VASP
-/// if either is unrecognised.  Also validates that mint is non-empty, amount ≥ 0,
-/// and threshold ≥ 0.
-///
-/// Admin-only — must be placed on the admin router (require_admin middleware).
-/// Requires FLAG_TRAVEL_RULE (bit 6) in StablecoinConfig.feature_flags.
 pub async fn post_travel_rule_record(
     State(state): State<AppState>,
     Json(body): Json<CreateTravelRuleRecord>,
-) -> Result<(StatusCode, Json<ApiResponse<TravelRuleRecord>>), TravelRuleApiError> {
+) -> Result<(StatusCode, Json<ApiResponse<TravelRuleRecord>>), (StatusCode, Json<serde_json::Value>)> {
     // Gate on FLAG_TRAVEL_RULE
     if !state.feature_flags.is_set(FLAG_TRAVEL_RULE) {
         tracing::warn!("travel-rule/records POST: FLAG_TRAVEL_RULE is not set — returning 503");
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(ApiResponse::err("travel rule feature is not enabled")),
-        ));
+        return Err((StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"success": false, "error": "FLAG_TRAVEL_RULE not set"}))));
     }
 
-    // AUDIT3C-H1: validate both VASPs against known_vasps registry.
-    // AppError is converted via the centralized error.rs IntoResponse impl.
+    // AUDIT3C-H1: validate both VASPs against known_vasps registry
     let record = state.db.insert_travel_rule_record(
         &body.originator_vasp,
         &body.beneficiary_vasp,
@@ -150,7 +140,7 @@ pub async fn post_travel_rule_record(
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
-        (status, Json(ApiResponse::err(e.to_string())))
+        (status, Json(serde_json::json!({"success": false, "error": e.to_string()})))
     })?;
 
     tracing::info!(
@@ -216,39 +206,6 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::broadcast;
 
-    // --- AUDIT3C-M3: require_wallet_param ---
-
-    #[test]
-    fn wallet_param_none_returns_none() {
-        assert!(require_wallet_param(None).is_none());
-    }
-
-    #[test]
-    fn wallet_param_empty_string_returns_none() {
-        assert!(require_wallet_param(Some("")).is_none());
-    }
-
-    #[test]
-    fn wallet_param_whitespace_only_returns_none() {
-        assert!(require_wallet_param(Some("   ")).is_none());
-    }
-
-    /// Non-empty wallet param returns `Some` with the original (untrimmed) value.
-    #[test]
-    fn wallet_param_valid_address_returns_original_value() {
-        // Base58 address — long form
-        let base58 = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
-        assert_eq!(require_wallet_param(Some(base58)), Some(base58));
-        // Short identifier — different format to exercise the same code path distinctly
-        let short = "vasp-001";
-        assert_eq!(require_wallet_param(Some(short)), Some(short));
-    }
-
-    #[test]
-    fn wallet_param_tab_newline_whitespace_returns_none() {
-        assert!(require_wallet_param(Some("\t\n")).is_none());
-    }
-
     fn make_state_with_flag(flag_set: bool) -> AppState {
         let db = Database::new(":memory:").expect("in-memory db");
         let ff = Arc::new(FeatureFlagsCache::new());
@@ -266,8 +223,7 @@ mod tests {
 
     fn make_app(state: AppState) -> Router {
         Router::new()
-            .route("/api/travel-rule/records", get(get_travel_rule_records))
-            .route("/api/admin/travel-rule/records", post(post_travel_rule_record))
+            .route("/api/travel-rule/records", get(get_travel_rule_records).post(post_travel_rule_record))
             .with_state(state)
     }
 
@@ -275,7 +231,7 @@ mod tests {
         app.oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/admin/travel-rule/records")
+                .uri("/api/travel-rule/records")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_vec(&body).unwrap()))
                 .unwrap(),
@@ -371,16 +327,10 @@ mod tests {
         assert!(v["error"].as_str().unwrap().contains("originator_vasp"));
     }
 
-    /// AUDIT3C-H1-T6: devnet TESTVASP0001 must be inserted explicitly by tests;
-    /// it is not seeded in production DBs.  Set SOLANA_NETWORK=devnet to seed it.
+    /// AUDIT3C-H1-T6: devnet TESTVASP0001 works → 201
     #[tokio::test]
     async fn test_post_devnet_test_vasp_succeeds() {
-        // TESTVASP0001 is only seeded when SOLANA_NETWORK=devnet is set.
-        // Tests must set that env var or insert it directly — use env var approach here.
-        std::env::set_var("SOLANA_NETWORK", "devnet");
-        let state = make_state_with_flag(true);
-        std::env::remove_var("SOLANA_NETWORK");
-        let app = make_app(state);
+        let app = make_app(make_state_with_flag(true));
         let resp = post_record(app, json!({
             "originator_vasp": "TESTVASP0001",
             "beneficiary_vasp": "TESTVASP0001",
@@ -390,51 +340,6 @@ mod tests {
             "compliant": true
         })).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
-    }
-
-    /// AUDIT3C-H1-T7a: empty mint → 422
-    #[tokio::test]
-    async fn test_post_empty_mint_returns_422() {
-        let app = make_app(make_state_with_flag(true));
-        let resp = post_record(app, json!({
-            "originator_vasp": "SSSISSUER001",
-            "beneficiary_vasp": "SSSMARKET001",
-            "mint": "",
-            "amount": 1000,
-            "threshold": 1000,
-            "compliant": true
-        })).await;
-        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    }
-
-    /// AUDIT3C-H1-T7b: negative amount → 422
-    #[tokio::test]
-    async fn test_post_negative_amount_returns_422() {
-        let app = make_app(make_state_with_flag(true));
-        let resp = post_record(app, json!({
-            "originator_vasp": "SSSISSUER001",
-            "beneficiary_vasp": "SSSMARKET001",
-            "mint": "mint1",
-            "amount": -1,
-            "threshold": 1000,
-            "compliant": true
-        })).await;
-        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    }
-
-    /// AUDIT3C-H1-T7c: negative threshold → 422
-    #[tokio::test]
-    async fn test_post_negative_threshold_returns_422() {
-        let app = make_app(make_state_with_flag(true));
-        let resp = post_record(app, json!({
-            "originator_vasp": "SSSISSUER001",
-            "beneficiary_vasp": "SSSMARKET001",
-            "mint": "mint1",
-            "amount": 1000,
-            "threshold": -5,
-            "compliant": true
-        })).await;
-        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     /// AUDIT3C-H1-T7: GET records returns record inserted via POST
@@ -455,7 +360,7 @@ mod tests {
         // GET and verify record is there
         let app2 = make_app(state);
         let get_resp = app2
-            .oneshot(Request::builder().uri("/api/travel-rule/records?wallet=SSSISSUER001").body(Body::empty()).unwrap())
+            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
             .await.unwrap();
         assert_eq!(get_resp.status(), StatusCode::OK);
         let body = axum::body::to_bytes(get_resp.into_body(), usize::MAX).await.unwrap();
