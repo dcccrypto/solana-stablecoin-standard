@@ -301,6 +301,25 @@ pub fn prove_and_resolve_handler(
 }
 
 // ─── partial_resolve ──────────────────────────────────────────────────────────
+//
+// BUG-AUDIT3-002 (MEDIUM, documented): Race between `partial_resolve` and
+// `expire_and_refund` in the same block.
+//
+// If a claimant submits `partial_resolve` and an issuer submits
+// `expire_and_refund` in the same slot (after the vault's `expiry_slot`), both
+// can succeed because neither holds a lock.  Solana's single-threaded execution
+// guarantees one wins and one fails — whichever lands first in the block wins.
+// This is expected atomic behaviour: `partial_resolve` sets the vault terminal
+// (PartiallyResolved or Resolved); `expire_and_refund` also sets it terminal
+// (Expired).  The second instruction will fail with VaultAlreadyTerminal.
+//
+// Resolution: treating `PartiallyResolved` as terminal when remainder == 0
+// (BUG-AUDIT3-001 fix) closes the most dangerous surface.  The remaining
+// `PartiallyResolved` state (remainder > 0) is intentionally non-terminal to
+// allow repeated partial draws; protocol integrators should be aware that
+// `expire_and_refund` can race with a subsequent `partial_resolve` call after
+// the expiry slot.  Consider making PartiallyResolved fully terminal in a future
+// protocol upgrade if repeated-partial semantics are not required.
 
 #[derive(Accounts)]
 pub struct PartialResolve<'info> {
@@ -401,14 +420,21 @@ pub fn partial_resolve_handler(
 
     let vault = &mut ctx.accounts.vault;
     vault.resolved_amount = vault.resolved_amount.saturating_add(amount);
-    vault.status = VaultStatus::PartiallyResolved;
+    // BUG-AUDIT3-001: if remainder == 0 the vault is fully resolved; mark it
+    // terminal (Resolved) so it cannot be re-entered by expire_and_refund or
+    // another partial_resolve call in the same / later slot.
+    vault.status = if remainder == 0 {
+        VaultStatus::Resolved
+    } else {
+        VaultStatus::PartiallyResolved
+    };
 
     emit!(ProbabilisticCommitmentResolved {
         config: vault.config,
         commitment_id: vault.commitment_id,
         claimant: vault.claimant,
         amount_released: amount,
-        partial: true,
+        partial: remainder > 0,
     });
 
     msg!(

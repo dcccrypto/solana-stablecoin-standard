@@ -512,6 +512,10 @@ pub enum ProposalAction {
     UpdateMinter = 4,
     /// Revoke a minter.  `target` = minter key.
     RevokeMinter = 5,
+    /// Approve an insurance vault draw.  `param` = max draw amount (u64 lamports/tokens).
+    /// Used when FLAG_DAO_COMMITTEE is active — draw_insurance verifies a passed
+    /// DrawInsurance proposal exists before transferring funds.
+    DrawInsurance = 6,
 }
 
 /// DAO Governance Proposal PDA.

@@ -83,11 +83,25 @@ pub fn init_keeper_config_handler(
         )?;
     }
 
+    // BUG-AUDIT3-006: cap keeper_reward_lamports to prevent reward-drain attacks.
+    // A malicious authority (or a compromised keypair) could set a very high
+    // reward, then spam crank_circuit_breaker to drain the keeper vault in a
+    // single slot if the cooldown is too short.  We enforce:
+    //   • min_cooldown_slots >= 10  (prevents per-slot draining)
+    //   • keeper_reward_lamports <= MAX_KEEPER_REWARD_LAMPORTS (0.1 SOL)
+    const MAX_KEEPER_REWARD_LAMPORTS: u64 = 100_000_000; // 0.1 SOL
+    require!(
+        params.keeper_reward_lamports <= MAX_KEEPER_REWARD_LAMPORTS,
+        SssError::InvalidKeeperReward
+    );
     require!(
         params.deviation_threshold_bps > 0 && params.deviation_threshold_bps <= 5_000,
         SssError::InvalidKeeperDeviation
     );
-    require!(params.min_cooldown_slots > 0, SssError::InvalidKeeperCooldown);
+    // Enforce minimum cooldown of 10 slots (~4–5 seconds on Solana mainnet) to
+    // prevent a keeper from triggering the circuit breaker on every slot and
+    // draining the reward vault.
+    require!(params.min_cooldown_slots >= 10, SssError::InvalidKeeperCooldown);
     require!(params.sustained_recovery_slots > 0, SssError::InvalidKeeperRecovery);
     require!(params.target_price > 0, SssError::InvalidPrice);
 

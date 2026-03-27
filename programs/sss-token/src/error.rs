@@ -76,6 +76,16 @@ pub enum SssError {
     ProposalAlreadyExecuted,
     #[msg("Proposal has been cancelled")]
     ProposalCancelled,
+    #[msg("DAO proposal required — FLAG_DAO_COMMITTEE is active; provide an executed DrawInsurance proposal")]
+    DaoProposalRequired,
+    #[msg("DAO proposal config mismatch — proposal does not belong to this stablecoin config")]
+    DaoProposalConfigMismatch,
+    #[msg("DAO proposal wrong action — expected DrawInsurance")]
+    DaoProposalWrongAction,
+    #[msg("DAO proposal not yet executed — quorum must be reached and execute_action called first")]
+    DaoProposalNotExecuted,
+    #[msg("DAO proposal approved amount is less than requested draw amount")]
+    DaoProposalInsufficientAmount,
     #[msg("Quorum not reached: not enough YES votes")]
     QuorumNotReached,
     #[msg("Quorum must be at least 1 and at most members.len()")]
@@ -327,8 +337,10 @@ pub enum SssError {
     KeeperRecoveryWindowNotMet,
     #[msg("Invalid keeper deviation threshold")]
     InvalidKeeperDeviation,
-    #[msg("Invalid keeper cooldown — must be > 0")]
+    #[msg("Invalid keeper cooldown — must be >= 10 slots")]
     InvalidKeeperCooldown,
+    #[msg("Invalid keeper reward — exceeds MAX_KEEPER_REWARD_LAMPORTS (0.1 SOL)")]
+    InvalidKeeperReward,
     #[msg("Invalid keeper recovery — sustained_recovery_slots must be > 0")]
     InvalidKeeperRecovery,
     #[msg("Mint is not paused")]
@@ -346,6 +358,8 @@ pub enum SssError {
     RedemptionNotOwner,
     #[msg("Redemption slot cap exceeded — too many redeemed this slot")]
     RedemptionSlotCapExceeded,
+    #[msg("Redemption queue out of order — must process queue_head first (FIFO enforced)")]
+    RedemptionQueueOutOfOrder,
     // SSS-150: Upgrade authority guard
     #[msg("Upgrade authority guard is not set")]
     UpgradeAuthorityGuardNotSet,

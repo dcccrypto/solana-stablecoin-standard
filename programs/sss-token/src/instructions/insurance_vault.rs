@@ -15,7 +15,10 @@ use anchor_spl::token_interface::{
 };
 
 use crate::error::SssError;
-use crate::state::{InsuranceVault, StablecoinConfig, FLAG_INSURANCE_VAULT_REQUIRED};
+use crate::state::{
+    InsuranceVault, ProposalAction, ProposalPda, StablecoinConfig, FLAG_DAO_COMMITTEE,
+    FLAG_INSURANCE_VAULT_REQUIRED,
+};
 
 // ─── Events ──────────────────────────────────────────────────────────────────
 
@@ -223,19 +226,23 @@ pub fn seed_insurance_vault_handler(
 
 /// Governance-controlled draw to cover protocol losses.
 ///
-/// Access: authority-only.  When FLAG_DAO_COMMITTEE is set, callers must first
-/// execute a DAO proposal with action matching `draw_insurance`; this instruction
-/// trusts the DAO executor has already validated quorum.
+/// Access: authority-only (when FLAG_DAO_COMMITTEE is NOT set).
+///
+/// BUG-AUDIT3-005 fix: when FLAG_DAO_COMMITTEE IS set, callers MUST provide
+/// a passed + executed `ProposalPda` with `action == DrawInsurance`.  The
+/// authority field is still required as a signer (the caller who holds the
+/// key), but access control is gated on the on-chain DAO quorum evidence,
+/// NOT on `config.authority == authority.key()` alone.
 ///
 /// `reason_hash` — 32-byte hash linking to the on/off-chain governance decision.
 #[derive(Accounts)]
+#[instruction(amount: u64, reason_hash: [u8; 32])]
 pub struct DrawInsurance<'info> {
     pub authority: Signer<'info>,
 
     #[account(
         seeds = [StablecoinConfig::SEED, sss_mint.key().as_ref()],
         bump = config.bump,
-        constraint = config.authority == authority.key() @ SssError::Unauthorized,
         constraint = config.feature_flags & FLAG_INSURANCE_VAULT_REQUIRED != 0 @ SssError::FeatureNotEnabled,
     )]
     pub config: Account<'info, StablecoinConfig>,
@@ -275,6 +282,11 @@ pub struct DrawInsurance<'info> {
     )]
     pub vault_authority: AccountInfo<'info>,
 
+    /// Optional DAO proposal — REQUIRED when FLAG_DAO_COMMITTEE is active.
+    /// Must be an executed DrawInsurance proposal with approved amount >= `amount`.
+    /// CHECK: validated in handler logic (action, executed, amount, config match).
+    pub dao_proposal: Option<Account<'info, ProposalPda>>,
+
     pub collateral_token_program: Interface<'info, TokenInterface>,
 }
 
@@ -288,10 +300,48 @@ pub fn draw_insurance_handler(
     let config = &ctx.accounts.config;
     let vault = &ctx.accounts.insurance_vault;
 
-    if config.feature_flags & crate::state::FLAG_DAO_COMMITTEE != 0 {
-        // DAO active: trust that execute_action (DAO executor) already validated quorum
-        // before CPIing into draw_insurance.  Authority here is the DAO executor.
-        msg!("DAO committee active: draw authorised via governance proposal");
+    if config.feature_flags & FLAG_DAO_COMMITTEE != 0 {
+        // BUG-AUDIT3-005: DAO active — MUST verify on-chain quorum evidence.
+        // Require a ProposalPda that:
+        //   1. belongs to this config
+        //   2. has action == DrawInsurance
+        //   3. has been executed (quorum reached + execute_action called)
+        //   4. approved amount (param) >= requested draw amount
+        //
+        // This closes the bypass: previously `config.authority` could call
+        // draw_insurance directly without any DAO vote.
+        match &ctx.accounts.dao_proposal {
+            None => {
+                return err!(SssError::DaoProposalRequired);
+            }
+            Some(proposal) => {
+                require!(
+                    proposal.config == config.key(),
+                    SssError::DaoProposalConfigMismatch
+                );
+                require!(
+                    proposal.action == ProposalAction::DrawInsurance,
+                    SssError::DaoProposalWrongAction
+                );
+                require!(proposal.executed, SssError::DaoProposalNotExecuted);
+                require!(!proposal.cancelled, SssError::ProposalCancelled);
+                require!(
+                    proposal.param >= amount,
+                    SssError::DaoProposalInsufficientAmount
+                );
+                msg!(
+                    "DAO committee active: draw authorised by proposal #{} (approved={})",
+                    proposal.proposal_id,
+                    proposal.param
+                );
+            }
+        }
+    } else {
+        // Non-DAO path: standard authority check.
+        require!(
+            config.authority == ctx.accounts.authority.key(),
+            SssError::Unauthorized
+        );
     }
 
     let net_supply = config.net_supply();
