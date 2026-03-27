@@ -941,11 +941,14 @@ describe("SSS-QA-037: Adversarial Tests (AUDIT-C/D findings)", () => {
       // SSS-3 is required for PRESET_INSTITUTIONAL
       const fakeCollateral = Keypair.generate().publicKey;
       const fakeVault      = Keypair.generate().publicKey;
+      const testSquadsKp = Keypair.generate();
       await program.methods.initialize({
         preset: 3, decimals: 6, name: "Squads Irrev", symbol: "SQDI",
         uri: "", transferHookProgram: null,
         collateralMint: fakeCollateral, reserveVault: fakeVault,
-        maxSupply: null, featureFlags: null, auditorElgamalPubkey: null,
+        maxSupply: new anchor.BN(1_000_000_000), featureFlags: null,
+        auditorElgamalPubkey: null, adminTimelockDelay: null,
+        squadsMultisig: testSquadsKp.publicKey,
       }).accounts({
         payer: authority.publicKey, mint: mintKp.publicKey, config: cfgPda,
         ctConfig: null, tokenProgram: TOKEN_2022_PROGRAM_ID,

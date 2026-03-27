@@ -234,9 +234,10 @@ describe("SSS-151: First-Loss Insurance Vault", () => {
         transferHookProgram: null,
         collateralMint: collateralMint,
         reserveVault: reserveVault,
-        maxSupply: null,
+        maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         adminTimelockDelay: null,
         maxOracleConfBps: null,
       })
@@ -429,9 +430,10 @@ describe("SSS-151: First-Loss Insurance Vault", () => {
         transferHookProgram: null,
         collateralMint: collateralMint,
         reserveVault: rv2,
-        maxSupply: null,
+        maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         adminTimelockDelay: null,
         maxOracleConfBps: null,
       })

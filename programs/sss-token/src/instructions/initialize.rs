@@ -72,13 +72,11 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     if params.preset == 3 {
         require!(params.collateral_mint.is_some(), SssError::InvalidCollateralMint);
         require!(params.reserve_vault.is_some(), SssError::InvalidVault);
-        // SSS-147: SSS-3 must set a positive supply_cap to prevent uncapped minting.
-        // The cap is locked at initialize time and cannot be changed after deployment.
-        // TODO SSS-147: When squads_authority module is implemented, require FLAG_SQUADS_AUTHORITY
-        // for SSS-3 preset at initialize time (no single-key SSS-3 deployments).
+        // SSS-147B: SSS-3 requires a finite max_supply at initialization.
+        // The cap is mandatory (> 0) and immutable — it cannot be changed after deployment.
         require!(
             params.max_supply.unwrap_or(0) > 0,
-            SssError::SupplyCapRequired
+            SssError::RequiresMaxSupplyForSSS3
         );
     }
 
@@ -187,7 +185,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     } else {
         [0u8; 32]
     };
-    // SSS-147: Lock the supply cap for SSS-3 — immutable after initialize.
+    // SSS-147B: Lock the supply cap for SSS-3 — immutable after initialize.
     // SSS-1 and SSS-2 do not lock the supply cap (it defaults to false).
     config.supply_cap_locked = params.preset == 3;
     // SSS-122: New configs start at CURRENT_VERSION — no migration needed for

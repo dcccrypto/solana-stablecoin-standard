@@ -156,9 +156,10 @@ describe("oracle-abstraction", () => {
         transferHookProgram: null,
         collateralMint,
         reserveVault: vaultTokenAccount,
-        maxSupply: null,
+        maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
       })
       .accounts({
         payer: authority.publicKey,
@@ -1036,9 +1037,10 @@ describe("oracle-abstraction", () => {
         transferHookProgram: null,
         collateralMint,
         reserveVault: dummyVault,
-        maxSupply: null,
+        maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
       })
       .accounts({
         payer: authority.publicKey,
@@ -1107,9 +1109,10 @@ describe("oracle-abstraction", () => {
         transferHookProgram: null,
         collateralMint,
         reserveVault: staleVaultAccount,
-        maxSupply: null,
+        maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
       })
       .accounts({
         payer: authority.publicKey,

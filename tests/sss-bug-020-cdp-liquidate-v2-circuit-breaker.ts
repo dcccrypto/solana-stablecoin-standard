@@ -63,8 +63,9 @@ describe("BUG-020: cdp_liquidate_v2 must respect FLAG_CIRCUIT_BREAKER", () => {
         uri: "https://test.invalid",
         transferHookProgram: null,
         collateralMint: collateralMint.publicKey,
-        maxSupply: null,
+        maxSupply: new anchor.BN(1_000_000_000),
         adminTimelockDelay: new anchor.BN(0),
+          squadsMultisig: Keypair.generate().publicKey,
       })
       .accounts({
         authority: authority.publicKey,
