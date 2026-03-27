@@ -1,155 +1,165 @@
-# Solana is the stablecoin chain now. Here's what that actually means.
+# Solana is processing more stablecoin volume than any blockchain in history. Here's what's actually broken.
 
-I've been building stablecoin infrastructure on Solana for the past few months and spent a lot of time going deep on how all of this actually works under the hood. This isn't a price thread or a "Solana is going to flip Ethereum" take. It's more of a brain dump on what's actually happening, some stuff that concerns me, and where I think this is going.
+February 2026: $650 billion in stablecoin transactions on Solana. One chain, one month, more than any blockchain has ever done.
 
-Let me know what you think at the end — genuinely curious where people disagree.
+Solana now handles 36% of global stablecoin transaction volume. Its supply crossed $17 billion this month. Circle minted $2.5 billion USDC on Solana in a single week. Solana has been beating Ethereum on USDC transfer volume since December.
 
----
+Visa, PayPal, Worldpay, Western Union. Not crypto companies experimenting. Payment infrastructure companies that moved real payment flows to Solana because it settles in 400ms and costs fractions of a cent per transaction. The same math that made Ethereum too expensive for high-frequency payments made Solana attractive.
 
-## The numbers first, because they're actually insane
-
-$650 billion in stablecoin transactions on Solana in February 2026. That's more than any other blockchain has ever done in a single month. Ever.
-
-Solana's stablecoin supply hit $17 billion in March. It was $5 billion at the start of 2025. Circle minted $2.5 billion USDC on Solana in a single week earlier this month.
-
-Solana now accounts for about 36% of global stablecoin transaction volume. It's been beating Ethereum on USDC transfer volume since December. Not in total supply — Ethereum still wins that — but in actual movement of money.
-
-Why? Because sending USDC on Solana costs $0.001 and settles in 400ms. The economics just work better for anything that moves frequently.
-
-Visa is using it for bank settlement. PayPal made Solana the primary network for PYUSD. Worldpay is using a stablecoin called USDG for client settlements. Western Union is integrated. These aren't crypto-native companies doing crypto experiments — these are traditional financial institutions routing real payment flows through Solana because it's cheaper and faster.
+Most of the coverage treats this as a success story and stops there. It is a success story. It's also a story about a lot of quietly broken infrastructure that nobody wants to talk about because the numbers look good.
 
 ---
 
-## Who's actually here
+**Who's issuing stablecoins on Solana right now**
 
-Beyond USDC ($8B+) and PYUSD ($777M, up 600% year-over-year), there's a bunch of newer stuff that's interesting:
+USDC crossed $8 billion on Solana, over 10% of the global supply. Circle minted $2.5 billion in a single week in March. PYUSD hit $777 million and grew 600% year over year after PayPal moved it from Ethereum to Solana as the primary chain. USDG, the consortium coin from Paxos Singapore backed by Kraken, Robinhood, Anchorage, and Worldpay, grew 169% in six months. Societe Generale launched EURCV as a MiCA-compliant euro stablecoin on Solana. First Digital USD launched from Hong Kong in January 2025. Jupiter has JupUSD. Solayer has sUSD backed by T-bills.
 
-**USDG** — Consortium stablecoin from Paxos Singapore, regulated by MAS. Kraken, Robinhood, Anchorage, Worldpay all in the consortium. Up 169% in 6 months. Worldpay using it for client settlements. This one is interesting because it's multi-institution by design — not just one company issuing and hoping.
-
-**EURCV** — Société Générale. A French bank issuing on a permissionless blockchain. That sentence would have sounded insane two years ago.
-
-**sUSD** — Solayer's T-bill backed stablecoin. Permissionless, yield-bearing. Interesting structure.
-
-**JupUSD** — Jupiter's stablecoin integrated across their DEX ecosystem.
-
-The thing that strikes me about this list is who's in it. These aren't DeFi-native stablecoin experiments anymore. The people building and using stablecoins on Solana are increasingly regulated institutions from the US, EU, Hong Kong, Singapore. The vibe has completely shifted.
+The jurisdictions: US, EU, Singapore, Hong Kong. These are regulated institutions making long-term infrastructure decisions. That doesn't mean everything is fine. It means the stakes of what's broken are higher than they were when it was just DeFi natives playing around.
 
 ---
 
-## The tech: Token-2022 is powerful and also kind of terrifying
+**The Token-2022 situation**
 
-Every serious stablecoin launched on Solana in the last year+ uses Token-2022. Transfer hooks, permanent delegates, confidential transfers, transfer fees — this stuff gives issuers compliance capabilities that weren't possible before.
+Every serious stablecoin launched on Solana in the past 18 months uses Token-2022. The old SPL standard was simple: mint, burn, freeze, transfer. Token-2022 adds what Solana calls extensions, optional capabilities baked into the token at creation time.
 
-The regulators want freeze/seize/burn capabilities. GENIUS Act Section 4 literally mandates it. Permanent delegates are how you implement "we can freeze your tokens under lawful order" on Solana. Transfer hooks are how you enforce sanctions screening on every transfer.
+The ones that matter for stablecoins: transfer hooks, permanent delegates, confidential transfers, and transfer fees.
 
-But there are some things about Token-2022 that I don't think are widely understood:
+Transfer hooks let the issuer attach an arbitrary program to every transfer. Before a transfer settles, that program runs. That's how you enforce compliance on-chain: blacklists, sanctions checks, spend limits, all of it executed at the token level, not off-chain policy.
 
-**Transfer hooks brought reentrancy back.** Solana was basically immune to reentrancy attacks because of how its account model works. Transfer hooks change that. If your hook makes a CPI call back into your own program mid-transfer, you now have a reentrancy vector. Neodyme wrote about this. Most hook implementations I've looked at don't have reentrancy guards.
+Permanent delegates let a designated authority transfer or burn any account without owner signature. The GENIUS Act requires issuers to have the technical capability to seize, freeze, or burn stablecoins under lawful order. Permanent delegates are the on-chain mechanism for that.
 
-**There was a critical Token-2022 bug quietly patched in April 2025.** The confidential transfers extension — the ZK-based private transfer feature — had a vulnerability that could have allowed unlimited token minting or fund withdrawal without authorization. It was patched before anyone exploited it. But this was a critical bug in a production token standard that handles real money, and I don't think it got nearly enough attention.
+Confidential transfers encrypt amounts using zero-knowledge proofs. The auditor with the right key sees everything. Everyone else doesn't. Institutional compliance often requires exactly this split.
 
-**Transfer hooks and confidential transfers don't work together.** If you want privacy AND compliance enforcement hooks, you can't have both right now. They're incompatible extensions. A fix is apparently coming.
+This gives Solana stablecoin issuers capabilities that genuinely don't exist at scale anywhere else right now. That's real.
 
-**Most hooks fail-open.** This one is the big one for me. The typical transfer hook implementation checks a compliance PDA that's passed in `remaining_accounts`. If the caller just... doesn't pass that account? The check gets skipped. Silently. A sanctioned wallet that knows this can bypass the entire compliance mechanism. This isn't a Token-2022 bug — it's an implementation pattern that's very easy to get wrong. But "easy to get wrong" in compliance infrastructure is a problem.
+What's also real:
 
----
+Transfer hooks brought reentrancy back to Solana. Solana's account model made reentrancy attacks structurally difficult. Transfer hooks break that assumption. If a hook makes a CPI call back into the calling program mid-transfer, you have a reentrancy vector. Neodyme wrote about this in 2025. Most developers building transfer hook programs have never had to think about reentrancy on Solana before and aren't thinking about it now.
 
-## The GENIUS Act deadline is real and most people aren't ready
+In April 2025, a critical vulnerability in the confidential transfers extension was quietly patched. The flaw was in the ZK cryptography. It could have allowed unlimited token minting or fund withdrawal without authorization. Nobody lost money. But this was a critical unlimited-mint bug in a production token standard that billions of dollars now sit on. The disclosure was minimal. If you're using confidential transfers, you need to know this happened.
 
-The GENIUS Act passed in July 2025. OCC published proposed implementing rules on February 25, 2026. Public comments close May 1. Enforcement kicks off Q3 2026.
+Transfer hooks and confidential transfers are currently incompatible. You cannot combine them in one token today. A stablecoin that wants privacy and on-chain compliance enforcement cannot have both. A fix is reportedly in development.
 
-The technical requirements are specific:
-
-- Freeze, seize, burn capability under lawful order
-- 1:1 reserve backing (USD, T-bills ≤93 days, FDIC-insured deposits)
-- Segregated, bankruptcy-remote reserve accounts
-- Monthly public reserve attestations (CEO + CFO certified)
-- AML/BSA compliance — you're classified as a financial institution
-- No rehypothecation
-- Private keys must be custodied by regulated entities
-
-MiCA is already live. Travel Rule is a global requirement now. These aren't future concerns.
-
-How many Solana stablecoin programs can actually check all these boxes today? Genuinely asking. I've been looking at a lot of them and the answer is: not many.
-
-The compliance gap isn't abstract risk. It's a business risk for anyone operating right now who hasn't thought this through.
+Most transfer hook implementations fail open. The standard pattern is to check a compliance PDA that gets passed in `remaining_accounts`. The problem is that `remaining_accounts` is caller-supplied. If the caller doesn't include the PDA, the check doesn't run. The transfer goes through. A sanctioned address that understands this can bypass the entire compliance mechanism by omitting one account from the transaction. This is an implementation pattern problem, not a Token-2022 bug, but it's everywhere and it makes a lot of "we have on-chain compliance" claims inaccurate.
 
 ---
 
-## The thing nobody talks about: everyone is rebuilding the same thing
+**The GENIUS Act deadline**
 
-Here's what I keep coming back to. Solana has $17B in stablecoins and is processing $650B a month. There are new stablecoins launching constantly.
+The GENIUS Act was signed July 18, 2025. The OCC published proposed implementing rules February 25, 2026. Public comments close May 1. Enforcement starts Q3 2026.
 
-And every single one is building the same compliance infrastructure from scratch.
+The technical requirements, not the policy summary: 1:1 reserve backing in USD, T-bills under 93 days maturity, or FDIC-insured deposits. Segregated, bankruptcy-remote accounts. No rehypothecation of reserves. Monthly reports certified by CEO and CFO personally. Annual audited financials for larger issuers. The issuer is classified as a financial institution under the Bank Secrecy Act, which means KYC, AML, transaction monitoring, suspicious activity reporting, annual compliance certification. Private keys for reserves must be held by federally or state regulated custodians. No yield to token holders, that's an explicit prohibition. And: the issuer must be technically capable of seizing, freezing, or burning tokens under lawful order.
 
-The governance system. The blacklist enforcement. The reserve attestation. The emergency pause. The authority rotation. The timelock for admin changes. The oracle integration. The Travel Rule hooks.
+MiCA is already in force across the EU. Travel Rule is a global requirement for VASP-to-VASP transfers above thresholds. Singapore, Hong Kong, UAE, Japan all have stablecoin frameworks.
 
-All of it. Every time.
+Look at most Solana stablecoin programs and ask whether they actually comply with all of this. Many don't. Single private key controls everything. No formal on-chain reserve attestation, just monthly reports. Transfer hooks that fail open. No timelocked admin operations. No documented capability for a regulator to verify freeze/burn is possible.
 
-On Ethereum this problem got solved at the protocol layer with ERC-20 and then layered standards on top. If you say you're ERC-20 compliant, integrators know what to expect. The composability is why Ethereum DeFi moves so fast.
-
-Solana has Token-2022 for the token mechanics. But there's no stablecoin standard — no shared specification for what the compliance layer, governance layer, and emergency controls should look like. Every issuer invents their own, every integrator writes custom parsing code, every auditor starts from scratch.
-
-I've been working on something called the Solana Stablecoin Standard (SSS) that tries to address this — formally verified presets (SSS-1 minimal, SSS-2 compliant, SSS-3 reserve-backed) that issuers can build on. It has 41 Kani formal proofs, a TLA+ spec, MiCA and GENIUS Act compliance presets built in. Not launching it as "the" standard — it's open source MIT, more of a reference implementation people can build on or critique. But I'll share more on that separately.
-
-The point is: the gap is real and it's a solvable problem.
+This isn't abstract future risk. Q3 2026 is close and the gap between what's implemented and what's required is real.
 
 ---
 
-## Some stuff that actually concerns me
+**The infrastructure reinvention problem**
 
-**The CLARITY Act.** There's a March 2026 draft bill that proposes banning platforms from offering yield on stablecoin balances. If this passes, yield-bearing stablecoins — sUSD, parts of USDG's value prop, and others — face legal uncertainty. The $17B supply number looks different if the yield mechanic gets killed.
+Every new stablecoin on Solana is building the same things from scratch. The governance system. The blacklist enforcement. The reserve attestation. The emergency pause mechanism. The authority rotation code. The oracle integration. The timelock logic. The Travel Rule hooks.
 
-**The audit culture.** The audit standards around Solana stablecoin programs are years behind Ethereum DeFi. Most programs have had no external audit. The Token-2022 confidential transfers bug from April 2025 was caught internally — which is lucky. The culture of "ship first, audit later (maybe)" is a real risk when you're handling institutional money.
+Every team, from zero, solving problems other teams have already solved, without the benefit of a shared specification to audit against or build on top of.
 
-**Oracle dependence.** CDP-backed stablecoins on Solana are mostly dependent on Pyth. If Pyth publishes a wrong price during high volatility — and Pyth prices come with confidence intervals that can be ±10-15% — CDPs liquidate incorrectly. Most programs check staleness but not confidence intervals. That's a meaningful gap.
+Ethereum partially solved this with standards. ERC-20 defined a token interface. ERC-4626 standardized yield vaults. These standards didn't eliminate risk but they created shared foundations. An auditor verifying an ERC-4626 vault has a spec to check against. A wallet implementing ERC-20 support covers every ERC-20 token. Composability follows from shared interfaces.
 
-**Single-key authority.** Most Solana stablecoin programs are controlled by a single keypair. One compromised laptop and the entire protocol is at risk. The multisig tooling (Squads) exists and is good. But it's not mandatory and most teams aren't using it properly pre-mainnet.
+Solana has Token-2022 for the token mechanics. There is no stablecoin standard above that. No shared specification for governance. No standard event schema so indexers don't write custom parsers for every stablecoin. No compliance interface that carries any shared meaning. Every integrator, every wallet, every DEX builds custom handling for every stablecoin because there's nothing to standardize against.
 
----
+The result: different blacklist enforcement semantics across programs, some fail closed and many fail open. Different authority models, some multisig and most single key. Different reserve attestation, some on-chain and many just PDFs. Different event schemas requiring custom indexer code for each one.
 
-## Two primitives that I think are underrated
-
-**Probabilistic Balance Standard (PBS)** — funds committed to a contract that are released only when a cryptographic condition is proven. Insurance payouts without an insurance company. Escrow without an escrow agent. The payout triggers automatically when the proof matches. 
-
-This maps directly to things like automated insurance (Reflect.money is doing something conceptually similar), enterprise compliance where payment requires proof of delivery, or any situation where "trust me" isn't good enough.
-
-**Agent Payment Channels (APC)** — payment infrastructure where automated systems (including AI agents) pay each other for verified outputs. Agent A commits funds. Agent B does work and submits a proof. Payment releases when the proof checks out. No intermediary.
-
-This sounds like science fiction but the settlement properties of Solana (400ms, sub-cent fees) make it practical in a way it isn't on any other chain. Keeper networks, compliance oracles, data feeds, rebalancing bots — any automated system that needs to pay for services based on verified outputs.
+The Solana Stablecoin Standard project is an open source attempt at addressing this gap. Formally verified preset configurations, MiCA and GENIUS Act compliance mappings, standard event schemas, reference implementations for governance and compliance layers. Not positioned as the only answer. Positioned as a contribution to a conversation that needs to happen.
 
 ---
 
-## What good looks like (checklist)
+**The "trustless" problem**
 
-If you're building a stablecoin on Solana in 2026, here's what I'd consider non-negotiable before mainnet:
+A lot of Solana stablecoins describe themselves as trustless or decentralized. The practical test: if the issuer's authority private key is compromised right now, what happens?
 
-- Fail-closed transfer hooks (missing compliance PDA = transaction fails, not skips)
-- External security audit — not optional
-- Authority under Squads multisig before mainnet
-- Timelocked admin operations (5+ days for anything that touches user funds)
-- On-chain reserve attestation, not just monthly PDFs
-- Oracle confidence interval checks, not just staleness
-- Documented trust assumptions — what trusted parties exist and what can they do
+For most Solana stablecoins, the answer is that an attacker can mint unlimited tokens in a single transaction with no delay and no circuit breaker. One compromised laptop, one transaction, entire protocol value gone.
 
-None of this is exotic. Most of it is just not cutting corners.
+That's not trustless. That's a single point of failure with better marketing language.
+
+Stablecoins do require trust. All of them. Circle can freeze your USDC. Paxos can blacklist your PYUSD. The GENIUS Act mandates this capability. The question isn't whether trust exists but whether it's bounded, documented, and protected.
+
+A multisig with 3-of-5 or 4-of-7 signers where no single device holds multiple keys meaningfully reduces the single-compromise risk. Timelocked admin operations give users and watchdogs time to react if something malicious is proposed. A separate guardian network that can trigger emergency pause without issuer involvement removes the issuer as a single point of failure for emergency response. Squads Protocol handles the multisig and timelock infrastructure on Solana and manages over $10 billion. The tooling exists. Most stablecoin programs on Solana aren't using it pre-mainnet.
 
 ---
 
-## Alright, I want your takes on a few things
+**The oracle confidence interval gap**
 
-This is where I'm genuinely uncertain and would love input:
+CDP stablecoins on Solana mostly use Pyth for price feeds. Pyth is good. The gap is in how programs use it.
 
-**Is the standard gap actually a problem, or does the market solve it?** Maybe issuers *should* differentiate on their compliance implementations rather than converge on a standard. Counter-argument welcome.
+Pyth prices come with a confidence interval. If the price is $100 with a confidence interval of +/-10%, the true price could be anywhere from $90 to $110. During high volatility, confidence intervals widen. Most programs check that the Pyth feed isn't stale. Most don't check that the confidence interval is within acceptable bounds before using the price.
 
-**How do you handle Travel Rule for DeFi?** VASP-to-VASP data sharing makes sense for institutions, but what about DeFi protocols interacting with stablecoins? The regulation is pretty unclear here.
+The two effects compound badly. Markets are most volatile right before liquidations. Confidence intervals are widest during that same period. A program that accepts a price with a 15% confidence interval can liquidate healthy positions because the oracle was uncertain, not because the position was actually undercollateralized.
 
-**Yield prohibition — how likely is the CLARITY Act to pass and what does it do to the stablecoin ecosystem?** I genuinely don't know how to think about this one.
+Multi-oracle verification where you require two feeds to agree within a tolerance, and confidence gating where you halt price-sensitive operations above a confidence threshold, both address this. Not many programs have either.
 
-**What's the right timelock duration for a production stablecoin?** 5 days feels right for most admin ops but too long for emergency oracle changes. How do other people handle this?
+---
 
-**Is the single-program-for-all-features approach right, or should stablecoins be more modular (separate programs per feature)?** This comes up every time we discuss architecture and I still don't have a strong opinion.
+**Probabilistic Balance Standard and Agent Payment Channels**
 
-Drop your takes. These aren't rhetorical — I actually want to understand where people land on this stuff.
+Two primitives that exist on Solana and don't in any practical form elsewhere.
 
-— @dcc_crypto
+PBS: a party commits an amount with a condition hash. When the counterparty proves the condition, funds release automatically. No intermediary decides whether the condition was met. The proof is mathematical. Applications include automated insurance claims that resolve when a verifiable event occurs, B2B payments that release on proof of delivery, escrow with mathematically verified release conditions. Reflect.money's "automatic, no-claims, no-delays" insurance model is conceptually this. The economics work on Solana, at sub-cent fees and 400ms finality, in a way they don't on Ethereum.
+
+APC: payment infrastructure for automated systems paying each other for verified outputs. An initiator opens a channel with a deposit. The counterparty does work and submits a hash of the output. Payment releases when the hash verifies. Force close is available after a timeout. Keeper networks, compliance oracle operators, data feed providers, rebalancing systems, any automated workflow where one system pays another for verifiable outputs. The combination of 400ms finality and sub-cent fees makes micropayments between automated systems viable.
+
+Neither is science fiction and neither requires new tooling. They're executable on Solana today.
+
+---
+
+**The audit situation**
+
+Most Solana stablecoin programs have had no external security audit. The programs holding significant user funds were written, tested internally, and deployed to mainnet.
+
+Ethereum DeFi went through this phase. The list of protocols that lost user funds due to unaudited code is long. The culture shifted. Launching a serious DeFi protocol on Ethereum today without at least one external audit is unusual. The community expects it. LPs expect it.
+
+That norm hasn't fully arrived on Solana yet. The security firms exist and are capable: Neodyme, OtterSec, Ackee Blockchain. The tooling for Solana-specific audits has matured. The cultural pressure to require audits before mainnet is still forming.
+
+The April 2025 Token-2022 confidential transfers bug was found and patched internally. Lucky. The argument that external audits are too expensive doesn't hold up when you're holding or targeting user funds at any meaningful scale. A serious audit costs $30,000 to $100,000. The expected loss from an exploited vulnerability is that cost times orders of magnitude.
+
+---
+
+**The CLARITY Act risk**
+
+A March 2026 draft bill proposes banning platforms from offering yield on stablecoin balances. The details are in flux but the intent is to prevent yield-bearing stablecoins from competing directly with bank deposits.
+
+This directly affects sUSD, parts of USDG's value proposition, and the DeFi yield use cases that have driven significant stablecoin adoption on Solana. The $17 billion supply number changes if the yield mechanic gets legally restricted.
+
+The argument behind the bill is substantively coherent. Regulators who understand what yield-bearing stablecoins are will take it seriously. Whether it passes is uncertain. Treating it as unlikely to matter is probably wrong.
+
+---
+
+**What production-ready looks like in 2026**
+
+Transfer hooks that fail closed. If the compliance account isn't in the transaction, the transaction fails. Not succeeds with a skipped check. Fails.
+
+Authority under multisig before mainnet. Not "we plan to add multisig." Under multisig at launch.
+
+Timelocked admin operations. Parameters that affect user funds need a waiting period, five days is a common threshold, before changes take effect.
+
+On-chain reserve attestation. Monthly PDFs are policy documents. They can say anything. On-chain attestation is verifiable.
+
+External security audit before mainnet from a firm that does Solana work. General smart contract auditors miss Solana-specific issues.
+
+Confidence interval validation in oracle usage, not just staleness checks.
+
+Documented trust assumptions: what trusted parties exist, what they can do, what limits apply. Not to claim there's no trust. To characterize it accurately.
+
+Off-chain monitoring that watches on-chain state and alerts when invariants break. Supply diverging from expected. Reserve ratio dropping. Circuit breaker triggering. You need to know when these happen.
+
+---
+
+**The standard question**
+
+Solana has Token-2022 for token mechanics. It doesn't have a stablecoin standard.
+
+Every indexer writes custom parsers. Every auditor starts from scratch. Every integrator builds custom handling. Every wallet needs to understand each stablecoin's specific behavior individually.
+
+The gap is solvable. The Solana stablecoin ecosystem is large enough now that the collective cost of not having shared foundations is significant. The question is whether the community treats it as a priority before the ecosystem is ten times larger.
+
+What are your actual takes on this? Specifically: does the single-program-many-feature-flags architecture make sense at scale, or should the more complex features like PBS and confidential transfers be separate programs that compose with a simpler core? And where do people land on the CLARITY Act risk to yield-bearing stablecoins?
