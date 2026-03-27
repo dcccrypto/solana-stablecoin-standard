@@ -129,6 +129,8 @@ async fn main() {
         .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
         .route("/api/admin/keys/:id", delete(delete_api_key))
         .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+        // AUDIT3C: POST travel-rule records is admin-only (VASP registry write path)
+        .route("/api/admin/travel-rule/records", post(post_travel_rule_record))
         .layer(middleware::from_fn(require_admin))
         .with_state(state.clone());
 
@@ -161,7 +163,7 @@ async fn main() {
         .route("/api/webhooks/:id", delete(delete_webhook))
         .route("/api/alerts", get(get_alerts).post(post_alert))
         .route("/api/webhook-deliveries", get(list_webhook_deliveries))
-        .route("/api/travel-rule/records", get(get_travel_rule_records).post(post_travel_rule_record))
+        .route("/api/travel-rule/records", get(get_travel_rule_records))
         .route("/api/pid-config", get(get_pid_config))
         .route("/api/zk-credentials/records", get(list_credential_records))
         .route("/api/zk-credentials/submit", post(submit_credential))

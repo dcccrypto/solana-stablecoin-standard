@@ -147,14 +147,23 @@ impl Database {
 
     /// AUDIT3C-H1: Seed the known_vasps table with default entries on first init.
     /// Idempotent — uses INSERT OR IGNORE.
+    ///
+    /// TESTVASP0001 is only inserted when the `SOLANA_NETWORK` env var is set to
+    /// `devnet` (or `localnet`).  It must **not** be present in the production DB.
     fn seed_known_vasps(conn: &rusqlite::Connection) -> Result<(), AppError> {
         conn.execute_batch(
             "INSERT OR IGNORE INTO known_vasps (vasp_id, name, jurisdiction)
              VALUES
                ('SSSISSUER001', 'SSS Protocol Issuer', 'US'),
-               ('SSSMARKET001', 'SSS Market Maker', 'US'),
-               ('TESTVASP0001', 'Test VASP (devnet only)', 'TEST');",
+               ('SSSMARKET001', 'SSS Market Maker', 'US');",
         )?;
+        let network = std::env::var("SOLANA_NETWORK").unwrap_or_default();
+        if matches!(network.as_str(), "devnet" | "localnet") {
+            conn.execute_batch(
+                "INSERT OR IGNORE INTO known_vasps (vasp_id, name, jurisdiction)
+                 VALUES ('TESTVASP0001', 'Test VASP (devnet only)', 'TEST');",
+            )?;
+        }
         Ok(())
     }
 
@@ -1463,7 +1472,8 @@ impl Database {
     }
 
     /// AUDIT3C-H1: Insert a validated travel rule record.
-    /// Returns 422 (UnprocessableEntity) if either VASP is unknown.
+    /// Returns 422 (UnprocessableEntity) if either VASP is unknown, mint is empty,
+    /// amount < 0, or threshold < 0.
     #[allow(clippy::too_many_arguments)]
     pub fn insert_travel_rule_record(
         &self,
@@ -1475,6 +1485,24 @@ impl Database {
         compliant: bool,
         tx_signature: Option<&str>,
     ) -> Result<crate::models::TravelRuleRecord, AppError> {
+        // Input validation
+        if mint.trim().is_empty() {
+            return Err(AppError::UnprocessableEntity(
+                "mint must not be empty".to_string(),
+            ));
+        }
+        if amount < 0 {
+            return Err(AppError::UnprocessableEntity(format!(
+                "amount must be non-negative, got {}",
+                amount
+            )));
+        }
+        if threshold < 0 {
+            return Err(AppError::UnprocessableEntity(format!(
+                "threshold must be non-negative, got {}",
+                threshold
+            )));
+        }
         if !self.is_known_vasp(originator_vasp)? {
             return Err(AppError::UnprocessableEntity(format!(
                 "UNKNOWN_VASP: originator_vasp '{}' is not in the VASP registry",
