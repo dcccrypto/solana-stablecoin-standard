@@ -88,7 +88,7 @@ SSS has not undergone a formal third-party security audit as of 2026-03-16. The 
 | `sss-token` (Anchor program) | ❌ Unaudited | Devnet only |
 | `sss-transfer-hook` (Anchor program) | ❌ Unaudited | Devnet only |
 | TypeScript SDK (`sdk/`) | ❌ Unaudited | — |
-| REST backend | ❌ Unaudited | — |
+| REST backend | ⚠️ Internal audit (SSS-AUDIT3-C) | See below |
 
 **Before mainnet deployment**, a full audit of at minimum the `sss-token` and `sss-transfer-hook` programs is required. Recommended audit scope:
 
@@ -96,6 +96,19 @@ SSS has not undergone a formal third-party security audit as of 2026-03-16. The 
 2. `sss-transfer-hook` — blacklist state integrity, hook registration, CPI re-entrancy
 3. `AdminTimelockModule` — timing logic, cancellation controls
 4. SDK — transaction construction, signer handling, error propagation
+
+### 4.1 SSS-AUDIT3-C: Backend Deep Audit (2026-03-27)
+
+An internal deep audit of all backend code added in the SSS-127–SSS-154 batch was completed on 2026-03-27. **1 HIGH, 4 MEDIUM, 4 LOW** findings identified; 4 areas passed clean. Admin role separation (BUG-033) has been implemented in PR #316.
+
+| Severity | Count | Key finding |
+|----------|-------|-------------|
+| HIGH | 1 | Travel Rule VASP forgery via indexer (AUDIT3C-H1) |
+| MEDIUM | 4 | Monitoring sanctions coverage gap, alert injection, travel rule data leak, insurance vault monitoring |
+| LOW | 4 | Unbounded DLQ, retry TOCTOU (mitigated), unauth metrics endpoint (intentional), sanctions event validation |
+| PASS | 4 | Reconciliation, DAO quorum, admin route auth, sanctions oracle injection |
+
+Full findings and fix specifications: [AUDIT3C-SUMMARY.md](./AUDIT3C-SUMMARY.md).
 
 ---
 
