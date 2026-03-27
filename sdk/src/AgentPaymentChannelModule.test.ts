@@ -642,6 +642,9 @@ describe('AgentPaymentChannelModule', () => {
           channelId: CHANNEL_ID,
         }),
       ).rejects.toThrow('FLAG_AGENT_PAYMENT_CHANNEL (bit 19) is not set');
+
+      // Ensure no transaction was submitted — the guard must fire before any build/send
+      expect(otherFlagProvider.sendAndConfirm).not.toHaveBeenCalled();
     });
 
     it('proceeds to build tx when FLAG_AGENT_PAYMENT_CHANNEL is set', async () => {

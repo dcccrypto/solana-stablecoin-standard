@@ -74,22 +74,21 @@ export const FLAG_AGENT_PAYMENT_CHANNEL = 1n << 19n; // 0x0008_0000
 /**
  * Read `feature_flags` (u64 LE) from raw `StablecoinConfig` account data.
  *
- * StablecoinConfig layout offsets (matches FeatureFlagsModule._readFeatureFlags):
- *   [0..8]   discriminator
- *   [8..40]  authority (Pubkey)
- *   [40..72] mint (Pubkey)
- *   [72..104] compliance_authority (Pubkey)
- *   [104]    decimals (u8)
- *   [105]    is_frozen (bool)
- *   [106..114] total_supply (u64)
- *   [114..122] max_supply (u64)
- *   [122..154] supply_cap_locked (... wait — see FeatureFlagsModule: feature_flags @ 298)
+ * Canonical offset for `feature_flags` is byte 298 (after discriminator),
+ * matching on-chain `StablecoinConfig` and FeatureFlagsModule._readFeatureFlags.
  *
- * The canonical offset is 298, as computed in FeatureFlagsModule._readFeatureFlags.
+ * Throws on malformed (truncated) account data so callers can distinguish
+ * between a legitimately zero feature_flags value and a corrupt/wrong account.
  */
 function _readConfigFeatureFlags(data: Buffer): bigint {
   const FEATURE_FLAGS_OFFSET = 298; // mirrors FeatureFlagsModule._readFeatureFlags
-  if (data.length < FEATURE_FLAGS_OFFSET + 8) return 0n;
+  if (data.length < FEATURE_FLAGS_OFFSET + 8) {
+    throw new Error(
+      `AgentPaymentChannel: StablecoinConfig account data too short ` +
+      `(${data.length} bytes, expected >= ${FEATURE_FLAGS_OFFSET + 8}). ` +
+      'Account may be malformed or belong to a different program.',
+    );
+  }
   return data.readBigUInt64LE(FEATURE_FLAGS_OFFSET);
 }
 
