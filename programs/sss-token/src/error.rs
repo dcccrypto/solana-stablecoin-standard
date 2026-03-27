@@ -382,11 +382,9 @@ pub enum SssError {
     // SSS-147: Supply cap
     #[msg("Supply cap is required for SSS-3 preset — set max_supply > 0")]
     SupplyCapRequired,
-    // SSS-147B: max_supply enforcement for SSS-3
-    #[msg("SSS-3 preset requires max_supply > 0")]
-    RequiresMaxSupplyForSSS3,
-    #[msg("Max supply is immutable after initialization")]
-    MaxSupplyImmutable,
+    // SSS-147A: Squads multisig required for SSS-3
+    #[msg("Squads multisig is required for SSS-3 preset — provide squads_multisig pubkey at initialize")]
+    RequiresSquadsForSSS3,
     // SSS-129: ZK credential
     #[msg("CredentialRegistry not found — call init_credential_registry first")]
     CredentialRegistryNotFound,
