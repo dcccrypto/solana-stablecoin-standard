@@ -113,7 +113,7 @@ pub struct CommitProbabilistic<'info> {
     #[account(
         seeds = [StablecoinConfig::SEED, stable_mint.key().as_ref()],
         bump = config.bump,
-        constraint = config.preset == 3 @ SssError::InvalidPreset,
+        constraint = config.preset >= 1 @ SssError::InvalidPreset,
         constraint = !config.paused @ SssError::MintPaused,
         constraint = config.feature_flags & FLAG_PROBABILISTIC_MONEY != 0 @ SssError::FeatureNotEnabled,
     )]

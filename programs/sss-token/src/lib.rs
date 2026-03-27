@@ -643,4 +643,91 @@ pub mod sss_token {
             keeper_reward_lamports,
         )
     }
+
+    // ─── SSS-109: Probabilistic Balance Standard (PBS) ───────────────────────
+
+    /// Lock stablecoin tokens in a ProbabilisticVault conditioned on a hash proof.
+    /// Requires FLAG_PROBABILISTIC_MONEY to be set on the config.
+    pub fn commit_probabilistic(
+        ctx: Context<CommitProbabilistic>,
+        params: CommitProbabilisticParams,
+    ) -> Result<()> {
+        instructions::pbs::commit_probabilistic_handler(ctx, params)
+    }
+
+    /// Release vault funds to claimant upon matching proof hash.
+    pub fn prove_and_resolve(
+        ctx: Context<ProveAndResolve>,
+        proof_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::pbs::prove_and_resolve_handler(ctx, proof_hash)
+    }
+
+    /// Partially release vault funds to claimant (partial payment).
+    pub fn partial_resolve(
+        ctx: Context<PartialResolve>,
+        amount: u64,
+        proof_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::pbs::partial_resolve_handler(ctx, amount, proof_hash)
+    }
+
+    /// Return expired vault funds to the issuer after expiry_slot.
+    pub fn expire_and_refund(ctx: Context<ExpireAndRefund>) -> Result<()> {
+        instructions::pbs::expire_and_refund_handler(ctx)
+    }
+
+    // ─── SSS-111: Agent Payment Channel (APC) ────────────────────────────────
+
+    /// Open a payment channel between two agents.
+    /// Requires FLAG_AGENT_PAYMENT_CHANNEL to be set on the config.
+    pub fn open_channel(
+        ctx: Context<OpenChannel>,
+        params: OpenChannelParams,
+    ) -> Result<()> {
+        instructions::apc::open_channel_handler(ctx, params)
+    }
+
+    /// Submit a work proof hash to an open channel.
+    pub fn submit_work_proof(
+        ctx: Context<SubmitWorkProof>,
+        channel_id: u64,
+        task_hash: [u8; 32],
+        output_hash: [u8; 32],
+        proof_type: u8,
+    ) -> Result<()> {
+        instructions::apc::submit_work_proof_handler(ctx, channel_id, task_hash, output_hash, proof_type)
+    }
+
+    /// Propose cooperative settlement of a payment channel.
+    pub fn propose_settle(
+        ctx: Context<ProposeSettle>,
+        channel_id: u64,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::apc::propose_settle_handler(ctx, channel_id, amount)
+    }
+
+    /// Countersign and execute a proposed settlement.
+    pub fn countersign_settle(
+        ctx: Context<CountersignSettle>,
+        channel_id: u64,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::apc::countersign_settle_handler(ctx, channel_id, amount)
+    }
+
+    /// Raise a dispute on a payment channel (triggers timeout window).
+    pub fn dispute(
+        ctx: Context<Dispute>,
+        channel_id: u64,
+        evidence_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::apc::dispute_handler(ctx, channel_id, evidence_hash)
+    }
+
+    /// Force-close a timed-out payment channel.
+    pub fn force_close(ctx: Context<ForceClose>, channel_id: u64) -> Result<()> {
+        instructions::apc::force_close_handler(ctx, channel_id)
+    }
 }

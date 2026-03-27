@@ -130,7 +130,7 @@ pub struct OpenChannel<'info> {
     #[account(
         seeds = [StablecoinConfig::SEED, stable_mint.key().as_ref()],
         bump = config.bump,
-        constraint = config.preset == 3 @ SssError::InvalidPreset,
+        constraint = config.preset >= 1 @ SssError::InvalidPreset,
         constraint = !config.paused @ SssError::MintPaused,
         constraint = config.feature_flags & FLAG_AGENT_PAYMENT_CHANNEL != 0 @ SssError::FeatureNotEnabled,
     )]
@@ -177,23 +177,24 @@ pub fn open_channel_handler(
     ctx: Context<OpenChannel>,
     params: OpenChannelParams,
 ) -> Result<()> {
-    require!(params.deposit > 0, SssError::ZeroAmount);
     require!(params.timeout_slots > 0, SssError::InvalidExpirySlot);
 
-    // Transfer deposit initiator → escrow.
-    transfer_checked(
-        CpiContext::new(
-            ctx.accounts.token_program.to_account_info(),
-            TransferChecked {
-                from: ctx.accounts.initiator_token_account.to_account_info(),
-                mint: ctx.accounts.stable_mint.to_account_info(),
-                to: ctx.accounts.escrow_token_account.to_account_info(),
-                authority: ctx.accounts.initiator.to_account_info(),
-            },
-        ),
-        params.deposit,
-        ctx.accounts.stable_mint.decimals,
-    )?;
+    // Transfer deposit initiator → escrow (only if deposit > 0).
+    if params.deposit > 0 {
+        transfer_checked(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.initiator_token_account.to_account_info(),
+                    mint: ctx.accounts.stable_mint.to_account_info(),
+                    to: ctx.accounts.escrow_token_account.to_account_info(),
+                    authority: ctx.accounts.initiator.to_account_info(),
+                },
+            ),
+            params.deposit,
+            ctx.accounts.stable_mint.decimals,
+        )?;
+    }
 
     let clock = Clock::get()?;
     let channel = &mut ctx.accounts.channel;

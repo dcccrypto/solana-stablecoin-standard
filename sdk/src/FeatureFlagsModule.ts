@@ -214,16 +214,28 @@ export class FeatureFlagsModule {
   /**
    * Parse `feature_flags` from raw `StablecoinConfig` account data.
    *
-   * Layout offsets (see `isFeatureFlagSet` JSDoc for full layout):
-   * - discriminator: 8 bytes
-   * - 5× Pubkey: 5 × 32 = 160 bytes  → offset 8
-   * - preset (u8): 1 byte            → offset 168
-   * - feature_flags (u64 LE): 8 bytes → offset 169
+   * Layout offsets (correct on-chain StablecoinConfig field order):
+   * - discriminator: 8 bytes          → offset 0
+   * - mint (Pubkey): 32               → offset 8
+   * - authority (Pubkey): 32          → offset 40
+   * - compliance_authority (Pubkey): 32 → offset 72
+   * - preset (u8): 1                  → offset 104
+   * - paused (bool): 1                → offset 105
+   * - total_minted (u64): 8           → offset 106
+   * - total_burned (u64): 8           → offset 114
+   * - transfer_hook_program (Pubkey): 32 → offset 122
+   * - collateral_mint (Pubkey): 32    → offset 154
+   * - reserve_vault (Pubkey): 32      → offset 186
+   * - total_collateral (u64): 8       → offset 218
+   * - max_supply (u64): 8             → offset 226
+   * - pending_authority (Pubkey): 32  → offset 234
+   * - pending_compliance_authority (Pubkey): 32 → offset 266
+   * - feature_flags (u64 LE): 8       → offset 298
    *
    * @internal
    */
   private _readFeatureFlags(data: Buffer): bigint {
-    const FEATURE_FLAGS_OFFSET = 8 + 5 * 32 + 1; // 169
+    const FEATURE_FLAGS_OFFSET = 8 + 32 + 32 + 32 + 1 + 1 + 8 + 8 + 32 + 32 + 32 + 8 + 8 + 32 + 32; // 298
     if (data.length < FEATURE_FLAGS_OFFSET + 8) return 0n;
     return data.readBigUInt64LE(FEATURE_FLAGS_OFFSET);
   }
