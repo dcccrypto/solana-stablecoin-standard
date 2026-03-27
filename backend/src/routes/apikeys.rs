@@ -7,6 +7,11 @@ use axum::{
 use crate::models::ApiResponse;
 use crate::state::AppState;
 
+/// POST /api/admin/keys — create a new API key.
+///
+/// SSS-AUDIT3-C: Accepts optional `is_admin: bool` to grant admin privileges.
+/// Only callers with an existing admin key can reach this route (enforced by
+/// the `require_admin_key` middleware applied in main.rs).
 pub async fn create_api_key(
     State(state): State<AppState>,
     Json(body): Json<serde_json::Value>,
@@ -16,12 +21,17 @@ pub async fn create_api_key(
         .and_then(|v| v.as_str())
         .unwrap_or("unnamed")
         .to_string();
+    let is_admin = body
+        .get("is_admin")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    match state.db.create_api_key(&label) {
+    match state.db.create_api_key_with_role(&label, is_admin) {
         Ok(entry) => Ok(Json(ApiResponse::ok(serde_json::json!({
             "id": entry.id,
             "key": entry.key,
             "label": entry.label,
+            "is_admin": entry.is_admin,
             "created_at": entry.created_at
         })))),
         Err(e) => {
@@ -43,6 +53,7 @@ pub async fn list_api_keys(
                         "id": k.id,
                         "label": k.label,
                         "key_prefix": &k.key[..8],
+                        "is_admin": k.is_admin,
                         "created_at": k.created_at
                     })
                 })

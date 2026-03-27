@@ -10,6 +10,49 @@ use serde_json::json;
 
 use crate::state::AppState;
 
+/// SSS-AUDIT3-C: Middleware that requires the API key to have `is_admin = true`.
+/// Apply to all `/api/admin/*` routes to enforce role separation.
+pub async fn require_admin_key(
+    State(state): State<AppState>,
+    req: Request<Body>,
+    next: Next,
+) -> Response {
+    let key_header = req.headers().get("X-Api-Key");
+    let key_str = match key_header {
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"success": false, "error": "Missing X-Api-Key header"})),
+            )
+                .into_response()
+        }
+        Some(value) => match value.to_str() {
+            Ok(s) => s.to_string(),
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"success": false, "error": "Invalid X-Api-Key header"})),
+                )
+                    .into_response()
+            }
+        },
+    };
+
+    match state.db.validate_admin_api_key(&key_str) {
+        Ok(true) => next.run(req).await,
+        Ok(false) => (
+            StatusCode::FORBIDDEN,
+            Json(json!({"success": false, "error": "Admin privileges required"})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
 /// Axum middleware that validates the `X-Api-Key` header against the database
 /// and enforces per-key rate limiting.
 ///
