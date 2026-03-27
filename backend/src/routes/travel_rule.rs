@@ -1,7 +1,8 @@
 //! SSS-127: Travel Rule backend endpoints
 //!
-//! - GET /api/travel-rule/records?wallet=&mint=&limit=
+//! - GET /api/travel-rule/records?wallet=<addr>&mint=&limit=
 //!   Returns indexed TravelRuleRecord events filtered by wallet (originator or beneficiary VASP).
+//!   `wallet` is required and must be non-empty (AUDIT3C-M3 fix — prevents bulk data exposure).
 //!
 //! - GET /api/pid-config
 //!   Returns SSS program IDs and travel-rule configuration metadata.
@@ -24,10 +25,22 @@ use crate::state::AppState;
 const SSS_TOKEN_PROGRAM_ID: &str = "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat";
 const SSS_TRANSFER_HOOK_PROGRAM_ID: &str = "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp";
 
+/// AUDIT3C-M3: Validate that a wallet query param is present and non-empty.
+/// Returns `Some(&str)` with the trimmed value on success, or `None` to signal 400.
+pub(crate) fn require_wallet_param(wallet: Option<&str>) -> Option<&str> {
+    match wallet {
+        Some(w) if !w.trim().is_empty() => Some(w),
+        _ => None,
+    }
+}
+
 /// GET /api/travel-rule/records
 ///
-/// Returns indexed TravelRuleRecord events.  Optionally filtered by `wallet`
+/// Returns indexed TravelRuleRecord events filtered by `wallet`
 /// (matches originator_vasp OR beneficiary_vasp), `mint`, and `limit`.
+///
+/// `wallet` is **required** — omitting it or passing an empty string returns 400.
+/// This prevents bulk data exposure (AUDIT3C-M3).
 ///
 /// Requires FLAG_TRAVEL_RULE (bit 6) in StablecoinConfig.feature_flags.
 pub async fn get_travel_rule_records(
@@ -40,12 +53,21 @@ pub async fn get_travel_rule_records(
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
 
+    // AUDIT3C-M3: require non-empty wallet param to prevent bulk data exposure.
+    let wallet = match require_wallet_param(params.wallet.as_deref()) {
+        Some(w) => w,
+        None => {
+            tracing::warn!("travel-rule/records: missing or empty wallet param — returning 400");
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    };
+
     let limit = params.limit.unwrap_or(100).min(1000);
 
     let records = state
         .db
         .list_travel_rule_records(
-            params.wallet.as_deref(),
+            Some(wallet),
             params.mint.as_deref(),
             limit,
         )
@@ -88,4 +110,44 @@ pub async fn get_pid_config(
         travel_rule_indexing_active: true,
         travel_rule_threshold: threshold,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- AUDIT3C-M3: require_wallet_param ---
+
+    #[test]
+    fn wallet_param_none_returns_none() {
+        assert!(require_wallet_param(None).is_none());
+    }
+
+    #[test]
+    fn wallet_param_empty_string_returns_none() {
+        assert!(require_wallet_param(Some("")).is_none());
+    }
+
+    #[test]
+    fn wallet_param_whitespace_only_returns_none() {
+        assert!(require_wallet_param(Some("   ")).is_none());
+    }
+
+    #[test]
+    fn wallet_param_valid_address_returns_some() {
+        let addr = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
+        assert_eq!(require_wallet_param(Some(addr)), Some(addr));
+    }
+
+    #[test]
+    fn wallet_param_valid_address_preserves_value() {
+        let addr = "vasp-001";
+        let result = require_wallet_param(Some(addr));
+        assert_eq!(result, Some("vasp-001"));
+    }
+
+    #[test]
+    fn wallet_param_tab_newline_whitespace_returns_none() {
+        assert!(require_wallet_param(Some("\t\n")).is_none());
+    }
 }
