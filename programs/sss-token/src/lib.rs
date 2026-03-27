@@ -352,6 +352,36 @@ pub mod sss_token {
         instructions::admin_timelock::set_oracle_params_handler(ctx, max_age_secs, max_conf_bps)
     }
 
+    // ─── SSS-119: Oracle Abstraction Layer ────────────────────────────────────
+
+    /// SSS-119: Set the oracle type (0=Pyth, 1=Switchboard, 2=Custom) and feed address.
+    /// Authority-only. Requires timelock when admin_timelock_delay > 0.
+    pub fn set_oracle_config(
+        ctx: Context<SetOracleConfig>,
+        oracle_type: u8,
+        oracle_feed: Pubkey,
+    ) -> Result<()> {
+        instructions::oracle_config::set_oracle_config_handler(ctx, oracle_type, oracle_feed)
+    }
+
+    /// SSS-119: Initialise the CustomPriceFeed PDA for an SSS-3 stablecoin.
+    /// Must be called before `update_custom_price` or `cdp_borrow_stable` with oracle_type=2.
+    /// Authority-only. Preset-3 only.
+    pub fn init_custom_price_feed(ctx: Context<InitCustomPriceFeed>) -> Result<()> {
+        instructions::oracle_config::init_custom_price_feed_handler(ctx)
+    }
+
+    /// SSS-119: Publish a new price to the CustomPriceFeed PDA.
+    /// Authority-only. `price` must be > 0; `expo` is the price exponent (e.g. -8).
+    pub fn update_custom_price(
+        ctx: Context<UpdateCustomPrice>,
+        price: i64,
+        expo: i32,
+        conf: u64,
+    ) -> Result<()> {
+        instructions::oracle_config::update_custom_price_handler(ctx, price, expo, conf)
+    }
+
     /// SSS-092: Set the annual stability fee (in basis points) for CDP borrows.
     /// Max 2000 bps (20% p.a.).  0 = no fee (default).
     /// Authority-only; takes effect on next `collect_stability_fee` call.

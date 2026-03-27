@@ -2407,6 +2407,215 @@
       "args": []
     },
     {
+      "name": "commit_probabilistic",
+      "docs": [
+        "Lock stablecoin tokens in a ProbabilisticVault conditioned on a hash proof.",
+        "Requires FLAG_PROBABILISTIC_MONEY to be set on the config."
+      ],
+      "discriminator": [
+        115,
+        214,
+        120,
+        212,
+        113,
+        149,
+        118,
+        242
+      ],
+      "accounts": [
+        {
+          "name": "issuer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stable_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stable_mint"
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  98,
+                  115,
+                  45,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              },
+              {
+                "kind": "arg",
+                "path": "params.commitment_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow_token_account",
+          "docs": [
+            "Escrow token account — must be owned by the vault PDA, pre-created by client."
+          ],
+          "writable": true
+        },
+        {
+          "name": "issuer_token_account",
+          "docs": [
+            "Issuer's token account (source)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "CommitProbabilisticParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "countersign_settle",
+      "docs": [
+        "Countersign and execute a proposed settlement."
+      ],
+      "discriminator": [
+        221,
+        85,
+        153,
+        198,
+        97,
+        144,
+        205,
+        79
+      ],
+      "accounts": [
+        {
+          "name": "countersigner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "channel",
+          "writable": true
+        },
+        {
+          "name": "proposed_settlement",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  112,
+                  99,
+                  45,
+                  115,
+                  101,
+                  116,
+                  116,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "channel"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stable_mint"
+        },
+        {
+          "name": "escrow_token_account",
+          "writable": true
+        },
+        {
+          "name": "counterparty_token_account",
+          "docs": [
+            "Counterparty's token account — receives the settlement amount."
+          ],
+          "writable": true
+        },
+        {
+          "name": "initiator_token_account",
+          "docs": [
+            "Initiator's token account — receives the remainder."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "channel_id",
+          "type": "u64"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "cpi_burn",
       "docs": [
         "Standardized CPI burn entrypoint.",
@@ -2790,6 +2999,50 @@
         {
           "name": "amount",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "dispute",
+      "docs": [
+        "Raise a dispute on a payment channel (triggers timeout window)."
+      ],
+      "discriminator": [
+        216,
+        92,
+        128,
+        146,
+        202,
+        85,
+        135,
+        73
+      ],
+      "accounts": [
+        {
+          "name": "disputer",
+          "docs": [
+            "Either party can raise a dispute."
+          ],
+          "signer": true
+        },
+        {
+          "name": "channel",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "channel_id",
+          "type": "u64"
+        },
+        {
+          "name": "evidence_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -3355,6 +3608,102 @@
       "args": []
     },
     {
+      "name": "expire_and_refund",
+      "docs": [
+        "Return expired vault funds to the issuer after expiry_slot."
+      ],
+      "discriminator": [
+        129,
+        130,
+        91,
+        224,
+        222,
+        230,
+        183,
+        134
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "docs": [
+            "Anyone can call expire — permissionless, checked by slot."
+          ],
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "stable_mint"
+        },
+        {
+          "name": "escrow_token_account",
+          "writable": true
+        },
+        {
+          "name": "issuer_token_account",
+          "docs": [
+            "Issuer's token account — receives refund."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "force_close",
+      "docs": [
+        "Force-close a timed-out payment channel."
+      ],
+      "discriminator": [
+        71,
+        1,
+        6,
+        64,
+        15,
+        200,
+        254,
+        234
+      ],
+      "accounts": [
+        {
+          "name": "initiator",
+          "docs": [
+            "Only the initiator can force-close after timeout."
+          ],
+          "signer": true
+        },
+        {
+          "name": "channel",
+          "writable": true
+        },
+        {
+          "name": "stable_mint"
+        },
+        {
+          "name": "escrow_token_account",
+          "writable": true
+        },
+        {
+          "name": "initiator_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "channel_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "freeze_account",
       "docs": [
         "Freeze an account (compliance action). Caller must be compliance authority."
@@ -3797,6 +4146,116 @@
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "init_custom_price_feed",
+      "docs": [
+        "SSS-119: Initialise the CustomPriceFeed PDA for an SSS-3 stablecoin.",
+        "Must be called before `update_custom_price` or `cdp_borrow_stable` with oracle_type=2.",
+        "Authority-only. Preset-3 only."
+      ],
+      "discriminator": [
+        85,
+        173,
+        225,
+        40,
+        138,
+        220,
+        118,
+        10
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sss_mint",
+          "docs": [
+            "The SSS-3 stablecoin mint (used to derive the CustomPriceFeed PDA)."
+          ]
+        },
+        {
+          "name": "custom_price_feed",
+          "docs": [
+            "CustomPriceFeed PDA — one per stablecoin mint.",
+            "Seeds: [b\"custom-price-feed\", sss_mint]"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  109,
+                  45,
+                  112,
+                  114,
+                  105,
+                  99,
+                  101,
+                  45,
+                  102,
+                  101,
+                  101,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "init_dao_committee",
@@ -4860,6 +5319,191 @@
       ]
     },
     {
+      "name": "open_channel",
+      "docs": [
+        "Open a payment channel between two agents.",
+        "Requires FLAG_AGENT_PAYMENT_CHANNEL to be set on the config."
+      ],
+      "discriminator": [
+        91,
+        45,
+        253,
+        71,
+        140,
+        166,
+        107,
+        109
+      ],
+      "accounts": [
+        {
+          "name": "initiator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "stable_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stable_mint"
+        },
+        {
+          "name": "channel",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  112,
+                  99,
+                  45,
+                  99,
+                  104,
+                  97,
+                  110,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "initiator"
+              },
+              {
+                "kind": "arg",
+                "path": "params.channel_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow_token_account",
+          "docs": [
+            "Escrow token account — owned by the channel PDA, pre-created by client."
+          ],
+          "writable": true
+        },
+        {
+          "name": "initiator_token_account",
+          "docs": [
+            "Initiator's token account (source of deposit)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "OpenChannelParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_resolve",
+      "docs": [
+        "Partially release vault funds to claimant (partial payment)."
+      ],
+      "discriminator": [
+        196,
+        149,
+        112,
+        210,
+        171,
+        194,
+        125,
+        133
+      ],
+      "accounts": [
+        {
+          "name": "claimant",
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "stable_mint"
+        },
+        {
+          "name": "escrow_token_account",
+          "writable": true
+        },
+        {
+          "name": "claimant_token_account",
+          "writable": true
+        },
+        {
+          "name": "issuer_token_account",
+          "docs": [
+            "Issuer's token account — receives the remainder on partial resolution."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "proof_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "pause",
       "docs": [
         "Pause the entire mint (SSS-2). No minting/burning while paused."
@@ -5287,6 +5931,74 @@
       ]
     },
     {
+      "name": "propose_settle",
+      "docs": [
+        "Propose cooperative settlement of a payment channel."
+      ],
+      "discriminator": [
+        136,
+        216,
+        0,
+        0,
+        129,
+        151,
+        115,
+        149
+      ],
+      "accounts": [
+        {
+          "name": "proposer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "channel",
+          "writable": true
+        },
+        {
+          "name": "proposed_settlement",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  112,
+                  99,
+                  45,
+                  115,
+                  101,
+                  116,
+                  116,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "channel"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "channel_id",
+          "type": "u64"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "propose_timelocked_op",
       "docs": [
         "Propose a timelocked admin operation (2-epoch delay by default).",
@@ -5360,6 +6072,60 @@
         {
           "name": "target",
           "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "prove_and_resolve",
+      "docs": [
+        "Release vault funds to claimant upon matching proof hash."
+      ],
+      "discriminator": [
+        31,
+        103,
+        169,
+        184,
+        93,
+        220,
+        51,
+        101
+      ],
+      "accounts": [
+        {
+          "name": "claimant",
+          "docs": [
+            "The claimant — must match vault.claimant."
+          ],
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "stable_mint"
+        },
+        {
+          "name": "escrow_token_account",
+          "writable": true
+        },
+        {
+          "name": "claimant_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "proof_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -6332,6 +7098,79 @@
       ]
     },
     {
+      "name": "set_oracle_config",
+      "docs": [
+        "SSS-119: Set the oracle type (0=Pyth, 1=Switchboard, 2=Custom) and feed address.",
+        "Authority-only. Requires timelock when admin_timelock_delay > 0."
+      ],
+      "discriminator": [
+        96,
+        171,
+        6,
+        98,
+        153,
+        183,
+        233,
+        31
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "oracle_type",
+          "type": "u8"
+        },
+        {
+          "name": "oracle_feed",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "set_oracle_params",
       "docs": [
         "SSS-090: Configure oracle staleness and confidence parameters.",
@@ -6674,6 +7513,63 @@
         {
           "name": "fee_bps",
           "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "submit_work_proof",
+      "docs": [
+        "Submit a work proof hash to an open channel."
+      ],
+      "discriminator": [
+        57,
+        146,
+        122,
+        38,
+        47,
+        54,
+        141,
+        193
+      ],
+      "accounts": [
+        {
+          "name": "submitter",
+          "docs": [
+            "Either party can submit work proofs."
+          ],
+          "signer": true
+        },
+        {
+          "name": "channel",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "channel_id",
+          "type": "u64"
+        },
+        {
+          "name": "task_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "output_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "proof_type",
+          "type": "u8"
         }
       ]
     },
@@ -7271,6 +8167,119 @@
               "name": "UpdateCollateralConfigParams"
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "update_custom_price",
+      "docs": [
+        "SSS-119: Publish a new price to the CustomPriceFeed PDA.",
+        "Authority-only. `price` must be > 0; `expo` is the price exponent (e.g. -8)."
+      ],
+      "discriminator": [
+        72,
+        96,
+        171,
+        76,
+        174,
+        64,
+        158,
+        142
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "The stablecoin authority — must match custom_price_feed.authority."
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101,
+                  99,
+                  111,
+                  105,
+                  110,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sss_mint"
+        },
+        {
+          "name": "custom_price_feed",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  109,
+                  45,
+                  112,
+                  114,
+                  105,
+                  99,
+                  101,
+                  45,
+                  102,
+                  101,
+                  101,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "sss_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "price",
+          "type": "i64"
+        },
+        {
+          "name": "expo",
+          "type": "i32"
+        },
+        {
+          "name": "conf",
+          "type": "u64"
         }
       ]
     },
@@ -7962,6 +8971,19 @@
       ]
     },
     {
+      "name": "CustomPriceFeed",
+      "discriminator": [
+        149,
+        188,
+        117,
+        83,
+        50,
+        81,
+        52,
+        72
+      ]
+    },
+    {
       "name": "DaoCommitteeConfig",
       "discriminator": [
         17,
@@ -8066,6 +9088,32 @@
       ]
     },
     {
+      "name": "PaymentChannel",
+      "discriminator": [
+        53,
+        102,
+        116,
+        128,
+        150,
+        23,
+        170,
+        138
+      ]
+    },
+    {
+      "name": "ProbabilisticVault",
+      "discriminator": [
+        80,
+        159,
+        27,
+        57,
+        175,
+        85,
+        236,
+        191
+      ]
+    },
+    {
       "name": "ProposalPda",
       "discriminator": [
         231,
@@ -8076,6 +9124,19 @@
         243,
         132,
         22
+      ]
+    },
+    {
+      "name": "ProposedSettlement",
+      "discriminator": [
+        85,
+        131,
+        135,
+        80,
+        142,
+        233,
+        49,
+        229
       ]
     },
     {
@@ -11031,6 +12092,29 @@
       }
     },
     {
+      "name": "ChannelStatus",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Open"
+          },
+          {
+            "name": "Disputed"
+          },
+          {
+            "name": "Settled"
+          },
+          {
+            "name": "ForceClose"
+          }
+        ]
+      }
+    },
+    {
       "name": "CircuitBreakerAutoUnpaused",
       "type": {
         "kind": "struct",
@@ -11342,6 +12426,39 @@
       }
     },
     {
+      "name": "CommitProbabilisticParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "condition_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "expiry_slot",
+            "type": "u64"
+          },
+          {
+            "name": "commitment_id",
+            "type": "u64"
+          },
+          {
+            "name": "claimant",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "ConfidentialTransferConfig",
       "docs": [
         "Confidential transfer config PDA — one per mint when FLAG_CONFIDENTIAL_TRANSFERS is set.",
@@ -11508,6 +12625,69 @@
           {
             "name": "slot",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CustomPriceFeed",
+      "docs": [
+        "Custom oracle price feed PDA — one per SSS-3 stablecoin mint.",
+        "Seeds: [b\"custom-price-feed\", sss_mint]",
+        "",
+        "Only the stablecoin authority may update prices via `update_custom_price`.",
+        "The `custom` oracle adapter verifies `feed.authority == config.authority`",
+        "(admin signature verification) before trusting the stored price."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "The authority (stablecoin config authority) who may update this feed."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "price",
+            "docs": [
+              "Price value — same semantics as Pyth: raw integer, scaled by 10^expo."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "expo",
+            "docs": [
+              "Price exponent — typically negative (e.g. -8 means price in 10^-8 USD)."
+            ],
+            "type": "i32"
+          },
+          {
+            "name": "conf",
+            "docs": [
+              "Confidence half-interval in the same units as price."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_update_slot",
+            "docs": [
+              "Slot at which the price was last updated (informational)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_update_unix_timestamp",
+            "docs": [
+              "Unix timestamp (seconds) at which the price was last updated.",
+              "Used by the custom oracle adapter to enforce max_oracle_age_secs staleness check."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }
@@ -12749,6 +13929,34 @@
       }
     },
     {
+      "name": "OpenChannelParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "counterparty",
+            "type": "pubkey"
+          },
+          {
+            "name": "deposit",
+            "type": "u64"
+          },
+          {
+            "name": "channel_id",
+            "type": "u64"
+          },
+          {
+            "name": "dispute_policy",
+            "type": "u8"
+          },
+          {
+            "name": "timeout_slots",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "OracleConsensus",
       "docs": [
         "Multi-oracle consensus PDA — aggregates N price sources into a single",
@@ -13036,6 +14244,100 @@
       }
     },
     {
+      "name": "PaymentChannel",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "initiator",
+            "docs": [
+              "Party that opened and funded the channel."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "counterparty",
+            "docs": [
+              "Service provider / recipient of successful work."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "stable_mint",
+            "docs": [
+              "SSS stablecoin mint."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "initiator_deposit",
+            "docs": [
+              "Tokens deposited by the initiator."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "open_slot",
+            "docs": [
+              "Slot at which the channel was opened (used for timeout calculation)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "channel_id",
+            "docs": [
+              "Monotonic channel id (caller-provided, unique per initiator)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "dispute_policy",
+            "docs": [
+              "Dispute resolution policy: 0=OracleAttestation, 1=PeerQuorum, 2=TimeoutFallback."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "timeout_slots",
+            "docs": [
+              "Slots after open_slot before force_close is permitted."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "work_proof_hash",
+            "docs": [
+              "Latest work proof hash (SHA-256 of task+output hashes), or evidence hash in Disputed."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "docs": [
+              "Current channel lifecycle status."
+            ],
+            "type": {
+              "defined": {
+                "name": "ChannelStatus"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "PidConfigInitialised",
       "type": {
         "kind": "struct",
@@ -13234,6 +14536,100 @@
       }
     },
     {
+      "name": "ProbabilisticVault",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "docs": [
+              "Config PDA this vault belongs to (needed for PDA signing)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "issuer",
+            "docs": [
+              "Issuer who locked the funds."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "claimant",
+            "docs": [
+              "Claimant authorised to receive funds on proof."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "stable_mint",
+            "docs": [
+              "SSS stablecoin mint."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "committed_amount",
+            "docs": [
+              "Total tokens committed into escrow."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "resolved_amount",
+            "docs": [
+              "Amount released so far (sum of all partial + full releases)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "condition_hash",
+            "docs": [
+              "SHA-256 / oracle hash the proof must match."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "expiry_slot",
+            "docs": [
+              "Slot after which `expire_and_refund` is allowed."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "commitment_id",
+            "docs": [
+              "Monotonic commitment id (caller-provided, must be unique per config)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "docs": [
+              "Current vault lifecycle status."
+            ],
+            "type": {
+              "defined": {
+                "name": "VaultStatus"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump seed."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "ProposalAction",
       "docs": [
         "Action kinds that a DAO committee proposal may authorize.",
@@ -13354,6 +14750,35 @@
           },
           {
             "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProposedSettlement",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "docs": [
+              "Amount to release to the counterparty."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "proposed_by",
+            "docs": [
+              "Which party proposed the settlement (must be initiator or counterparty)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump."
+            ],
             "type": "u8"
           }
         ]
@@ -14663,6 +16088,29 @@
           {
             "name": "slot",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultStatus",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending"
+          },
+          {
+            "name": "Resolved"
+          },
+          {
+            "name": "Expired"
+          },
+          {
+            "name": "PartiallyResolved"
           }
         ]
       }
