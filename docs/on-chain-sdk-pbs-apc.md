@@ -106,6 +106,12 @@ Terminal states: `Resolved`, `Expired`.
 
 The Agent Payment Channel enables **two agents** (opener/hirer and counterparty/worker) to transact trust-minimally. The opener optionally deposits stablecoins; the worker submits work proofs; settlement flows cooperatively or unilaterally via timeout.
 
+### Prerequisites
+
+The `FLAG_AGENT_PAYMENT_CHANNEL` feature flag (`1 << 19 = 0x00080000`, bit 19) must be set on the `StablecoinConfig` PDA. `openChannel()` performs an explicit SDK-level guard before building any transaction — it reads the config, checks the flag, and throws a descriptive error if APC is not enabled.
+
+> **Security fix (PR #325, 2026-03-27):** `_readConfigFeatureFlags()` now throws on truncated or malformed account data (data buffer shorter than expected layout) instead of silently returning `0n`. This prevents a malformed config account from bypassing the feature-flag guard. Additionally, `openChannel()` asserts `counterparty` is a non-zero public key before proceeding.
+
 ### Quick Start
 
 ```ts
