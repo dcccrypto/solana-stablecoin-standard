@@ -112,6 +112,7 @@ describe("SSS-156: Issuer Legal Entity Registry", () => {
         preset: 3,
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         oracleType: 0,
         oracleFeed: null,
         maxOracleAgeSecs: null,
@@ -179,6 +180,7 @@ describe("SSS-156: Issuer Legal Entity Registry", () => {
         preset: 3,
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         oracleType: 0,
         oracleFeed: null,
         maxOracleAgeSecs: null,
@@ -230,6 +232,7 @@ describe("SSS-156: Issuer Legal Entity Registry", () => {
         name: "Test3", symbol: "TS3", decimals: 6,
         initialSupplyCap: new BN(1_000_000_000), preset: 3,
         featureFlags: null, auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         oracleType: 0, oracleFeed: null, maxOracleAgeSecs: null,
         maxOracleConfBps: null, pythPriceFeed: null,
       })
@@ -262,6 +265,7 @@ describe("SSS-156: Issuer Legal Entity Registry", () => {
         name: "Test4", symbol: "TS4", decimals: 6,
         initialSupplyCap: new BN(1_000_000_000), preset: 3,
         featureFlags: null, auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         oracleType: 0, oracleFeed: null, maxOracleAgeSecs: null,
         maxOracleConfBps: null, pythPriceFeed: null,
       })
@@ -294,6 +298,7 @@ describe("SSS-156: Issuer Legal Entity Registry", () => {
         name: "Test5", symbol: "TS5", decimals: 6,
         initialSupplyCap: new BN(1_000_000_000), preset: 3,
         featureFlags: null, auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         oracleType: 0, oracleFeed: null, maxOracleAgeSecs: null,
         maxOracleConfBps: null, pythPriceFeed: null,
       })
@@ -326,6 +331,7 @@ describe("SSS-156: Issuer Legal Entity Registry", () => {
         name: "Test6", symbol: "TS6", decimals: 6,
         initialSupplyCap: new BN(1_000_000_000), preset: 3,
         featureFlags: null, auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         oracleType: 0, oracleFeed: null, maxOracleAgeSecs: null,
         maxOracleConfBps: null, pythPriceFeed: null,
       })
@@ -376,6 +382,7 @@ describe("SSS-156: Issuer Legal Entity Registry", () => {
         name: "Test8", symbol: "TS8", decimals: 6,
         initialSupplyCap: new BN(1_000_000_000), preset: 3,
         featureFlags: null, auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         oracleType: 0, oracleFeed: null, maxOracleAgeSecs: null,
         maxOracleConfBps: null, pythPriceFeed: null,
       })

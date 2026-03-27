@@ -4,7 +4,7 @@ A modular, production-ready stablecoin SDK for Solana with two opinionated prese
 
 ## Presets
 
-| Feature | SSS-1 Minimal | SSS-2 Compliant | SSS-3 Trustless |
+| Feature | SSS-1 Minimal | SSS-2 Compliant | SSS-3 Trust-Minimized |
 |---------|:---:|:---:|:---:|
 | Token-2022 mint | ✅ | ✅ | ✅ |
 | Freeze authority | ✅ | ✅ | ✅ |
@@ -19,7 +19,7 @@ A modular, production-ready stablecoin SDK for Solana with two opinionated prese
 
 **SSS-1** — For internal tokens, DAO treasuries, ecosystem settlement.  
 **SSS-2** — For regulated stablecoins (USDC/USDT-class). Compliant by default.  
-**SSS-3** — Trustless collateral-backed: on-chain collateral enforcement + ZK transfer privacy. [Reference design →](docs/SSS-3.md)
+**SSS-3** — Trust-minimized collateral-backed: on-chain collateral enforcement + ZK transfer privacy. Mandatory Squads multisig, immutable supply cap, DAO proposals, and oracle timelocks (SSS-147). [Reference design →](docs/SSS-3.md)
 
 ## Quick Start
 
@@ -130,6 +130,21 @@ Endpoints:
 | [Multi-Oracle Consensus](docs/MULTI-ORACLE-CONSENSUS.md) | Median/TWAP price aggregation across up to 5 oracle sources with outlier rejection and staleness guards (SSS-153) |
 | [Redemption Queue](docs/REDEMPTION-QUEUE.md) | FIFO slot-delayed redemption with front-run protection, per-slot throughput cap, SlotHashes MEV seed, and keeper reward (SSS-154) |
 
+## SSS-3 Trust Assumptions (post SSS-147 hardening)
+
+SSS-3 is **trust-minimized**, not trustless. After the SSS-147 hardening round, the remaining trust assumptions are documented and on-chain verifiable:
+
+| Assumption | On-chain verifiable? | Hardening |
+|-----------|----------------------|-----------|
+| Reserve attestor is authority-whitelisted | ✅ Yes | v1 — future versions move to direct vault reads |
+| Pyth oracle feed is authority-set | ✅ Yes — timelocked | SSS-147D: `require_timelock_executed()` on oracle ops |
+| Guardian multisig provides emergency controls | ✅ Yes | Always required for pause/unpause |
+| Squads multisig holds upgrade authority | ✅ Yes — mandatory | SSS-147A: `initialize` rejects without valid multisig |
+
+SSS-147 additionally enforces: immutable `max_supply` (SSS-147B), DAO-member-proposable governance with `FLAG_DAO_COMMITTEE` protection (SSS-147C), and compliance authority timelocks (SSS-147D).
+
+See [SSS-3.md — Trust Assumptions](docs/SSS-3.md#trust-assumptions-sss-147-post-hardening) and [TRUST-MODEL.md](docs/TRUST-MODEL.md) for the full breakdown.
+
 ## Documentation
 
 | Guide | Description |
@@ -149,7 +164,7 @@ Endpoints:
 | [Hook Program Monitoring](docs/HOOK-MONITORING.md) | Transfer hook program liveness monitoring — off-chain TypeScript monitor, ExtraAccountMetaList checks, alert runbook (BUG-023) |
 | [Preset: SSS-1 Minimal](docs/SSS-1.md) | SSS-1 preset specification |
 | [Preset: SSS-2 Compliant](docs/SSS-2.md) | SSS-2 preset specification |
-| [Preset: SSS-3 Trustless](docs/SSS-3.md) | SSS-3 trustless collateral-backed reference design |
+| [Preset: SSS-3 Trust-Minimized](docs/SSS-3.md) | SSS-3 trust-minimized collateral-backed reference design — mandatory Squads multisig, immutable supply cap, DAO proposals, oracle timelocks (SSS-147) |
 | [Preset: SSS-4 Institutional](docs/SSS-4-INSTITUTIONAL.md) | SSS-4 Squads V4 multisig authority — institutional grade m-of-n governance (SSS-134) |
 | [Upgrade Authority Guard](docs/UPGRADE-AUTHORITY-GUARD.md) | BPF upgrade authority transfer to Squads multisig + on-chain guard for continuous drift monitoring (SSS-150) |
 | [Architecture](docs/ARCHITECTURE.md) | Three-layer system architecture |

@@ -1573,6 +1573,8 @@ describe("sss-token", () => {
       );
 
       // Initialize SSS-3 mint for CDP
+      // SSS-147A: SSS-3 requires squads_multisig + max_supply > 0
+      const testSquadsMultisig = Keypair.generate().publicKey;
       await program.methods
         .initialize({
           preset: 3,
@@ -1583,9 +1585,11 @@ describe("sss-token", () => {
           transferHookProgram: null,
           collateralMint: collateralMint,
           reserveVault: vaultTokenAccount, // re-use vault as "reserve" for SSS-3 init
-          maxSupply: null,
-        featureFlags: null,
-        auditorElgamalPubkey: null,
+          maxSupply: new anchor.BN(1_000_000_000),
+          featureFlags: null,
+          auditorElgamalPubkey: null,
+          adminTimelockDelay: null,
+          squadsMultisig: testSquadsMultisig,
         })
         .accounts({
           payer: authority.publicKey,
@@ -2782,9 +2786,10 @@ describe("sss-token", () => {
           transferHookProgram: null,
           collateralMint: mockStSolMint,
           reserveVault: vaultStSolTokenAccount,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -4225,9 +4230,10 @@ describe("sss-token", () => {
           transferHookProgram: null,
           collateralMint: sec085CollateralMint,
           reserveVault: sec085VaultTokenAccount,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -4544,9 +4550,10 @@ describe("sss-token", () => {
             transferHookProgram: null,
             collateralMint: daoColMint,
             reserveVault: daoVaultTaKp.publicKey,
-            maxSupply: null,
+            maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
           })
           .accounts({
             payer: authority.publicKey,
@@ -4835,9 +4842,10 @@ describe("sss-token", () => {
           transferHookProgram: null,
           collateralMint: sss090CollateralMint,
           reserveVault: sss090VaultTokenAccount,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -5156,9 +5164,10 @@ describe("sss-token", () => {
           transferHookProgram: null,
           collateralMint: Keypair.generate().publicKey,
           reserveVault: Keypair.generate().publicKey,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -5306,9 +5315,10 @@ describe("sss-token", () => {
           transferHookProgram: null,
           collateralMint: sss097CollateralMint,
           reserveVault: sss097ReserveVault,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -5665,9 +5675,10 @@ describe("sss-token", () => {
           transferHookProgram: null,
           collateralMint: sss098CollateralMint,
           reserveVault: sss098ReserveVault,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -6235,9 +6246,10 @@ describe("sss-token", () => {
           transferHookProgram: null,
           collateralMint: sss100CollateralMint,
           reserveVault: sss100ReserveVault,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
         featureFlags: null,
         auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -7410,9 +7422,10 @@ describe("sss-token", () => {
           transferHookProgram: null,
           collateralMint: Keypair.generate().publicKey,
           reserveVault: Keypair.generate().publicKey,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
           featureFlags: null,
           auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -7650,9 +7663,11 @@ describe("sss-token", () => {
           transferHookProgram: null,
           collateralMint: Keypair.generate().publicKey,
           reserveVault: Keypair.generate().publicKey,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
           featureFlags: null,
+          auditorElgamalPubkey: null,
           adminTimelockDelay: new anchor.BN(TIMELOCK_DELAY),
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           authority: authority.publicKey,

@@ -134,9 +134,10 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           transferHookProgram: null,
           collateralMint: SystemProgram.programId,
           reserveVault: SystemProgram.programId,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
           featureFlags: null,
           auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -402,9 +403,10 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           transferHookProgram: null,
           collateralMint: collateralMint,
           reserveVault: SystemProgram.programId,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
           featureFlags: null,
           auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -625,9 +627,10 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           transferHookProgram: null,
           collateralMint: SystemProgram.programId,
           reserveVault: SystemProgram.programId,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
           featureFlags: null,
           auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -883,9 +886,10 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           transferHookProgram: null,
           collateralMint: SystemProgram.programId,
           reserveVault: SystemProgram.programId,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
           featureFlags: null,
           auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -1034,9 +1038,10 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           transferHookProgram: null,
           collateralMint: SystemProgram.programId,
           reserveVault: SystemProgram.programId,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
           featureFlags: null,
           auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
@@ -1231,9 +1236,10 @@ describe("SSS-103: Integration Tests — Gaps Sprint SSS-090–099", () => {
           transferHookProgram: null,
           collateralMint: collateralMint,
           reserveVault: SystemProgram.programId,
-          maxSupply: null,
+          maxSupply: new anchor.BN(1_000_000_000),
           featureFlags: null,
           auditorElgamalPubkey: null,
+          squadsMultisig: Keypair.generate().publicKey,
         })
         .accounts({
           payer: authority.publicKey,
