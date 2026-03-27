@@ -32,13 +32,40 @@ export class SolanaStablecoin {
     return new SolanaStablecoin(config);
   }
 
-  /** Record a mint event. */
+  /**
+   * Record an **off-chain** mint event in the SSS backend database.
+   *
+   * @remarks
+   * **This method does NOT perform any on-chain Solana transaction.**
+   * It only POSTs an event record to the SSS backend API (`/api/mint`).
+   * To actually mint tokens on-chain, you must submit a Solana transaction
+   * via the SSS program separately (e.g. using `SolanaStablecoin.mintTo()`
+   * from the Anchor client wrapper).
+   *
+   * @param params.txSignature - The Solana transaction signature confirming
+   * the on-chain mint. Must be a valid base58-encoded 88-character signature.
+   * **Required:** the backend will reject requests without a confirmed
+   * on-chain transaction signature.
+   *
+   * @throws {SSSError} if `params.amount` is not a positive number.
+   * @throws {SSSError} if `params.txSignature` is missing or blank.
+   */
   async mint(params: {
     tokenMint: string;
     amount: number;
     recipient: string;
-    txSignature?: string;
+    txSignature: string;
   }): Promise<MintEvent> {
+    if (params.amount <= 0) {
+      throw new Error(
+        `SSSError: mint amount must be > 0, got ${params.amount}`
+      );
+    }
+    if (!params.txSignature || params.txSignature.trim() === "") {
+      throw new Error(
+        "SSSError: txSignature is required for mint — provide the confirmed Solana transaction signature"
+      );
+    }
     return this.client.mint({
       token_mint: params.tokenMint,
       amount: params.amount,
@@ -47,13 +74,40 @@ export class SolanaStablecoin {
     });
   }
 
-  /** Record a burn event. */
+  /**
+   * Record an **off-chain** burn event in the SSS backend database.
+   *
+   * @remarks
+   * **This method does NOT perform any on-chain Solana transaction.**
+   * It only POSTs an event record to the SSS backend API (`/api/burn`).
+   * To actually burn tokens on-chain, you must submit a Solana transaction
+   * via the SSS program separately (e.g. using `SolanaStablecoin.burnFrom()`
+   * from the Anchor client wrapper).
+   *
+   * @param params.txSignature - The Solana transaction signature confirming
+   * the on-chain burn. Must be a valid base58-encoded 88-character signature.
+   * **Required:** the backend will reject requests without a confirmed
+   * on-chain transaction signature.
+   *
+   * @throws {SSSError} if `params.amount` is not a positive number.
+   * @throws {SSSError} if `params.txSignature` is missing or blank.
+   */
   async burn(params: {
     tokenMint: string;
     amount: number;
     source: string;
-    txSignature?: string;
+    txSignature: string;
   }): Promise<BurnEvent> {
+    if (params.amount <= 0) {
+      throw new Error(
+        `SSSError: burn amount must be > 0, got ${params.amount}`
+      );
+    }
+    if (!params.txSignature || params.txSignature.trim() === "") {
+      throw new Error(
+        "SSSError: txSignature is required for burn — provide the confirmed Solana transaction signature"
+      );
+    }
     return this.client.burn({
       token_mint: params.tokenMint,
       amount: params.amount,
