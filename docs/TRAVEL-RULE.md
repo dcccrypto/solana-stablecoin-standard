@@ -237,6 +237,65 @@ curl "https://api.example.com/api/travel-rule/records?mint=AxE9NQ8z6tzNJT9AHBu2Y
 
 ---
 
+### `POST /api/travel-rule/records`
+
+> **AUDIT3C-H1 (HIGH — fixed 421da49):** Submits a new TravelRuleRecord. Both `originator_vasp` and `beneficiary_vasp` are validated against the backend's **known VASP registry** (`known_vasps` table). Unrecognised VASP identifiers are rejected with `422 UNKNOWN_VASP` — they are never persisted.
+
+**Request body (JSON):**
+
+| Field             | Type    | Required | Description                                               |
+|-------------------|---------|----------|-----------------------------------------------------------|
+| `originator_vasp` | string  | ✓        | Registered VASP ID for the originating party              |
+| `beneficiary_vasp`| string  | ✓        | Registered VASP ID for the beneficiary party              |
+| `mint`            | string  | ✓        | SSS stablecoin mint address                               |
+| `amount`          | i64     | ✓        | Transfer amount (token native units)                      |
+| `threshold`       | i64     | ✓        | Threshold amount at time of submission                    |
+| `compliant`       | bool    | ✓        | Whether transfer meets travel-rule requirements           |
+| `tx_signature`    | string  | No       | On-chain transaction signature                            |
+
+**Responses:**
+
+| Status | Meaning                                                                 |
+|--------|-------------------------------------------------------------------------|
+| 201    | Created — record accepted, returns full `TravelRuleRecord` object       |
+| 422    | `UNKNOWN_VASP` — one or both VASPs not found in the registry            |
+| 503    | `FLAG_TRAVEL_RULE` is not set in `StablecoinConfig.feature_flags`       |
+
+**Example (success):**
+```bash
+curl -X POST "https://api.example.com/api/travel-rule/records" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "originator_vasp": "SSSISSUER001",
+    "beneficiary_vasp": "SSSMARKET001",
+    "mint": "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
+    "amount": 1000000000,
+    "threshold": 1000000000,
+    "compliant": true,
+    "tx_signature": "5A3f..."
+  }'
+```
+
+**Example (unknown VASP — 422):**
+```bash
+curl -X POST "https://api.example.com/api/travel-rule/records" \
+  -H "Content-Type: application/json" \
+  -d '{"originator_vasp": "FORGEDVASP99", "beneficiary_vasp": "SSSMARKET001", ...}'
+# → HTTP 422: {"success": false, "error": "unknown VASP: FORGEDVASP99"}
+```
+
+**Known VASPs (seeded):**
+
+| VASP ID          | Description                 |
+|------------------|-----------------------------|
+| `SSSISSUER001`   | SSS Issuer (default)        |
+| `SSSMARKET001`   | SSS Market Maker (default)  |
+| `TESTVASP0001`   | Test VASP (devnet only)     |
+
+> New VASPs must be inserted into `known_vasps` by an admin before they can submit records. Seed entries can be extended via migration.
+
+---
+
 ### `GET /api/pid-config`
 
 Returns SSS program IDs and the current travel-rule operational configuration.
