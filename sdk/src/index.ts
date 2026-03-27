@@ -97,3 +97,25 @@ export type {
   WithdrawConfidentialParams,
   ConfidentialTransferConfigAccount,
 } from './ConfidentialTransferModule';
+export {
+  AgentPaymentChannelModule,
+  FLAG_AGENT_PAYMENT_CHANNEL,
+  APC_CHANNEL_SEED,
+  APC_CONFIG_SEED,
+  APC_SETTLE_SEED,
+  deriveApcConfigPda,
+  deriveChannelPda,
+  DisputePolicy,
+  ApcProofType,
+  ChannelStatus,
+} from './AgentPaymentChannelModule';
+export type {
+  OpenChannelParams,
+  OpenChannelResult,
+  SubmitWorkProofParams,
+  ProposeSettleParams,
+  CountersignSettleParams,
+  DisputeParams,
+  ForceCloseParams,
+  PaymentChannel,
+} from './AgentPaymentChannelModule';
