@@ -37,11 +37,21 @@ import {
 } from '@solana/web3.js';
 import { AnchorProvider, BN } from '@coral-xyz/anchor';
 import { TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
+import { FeatureFlagsModule } from './FeatureFlagsModule';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Bit flag for the probabilistic money feature (bit 6 = 0x40). */
-export const FLAG_PROBABILISTIC_MONEY = 1n << 20n; // 0x100000 — matches FLAG_PROBABILISTIC_MONEY in state.rs (bit 20)
+/**
+ * Bit flag for the probabilistic money feature.
+ *
+ * Matches `FLAG_PROBABILISTIC_MONEY` in `state.rs` (bit 20 = 1 << 20).
+ *
+ * AUDIT3-B finding: prior value was `1n << 6n` (0x40) which matched
+ * FLAG_TRAVEL_RULE (bit 6), not the actual on-chain constant (bit 20).
+ * Any SDK call that checked this flag would silently pass/fail based on
+ * the wrong flag bit.
+ */
+export const FLAG_PROBABILISTIC_MONEY = 1n << 20n; // 0x0010_0000 — matches state.rs
 
 /** PDA seed for ProbabilisticVault accounts. */
 export const PBS_VAULT_SEED = Buffer.from('pbs-vault');
@@ -289,6 +299,18 @@ export class ProbabilisticModule {
     //   const slot = await provider.connection.getSlot();
     //   expirySlot = new BN(slot + 1000);
     if (expirySlot.lten(0)) throw new Error('expirySlot must be a positive slot number (must be > current on-chain slot)');
+
+    // AUDIT3-B: guard — verify FLAG_PROBABILISTIC_MONEY (bit 20) is set on-chain
+    // before building the transaction. Without this guard, callers that haven't
+    // enabled PBS get an opaque program revert rather than a clear SDK error.
+    const ff = new FeatureFlagsModule(this.provider, this.programId);
+    const pbsEnabled = await ff.isFeatureFlagSet(mint, FLAG_PROBABILISTIC_MONEY);
+    if (!pbsEnabled) {
+      throw new Error(
+        'ProbabilisticModule: FLAG_PROBABILISTIC_MONEY (bit 20) is not set on this mint. ' +
+        'Enable it via FeatureFlagsModule.setFeatureFlag({ mint, flag: FLAG_PROBABILISTIC_MONEY }) first.',
+      );
+    }
 
     const [configPda] = derivePbsConfigPda(mint, this.programId);
     const [vaultPda] = derivePbsVaultPda(configPda, commitmentId, this.programId);
