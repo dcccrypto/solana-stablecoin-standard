@@ -120,8 +120,41 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_liq_history_cdp ON liquidation_history(cdp_address);
             CREATE INDEX IF NOT EXISTS idx_liq_history_collateral ON liquidation_history(collateral_mint);
             CREATE INDEX IF NOT EXISTS idx_liq_history_created ON liquidation_history(created_at DESC);
+            CREATE TABLE IF NOT EXISTS travel_rule_records (
+                id TEXT PRIMARY KEY,
+                originator_vasp TEXT NOT NULL,
+                beneficiary_vasp TEXT NOT NULL,
+                mint TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                threshold INTEGER NOT NULL,
+                compliant INTEGER NOT NULL DEFAULT 0,
+                tx_signature TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_travel_rule_originator ON travel_rule_records(originator_vasp);
+            CREATE INDEX IF NOT EXISTS idx_travel_rule_beneficiary ON travel_rule_records(beneficiary_vasp);
+            CREATE INDEX IF NOT EXISTS idx_travel_rule_created ON travel_rule_records(created_at DESC);
+            CREATE TABLE IF NOT EXISTS known_vasps (
+                vasp_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                jurisdiction TEXT NOT NULL
+            );
         ")?;
         Self::ensure_webhook_delivery_log_schema(&conn)?;
+        Self::seed_known_vasps(&conn)?;
+        Ok(())
+    }
+
+    /// AUDIT3C-H1: Seed the known_vasps table with default entries on first init.
+    /// Idempotent — uses INSERT OR IGNORE.
+    fn seed_known_vasps(conn: &rusqlite::Connection) -> Result<(), AppError> {
+        conn.execute_batch(
+            "INSERT OR IGNORE INTO known_vasps (vasp_id, name, jurisdiction)
+             VALUES
+               ('SSSISSUER001', 'SSS Protocol Issuer', 'US'),
+               ('SSSMARKET001', 'SSS Market Maker', 'US'),
+               ('TESTVASP0001', 'Test VASP (devnet only)', 'TEST');",
+        )?;
         Ok(())
     }
 
@@ -1416,6 +1449,68 @@ impl Database {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(records)
+    }
+
+    /// AUDIT3C-H1: Check whether a VASP ID is in the known_vasps registry.
+    pub fn is_known_vasp(&self, vasp_id: &str) -> Result<bool, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM known_vasps WHERE vasp_id = ?1",
+            rusqlite::params![vasp_id],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    /// AUDIT3C-H1: Insert a validated travel rule record.
+    /// Returns 422 (UnprocessableEntity) if either VASP is unknown.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_travel_rule_record(
+        &self,
+        originator_vasp: &str,
+        beneficiary_vasp: &str,
+        mint: &str,
+        amount: i64,
+        threshold: i64,
+        compliant: bool,
+        tx_signature: Option<&str>,
+    ) -> Result<crate::models::TravelRuleRecord, AppError> {
+        if !self.is_known_vasp(originator_vasp)? {
+            return Err(AppError::UnprocessableEntity(format!(
+                "UNKNOWN_VASP: originator_vasp '{}' is not in the VASP registry",
+                originator_vasp
+            )));
+        }
+        if !self.is_known_vasp(beneficiary_vasp)? {
+            return Err(AppError::UnprocessableEntity(format!(
+                "UNKNOWN_VASP: beneficiary_vasp '{}' is not in the VASP registry",
+                beneficiary_vasp
+            )));
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        conn.execute(
+            "INSERT INTO travel_rule_records \
+             (id, originator_vasp, beneficiary_vasp, mint, amount, threshold, compliant, tx_signature, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
+                id, originator_vasp, beneficiary_vasp, mint,
+                amount, threshold, compliant as i64,
+                tx_signature, now
+            ],
+        )?;
+        Ok(crate::models::TravelRuleRecord {
+            id,
+            originator_vasp: originator_vasp.to_string(),
+            beneficiary_vasp: beneficiary_vasp.to_string(),
+            mint: mint.to_string(),
+            amount,
+            threshold,
+            compliant,
+            tx_signature: tx_signature.map(|s| s.to_string()),
+            created_at: now,
+        })
     }
 
     /// List credential records with optional filters.

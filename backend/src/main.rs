@@ -51,7 +51,7 @@ use routes::{
     webhooks::{delete_webhook, list_webhooks, register_webhook},
     ws_events::ws_events_handler,
     zk_credentials::{list_credential_records, list_registries, submit_credential, upsert_registry, verify_credential},
-    travel_rule::{get_travel_rule_records, get_pid_config},
+    travel_rule::{get_travel_rule_records, get_pid_config, post_travel_rule_record},
     webhook_deliveries::list_webhook_deliveries,
 };
 use state::AppState;
@@ -161,7 +161,7 @@ async fn main() {
         .route("/api/webhooks/:id", delete(delete_webhook))
         .route("/api/alerts", get(get_alerts).post(post_alert))
         .route("/api/webhook-deliveries", get(list_webhook_deliveries))
-        .route("/api/travel-rule/records", get(get_travel_rule_records))
+        .route("/api/travel-rule/records", get(get_travel_rule_records).post(post_travel_rule_record))
         .route("/api/pid-config", get(get_pid_config))
         .route("/api/zk-credentials/records", get(list_credential_records))
         .route("/api/zk-credentials/submit", post(submit_credential))
