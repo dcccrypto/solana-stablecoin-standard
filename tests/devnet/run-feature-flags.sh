@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # tests/devnet/run-feature-flags.sh
 #
-# Runner for SSS-DEVTEST-003: Feature Flag Integration Tests
+# SSS-DEVTEST-003 runner — feature flag integration tests on devnet.
 #
 # Prerequisites:
-#   - Solana CLI installed and configured (solana-keygen new if needed)
-#   - At least 0.1 SOL on the devnet wallet (solana airdrop 1 --url devnet)
-#   - Project built: anchor build
-#   - Dependencies installed: npm ci
+#   - Solana CLI installed (solana-keygen new --outfile ~/.config/solana/id.json)
+#   - At least 0.1 SOL on the devnet wallet:
+#       solana airdrop 2 --url https://api.devnet.solana.com
+#   - IDL present (run `anchor build` or restore from CI artefacts)
+#   - npm deps installed: npm ci
 #
-# Usage:
-#   bash tests/devnet/run-feature-flags.sh
-#   ANCHOR_WALLET=/path/to/your-wallet.json bash tests/devnet/run-feature-flags.sh
+# Environment overrides:
+#   ANCHOR_PROVIDER_URL   default: https://api.devnet.solana.com
+#   ANCHOR_WALLET         default: ~/.config/solana/id.json
 
 set -euo pipefail
 
@@ -27,17 +28,16 @@ echo "  Network : $ANCHOR_PROVIDER_URL"
 echo "  Wallet  : $ANCHOR_WALLET"
 echo "========================================"
 
-# Sanity checks
 if [ ! -f "$ANCHOR_WALLET" ]; then
-  echo "❌ Wallet not found at $ANCHOR_WALLET"
-  echo "   Generate one: solana-keygen new --outfile $ANCHOR_WALLET"
+  echo "❌  Wallet not found at: $ANCHOR_WALLET"
+  echo "    Generate: solana-keygen new --outfile \"$ANCHOR_WALLET\""
   exit 1
 fi
 
 if [ ! -f "$REPO_ROOT/target/idl/sss_token.json" ]; then
-  echo "⚠️  IDL not found at target/idl/sss_token.json"
-  echo "   Run: anchor build"
-  echo "   The test will report all flags as SKIP/IDL-missing."
+  echo "⚠️   IDL not found at target/idl/sss_token.json"
+  echo "    The test will gracefully skip all flags with 'IDL missing' status."
+  echo "    To build: anchor build"
 fi
 
 npx ts-mocha --transpile-only -p ./tsconfig.json -t 300000 \
