@@ -62,8 +62,11 @@ impl Database {
                 id TEXT PRIMARY KEY,
                 key TEXT NOT NULL UNIQUE,
                 label TEXT NOT NULL,
+                is_admin INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             );
+
+
             CREATE TABLE IF NOT EXISTS event_log (
                 id TEXT PRIMARY KEY,
                 event_type TEXT NOT NULL,
@@ -90,6 +93,7 @@ impl Database {
             );
             CREATE INDEX IF NOT EXISTS idx_collateral_config_sss_mint ON collateral_config(sss_mint);
             CREATE TABLE IF NOT EXISTS liquidation_history (
+
                 id TEXT PRIMARY KEY,
                 cdp_address TEXT NOT NULL,
                 collateral_mint TEXT NOT NULL,
@@ -104,6 +108,23 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_liq_history_collateral ON liquidation_history(collateral_mint);
             CREATE INDEX IF NOT EXISTS idx_liq_history_created ON liquidation_history(created_at DESC);
         ")?;
+
+        // SSS-AUDIT3-C: idempotent migration — add is_admin to existing api_keys tables.
+        // SQLite doesn't support IF NOT EXISTS for ALTER TABLE ADD COLUMN; we check first.
+        let has_is_admin: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('api_keys') WHERE name = 'is_admin'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+        if !has_is_admin {
+            conn.execute_batch(
+                "ALTER TABLE api_keys ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;",
+            )?;
+        }
+
         Ok(())
     }
 
@@ -443,17 +464,24 @@ impl Database {
 
     // ─── API key management ─────────────────────────────────────────────────
 
-    /// Generate a new API key with the given label.
+    /// Generate a new API key with the given label (non-admin by default).
+    /// SSS-AUDIT3-C: `is_admin` flag added — controls access to /api/admin/* routes.
+    #[allow(dead_code)]
     pub fn create_api_key(&self, label: &str) -> Result<ApiKeyEntry, AppError> {
+        self.create_api_key_with_role(label, false)
+    }
+
+    /// Create a new API key with explicit admin role.
+    pub fn create_api_key_with_role(&self, label: &str, is_admin: bool) -> Result<ApiKeyEntry, AppError> {
         let id = Uuid::new_v4().to_string();
         let key = format!("sss_{}", Uuid::new_v4().to_string().replace('-', ""));
         let created_at = Utc::now().to_rfc3339();
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         conn.execute(
-            "INSERT INTO api_keys (id, key, label, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![id, key, label, created_at],
+            "INSERT INTO api_keys (id, key, label, is_admin, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, key, label, is_admin as i64, created_at],
         )?;
-        Ok(ApiKeyEntry { id, key, label: label.to_string(), created_at })
+        Ok(ApiKeyEntry { id, key, label: label.to_string(), is_admin, created_at })
     }
 
     /// Validate that the given key exists.
@@ -467,18 +495,31 @@ impl Database {
         Ok(count > 0)
     }
 
+    /// Validate that the given key exists AND has admin privileges.
+    /// SSS-AUDIT3-C: used by require_admin_key middleware.
+    pub fn validate_admin_api_key(&self, key: &str) -> Result<bool, AppError> {
+        let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM api_keys WHERE key = ?1 AND is_admin = 1",
+            params![key],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
     /// List all API keys (full key included — redaction happens at route level).
     pub fn list_api_keys(&self) -> Result<Vec<ApiKeyEntry>, AppError> {
         let conn = self.conn.lock().map_err(|e| AppError::Internal(e.to_string()))?;
         let mut stmt = conn.prepare(
-            "SELECT id, key, label, created_at FROM api_keys ORDER BY created_at DESC",
+            "SELECT id, key, label, is_admin, created_at FROM api_keys ORDER BY created_at DESC",
         )?;
         let entries = stmt.query_map([], |row| {
             Ok(ApiKeyEntry {
                 id: row.get(0)?,
                 key: row.get(1)?,
                 label: row.get(2)?,
-                created_at: row.get(3)?,
+                is_admin: row.get::<_, i64>(3)? != 0,
+                created_at: row.get(4)?,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(entries)

@@ -19,7 +19,7 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use auth::require_api_key;
+use auth::{require_api_key, require_admin_key};
 use db::Database;
 use routes::{
     analytics::{get_cdp_health, get_liquidation_analytics, get_protocol_stats},
@@ -65,19 +65,20 @@ async fn main() {
             match db.validate_api_key(&seed_key) {
                 Ok(true) => info!("Bootstrap API key already exists"),
                 _ => {
-                    // Insert the seed key directly
+                    // Insert the seed key directly — bootstrap key gets admin=1 (SSS-AUDIT3-C)
                     let conn = db.conn.lock().expect("db lock");
                     conn.execute(
-                        "INSERT OR IGNORE INTO api_keys (id, key, label, created_at) VALUES (?1, ?2, ?3, ?4)",
+                        "INSERT OR IGNORE INTO api_keys (id, key, label, is_admin, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
                         rusqlite::params![
                             uuid::Uuid::new_v4().to_string(),
                             seed_key,
                             "bootstrap",
+                            1i64,
                             chrono::Utc::now().to_rfc3339()
                         ],
                     ).expect("Failed to insert bootstrap key");
                     drop(conn);
-                    info!("Bootstrap API key seeded");
+                    info!("Bootstrap API key seeded (admin=true)");
                 }
             }
         }
@@ -117,9 +118,23 @@ async fn main() {
         .route("/api/confidential/transfer", post(initiate_confidential_transfer))
         .route("/api/webhooks", get(list_webhooks).post(register_webhook))
         .route("/api/webhooks/:id", delete(delete_webhook))
-        .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
-        .route("/api/admin/keys/:id", delete(delete_api_key))
-        .route("/api/admin/circuit-breaker", post(set_circuit_breaker))
+        // SSS-AUDIT3-C: admin routes require is_admin=true key (role separation)
+        .route(
+            "/api/admin/keys",
+            get(list_api_keys)
+                .post(create_api_key)
+                .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_key)),
+        )
+        .route(
+            "/api/admin/keys/:id",
+            delete(delete_api_key)
+                .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_key)),
+        )
+        .route(
+            "/api/admin/circuit-breaker",
+            post(set_circuit_breaker)
+                .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_key)),
+        )
         .route("/api/ws/events", get(ws_events_handler))
         .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
         .layer(TraceLayer::new_for_http())
@@ -162,8 +177,8 @@ mod tests {
 
     fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        // Pre-create an API key for tests
-        let key_entry = db.create_api_key("test").expect("Failed to create test API key");
+        // Pre-create an admin API key for tests (SSS-AUDIT3-C: is_admin=true)
+        let key_entry = db.create_api_key_with_role("test", true).expect("Failed to create test API key");
         let test_key = key_entry.key.clone();
 
         let state = AppState::new(db);
@@ -197,8 +212,18 @@ mod tests {
             .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
             .route("/api/webhooks/:id", delete(delete_webhook))
-            .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
-            .route("/api/admin/keys/:id", delete(delete_api_key))
+            // SSS-AUDIT3-C: admin routes with require_admin_key guard in test router
+            .route(
+                "/api/admin/keys",
+                get(list_api_keys)
+                    .post(create_api_key)
+                    .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_key)),
+            )
+            .route(
+                "/api/admin/keys/:id",
+                delete(delete_api_key)
+                    .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_key)),
+            )
             .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
             .layer(cors)
             .with_state(state);
@@ -633,6 +658,139 @@ mod tests {
     }
 }
 
+// ─── SSS-AUDIT3-C Tests ───────────────────────────────────────────────────────
+#[cfg(test)]
+mod audit3c_tests {
+    use super::*;
+    use axum::{
+        body::Body,
+        http::{Method, Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    fn build_app_admin() -> (Router<()>, String) {
+        let db = Database::new(":memory:").expect("db");
+        let key_entry = db.create_api_key_with_role("admin-test", true).expect("create key");
+        let test_key = key_entry.key.clone();
+        let state = AppState::new(db);
+        let cors = CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any);
+        let app: Router<()> = Router::new()
+            .route("/api/supply", get(supply))
+            .route(
+                "/api/admin/keys",
+                get(list_api_keys)
+                    .post(create_api_key)
+                    .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_key)),
+            )
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .layer(cors)
+            .with_state(state);
+        (app, test_key)
+    }
+
+    /// Non-admin key cannot access /api/admin/keys.
+    #[tokio::test]
+    async fn test_admin_route_rejects_non_admin_key() {
+        let (app, key) = build_app_non_admin();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/admin/keys")
+                    .header("X-Api-Key", &key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::FORBIDDEN,
+            "non-admin key must get 403 on /api/admin/keys"
+        );
+    }
+
+    /// Admin key can access /api/admin/keys.
+    #[tokio::test]
+    async fn test_admin_route_accepts_admin_key() {
+        let (app, key) = build_app_admin();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/admin/keys")
+                    .header("X-Api-Key", &key)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "admin key must be allowed on /api/admin/keys"
+        );
+    }
+
+    /// is_admin column migration: existing keys default to is_admin=false.
+    #[test]
+    fn test_validate_admin_key_non_admin() {
+        let db = Database::new(":memory:").unwrap();
+        // create_api_key (non-admin) should fail validate_admin_api_key
+        let entry = db.create_api_key("regular").unwrap();
+        assert!(!db.validate_admin_api_key(&entry.key).unwrap());
+    }
+
+    /// is_admin=true key passes validate_admin_api_key.
+    #[test]
+    fn test_validate_admin_key_admin() {
+        let db = Database::new(":memory:").unwrap();
+        let entry = db.create_api_key_with_role("superadmin", true).unwrap();
+        assert!(db.validate_admin_api_key(&entry.key).unwrap());
+    }
+
+    /// list_api_keys returns is_admin field.
+    #[test]
+    fn test_list_api_keys_includes_is_admin() {
+        let db = Database::new(":memory:").unwrap();
+        db.create_api_key_with_role("regular", false).unwrap();
+        db.create_api_key_with_role("admin", true).unwrap();
+        let keys = db.list_api_keys().unwrap();
+        assert_eq!(keys.len(), 2);
+        let admin_count = keys.iter().filter(|k| k.is_admin).count();
+        let regular_count = keys.iter().filter(|k| !k.is_admin).count();
+        assert_eq!(admin_count, 1);
+        assert_eq!(regular_count, 1);
+    }
+
+    // Helper: build app with a NON-admin key for negative tests.
+    fn build_app_non_admin() -> (Router<()>, String) {
+        let db = Database::new(":memory:").expect("db");
+        let key_entry = db.create_api_key_with_role("non-admin", false).expect("create key");
+        let test_key = key_entry.key.clone();
+        let state = AppState::new(db);
+        let cors = CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any);
+        let app: Router<()> = Router::new()
+            .route("/api/supply", get(supply))
+            .route(
+                "/api/admin/keys",
+                get(list_api_keys)
+                    .post(create_api_key)
+                    .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_key)),
+            )
+            .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
+            .layer(cors)
+            .with_state(state);
+        (app, test_key)
+    }
+}
+
 // ─── QA Integration Tests ─────────────────────────────────────────────────────
 #[cfg(test)]
 mod qa_tests {
@@ -650,7 +808,8 @@ mod qa_tests {
 
     fn build_app() -> (Router<()>, String) {
         let db = Database::new(":memory:").expect("Failed to create test DB");
-        let key_entry = db.create_api_key("qa-test").expect("create key");
+        // SSS-AUDIT3-C: test key is admin so all routes work in integration tests
+        let key_entry = db.create_api_key_with_role("qa-test", true).expect("create key");
         let test_key = key_entry.key.clone();
         let state = AppState::new(db);
         let app = Router::new()
@@ -676,8 +835,17 @@ mod qa_tests {
             .route("/api/confidential/transfer", post(initiate_confidential_transfer))
             .route("/api/webhooks", get(list_webhooks).post(register_webhook))
             .route("/api/webhooks/:id", delete(delete_webhook))
-            .route("/api/admin/keys", get(list_api_keys).post(create_api_key))
-            .route("/api/admin/keys/:id", delete(delete_api_key))
+            .route(
+                "/api/admin/keys",
+                get(list_api_keys)
+                    .post(create_api_key)
+                    .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_key)),
+            )
+            .route(
+                "/api/admin/keys/:id",
+                delete(delete_api_key)
+                    .route_layer(middleware::from_fn_with_state(state.clone(), require_admin_key)),
+            )
             .layer(middleware::from_fn_with_state(state.clone(), require_api_key))
             .with_state(state);
         (app, test_key)

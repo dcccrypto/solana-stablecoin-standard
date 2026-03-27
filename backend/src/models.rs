@@ -100,6 +100,19 @@ pub struct ApiKeyEntry {
     pub key: String,
     pub label: String,
     pub created_at: String,
+    /// When true, this key may access /api/admin/* routes.
+    #[serde(default)]
+    pub is_admin: bool,
+}
+
+/// Request body for POST /api/admin/keys.
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Default)]
+pub struct CreateApiKeyRequest {
+    pub label: String,
+    /// If true, the key is granted admin privileges (circuit-breaker, key mgmt).
+    #[serde(default)]
+    pub is_admin: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
