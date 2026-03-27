@@ -95,6 +95,47 @@ Runner: `tests/devnet/run-cdp-lifecycle.sh`
   All 6 tests pass
 ```
 
+## DEVTEST-005: PBS + APC End-to-End Proof Demo (2026-03-27)
+
+Full end-to-end PBS (Probabilistic Balance Standard) + APC (Agent Payment Channel) live devnet exercise.
+
+### Steps
+
+| # | Step | Description |
+|---|------|-------------|
+| 0a | Fund agents | Airdrop SOL to Agent A + Agent B keypairs |
+| 0b | Initialize SUSD mint | SSS-1 config + enable `FLAG_PROBABILISTIC_MONEY` (bit 6) |
+| 0c | Register minter + mint | Register minter, mint 10 SUSD to Agent A |
+| 1 | PBS Commit | Agent A commits 10 SUSD to PBS vault |
+| 2 | APC Open | Agent B opens payment channel with Agent A |
+| 3 | Simulate work | Agent B performs off-chain work, produces output hash |
+| 4 | Submit work proof | Agent B submits `submitWorkProof` on-chain |
+| 5 | Verify output hash | Agent A verifies the output hash on-chain |
+| 6 | proveAndResolve | PBS collapses — 10 SUSD transferred to Agent B |
+| 7 | Settle APC | Agent A countersigns cooperative settle |
+
+### Result
+
+Full live devnet run requires a funded USDC-devnet mint and pre-funded agent keypairs.
+Script uses new program ID `7ftxDKYuqJ5DcVFcEAXFoPjc5kX6rhQdJRJmuHHgDQw1` with PBS/APC instructions.
+
+```bash
+# Fund your keypair with devnet SOL first:
+solana airdrop 2 --url devnet
+
+# Run DEVTEST-005 end-to-end proof demo:
+npx ts-node scripts/proof-demo-devnet.ts
+```
+
+Expected output (successful run):
+```
+✅ Agent B received 10 SUSD for verified work. No intermediary. No escrow agent. No trust required.
+```
+
+Also available: `scripts/devnet-pbs-apc-smoke-test.ts` — lightweight PBS+APC smoke test (no full lifecycle, fast validation).
+
+Bug fix landed alongside: `tsconfig.json` updated to `target: es2020` for BigInt literal support in proof-demo script.
+
 ## `Anchor.toml` Program IDs (devnet + localnet)
 
 ```toml
