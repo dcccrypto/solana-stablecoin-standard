@@ -362,6 +362,10 @@ pub struct InitializeParams {
     /// Pass Some(0) in test environments to allow direct admin calls without going
     /// through the propose/execute timelock flow.
     pub admin_timelock_delay: Option<u64>,
+    /// SSS-147A: Squads V4 multisig PDA for FLAG_SQUADS_AUTHORITY.
+    /// Required when preset == 3 — SSS-3 stablecoins must be governed by a multisig.
+    /// Optional for SSS-1 and SSS-2 (but may still be provided to enable FLAG_SQUADS_AUTHORITY).
+    pub squads_multisig: Option<Pubkey>,
 }
 
 /// Parameters for updating authorities.

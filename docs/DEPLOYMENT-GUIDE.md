@@ -316,6 +316,51 @@ anchor run initialize --provider.cluster mainnet-beta
 solana account <CONFIG_PDA_ADDRESS>
 ```
 
+### 5d-i. SSS-3 Preset: Squads Multisig Required at Initialize (SSS-147A)
+
+> **⚠️ SSS-147A enforcement:** If you are deploying an **SSS-3 (reserve-backed)** stablecoin, the `initialize` instruction now **rejects** any deployment where `squads_multisig` is not provided. Passing `Pubkey::default()` (all zeros) is treated as absent and will fail with `RequiresSquadsForSSS3`.
+
+**SSS-1 and SSS-2 presets are unaffected.**
+
+#### Why?
+
+SSS-3 stablecoins hold user collateral in a reserve vault. A single admin key is a single point of failure and a centralisation risk. Requiring a Squads v4 multisig at initialization enforces a minimum governance standard before any SSS-3 token can be deployed on-chain.
+
+#### How to initialize an SSS-3 stablecoin
+
+1. **Create a Squads v4 multisig first** (see [Section 6](#6-program-upgrade-authority-transfer-to-squads-multisig)).
+   - Minimum recommended: 3-of-5 signers.
+   - Record the multisig PDA: `<SQUADS_MULTISIG_PUBKEY>`.
+
+2. **Pass the multisig PDA as `squads_multisig` in `InitializeParams`:**
+
+   ```typescript
+   await program.methods
+     .initialize({
+       preset: 3,
+       decimals: 6,
+       collateralMint: new PublicKey("<COLLATERAL_MINT>"),
+       reserveVault: new PublicKey("<RESERVE_VAULT>"),
+       maxSupply: new BN("1000000000000"), // required for SSS-3
+       squadsMultisig: new PublicKey("<SQUADS_MULTISIG_PUBKEY>"), // mandatory
+       // ...other params
+     })
+     .rpc();
+   ```
+
+3. **Verify on-chain** after initialization:
+   ```bash
+   # squads_multisig must not be all-zeros and FLAG_SQUADS_AUTHORITY must be set
+   anchor run verify-config --provider.cluster mainnet-beta
+   ```
+
+#### Checklist
+
+- [ ] Squads v4 multisig created with ≥ 3-of-5 threshold
+- [ ] `squads_multisig` parameter passed (non-default pubkey) to `initialize`
+- [ ] `FLAG_SQUADS_AUTHORITY` is set in `feature_flags` after initialization
+- [ ] `config.squads_multisig` on-chain matches expected multisig PDA
+
 ### 5e. Oracle Feed Validation
 
 See [Section 7](#7-oracle-feed-validation) for full details.
