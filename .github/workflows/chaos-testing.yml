@@ -1,0 +1,197 @@
+name: SSS-141 Chaos / Fuzz Testing
+
+on:
+  # Weekly on Sundays at 03:00 UTC
+  schedule:
+    - cron: "0 3 * * 0"
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      cluster:
+        description: "Solana cluster to target"
+        required: false
+        default: "devnet"
+        type: choice
+        options:
+          - localnet
+          - devnet
+
+concurrency:
+  group: chaos-testing-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "20"
+  ANCHOR_VERSION: "0.32.0"
+  SOLANA_VERSION: "1.18.26"
+
+jobs:
+  chaos-tests:
+    name: Chaos / Fuzz Tests (${{ github.event.inputs.cluster || 'devnet' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # ── checkout ────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Node.js ─────────────────────────────────────────────────────────────
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      # ── Rust toolchain ───────────────────────────────────────────────────────
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      # ── Solana CLI ───────────────────────────────────────────────────────────
+      - name: Cache Solana CLI
+        uses: actions/cache@v4
+        id: cache-solana
+        with:
+          path: ~/.local/share/solana
+          key: solana-${{ env.SOLANA_VERSION }}-${{ runner.os }}
+
+      - name: Install Solana CLI
+        if: steps.cache-solana.outputs.cache-hit != 'true'
+        run: |
+          sh -c "$(curl -sSfL https://release.solana.com/v${{ env.SOLANA_VERSION }}/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Add Solana to PATH
+        run: echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      # ── Anchor CLI ───────────────────────────────────────────────────────────
+      - name: Cache Anchor CLI
+        uses: actions/cache@v4
+        id: cache-anchor
+        with:
+          path: ~/.cargo/bin/anchor
+          key: anchor-${{ env.ANCHOR_VERSION }}-${{ runner.os }}
+
+      - name: Install Anchor CLI
+        if: steps.cache-anchor.outputs.cache-hit != 'true'
+        run: |
+          cargo install --git https://github.com/coral-xyz/anchor \
+            --tag v${{ env.ANCHOR_VERSION }} anchor-cli --locked
+
+      # ── npm install ──────────────────────────────────────────────────────────
+      - name: Install Node dependencies
+        run: npm install
+
+      # ── Wallet setup ─────────────────────────────────────────────────────────
+      - name: Generate test wallet
+        run: |
+          mkdir -p ~/.config/solana
+          solana-keygen new --outfile ~/.config/solana/id.json --no-bip39-passphrase --silent
+          solana config set --url devnet
+
+      - name: Fund test wallet (devnet)
+        if: ${{ github.event.inputs.cluster != 'localnet' }}
+        run: |
+          PUBKEY=$(solana-keygen pubkey ~/.config/solana/id.json)
+          echo "Test wallet: $PUBKEY"
+          # Attempt airdrop; failure is non-fatal (faucet may be rate-limited)
+          solana airdrop 2 $PUBKEY --url devnet || true
+          solana airdrop 2 $PUBKEY --url devnet || true
+          sleep 5
+          solana balance $PUBKEY --url devnet || true
+
+      # ── localnet validator (if running localnet) ──────────────────────────────
+      - name: Start localnet validator
+        if: ${{ github.event.inputs.cluster == 'localnet' }}
+        run: |
+          solana-test-validator \
+            --reset \
+            --quiet \
+            --bind-address 0.0.0.0 \
+            --rpc-port 8899 &
+          sleep 10
+          solana config set --url http://127.0.0.1:8899
+
+      # ── TypeScript type-check ─────────────────────────────────────────────────
+      - name: TypeScript type-check (chaos files)
+        run: npx tsc --noEmit
+        continue-on-error: true
+
+      # ── Run chaos test suite ──────────────────────────────────────────────────
+      - name: Run AccountFuzzer
+        env:
+          ANCHOR_PROVIDER_URL: ${{ github.event.inputs.cluster == 'localnet' && 'http://127.0.0.1:8899' || 'https://api.devnet.solana.com' }}
+          ANCHOR_WALLET: ~/.config/solana/id.json
+        run: |
+          npx ts-mocha --transpile-only -p tsconfig.json -t 120000 \
+            tests/chaos/accountFuzzer.ts 2>&1 | tee /tmp/account-fuzzer.log || true
+
+      - name: Run AmountFuzzer
+        env:
+          ANCHOR_PROVIDER_URL: ${{ github.event.inputs.cluster == 'localnet' && 'http://127.0.0.1:8899' || 'https://api.devnet.solana.com' }}
+          ANCHOR_WALLET: ~/.config/solana/id.json
+        run: |
+          npx ts-mocha --transpile-only -p tsconfig.json -t 120000 \
+            tests/chaos/amountFuzzer.ts 2>&1 | tee /tmp/amount-fuzzer.log || true
+
+      - name: Run SequenceFuzzer
+        env:
+          ANCHOR_PROVIDER_URL: ${{ github.event.inputs.cluster == 'localnet' && 'http://127.0.0.1:8899' || 'https://api.devnet.solana.com' }}
+          ANCHOR_WALLET: ~/.config/solana/id.json
+        run: |
+          npx ts-mocha --transpile-only -p tsconfig.json -t 120000 \
+            tests/chaos/sequenceFuzzer.ts 2>&1 | tee /tmp/sequence-fuzzer.log || true
+
+      - name: Run ConcurrencyFuzzer
+        env:
+          ANCHOR_PROVIDER_URL: ${{ github.event.inputs.cluster == 'localnet' && 'http://127.0.0.1:8899' || 'https://api.devnet.solana.com' }}
+          ANCHOR_WALLET: ~/.config/solana/id.json
+        run: |
+          npx ts-mocha --transpile-only -p tsconfig.json -t 120000 \
+            tests/chaos/concurrencyFuzzer.ts 2>&1 | tee /tmp/concurrency-fuzzer.log || true
+
+      - name: Run ChaosRunner (aggregate + report generation)
+        env:
+          ANCHOR_PROVIDER_URL: ${{ github.event.inputs.cluster == 'localnet' && 'http://127.0.0.1:8899' || 'https://api.devnet.solana.com' }}
+          ANCHOR_WALLET: ~/.config/solana/id.json
+        run: |
+          npx ts-mocha --transpile-only -p tsconfig.json -t 120000 \
+            tests/chaos/accountFuzzer.ts \
+            tests/chaos/amountFuzzer.ts \
+            tests/chaos/sequenceFuzzer.ts \
+            tests/chaos/concurrencyFuzzer.ts \
+            tests/chaos/chaosRunner.ts 2>&1 | tee /tmp/chaos-runner.log || true
+
+      # ── Collect & upload report ───────────────────────────────────────────────
+      - name: Show CHAOS-REPORT.md
+        run: cat docs/CHAOS-REPORT.md || echo "Report not generated (localnet not available in CI without program build)"
+
+      - name: Upload chaos logs as artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chaos-test-logs-${{ github.run_number }}
+          path: |
+            /tmp/account-fuzzer.log
+            /tmp/amount-fuzzer.log
+            /tmp/sequence-fuzzer.log
+            /tmp/concurrency-fuzzer.log
+            /tmp/chaos-runner.log
+            docs/CHAOS-REPORT.md
+          retention-days: 30
+
+      # ── Commit report if changed ──────────────────────────────────────────────
+      - name: Commit updated CHAOS-REPORT.md
+        if: github.event_name == 'schedule'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/CHAOS-REPORT.md
+          if git diff --cached --quiet; then
+            echo "No changes to CHAOS-REPORT.md"
+          else
+            git commit -m "chore(chaos): auto-update CHAOS-REPORT.md [$(date -u '+%Y-%m-%d')]"
+            git push origin HEAD
+          fi
