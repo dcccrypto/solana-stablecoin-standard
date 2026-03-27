@@ -20,7 +20,7 @@ The following features are **not production-ready** in v1. Each requires explici
 | `max_supply` uncapped when = 0 | **Footgun** | Always set explicitly |
 | BPF upgrade authority | **Script + on-chain guard added (SSS-150)** — `transfer-upgrade-authority.ts` + `set_upgrade_authority_guard` instruction | Transfer to Squads multisig (BLOCKING — see Section 2) |
 
-See [TRUST-MODEL.md](./TRUST-MODEL.md) for full trust-assumption breakdown.
+See [TRUST-MODEL.md](./TRUST-MODEL.md) for full trust-assumption breakdown. See [SSS-3.md — Trust Assumptions](./SSS-3.md#trust-assumptions-sss-147-post-hardening) for the formal documented assumptions after SSS-147 hardening.
 
 ---
 
@@ -337,7 +337,22 @@ Define clear criteria for the multisig to call `pause()` immediately:
 
 ---
 
-## 13. Final Pre-Launch Sign-Off
+## 13. SSS-3 Trust Assumptions (SSS-147E)
+
+SSS-3 is **trust-minimized**, not trustless. The following trust assumptions are explicitly documented and on-chain verifiable. Each must be confirmed before mainnet launch:
+
+| Assumption | Mechanism | Mainnet Confirmation |
+|---|---|---|
+| Reserve attestor is authority-whitelisted | `set_reserve_attestor_whitelist` — on-chain whitelisted, not permissionless | 🔲 Attestor identity published and whitelist PDA verified |
+| Pyth oracle feed is authority-set | Feed address set by admin, now timelocked (SSS-147D) | 🔲 Timelock active; feed address matches published config |
+| Guardian multisig holds emergency controls | Guardian pause/unpause via Squads 2-of-N | 🔲 Guardian signers confirmed, quorum ≥ 2-of-5 |
+| Squads multisig holds program authority | Mandatory after SSS-147A — all admin instructions require Squads | 🔲 Upgrade authority and admin keys transferred to Squads |
+
+> **These assumptions are intentional design choices, not bugs.** They are documented in [SSS-3.md — Trust Assumptions](./SSS-3.md#trust-assumptions-sss-147-post-hardening), [SSS-SPEC.md](./SSS-SPEC.md), and [TRUST-MODEL.md](./TRUST-MODEL.md). Ensure all four items are confirmed before deploying with real TVL.
+
+---
+
+## 14. Final Pre-Launch Sign-Off
 
 | Signer | Role | Signature | Date |
 |--------|------|-----------|------|
@@ -366,4 +381,4 @@ These items from GAPS-ANALYSIS-ANCHOR.md are **not** blocking launch if debt cei
 
 ---
 
-_Last updated: 2026-03-25 by sss-docs_
+_Last updated: 2026-03-27 by sss-docs (SSS-149: added Section 13 SSS-3 Trust Assumptions referencing SSS-147E)_
