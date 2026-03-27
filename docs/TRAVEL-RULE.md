@@ -245,9 +245,9 @@ curl "https://api.example.com/api/travel-rule/records?wallet=<originatorVasp>&mi
 
 ---
 
-### `POST /api/travel-rule/records`
+### `POST /api/admin/travel-rule/records`
 
-> **AUDIT3C-H1 (HIGH — fixed 421da49):** Submits a new TravelRuleRecord. Both `originator_vasp` and `beneficiary_vasp` are validated against the backend's **known VASP registry** (`known_vasps` table). Unrecognised VASP identifiers are rejected with `422 UNKNOWN_VASP` — they are never persisted.
+> **AUDIT3C-H1 (HIGH — fixed 4fb190c):** Admin-only endpoint (requires `require_admin` middleware — supply a valid admin bearer token). Submits a new TravelRuleRecord. Both `originator_vasp` and `beneficiary_vasp` are validated against the backend's **known VASP registry** (`known_vasps` table). Unrecognised VASP identifiers are rejected with `422 UNKNOWN_VASP` — they are never persisted. Input values are validated server-side: `mint` must be non-empty, `amount` and `threshold` must be non-negative.
 
 **Request body (JSON):**
 
@@ -255,24 +255,27 @@ curl "https://api.example.com/api/travel-rule/records?wallet=<originatorVasp>&mi
 |-------------------|---------|----------|-----------------------------------------------------------|
 | `originator_vasp` | string  | ✓        | Registered VASP ID for the originating party              |
 | `beneficiary_vasp`| string  | ✓        | Registered VASP ID for the beneficiary party              |
-| `mint`            | string  | ✓        | SSS stablecoin mint address                               |
-| `amount`          | i64     | ✓        | Transfer amount (token native units)                      |
-| `threshold`       | i64     | ✓        | Threshold amount at time of submission                    |
+| `mint`            | string  | ✓        | SSS stablecoin mint address (must be non-empty)           |
+| `amount`          | i64     | ✓        | Transfer amount in token native units (must be ≥ 0)       |
+| `threshold`       | i64     | ✓        | Threshold amount at time of submission (must be ≥ 0)      |
 | `compliant`       | bool    | ✓        | Whether transfer meets travel-rule requirements           |
 | `tx_signature`    | string  | No       | On-chain transaction signature                            |
 
 **Responses:**
 
-| Status | Meaning                                                                 |
-|--------|-------------------------------------------------------------------------|
-| 201    | Created — record accepted, returns full `TravelRuleRecord` object       |
-| 422    | `UNKNOWN_VASP` — one or both VASPs not found in the registry            |
-| 503    | `FLAG_TRAVEL_RULE` is not set in `StablecoinConfig.feature_flags`       |
+| Status | Meaning                                                                              |
+|--------|--------------------------------------------------------------------------------------|
+| 201    | Created — record accepted, returns full `TravelRuleRecord` object                    |
+| 401    | Unauthorized — missing or invalid admin bearer token                                 |
+| 422    | `UNKNOWN_VASP` — one or both VASPs not found in the registry                         |
+| 422    | `UnprocessableEntity` — empty mint, negative amount, or negative threshold           |
+| 503    | `FLAG_TRAVEL_RULE` is not set in `StablecoinConfig.feature_flags`                    |
 
 **Example (success):**
 ```bash
-curl -X POST "https://api.example.com/api/travel-rule/records" \
+curl -X POST "https://api.example.com/api/admin/travel-rule/records" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <admin-token>" \
   -d '{
     "originator_vasp": "SSSISSUER001",
     "beneficiary_vasp": "SSSMARKET001",
@@ -286,19 +289,29 @@ curl -X POST "https://api.example.com/api/travel-rule/records" \
 
 **Example (unknown VASP — 422):**
 ```bash
-curl -X POST "https://api.example.com/api/travel-rule/records" \
+curl -X POST "https://api.example.com/api/admin/travel-rule/records" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <admin-token>" \
   -d '{"originator_vasp": "FORGEDVASP99", "beneficiary_vasp": "SSSMARKET001", ...}'
 # → HTTP 422: {"success": false, "error": "unknown VASP: FORGEDVASP99"}
 ```
 
+**Example (invalid input — 422):**
+```bash
+curl -X POST "https://api.example.com/api/admin/travel-rule/records" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <admin-token>" \
+  -d '{"originator_vasp": "SSSISSUER001", "beneficiary_vasp": "SSSMARKET001", "mint": "", "amount": -1, "threshold": 0, "compliant": true}'
+# → HTTP 422: {"success": false, "error": "mint must not be empty"}
+```
+
 **Known VASPs (seeded):**
 
-| VASP ID          | Description                 |
-|------------------|-----------------------------|
-| `SSSISSUER001`   | SSS Issuer (default)        |
-| `SSSMARKET001`   | SSS Market Maker (default)  |
-| `TESTVASP0001`   | Test VASP (devnet only)     |
+| VASP ID          | Description                                  |
+|------------------|----------------------------------------------|
+| `SSSISSUER001`   | SSS Issuer (default)                         |
+| `SSSMARKET001`   | SSS Market Maker (default)                   |
+| `TESTVASP0001`   | Test VASP (**devnet/localnet only** — not seeded in production) |
 
 > New VASPs must be inserted into `known_vasps` by an admin before they can submit records. Seed entries can be extended via migration.
 
