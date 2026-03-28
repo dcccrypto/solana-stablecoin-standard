@@ -126,7 +126,8 @@ Loads an already-deployed stablecoin by its mint address. Use this when you know
 **Example:**
 
 ```typescript
-const mintAddress = new PublicKey('2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY');
+// Replace with your deployed stablecoin mint address (not the program ID)
+const mintAddress = new PublicKey('TokenMintAddressGoesHere11111111111111111111');
 
 const stablecoin = await SolanaStablecoin.load(provider, mintAddress, {
   preset: 'SSS-1',

@@ -71,7 +71,8 @@ SSS indexer schema parser.
   "webhookURL": "https://your-backend.example.com/api/webhooks/helius",
   "transactionTypes": ["TRANSFER"],
   "accountAddresses": [
-    "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY"
+    "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY",
+    "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp"
   ],
   "webhookType": "enhanced"
 }

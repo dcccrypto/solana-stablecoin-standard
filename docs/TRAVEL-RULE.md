@@ -214,7 +214,7 @@ Returns indexed TravelRuleRecord events, newest first.
   "data": [
     {
       "id": "uuid-v4",
-      "mint": "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY",
+      "mint": "SSSMintAddressYourStablecoinMint11111111111",
       "nonce": 1711234567890,
       "originator_vasp": "<base58 pubkey>",
       "beneficiary_vasp": "<base58 pubkey>",
@@ -240,7 +240,7 @@ HTTP status: `400 BAD_REQUEST`
 curl "https://api.example.com/api/travel-rule/records?wallet=<originatorVasp>&limit=50"
 
 # With mint filter
-curl "https://api.example.com/api/travel-rule/records?wallet=<originatorVasp>&mint=2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY"
+curl "https://api.example.com/api/travel-rule/records?wallet=<originatorVasp>&mint=SSSMintAddressYourStablecoinMint11111111111"
 ```
 
 ---
@@ -279,7 +279,7 @@ curl -X POST "https://api.example.com/api/admin/travel-rule/records" \
   -d '{
     "originator_vasp": "SSSISSUER001",
     "beneficiary_vasp": "SSSMARKET001",
-    "mint": "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY",
+    "mint": "SSSMintAddressYourStablecoinMint11111111111",
     "amount": 1000000000,
     "threshold": 1000000000,
     "compliant": true,

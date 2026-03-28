@@ -28,9 +28,9 @@ import {
   UpdateRolesParams,
 } from './types';
 
-/** Deployed program IDs (devnet + localnet) — matches Anchor.toml */
+/** Deployed program IDs (devnet + localnet) — matches Anchor.toml (SSS-DEVNET-002) */
 export const SSS_TOKEN_PROGRAM_ID = new PublicKey(
-  'AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat'
+  '2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY'
 );
 export const SSS_TRANSFER_HOOK_PROGRAM_ID = new PublicKey(
   'phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp'

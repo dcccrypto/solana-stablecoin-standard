@@ -13,7 +13,7 @@
 | SSS Token | `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY` |
 | Transfer Hook | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
 
-**Note:** Old program `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY` was closed. Fresh deploy with new keypair.
+**Note:** Old program `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` (SSS-DEVNET-001) was closed. Fresh deploy with new keypair.
 
 ### Deploy Signature
 `RvATRYs6EZpFPWqTB4Vf4VziYmczKyfajLbzkFGfiNTcEuNcRMA1abyKxHMzqNzc3zCYm9GHmsygyewUV6XEMWd`
@@ -24,5 +24,5 @@ solana program show 2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY --url devnet
 ```
 
 ## Previous Deploy (2026-03-22, SSS-DEVNET-001)
-- SSS Token: `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY` (CLOSED)
+- SSS Token: `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` (CLOSED)
 - Transfer Hook: `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp`
