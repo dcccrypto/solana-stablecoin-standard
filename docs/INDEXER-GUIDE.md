@@ -16,7 +16,7 @@
 
 | Program          | Address                                        |
 |------------------|------------------------------------------------|
-| `sss-token`      | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
+| `sss-token`      | `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY` |
 | `sss-transfer-hook` | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
 
 ---
@@ -71,7 +71,7 @@ SSS indexer schema parser.
   "webhookURL": "https://your-backend.example.com/api/webhooks/helius",
   "transactionTypes": ["TRANSFER"],
   "accountAddresses": [
-    "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat"
+    "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY"
   ],
   "webhookType": "enhanced"
 }
@@ -85,7 +85,7 @@ line through the SSS `parse_log_line` parser (or the `/api/events` endpoint).
 ## Shyft Setup
 
 Shyft supports program-level event subscriptions. Configure a callback URL in
-your Shyft dashboard for `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat`.
+your Shyft dashboard for `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY`.
 
 Shyft delivers `log_messages` arrays; iterate them with `parse_log_line`.
 
@@ -98,7 +98,7 @@ Use `getSignaturesForAddress` polling or a WebSocket subscription:
 ```ts
 import { Connection, PublicKey } from '@solana/web3.js';
 
-const SSS_PROGRAM = new PublicKey('AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat');
+const SSS_PROGRAM = new PublicKey('2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY');
 const conn = new Connection('https://api.devnet.solana.com');
 
 // Poll for new signatures

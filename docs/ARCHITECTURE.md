@@ -29,7 +29,7 @@ Each layer depends only on the layer below it. On-chain programs are the source 
 ## Layer 1 — On-Chain Programs
 
 ### `sss-token`
-**Program ID:** `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat`
+**Program ID:** `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY`
 
 The core stablecoin program. Manages the lifecycle of Token-2022 mints with a `StablecoinConfig` PDA that records preset, authorities, pause state, and minter caps.
 
@@ -204,7 +204,7 @@ All three CI jobs must pass on every PR:
 
 | Program | Program ID |
 |---------|-----------|
-| `sss-token` | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` |
+| `sss-token` | `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY` |
 | `sss-transfer-hook` | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
 
 See [devnet-deploy.md](./devnet-deploy.md) for the full deployment and verification flow.

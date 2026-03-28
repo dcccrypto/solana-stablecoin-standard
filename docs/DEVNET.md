@@ -1,10 +1,30 @@
 # Devnet Deployment
 
 ## Program IDs
-- SSS Token: `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat`
+- SSS Token: `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY` _(SSS-DEVNET-002, 2026-03-28)_
 - Transfer Hook: `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp`
 
-## Latest Upgrade (2026-03-22)
+> **Previous SSS Token:** `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` — **CLOSED** (SSS-DEVNET-001)
+
+## SSS-DEVNET-002 (2026-03-28)
+
+Fresh deploy with new keypair. Old program closed.
+
+**Deployer:** `ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB`
+**Slot:** 451673869
+**Deploy Signature:** `RvATRYs6EZpFPWqTB4Vf4VziYmczKyfajLbzkFGfiNTcEuNcRMA1abyKxHMzqNzc3zCYm9GHmsygyewUV6XEMWd`
+
+| Program | Address |
+|---------|---------|
+| SSS Token | `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY` |
+| Transfer Hook | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` |
+
+Verify:
+```bash
+solana program show 2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY --url devnet
+```
+
+## SSS-DEVNET-001 (2026-03-22)
 Includes: PBS (Probabilistic Balance Standard) + APC (Agent Payment Channel)
 
 ### Program Upgrade Transactions
@@ -148,7 +168,9 @@ Also available: `scripts/devnet-pbs-apc-smoke-test.ts` — lightweight PBS+APC s
 
 ```toml
 [programs.devnet]
-sss_token       = "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat"
+sss_token       = "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY"
 sss_transfer_hook = "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp"
 cpi_caller      = "HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof"
 ```
+
+> Note: `sss_token` updated to SSS-DEVNET-002 address (2026-03-28). Old program `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` is closed.
