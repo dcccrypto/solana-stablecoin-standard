@@ -22,7 +22,7 @@ You also need a Solana wallet with some devnet SOL. The deploy script will airdr
 
 | Program | ID | Explorer |
 |---------|----|----|
-| `sss-token` | `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` | [View](https://explorer.solana.com/address/AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat?cluster=devnet) |
+| `sss-token` | `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY` | [View](https://explorer.solana.com/address/2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY?cluster=devnet) |
 | `sss-transfer-hook` | `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` | [View](https://explorer.solana.com/address/phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp?cluster=devnet) |
 | `cpi-caller` | `HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof` | [View](https://explorer.solana.com/address/HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof?cluster=devnet) |
 
@@ -63,12 +63,12 @@ After a successful run, `deploy/devnet-latest.json` will look like:
   "deployedAt": "2026-03-15T09:00:57Z",
   "wallet": "ChNiRUbCijSXN6WqTgG7NAk9AqN1asbPj7LuaQ4nCvFB",
   "programs": {
-    "sssToken": "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
+    "sssToken": "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY",
     "transferHook": "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp",
     "cpiCaller": "HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof"
   },
   "explorerLinks": {
-    "sssToken": "https://explorer.solana.com/address/AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat?cluster=devnet",
+    "sssToken": "https://explorer.solana.com/address/2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY?cluster=devnet",
     "transferHook": "https://explorer.solana.com/address/phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp?cluster=devnet",
     "cpiCaller": "https://explorer.solana.com/address/HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof?cluster=devnet"
   }
@@ -126,7 +126,7 @@ import { AnchorProvider, Wallet } from '@coral-xyz/anchor';
 const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
 const provider = new AnchorProvider(connection, wallet, { commitment: 'confirmed' });
 
-// SSS_TOKEN_PROGRAM_ID = 'AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat'
+// SSS_TOKEN_PROGRAM_ID = '2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY'
 const stablecoin = await SolanaStablecoin.create(provider, sss1Config({
   name: 'My USD',
   symbol: 'MUSD',

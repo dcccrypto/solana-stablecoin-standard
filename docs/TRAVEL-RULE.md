@@ -214,7 +214,7 @@ Returns indexed TravelRuleRecord events, newest first.
   "data": [
     {
       "id": "uuid-v4",
-      "mint": "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
+      "mint": "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY",
       "nonce": 1711234567890,
       "originator_vasp": "<base58 pubkey>",
       "beneficiary_vasp": "<base58 pubkey>",
@@ -240,7 +240,7 @@ HTTP status: `400 BAD_REQUEST`
 curl "https://api.example.com/api/travel-rule/records?wallet=<originatorVasp>&limit=50"
 
 # With mint filter
-curl "https://api.example.com/api/travel-rule/records?wallet=<originatorVasp>&mint=AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat"
+curl "https://api.example.com/api/travel-rule/records?wallet=<originatorVasp>&mint=2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY"
 ```
 
 ---
@@ -279,7 +279,7 @@ curl -X POST "https://api.example.com/api/admin/travel-rule/records" \
   -d '{
     "originator_vasp": "SSSISSUER001",
     "beneficiary_vasp": "SSSMARKET001",
-    "mint": "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
+    "mint": "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY",
     "amount": 1000000000,
     "threshold": 1000000000,
     "compliant": true,
@@ -324,7 +324,7 @@ Returns SSS program IDs and the current travel-rule operational configuration.
 **Response:**
 ```json
 {
-  "sss_token_program_id": "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
+  "sss_token_program_id": "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY",
   "sss_transfer_hook_program_id": "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp",
   "travel_rule_indexing_active": true,
   "travel_rule_threshold": 1000000000

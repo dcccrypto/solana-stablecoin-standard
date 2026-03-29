@@ -89,7 +89,7 @@ const sig: TransactionSignature = await stablecoin.mintTo(params);
 **Our SDK:**
 ```ts
 // Hardcoded program IDs for devnet — no mainnet support
-export const SSS_TOKEN_PROGRAM_ID = new PublicKey('AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat');
+export const SSS_TOKEN_PROGRAM_ID = new PublicKey('2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY');
 // Every module uses this constant — changing it requires forking the SDK
 ```
 

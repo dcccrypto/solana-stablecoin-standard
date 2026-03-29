@@ -4,7 +4,7 @@
 > **Version:** 0.1 (2026-03-16)
 > **Status:** Draft — describes the current reference implementation
 > **Author:** sss-docs
-> **Reference implementation:** `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` (sss-token), `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` (sss-transfer-hook)
+> **Reference implementation:** `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY` (sss-token), `phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp` (sss-transfer-hook)
 
 ---
 
