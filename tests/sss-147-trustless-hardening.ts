@@ -296,6 +296,11 @@ function simulateInitialize(params: {
     if (!params.max_supply || params.max_supply === 0n) {
       return { ok: false, error: Err.RequiresMaxSupplyForSSS3 };
     }
+    // SSS-147A (fix): SSS-3 REQUIRES a valid squads_multisig pubkey — enforce here
+    // to mirror the on-chain require! added in initialize.rs.
+    if (!params.squads_multisig) {
+      return { ok: false, error: Err.RequiresSquadsForSSS3 };
+    }
   }
   const authority = Keypair.generate().publicKey.toBase58();
   // SSS-147A: set FLAG_SQUADS_AUTHORITY when squads_multisig is provided

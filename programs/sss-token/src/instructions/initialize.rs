@@ -78,6 +78,13 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
             params.max_supply.unwrap_or(0) > 0,
             SssError::RequiresMaxSupplyForSSS3
         );
+        // SSS-147A (fix): SSS-3 REQUIRES a valid squads_multisig pubkey.
+        // The optional if-let below only sets the flag when provided; this guard
+        // enforces the requirement so initialize() cannot succeed without it.
+        require!(
+            params.squads_multisig.is_some() && params.squads_multisig.unwrap() != Pubkey::default(),
+            SssError::RequiresSquadsForSSS3
+        );
     }
 
     // SSS-106: Validate and store confidential transfer config if FLAG is set.

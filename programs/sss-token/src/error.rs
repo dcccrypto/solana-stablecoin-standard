@@ -399,6 +399,9 @@ pub enum SssError {
     // SSS-147B: max_supply enforcement for SSS-3
     #[msg("SSS-3 preset requires max_supply > 0")]
     RequiresMaxSupplyForSSS3,
+    // SSS-147A: squads multisig enforcement for SSS-3
+    #[msg("SSS-3 preset requires a valid squads_multisig pubkey — cannot be None or default")]
+    RequiresSquadsForSSS3,
     #[msg("Max supply is immutable after initialization")]
     MaxSupplyImmutable,
     // SSS-129: ZK credential
