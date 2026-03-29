@@ -75,6 +75,12 @@ Creates and initialises a new stablecoin mint on-chain. This is the primary entr
 | `transferHookProgram` | `PublicKey` | SSS-2 only | Transfer hook program ID for compliance enforcement |
 | `collateralMint` | `PublicKey \| null` | SSS-3 only | Mint of the collateral token (e.g. USDC mint address) |
 | `reserveVault` | `PublicKey \| null` | SSS-3 only | Reserve vault token account address (PDA-owned) |
+| `squads_multisig` | `PublicKey` | SSS-3 only (required) | Squads multisig pubkey for upgrade/admin authority — **must be non-default** (see SSS-147A) |
+| `maxSupply` | `bigint \| null` | SSS-3 only (required) | Hard supply cap in base units — **must be > 0** (see SSS-147B) |
+
+> **⚠️ SSS-147A enforcement (on-chain):** For the **SSS-3 preset**, `initialize` rejects if `squads_multisig` is `null`, `undefined`, or `PublicKey.default()` (all-zero key). The program returns `RequiresSquadsForSSS3` in this case. `FLAG_SQUADS_AUTHORITY` is automatically set when a valid pubkey is provided.
+>
+> **⚠️ SSS-147B enforcement (on-chain):** For the **SSS-3 preset**, `initialize` rejects if `maxSupply` is `0n` or omitted. The program returns `RequiresMaxSupplyForSSS3`.
 
 **Returns:** `Promise<SolanaStablecoin>`
 
@@ -102,6 +108,34 @@ const stablecoin = await SolanaStablecoin.create(provider, {
   decimals: 6,
   transferHookProgram: SSS_TRANSFER_HOOK_PROGRAM_ID,
 });
+```
+
+**Example — SSS-3 (reserve-backed, trust-minimized preset):**
+
+```typescript
+import { PublicKey } from '@solana/web3.js';
+
+// SSS-147A: squads_multisig is REQUIRED for SSS-3. Omitting it or passing
+// PublicKey.default() will throw RequiresSquadsForSSS3 on-chain.
+const SQUADS_MULTISIG = new PublicKey('SQDSxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
+
+// SSS-147B: maxSupply is REQUIRED for SSS-3 (> 0). Omitting it or passing 0n
+// will throw RequiresMaxSupplyForSSS3 on-chain.
+const MAX_SUPPLY = 100_000_000_000_000n; // 100 million USDR (6 decimals)
+
+const stablecoin = await SolanaStablecoin.create(provider, {
+  preset: 'SSS-3',
+  name: 'USD Reserve',
+  symbol: 'USDR',
+  decimals: 6,
+  collateralMint: USDC_MINT,
+  reserveVault: reserveVaultPda,
+  squads_multisig: SQUADS_MULTISIG,
+  maxSupply: MAX_SUPPLY,
+});
+
+console.log('Mint address:', stablecoin.mint.toBase58());
+// FLAG_SQUADS_AUTHORITY is auto-set; all admin ops now require Squads approval.
 ```
 
 ---
