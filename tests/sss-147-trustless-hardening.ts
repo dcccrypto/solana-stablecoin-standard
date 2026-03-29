@@ -37,6 +37,7 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 const FLAG_DAO_COMMITTEE = BigInt(1) << BigInt(2);   // bit 2 = 4
 const FLAG_CIRCUIT_BREAKER = BigInt(1) << BigInt(0); // bit 0 = 1
 const FLAG_SQUADS_AUTHORITY = BigInt(1) << BigInt(13); // bit 13 — SSS-147A
+const DEFAULT_PUBKEY = PublicKey.default.toBase58();
 
 // ---------------------------------------------------------------------------
 // Error codes (mirrors SssError enum)
@@ -296,10 +297,16 @@ function simulateInitialize(params: {
     if (!params.max_supply || params.max_supply === 0n) {
       return { ok: false, error: Err.RequiresMaxSupplyForSSS3 };
     }
+    // SSS-147A: SSS-3 REQUIRES a valid squads_multisig (not null and not default pubkey)
+    if (!params.squads_multisig || params.squads_multisig === DEFAULT_PUBKEY) {
+      return { ok: false, error: Err.RequiresSquadsForSSS3 };
+    }
   }
   const authority = Keypair.generate().publicKey.toBase58();
-  // SSS-147A: set FLAG_SQUADS_AUTHORITY when squads_multisig is provided
-  const feature_flags = params.squads_multisig ? FLAG_SQUADS_AUTHORITY : 0n;
+  // SSS-147A: set FLAG_SQUADS_AUTHORITY when squads_multisig is provided and not default pubkey
+  const feature_flags = (params.squads_multisig && params.squads_multisig !== DEFAULT_PUBKEY)
+    ? FLAG_SQUADS_AUTHORITY
+    : 0n;
   return {
     ok: true,
     config: {
@@ -634,6 +641,23 @@ describe("SSS-147: Trustless Hardening", () => {
     if (sss2.ok) {
       assert.equal(sss2.config.feature_flags & FLAG_SQUADS_AUTHORITY, 0n,
         "FLAG_SQUADS_AUTHORITY must NOT be set for SSS-2 without squads_multisig");
+    }
+  });
+
+  // ─── Test 14: SSS-147A — SSS-3 with Pubkey::default() is rejected ────────
+
+  it("14. SSS-3 initialize with squads_multisig=PublicKey.default is rejected (RequiresSquadsForSSS3)", () => {
+    const result = simulateInitialize({
+      preset: 3,
+      collateral_mint: Keypair.generate().publicKey.toBase58(),
+      reserve_vault: Keypair.generate().publicKey.toBase58(),
+      max_supply: 1_000_000n,
+      squads_multisig: PublicKey.default.toBase58(), // all-zeros pubkey — on-chain rejects this
+    });
+    assert.isFalse(result.ok, "SSS-3 with Pubkey::default() as squads_multisig should be rejected");
+    if (!result.ok) {
+      assert.equal(result.error, Err.RequiresSquadsForSSS3,
+        "Error must be RequiresSquadsForSSS3 for default pubkey input");
     }
   });
 });
