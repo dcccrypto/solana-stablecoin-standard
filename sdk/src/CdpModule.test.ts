@@ -9,7 +9,7 @@ vi.mock('./idl/sss_token.json', () => ({
   default: {
     version: '0.1.0',
     name: 'sss_token',
-    address: 'AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat',
+    address: '2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY',
     instructions: [],
     accounts: [],
     errors: [],
@@ -79,7 +79,7 @@ import { parsePriceData } from '@pythnetwork/client';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
-const MOCK_PROGRAM_ID = new PublicKey('AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat');
+const MOCK_PROGRAM_ID = new PublicKey('2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY');
 const MOCK_SSS_MINT = PublicKey.unique();
 const MOCK_USER = PublicKey.unique();
 const MOCK_COLLATERAL_MINT = PublicKey.unique();

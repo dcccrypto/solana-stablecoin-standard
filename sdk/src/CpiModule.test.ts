@@ -22,7 +22,7 @@ vi.mock('./idl/sss_token.json', () => ({
   default: {
     version: '0.1.0',
     name: 'sss_token',
-    address: 'AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat',
+    address: '2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY',
     instructions: [],
     accounts: [],
     errors: [],
@@ -89,7 +89,7 @@ import {
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
-const PROGRAM_ID = new PublicKey('AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat');
+const PROGRAM_ID = new PublicKey('2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY');
 const MINT = new PublicKey('iMQMstNzoHq8Hmc5SA8fdBcDFBoE3uDiENoSr9JQChS');
 const MINTER = new PublicKey('3hrYcjWLwUXXPDM3F7fGCksDneLeMtucwrsFPqJy4h2S');
 const RECIPIENT_TA = new PublicKey('HTBxWfLzuFgm7WHWZ5Z1FefuQX1eKF84428KJgBZDzrs');
