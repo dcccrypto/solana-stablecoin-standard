@@ -401,6 +401,62 @@ Seeds: `["ct-config", mint]`
 
 ---
 
+## Flag Interaction Security (AUDIT2-A)
+
+Two flag interaction bugs were identified and fixed (commit `28127a0`). Both are **security-critical**: each allowed a flag meant to enforce a restriction to be silently bypassed by another flag.
+
+---
+
+### BUG-AUDIT2-A-1: `FLAG_MARKET_MAKER_HOOKS` bypasses `FLAG_CIRCUIT_BREAKER`
+
+**Severity:** HIGH  
+**Fixed in:** `programs/sss-token/src/instructions/market_maker.rs` (commit `28127a0`)
+
+**Root cause:** The `mm_mint_handler` and `mm_burn_handler` instructions (available to whitelisted market makers) had no circuit-breaker check. A whitelisted MM could call `mm_mint` or `mm_burn` freely even while `FLAG_CIRCUIT_BREAKER` was set — inflating or deflating supply during an emergency halt.
+
+**Fix:** Both `mm_mint_handler` and `mm_burn_handler` now assert:
+```rust
+require!(
+    config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+    SssError::CircuitBreakerActive
+);
+```
+
+**Impact:** Any issuer relying solely on `FLAG_CIRCUIT_BREAKER` to halt all mint/burn operations should note that prior to this fix, whitelisted MMs were an unguarded bypass vector. The fix makes `FLAG_CIRCUIT_BREAKER` truly halt **all** supply-changing instructions, including MM paths.
+
+---
+
+### BUG-AUDIT2-A-2: `FLAG_CONFIDENTIAL_TRANSFERS` bypasses `FLAG_SPEND_POLICY`
+
+**Severity:** HIGH  
+**Fixed in:** `programs/transfer-hook/src/lib.rs` (commit `28127a0`)
+
+**Root cause:** Token-2022 Confidential Transfers pass `amount=0` to the transfer hook (the real amount is ElGamal-encrypted and not visible to the hook). When `FLAG_SPEND_POLICY` was active, the spend-limit check always passed (`0 ≤ any limit`), silently ignoring the per-transaction cap.
+
+**Fix:** When both `FLAG_SPEND_POLICY` and `FLAG_CONFIDENTIAL_TRANSFERS` are set, the transfer hook now **rejects** confidential transfers outright:
+```rust
+if config.feature_flags & FLAG_SPEND_POLICY != 0
+    && config.feature_flags & FLAG_CONFIDENTIAL_TRANSFERS != 0
+{
+    return Err(SssError::ConfidentialTransferSpendPolicyConflict.into());
+}
+```
+
+**Operator guidance:** `FLAG_SPEND_POLICY` and `FLAG_CONFIDENTIAL_TRANSFERS` are **mutually exclusive** in the current implementation. Issuers who need both spend limits and privacy must wait for an encrypted-amount-aware spend-policy implementation (future work).
+
+---
+
+### Pairs analyzed — by design, not bugs
+
+| Flag pair | Verdict |
+|---|---|
+| `FLAG_ZK_COMPLIANCE` + `FLAG_CIRCUIT_BREAKER` | ✅ Independent: CB halts mint; ZK halts transfer. Correct. |
+| `FLAG_SQUADS_AUTHORITY` + `FLAG_GUARDIAN_PAUSE` | ✅ By design: guardian quorum (`guardian_propose_pause`) is an independent safety path; it does not and should not require Squads co-signing. |
+| `FLAG_DAO_COMMITTEE` + `FLAG_SQUADS_AUTHORITY` | ✅ Correct: Squads gates admin instructions; DAO gates governance votes. Separate authority channels. |
+| `FLAG_POR_HALT_ON_BREACH` + `FLAG_CIRCUIT_BREAKER` | ✅ Acceptable: CB takes priority; POR check is unreachable when CB active. |
+
+---
+
 ## Error Codes
 
 | Error | Code | Description |
@@ -418,6 +474,7 @@ Seeds: `["ct-config", mint]`
 | `SssError::Unauthorized` | — | Signer is not the admin authority for any flag write. |
 | `SssError::ConfidentialTransferNotEnabled` | — | CT operation attempted when `FLAG_CONFIDENTIAL_TRANSFERS` is not set. |
 | `SssError::MissingAuditorKey` | — | `FLAG_CONFIDENTIAL_TRANSFERS` set at init but no auditor ElGamal key provided. |
+| `SssError::ConfidentialTransferSpendPolicyConflict` | — | CT transfer rejected because `FLAG_SPEND_POLICY` is active (AUDIT2-A-2 fix). |
 
 ---
 

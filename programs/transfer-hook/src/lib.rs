@@ -40,6 +40,10 @@ const MAX_TRANSFER_AMOUNT_OFFSET: usize = 306;
 
 /// FLAG_SPEND_POLICY bit in feature_flags (bit 1 = 1 << 1).
 const FLAG_SPEND_POLICY: u64 = 1 << 1;
+/// FLAG_CONFIDENTIAL_TRANSFERS — bit 5.
+/// When active, Token-2022 CT transfers pass amount=0 to transfer hooks,
+/// making amount-based spend limits unenforceable.
+const FLAG_CONFIDENTIAL_TRANSFERS: u64 = 1 << 5;
 
 /// FLAG_ZK_COMPLIANCE bit in feature_flags (bit 4 = 1 << 4).
 const FLAG_ZK_COMPLIANCE: u64 = 1 << 4;
@@ -232,6 +236,16 @@ pub mod sss_transfer_hook {
                     .unwrap(),
             );
             if feature_flags & FLAG_SPEND_POLICY != 0 {
+                // AUDIT2-A BUG FIX: CT + SpendPolicy conflict.
+                // When FLAG_CONFIDENTIAL_TRANSFERS is active, Token-2022 passes
+                // amount=0 to transfer hooks for encrypted transfers, making
+                // spend limits unenforceable. Block CT transfers when spend policy
+                // is active to prevent silent bypass.
+                require!(
+                    feature_flags & FLAG_CONFIDENTIAL_TRANSFERS == 0,
+                    HookError::SpendLimitExceeded
+                );
+
                 let max_transfer_amount = u64::from_le_bytes(
                     config_data[MAX_TRANSFER_AMOUNT_OFFSET..MAX_TRANSFER_AMOUNT_OFFSET + 8]
                         .try_into()

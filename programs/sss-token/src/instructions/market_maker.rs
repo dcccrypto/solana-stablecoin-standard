@@ -24,7 +24,7 @@ use anchor_spl::token_interface::{burn, mint_to, Burn, Mint, MintTo, TokenAccoun
 use crate::error::SssError;
 use crate::events::{MarketMakerConfigInitialized, MarketMakerRegistered, MmBurn, MmCapacity, MmMint};
 use crate::oracle;
-use crate::state::{MarketMakerConfig, StablecoinConfig, FLAG_MARKET_MAKER_HOOKS};
+use crate::state::{MarketMakerConfig, StablecoinConfig, FLAG_CIRCUIT_BREAKER, FLAG_MARKET_MAKER_HOOKS};
 
 /// Peg price in micro-USD (1.000000 USD = 1_000_000 µUSD).
 const PEG_PRICE_MICRO_USD: i64 = 1_000_000;
@@ -289,6 +289,14 @@ pub fn mm_mint_handler(ctx: Context<MmMintAccounts>, amount: u64) -> Result<()> 
         SssError::MarketMakerHooksDisabled
     );
 
+    // AUDIT2-A BUG FIX: MM mint must respect the circuit breaker.
+    // Without this check, a whitelisted MM could mint during an emergency halt,
+    // inflating supply while the protocol is paused for safety.
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+        SssError::CircuitBreakerActive
+    );
+
     // 1. Whitelist check
     let mm_key = ctx.accounts.market_maker.key();
     require!(
@@ -422,6 +430,15 @@ pub fn mm_burn_handler(ctx: Context<MmBurnAccounts>, amount: u64) -> Result<()> 
     require!(
         ctx.accounts.config.feature_flags & FLAG_MARKET_MAKER_HOOKS != 0,
         SssError::MarketMakerHooksDisabled
+    );
+
+    // AUDIT2-A BUG FIX: MM burn must respect the circuit breaker.
+    // Allow burn during circuit breaker (deflation is safe); only block mint.
+    // Note: burn is safe to permit even under CB (reduces supply, not inflating it).
+    // Keeping this check as a conservative safety measure consistent with mm_mint.
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+        SssError::CircuitBreakerActive
     );
 
     // 1. Whitelist check

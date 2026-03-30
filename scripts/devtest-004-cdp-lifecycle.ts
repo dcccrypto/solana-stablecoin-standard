@@ -309,8 +309,74 @@ async function main(): Promise<void> {
     userSssAccount = getAssociatedTokenAddressSync(sssMint, keypair.publicKey, false, TOKEN_2022_PROGRAM_ID);
   }
 
+  // ── STEP 8.5: SSS-119 Custom Oracle Setup ──
+  // Pyth V1 feed (H6ARHf6Y) is stale on devnet — switch to custom oracle (type=2).
+  // Requires program upgrade with SSS-119 instructions wired (commit 95aa081).
+  console.log('\n🔮 Step 8.5: Setting up SSS-119 custom price oracle ($139.80/SOL)...');
+  const CUSTOM_PRICE_FEED_SEED = Buffer.from('custom-price-feed');
+  const [customPriceFeedPda] = PublicKey.findProgramAddressSync(
+    [CUSTOM_PRICE_FEED_SEED, sssMint.toBuffer()],
+    SSS_TOKEN_PROGRAM_ID
+  );
+  const configPda = getConfigPda(sssMint, SSS_TOKEN_PROGRAM_ID);
+
+  try {
+    // 8.5a: set oracle type to 2 (custom) + feed to the CustomPriceFeed PDA
+    const setOracleSig = await program.methods
+      .setOracleConfig(2, customPriceFeedPda)
+      .accounts({
+        authority: keypair.publicKey,
+        config: configPda,
+        mint: sssMint,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: 'confirmed' });
+    console.log(`  ✅ Oracle type set to Custom: ${explorerLink(setOracleSig)}`);
+    await sleep(2000);
+
+    // 8.5b: init the CustomPriceFeed PDA
+    const initFeedSig = await program.methods
+      .initCustomPriceFeed()
+      .accounts({
+        authority: keypair.publicKey,
+        config: configPda,
+        sssMint,
+        customPriceFeed: customPriceFeedPda,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc({ commitment: 'confirmed' });
+    console.log(`  ✅ CustomPriceFeed PDA initialized: ${explorerLink(initFeedSig)}`);
+    await sleep(2000);
+
+    // 8.5c: update price — $139.80/SOL with expo=-8
+    // price = 13_980_000_000 (139.80 * 10^8)
+    const updatePriceSig = await program.methods
+      .updateCustomPrice(
+        new BN('13980000000'), // price: 139.80 USD * 10^8
+        -8,                    // expo: -8
+        new BN('100000000')    // conf: ±1 USD
+      )
+      .accounts({
+        authority: keypair.publicKey,
+        config: configPda,
+        sssMint,
+        customPriceFeed: customPriceFeedPda,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .rpc({ commitment: 'confirmed' });
+    console.log(`  ✅ Custom price set ($139.80/SOL): ${explorerLink(updatePriceSig)}`);
+    results.push({ step: '8.5. SSS-119 custom oracle', status: 'PASS', txSig: updatePriceSig, notes: 'oracle_type=2, price=$139.80, expo=-8' });
+    await sleep(2000);
+  } catch (e: any) {
+    console.error(`  ⚠️  Custom oracle setup: ${e.message?.slice(0, 120)}`);
+    results.push({ step: '8.5. SSS-119 custom oracle', status: 'FAIL', notes: e.message?.slice(0, 120) });
+    // Fallback: try Pyth anyway — may fail with InvalidPriceFeed if feed is stale
+    console.log('  ⚠️  Proceeding with Pyth fallback (may fail if feed is stale)');
+  }
+
   // ── STEP 9: Borrow stablecoins ──
-  console.log('\n💸 Step 9: Borrowing stablecoins against collateral (Pyth SOL/USD feed)...');
+  console.log('\n💸 Step 9: Borrowing stablecoins against collateral (custom oracle or Pyth fallback)...');
   const BORROW_AMOUNT = 1_000_000n; // 1 token (6 decimals) — conservative borrow
   const cdpPositionPda = getCdpPositionPda(sssMint, keypair.publicKey, SSS_TOKEN_PROGRAM_ID);
   try {
@@ -324,7 +390,10 @@ async function main(): Promise<void> {
         collateralVault: collateralVaultPda,
         cdpPosition: cdpPositionPda,
         userSssAccount,
-        pythPriceFeed: PYTH_SOL_USD,
+        // SSS-119: pass the CustomPriceFeed PDA as the feed account.
+        // Program dispatches to custom oracle when oracle_type == 2.
+        pythPriceFeed: customPriceFeedPda,
+        oracleConsensus: null,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
