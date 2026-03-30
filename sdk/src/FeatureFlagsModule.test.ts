@@ -4,7 +4,7 @@ import { FeatureFlagsModule, FLAG_CIRCUIT_BREAKER } from './FeatureFlagsModule';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const PROGRAM_ID = new PublicKey('AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat');
+const PROGRAM_ID = new PublicKey('2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY');
 const ADMIN = new PublicKey('J8yr2kdmy9FLLJqtar3msUW214GRdvJymJ6uFdJtjkQS');
 const MINT = new PublicKey('8SDDdSsYRrHRZknJ9Ep358R4zDWMLpwQzmtDwNvrpkge');
 

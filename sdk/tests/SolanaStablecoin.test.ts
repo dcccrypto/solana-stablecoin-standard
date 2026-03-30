@@ -23,7 +23,7 @@ import type {
 describe('program ID constants', () => {
   it('SSS_TOKEN_PROGRAM_ID is a valid PublicKey', () => {
     expect(SSS_TOKEN_PROGRAM_ID).toBeInstanceOf(PublicKey);
-    expect(SSS_TOKEN_PROGRAM_ID.toBase58()).toBe('AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat');
+    expect(SSS_TOKEN_PROGRAM_ID.toBase58()).toBe('2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY');
   });
 
   it('SSS_TRANSFER_HOOK_PROGRAM_ID is a valid PublicKey', () => {

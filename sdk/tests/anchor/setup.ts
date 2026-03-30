@@ -31,7 +31,7 @@ const REPO_ROOT = path.resolve(__dirname, '../../..');
 const DEPLOY_DIR = path.join(REPO_ROOT, 'target/deploy');
 
 export const SSS_TOKEN_PROGRAM_ID = new PublicKey(
-  'AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat'
+  '2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY'
 );
 export const SSS_TRANSFER_HOOK_PROGRAM_ID = new PublicKey(
   'phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp'
