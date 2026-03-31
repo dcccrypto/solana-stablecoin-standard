@@ -1,5 +1,18 @@
+// ⚠️  STUB — NOT FUNCTIONAL ⚠️
+//
+// ConfidentialTransferModule write methods (enableConfidentialTransfers,
+// applyPendingBalance, depositConfidential, withdrawConfidential) call
+// phantom on-chain instructions that do NOT exist in the deployed program.
+//
+// The CT config (ConfidentialTransferConfig PDA) is created during
+// initialize() when FLAG_CONFIDENTIAL_TRANSFERS is set in featureFlags.
+// There is no separate standalone instruction for these operations.
+//
+// Read helpers (getConfig, isEnabled, getConfigPda, auditTransfer) are
+// functional and safe to use.
+
 import { PublicKey, TransactionSignature } from '@solana/web3.js';
-import { AnchorProvider, BN } from '@coral-xyz/anchor';
+import { AnchorProvider } from '@coral-xyz/anchor';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -260,27 +273,9 @@ export class ConfidentialTransferModule {
    * ```
    */
   async enableConfidentialTransfers(
-    params: EnableConfidentialTransfersParams
+    _params: EnableConfidentialTransfersParams
   ): Promise<TransactionSignature> {
-    const { mint, auditorElGamalPubkey, autoApproveNewAccounts = false } = params;
-
-    if (auditorElGamalPubkey.length !== 32) {
-      throw new Error('auditorElGamalPubkey must be exactly 32 bytes (Ristretto255 compressed point)');
-    }
-
-    const program = await this._loadProgram();
-    const [config] = this.getConfigPda(mint);
-    const auditorKeyArray = Array.from(auditorElGamalPubkey);
-
-    return program.methods
-      .initConfidentialTransferConfig(auditorKeyArray, autoApproveNewAccounts)
-      .accounts({
-        authority: this.provider.wallet.publicKey,
-        mint,
-        ctConfig: config,
-        systemProgram: (await import('@solana/web3.js')).SystemProgram.programId,
-      })
-      .rpc({ commitment: 'confirmed' });
+    throw new Error('ConfidentialTransferModule: CT config is created during initialize(). This method is not supported as a standalone instruction.');
   }
 
   /**
@@ -299,23 +294,9 @@ export class ConfidentialTransferModule {
    * ```
    */
   async applyPendingBalance(
-    params: ApplyPendingBalanceParams
+    _params: ApplyPendingBalanceParams
   ): Promise<TransactionSignature> {
-    const { mint, tokenAccount } = params;
-    const owner = this.provider.wallet.publicKey;
-    const tokenAcc = tokenAccount ?? (await this._getAta(mint, owner));
-
-    const program = await this._loadProgram();
-
-    return program.methods
-      .applyPendingConfidentialBalance()
-      .accounts({
-        owner,
-        mint,
-        tokenAccount: tokenAcc,
-        tokenProgram: (await import('@solana/spl-token')).TOKEN_2022_PROGRAM_ID,
-      })
-      .rpc({ commitment: 'confirmed' });
+    throw new Error('ConfidentialTransferModule: CT config is created during initialize(). This method is not supported as a standalone instruction.');
   }
 
   /**
@@ -334,24 +315,9 @@ export class ConfidentialTransferModule {
    * ```
    */
   async depositConfidential(
-    params: DepositConfidentialParams
+    _params: DepositConfidentialParams
   ): Promise<TransactionSignature> {
-    const { mint, amount, tokenAccount } = params;
-    if (amount <= 0n) throw new Error('amount must be > 0');
-
-    const owner = this.provider.wallet.publicKey;
-    const tokenAcc = tokenAccount ?? (await this._getAta(mint, owner));
-    const program = await this._loadProgram();
-
-    return program.methods
-      .depositConfidential(new BN(amount.toString()))
-      .accounts({
-        owner,
-        mint,
-        tokenAccount: tokenAcc,
-        tokenProgram: (await import('@solana/spl-token')).TOKEN_2022_PROGRAM_ID,
-      })
-      .rpc({ commitment: 'confirmed' });
+    throw new Error('ConfidentialTransferModule: CT config is created during initialize(). This method is not supported as a standalone instruction.');
   }
 
   /**
@@ -371,24 +337,9 @@ export class ConfidentialTransferModule {
    * ```
    */
   async withdrawConfidential(
-    params: WithdrawConfidentialParams
+    _params: WithdrawConfidentialParams
   ): Promise<TransactionSignature> {
-    const { mint, amount, tokenAccount } = params;
-    if (amount <= 0n) throw new Error('amount must be > 0');
-
-    const owner = this.provider.wallet.publicKey;
-    const tokenAcc = tokenAccount ?? (await this._getAta(mint, owner));
-    const program = await this._loadProgram();
-
-    return program.methods
-      .withdrawConfidential(new BN(amount.toString()))
-      .accounts({
-        owner,
-        mint,
-        tokenAccount: tokenAcc,
-        tokenProgram: (await import('@solana/spl-token')).TOKEN_2022_PROGRAM_ID,
-      })
-      .rpc({ commitment: 'confirmed' });
+    throw new Error('ConfidentialTransferModule: CT config is created during initialize(). This method is not supported as a standalone instruction.');
   }
 
   /**

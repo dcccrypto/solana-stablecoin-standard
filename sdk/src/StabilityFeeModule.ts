@@ -43,7 +43,11 @@ export interface SetStabilityFeeArgs {
 export interface CollectStabilityFeeArgs {
   /** The SSS-3 stablecoin mint. */
   mint: PublicKey;
-  /** The CDP position owner (debtor). Must be the current provider wallet. */
+  /**
+   * The CDP position owner (debtor). Used to derive the CdpPosition PDA.
+   * Does NOT need to sign — any whitelisted keeper or authority can call this
+   * (BUG-015 fix: caller is the signer, not the debtor).
+   */
   debtor: PublicKey;
   /** The debtor's SSS token account (Token-2022). */
   debtorSssAccount: PublicKey;
@@ -87,12 +91,14 @@ export interface StabilityFeePreview {
 // ─── Anchor discriminators (SHA-256("global:<ix>")[0..8]) ────────────────────
 // Pre-computed to avoid a full IDL dependency at runtime.
 
+// SHA-256("global:set_stability_fee")[0..8]
 const DISCRIMINATOR_SET_STABILITY_FEE = Buffer.from([
-  0x4c, 0x9a, 0x3e, 0x12, 0xb7, 0x5f, 0x2d, 0x88,
+  0x3a, 0x89, 0x67, 0xdc, 0x8c, 0x67, 0xcd, 0xfd,
 ]);
 
+// SHA-256("global:collect_stability_fee")[0..8]
 const DISCRIMINATOR_COLLECT_STABILITY_FEE = Buffer.from([
-  0x7e, 0x1c, 0x45, 0xa3, 0x9f, 0x0b, 0x6d, 0x22,
+  0x74, 0x1a, 0x64, 0xeb, 0x67, 0x61, 0x26, 0xd6,
 ]);
 
 // ─── StabilityFeeModule ──────────────────────────────────────────────────────
@@ -206,17 +212,26 @@ export class StabilityFeeModule {
   /**
    * Accrue and burn stability fees for a CDP position.
    *
-   * Permissionless — keepers may call this on behalf of any debtor.
-   * The debtor must sign (they authorise the burn from their token account).
-   * In practice the debtor wallet is the provider wallet.
+   * Permissionless — keepers may call this on behalf of any debtor (BUG-015 fix).
+   * The `caller` (provider wallet) is the signer; the `debtor` is a read-only
+   * CHECK account used only for CdpPosition PDA seed derivation.
    *
    * No-ops (returns immediately without sending a transaction) when:
    * - `stability_fee_bps == 0` on-chain.
    * - Less than 1 second has elapsed since last accrual.
    *
+   * Account order (matches IDL for `collect_stability_fee`):
+   * 1. caller        — signer, writable (keeper or authority)
+   * 2. config        — writable (PDA keyed by sss_mint)
+   * 3. sss_mint      — writable
+   * 4. debtor        — read-only CHECK (PDA seed only, no signature needed)
+   * 5. cdp_position  — writable (PDA derived from [seed, sss_mint, debtor])
+   * 6. debtor_sss_account — writable (fees burned from here)
+   * 7. token_program — read-only
+   *
    * @param args.mint             - The SSS-3 stablecoin mint.
-   * @param args.debtor           - CDP position owner (signer).
-   * @param args.debtorSssAccount - Debtor's SSS token-2022 account.
+   * @param args.debtor           - CDP position owner (NOT the signer; used for PDA derivation).
+   * @param args.debtorSssAccount - Debtor's SSS token-2022 account (fees burned from here).
    * @returns Transaction signature, or `null` when the instruction would no-op.
    */
   async collectStabilityFee(
@@ -239,9 +254,12 @@ export class StabilityFeeModule {
     const ix = new TransactionInstruction({
       programId: this.programId,
       keys: [
-        { pubkey: debtor, isSigner: true, isWritable: true },
+        // BUG-015 fix: caller (keeper/authority) is the signer, NOT the debtor
+        { pubkey: this.provider.wallet.publicKey, isSigner: true, isWritable: true },
         { pubkey: configPda, isSigner: false, isWritable: true },
         { pubkey: mint, isSigner: false, isWritable: true },
+        // debtor is a read-only CHECK account (no signature required)
+        { pubkey: debtor, isSigner: false, isWritable: false },
         { pubkey: cdpPositionPda, isSigner: false, isWritable: true },
         { pubkey: debtorSssAccount, isSigner: false, isWritable: true },
         { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },

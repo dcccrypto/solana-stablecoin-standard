@@ -176,30 +176,42 @@ export class SolanaStablecoin {
     };
     // SSS-106: only include if deployed IDL supports these fields
     if (hasField('feature_flags')) {
-      initParams['featureFlags'] = null;
+      initParams['featureFlags'] = config.featureFlags !== undefined ? new BN(config.featureFlags.toString()) : null;
     }
     if (hasField('auditor_elgamal_pubkey')) {
-      initParams['auditorElgamalPubkey'] = null;
+      initParams['auditorElgamalPubkey'] = config.auditorElGamalPubkey ? Array.from(config.auditorElGamalPubkey) : null;
     }
     // SSS-085: timelock delay — only if deployed IDL supports it
     if (hasField('admin_timelock_delay')) {
-      initParams['adminTimelockDelay'] = new BN(0);
+      initParams['adminTimelockDelay'] = config.adminTimelockDelay !== undefined ? new BN(config.adminTimelockDelay) : new BN(0);
     }
     // SSS-147a: squads multisig — only if deployed IDL supports it
     if (hasField('squads_multisig')) {
       initParams['squadsMultisig'] = null;
     }
 
+    // Build accounts — ctConfig is optional and only included when the CT flag is set
+    const FLAG_CT = 1n << 5n; // 0x20 — FLAG_CONFIDENTIAL_TRANSFERS
+    const CT_CONFIG_SEED_LOCAL = Buffer.from('ct-config');
+    const accounts: Record<string, any> = {
+      payer,
+      mint,
+      config: configPda,
+      tokenProgram: new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'),
+      systemProgram: new PublicKey('11111111111111111111111111111111'),
+      rent: new PublicKey('SysvarRent111111111111111111111111111111111'),
+    };
+    if (config.featureFlags !== undefined && (config.featureFlags & FLAG_CT) !== 0n) {
+      const [ctConfigPda] = PublicKey.findProgramAddressSync(
+        [CT_CONFIG_SEED_LOCAL, mint.toBuffer()],
+        programId
+      );
+      accounts['ctConfig'] = ctConfigPda;
+    }
+
     await program.methods
       .initialize(initParams)
-      .accounts({
-        payer,
-        mint,
-        config: configPda,
-        tokenProgram: new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'),
-        systemProgram: new PublicKey('11111111111111111111111111111111'),
-        rent: new PublicKey('SysvarRent111111111111111111111111111111111'),
-      })
+      .accounts(accounts)
       .signers([mintKeypair])
       .rpc({ commitment: 'confirmed' });
 

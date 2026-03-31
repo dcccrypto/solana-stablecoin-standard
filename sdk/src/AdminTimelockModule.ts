@@ -1,5 +1,6 @@
 import { PublicKey, TransactionSignature } from '@solana/web3.js';
 import { AnchorProvider, BN } from '@coral-xyz/anchor';
+import { TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 import { SSSError } from './error';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ export type AdminOpKind =
   | typeof ADMIN_OP_CLEAR_FEATURE_FLAG;
 
 /**
- * Parameters for `proposeTimelockOp`.
+ * Parameters for `proposeTimelockedOp`.
  */
 export interface ProposeTimelockOpParams {
   /** The stablecoin mint whose config will be updated. */
@@ -72,7 +73,7 @@ export interface ProposeTimelockOpParams {
 }
 
 /**
- * Parameters for `executeTimelockOp` and `cancelTimelockOp`.
+ * Parameters for `executeTimelockedOp` and `cancelTimelockedOp`.
  * Both instructions only require the mint to derive the config PDA.
  */
 export interface TimelockOpMintParams {
@@ -120,9 +121,9 @@ export interface PendingTimelockOp {
  * This prevents a compromised key from instantly draining the protocol.
  *
  * **Lifecycle**
- * 1. Authority calls `proposeTimelockOp` — stores op + mature slot on-chain.
- * 2. After `matureSlot` is reached, authority calls `executeTimelockOp`.
- * 3. Authority may call `cancelTimelockOp` at any time before execution.
+ * 1. Authority calls `proposeTimelockedOp` — stores op + mature slot on-chain.
+ * 2. After `matureSlot` is reached, authority calls `executeTimelockedOp`.
+ * 3. Authority may call `cancelTimelockedOp` at any time before execution.
  *
  * @example
  * ```ts
@@ -131,7 +132,7 @@ export interface PendingTimelockOp {
  * const timelock = new AdminTimelockModule(provider, program);
  *
  * // Propose transferring authority to a new key (will mature ~2 days later)
- * await timelock.proposeTimelockOp({
+ * await timelock.proposeTimelockedOp({
  *   mint,
  *   opKind: ADMIN_OP_TRANSFER_AUTHORITY,
  *   param: 0n,
@@ -139,15 +140,30 @@ export interface PendingTimelockOp {
  * });
  *
  * // Later, once the timelock matures
- * await timelock.executeTimelockOp({ mint });
+ * await timelock.executeTimelockedOp({ mint });
  * ```
  */
 export class AdminTimelockModule {
+  static readonly CONFIG_SEED = Buffer.from('stablecoin-config');
+
   constructor(
     private readonly provider: AnchorProvider,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private readonly program: any,
   ) {}
+
+  // ─── PDA helpers ─────────────────────────────────────────────────────────
+
+  /**
+   * Derive the `StablecoinConfig` PDA for the given mint.
+   * Seeds: `[b"stablecoin-config", mint]`
+   */
+  getConfigPda(mint: PublicKey): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [AdminTimelockModule.CONFIG_SEED, mint.toBuffer()],
+      this.program.programId,
+    );
+  }
 
   /**
    * Propose a timelocked admin operation.
@@ -161,7 +177,7 @@ export class AdminTimelockModule {
    *   locks out all admin operations for ~2 days without doing anything useful.
    * @throws If `opKind` is not one of the three valid operation kinds.
    */
-  async proposeTimelockOp(params: ProposeTimelockOpParams): Promise<TransactionSignature> {
+  async proposeTimelockedOp(params: ProposeTimelockOpParams): Promise<TransactionSignature> {
     const { mint, opKind, param, target } = params;
 
     // F-2 guard: ADMIN_OP_NONE (0) must never be proposed. It creates a pending
@@ -171,20 +187,32 @@ export class AdminTimelockModule {
     // repeatedly proposing ADMIN_OP_NONE ops.
     if (opKind === ADMIN_OP_NONE) {
       throw new SSSError(
-        'proposeTimelockOp: opKind must not be ADMIN_OP_NONE (0). ' +
+        'proposeTimelockedOp: opKind must not be ADMIN_OP_NONE (0). ' +
         'Use ADMIN_OP_TRANSFER_AUTHORITY (1), ADMIN_OP_SET_FEATURE_FLAG (2), ' +
         'or ADMIN_OP_CLEAR_FEATURE_FLAG (3).',
         400
       );
     }
 
+    const [config] = this.getConfigPda(mint);
+
     return this.program.methods
-      .proposeTimelockOp(opKind, new BN(param.toString()), target)
+      .proposeTimelockedOp(opKind, new BN(param.toString()), target)
       .accounts({
         authority: this.provider.wallet.publicKey,
+        config,
         mint,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
+  }
+
+  /**
+   * @deprecated Use {@link proposeTimelockedOp} instead.
+   * @internal Alias kept for backward compatibility.
+   */
+  async proposeTimelockOp(params: ProposeTimelockOpParams): Promise<TransactionSignature> {
+    return this.proposeTimelockedOp(params);
   }
 
   /**
@@ -197,14 +225,25 @@ export class AdminTimelockModule {
    * @throws `TimelockNotMature` if the delay has not elapsed.
    * @throws `NoTimelockPending` if no operation is pending.
    */
-  async executeTimelockOp(params: TimelockOpMintParams): Promise<TransactionSignature> {
+  async executeTimelockedOp(params: TimelockOpMintParams): Promise<TransactionSignature> {
+    const [config] = this.getConfigPda(params.mint);
     return this.program.methods
-      .executeTimelockOp()
+      .executeTimelockedOp()
       .accounts({
         authority: this.provider.wallet.publicKey,
+        config,
         mint: params.mint,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
+  }
+
+  /**
+   * @deprecated Use {@link executeTimelockedOp} instead.
+   * @internal Alias kept for backward compatibility.
+   */
+  async executeTimelockOp(params: TimelockOpMintParams): Promise<TransactionSignature> {
+    return this.executeTimelockedOp(params);
   }
 
   /**
@@ -214,14 +253,25 @@ export class AdminTimelockModule {
    * @returns Transaction signature.
    * @throws `NoTimelockPending` if no operation is pending.
    */
-  async cancelTimelockOp(params: TimelockOpMintParams): Promise<TransactionSignature> {
+  async cancelTimelockedOp(params: TimelockOpMintParams): Promise<TransactionSignature> {
+    const [config] = this.getConfigPda(params.mint);
     return this.program.methods
-      .cancelTimelockOp()
+      .cancelTimelockedOp()
       .accounts({
         authority: this.provider.wallet.publicKey,
+        config,
         mint: params.mint,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
+  }
+
+  /**
+   * @deprecated Use {@link cancelTimelockedOp} instead.
+   * @internal Alias kept for backward compatibility.
+   */
+  async cancelTimelockOp(params: TimelockOpMintParams): Promise<TransactionSignature> {
+    return this.cancelTimelockedOp(params);
   }
 
   /**
@@ -234,11 +284,14 @@ export class AdminTimelockModule {
    * @returns Transaction signature.
    */
   async setPythFeed(params: SetPythFeedParams): Promise<TransactionSignature> {
+    const [config] = this.getConfigPda(params.mint);
     return this.program.methods
       .setPythFeed(params.feed)
       .accounts({
         authority: this.provider.wallet.publicKey,
+        config,
         mint: params.mint,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
   }

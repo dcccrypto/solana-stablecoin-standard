@@ -143,12 +143,14 @@ export interface BackstopFundState {
 // ─── Anchor discriminators (SHA-256("global:<ix>")[0..8]) ────────────────────
 // Pre-computed to avoid a full IDL dependency at runtime.
 
+// SHA-256("global:set_backstop_params")[0..8]
 const DISCRIMINATOR_SET_BACKSTOP_PARAMS = Buffer.from([
-  0x3a, 0x7f, 0x2c, 0x91, 0xd4, 0x0e, 0xb5, 0x6f,
+  0x74, 0x56, 0xc6, 0x29, 0x15, 0xa3, 0x1d, 0xdd,
 ]);
 
+// SHA-256("global:trigger_backstop")[0..8]
 const DISCRIMINATOR_TRIGGER_BACKSTOP = Buffer.from([
-  0xc8, 0x4b, 0x17, 0x5e, 0x39, 0xa2, 0x0d, 0x76,
+  0x25, 0x3e, 0xea, 0xdf, 0x50, 0x96, 0xd9, 0xe4,
 ]);
 
 // ─── BadDebtBackstopModule ────────────────────────────────────────────────────

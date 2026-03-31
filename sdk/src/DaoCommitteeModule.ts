@@ -1,5 +1,6 @@
 import { PublicKey, TransactionSignature } from '@solana/web3.js';
 import { AnchorProvider, BN } from '@coral-xyz/anchor';
+import { TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -182,11 +183,12 @@ export class DaoCommitteeModule {
    * Derive the `ProposalPda` for a specific proposal id.
    *
    * Seeds: `[b"dao-proposal", config_pubkey, proposal_id.to_le_bytes()]`
+   * Note: `proposal_id` is a u64 on-chain, so we use 8 bytes LE.
    */
   getProposalPda(mint: PublicKey, proposalId: number): [PublicKey, number] {
     const [config] = this.getConfigPda(mint);
-    const idBuf = Buffer.alloc(4);
-    idBuf.writeUInt32LE(proposalId, 0);
+    const idBuf = Buffer.alloc(8);
+    idBuf.writeBigUInt64LE(BigInt(proposalId), 0);
     return PublicKey.findProgramAddressSync(
       [DaoCommitteeModule.PROPOSAL_SEED, config.toBuffer(), idBuf],
       this.programId
@@ -218,6 +220,7 @@ export class DaoCommitteeModule {
         mint,
         config,
         committee,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: PublicKey.default,
       })
       .rpc({ commitment: 'confirmed' });
@@ -239,14 +242,16 @@ export class DaoCommitteeModule {
     const [committee] = this.getCommitteePda(mint);
     const [proposal] = this.getProposalPda(mint, proposalId);
 
+    // IDL expects: (action, param, target) — proposalId is NOT an arg (comes from committee.next_proposal_id)
     return program.methods
-      .proposeAction(proposalId, this._encodeAction(action))
+      .proposeAction(this._encodeAction(action), new BN(0), PublicKey.default)
       .accounts({
         proposer: this.provider.wallet.publicKey,
         mint,
         config,
         committee,
         proposal,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: PublicKey.default,
       })
       .rpc({ commitment: 'confirmed' });
@@ -276,6 +281,7 @@ export class DaoCommitteeModule {
         config,
         committee,
         proposal,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc({ commitment: 'confirmed' });
   }
@@ -304,6 +310,7 @@ export class DaoCommitteeModule {
         config,
         committee,
         proposal,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc({ commitment: 'confirmed' });
   }
@@ -387,7 +394,7 @@ export class DaoCommitteeModule {
     if (this._program) return this._program;
     const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
     const idl = await import('./idl/sss_token.json');
-    this._program = new AnchorProgram(idl as any, this.provider) as any;
+    this._program = new AnchorProgram({ ...idl as any, address: this.programId.toBase58() }, this.provider) as any;
     return this._program;
   }
 }

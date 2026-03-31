@@ -9,6 +9,8 @@ export type { CircuitBreakerParams, CircuitBreakerState } from './CircuitBreaker
 export { SpendPolicyModule, FLAG_SPEND_POLICY } from './SpendPolicyModule';
 export type { SpendPolicyParams, ClearSpendLimitParams } from './SpendPolicyModule';
 export { DaoCommitteeModule, FLAG_DAO_COMMITTEE } from './DaoCommitteeModule';
+export { GuardianModule } from './GuardianModule';
+export type { InitGuardianConfigParams, ProposePauseParams, VotePauseParams, LiftPauseParams } from './GuardianModule';
 export type { ProposalAccount, ProposalActionKind, InitDaoCommitteeParams, ProposeActionParams, VoteActionParams, ExecuteActionParams } from './DaoCommitteeModule';
 export { YieldCollateralModule, FLAG_YIELD_COLLATERAL } from './YieldCollateralModule';
 export type { InitYieldCollateralParams, AddYieldCollateralMintParams, RemoveYieldCollateralMintParams } from './YieldCollateralModule';
@@ -119,3 +121,59 @@ export type {
   ForceCloseParams,
   PaymentChannel,
 } from './AgentPaymentChannelModule';
+export { CdpModule } from './CdpModule';
+export { InsuranceVaultModule, FLAG_INSURANCE_VAULT_REQUIRED } from './InsuranceVaultModule';
+export type { InitInsuranceVaultParams, SeedInsuranceVaultParams, ReplenishInsuranceVaultParams, DrawInsuranceParams } from './InsuranceVaultModule';
+export type {
+  CollateralEntry,
+  CdpPosition,
+  CollateralType,
+  DepositCollateralParams as CdpDepositCollateralParams,
+  BorrowStableParams,
+  RepayStableParams,
+} from './CdpModule';
+export { CpiModule, getInterfaceVersionPda, CURRENT_INTERFACE_VERSION } from './CpiModule';
+export type {
+  InterfaceVersionInfo,
+  CpiMintParams,
+  CpiBurnParams,
+  UpdateInterfaceVersionParams,
+} from './CpiModule';
+export {
+  ProbabilisticModule,
+  FLAG_PROBABILISTIC_MONEY,
+  PBS_VAULT_SEED,
+  PBS_CONFIG_SEED,
+  VaultStatus,
+  derivePbsConfigPda,
+  derivePbsVaultPda,
+} from './ProbabilisticModule';
+export type {
+  ProbabilisticVault,
+  CommitProbabilisticParams,
+  CommitResult,
+  ProveAndResolveParams,
+  PartialResolveParams,
+  ExpireAndRefundParams,
+} from './ProbabilisticModule';
+export { ReserveCompositionModule } from './ReserveCompositionModule';
+export type { ReserveCompositionData } from './ReserveCompositionModule';
+export { RedemptionQueueModule, FLAG_REDEMPTION_QUEUE } from './RedemptionQueueModule';
+export type {
+  InitRedemptionQueueParams,
+  EnqueueRedemptionParams,
+  ProcessRedemptionParams,
+  CancelRedemptionParams,
+  UpdateRedemptionQueueParams,
+  CompactRedemptionHeadParams,
+} from './RedemptionQueueModule';
+export { LegalEntityModule, FLAG_LEGAL_REGISTRY } from './LegalEntityModule';
+export type {
+  IssuerRegistryAccount,
+  RegisterLegalEntityParams,
+  UpdateLegalEntityParams,
+} from './LegalEntityModule';
+export { CustomOracleModule } from './CustomOracleModule';
+export type { InitCustomPriceFeedParams, UpdateCustomPriceParams, SetOracleConfigParams } from './CustomOracleModule';
+export { KeeperModule } from './KeeperModule';
+export type { AddAuthorizedKeeperParams, RemoveAuthorizedKeeperParams, MigrateConfigParams } from './KeeperModule';

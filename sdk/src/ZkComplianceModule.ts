@@ -207,12 +207,14 @@ export class ZkComplianceModule {
     const [zkComplianceConfig] = this.getZkConfigPda(mint);
 
     return program.methods
-      .initZkCompliance(new BN(ttlSlots))
+      .initZkCompliance(new BN(ttlSlots), null)
       .accounts({
         authority: this.provider.wallet.publicKey,
         mint,
         config,
         zkComplianceConfig,
+        tokenProgram: (await import('@solana/spl-token')).TOKEN_2022_PROGRAM_ID,
+        systemProgram: (await import('@solana/web3.js')).SystemProgram.programId,
       })
       .rpc({ commitment: 'confirmed' });
   }
@@ -245,6 +247,7 @@ export class ZkComplianceModule {
         config,
         zkComplianceConfig,
         verificationRecord,
+        systemProgram: (await import('@solana/web3.js')).SystemProgram.programId,
       })
       .rpc({ commitment: 'confirmed' });
   }
