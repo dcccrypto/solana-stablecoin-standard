@@ -357,10 +357,10 @@ mod tests {
             "compliant": true
         })).await;
         assert_eq!(post_resp.status(), StatusCode::CREATED);
-        // GET and verify record is there
+        // GET and verify record is there (AUDIT3C-M3: wallet param required)
         let app2 = make_app(state);
         let get_resp = app2
-            .oneshot(Request::builder().uri("/api/travel-rule/records").body(Body::empty()).unwrap())
+            .oneshot(Request::builder().uri("/api/travel-rule/records?wallet=SSSISSUER001").body(Body::empty()).unwrap())
             .await.unwrap();
         assert_eq!(get_resp.status(), StatusCode::OK);
         let body = axum::body::to_bytes(get_resp.into_body(), usize::MAX).await.unwrap();
