@@ -192,3 +192,36 @@ cpi_caller      = "HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof"
 ```
 
 > Note: `sss_token` updated to SSS-DEVNET-002 address (2026-03-28). Old program `AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat` is closed.
+
+## AUDIT3-D: Adversarial Test Suite — 7/7 PASS ✅ (2026-03-31)
+
+Full adversarial validation of the deployed binary at `main@a190a23`, devnet slot **452170389**.
+
+**Binary:** `2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY` (SSS-DEVNET-002)
+**Commit:** `a190a23` (includes SSS-147A fix from PR #331, merged PR #334)
+**Run by:** sss-qa — 2026-03-31 00:14 UTC
+
+| Test | Description | Result |
+|------|-------------|--------|
+| Test-1 | PBS `prove_and_resolve` with invalid commitment rejected | ✅ PASS |
+| Test-2 | APC `force_close` on non-existent channel rejected | ✅ PASS |
+| Test-3 | `triggerBackstop` without DAO quorum/config rejected | ✅ PASS |
+| Test-4 | No `crank_circuit_breaker` spam vector (`FLAG_CIRCUIT_BREAKER`-gated) | ✅ PASS |
+| Test-5 | SSS-3 init with `squadsMultisig=null` rejected (`RequiresSquadsForSSS3`) | ✅ PASS |
+| Test-6 | `max_supply` immutable — no setter, `MaxSupplyImmutable` enforced | ✅ PASS |
+| Test-7 | `SanctionsRecordMissing` (code 6115, BUG-003) enforced on-chain | ✅ PASS |
+
+### Test-5 Details (SSS-147A)
+
+Previously FAIL on stale binary (`main@20df1c0`). Fix landed in PR #331 (`0828ceb`).
+Re-run confirmed on redeployed binary (`a190a23`, slot 452170389).
+
+Source: `programs/sss-token/src/instructions/initialize.rs` lines 81–86
+```rust
+require!(
+    params.squads_multisig.is_some() && params.squads_multisig.unwrap() != Pubkey::default(),
+    SssError::RequiresSquadsForSSS3
+);
+```
+
+All 7 adversarial tests green. AUDIT3-D **closed**.
