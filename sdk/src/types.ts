@@ -26,6 +26,10 @@ export interface SssConfig {
   featureFlags?: bigint;
   /** Auditor ElGamal pubkey (32 bytes) — required when FLAG_CONFIDENTIAL_TRANSFERS is set. */
   auditorElGamalPubkey?: Uint8Array;
+  /** Admin timelock delay in seconds (SSS-085). Optional — defaults to 0 (disabled). */
+  adminTimelockDelay?: number;
+  /** Squads multisig address for governance (SSS-147a). Optional. */
+  squadsMultisig?: PublicKey;
 }
 
 export interface MintParams {

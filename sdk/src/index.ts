@@ -119,3 +119,38 @@ export type {
   ForceCloseParams,
   PaymentChannel,
 } from './AgentPaymentChannelModule';
+export { CdpModule } from './CdpModule';
+export type {
+  CollateralEntry,
+  CdpPosition,
+  CollateralType,
+  DepositCollateralParams as CdpDepositCollateralParams,
+  BorrowStableParams,
+  RepayStableParams,
+} from './CdpModule';
+export { CpiModule, getInterfaceVersionPda, CURRENT_INTERFACE_VERSION } from './CpiModule';
+export type {
+  InterfaceVersionInfo,
+  CpiMintParams,
+  CpiBurnParams,
+  UpdateInterfaceVersionParams,
+} from './CpiModule';
+export {
+  ProbabilisticModule,
+  FLAG_PROBABILISTIC_MONEY,
+  PBS_VAULT_SEED,
+  PBS_CONFIG_SEED,
+  VaultStatus,
+  derivePbsConfigPda,
+  derivePbsVaultPda,
+} from './ProbabilisticModule';
+export type {
+  ProbabilisticVault,
+  CommitProbabilisticParams,
+  CommitResult,
+  ProveAndResolveParams,
+  PartialResolveParams,
+  ExpireAndRefundParams,
+} from './ProbabilisticModule';
+export { ReserveCompositionModule } from './ReserveCompositionModule';
+export type { ReserveCompositionData } from './ReserveCompositionModule';
