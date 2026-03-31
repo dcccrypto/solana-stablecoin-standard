@@ -6,12 +6,12 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-sss_token = "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY"
+sss_token = "ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811"
 sss_transfer_hook = "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp"
 cpi_caller = "HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof"
 
 [programs.localnet]
-sss_token = "2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY"
+sss_token = "ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811"
 sss_transfer_hook = "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp"
 cpi_caller = "HfQcpMxqPDmpKQtQttHSgXKXs4gjXn6A4GiRqRCKoEof"
 
