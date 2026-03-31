@@ -173,3 +173,7 @@ export type {
   RegisterLegalEntityParams,
   UpdateLegalEntityParams,
 } from './LegalEntityModule';
+export { CustomOracleModule } from './CustomOracleModule';
+export type { InitCustomPriceFeedParams, UpdateCustomPriceParams, SetOracleConfigParams } from './CustomOracleModule';
+export { KeeperModule } from './KeeperModule';
+export type { AddAuthorizedKeeperParams, RemoveAuthorizedKeeperParams, MigrateConfigParams } from './KeeperModule';
