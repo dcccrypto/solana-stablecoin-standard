@@ -1,5 +1,6 @@
-import { PublicKey, TransactionSignature } from '@solana/web3.js';
+import { PublicKey, SystemProgram, TransactionSignature } from '@solana/web3.js';
 import { AnchorProvider, BN } from '@coral-xyz/anchor';
+import { TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ export class YieldCollateralModule {
   private readonly programId: PublicKey;
 
   static readonly CONFIG_SEED = Buffer.from('stablecoin-config');
-  static readonly YIELD_COLLATERAL_SEED = Buffer.from('yield-collateral-config');
+  static readonly YIELD_COLLATERAL_SEED = Buffer.from('yield-collateral');
 
   /**
    * @param provider   Anchor provider (wallet must be the admin authority).
@@ -160,6 +161,8 @@ export class YieldCollateralModule {
         config,
         mint,
         yieldCollateralConfig,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
       })
       .rpc({ commitment: 'confirmed' });
   }
@@ -184,6 +187,7 @@ export class YieldCollateralModule {
         config,
         mint,
         yieldCollateralConfig,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .rpc({ commitment: 'confirmed' });
   }
@@ -279,7 +283,7 @@ export class YieldCollateralModule {
     if (this._program) return this._program;
     const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
     const idl = await import('./idl/sss_token.json');
-    this._program = new AnchorProgram(idl as any, this.provider) as any;
+    this._program = new AnchorProgram({ ...idl as any, address: this.programId.toBase58() }, this.provider) as any;
     return this._program;
   }
 }

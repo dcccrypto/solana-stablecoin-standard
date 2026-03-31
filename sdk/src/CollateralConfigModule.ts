@@ -298,7 +298,7 @@ export class CollateralConfigModule {
     if (this._program) return this._program;
     const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
     const idl = await import('./idl/sss_token.json');
-    this._program = new AnchorProgram(idl as any, this.provider) as any;
+    this._program = new AnchorProgram({ ...idl as any, address: this.programId.toBase58() }, this.provider) as any;
     return this._program;
   }
 }
