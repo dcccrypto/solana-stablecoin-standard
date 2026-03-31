@@ -167,3 +167,9 @@ export type {
   UpdateRedemptionQueueParams,
   CompactRedemptionHeadParams,
 } from './RedemptionQueueModule';
+export { LegalEntityModule, FLAG_LEGAL_REGISTRY } from './LegalEntityModule';
+export type {
+  IssuerRegistryAccount,
+  RegisterLegalEntityParams,
+  UpdateLegalEntityParams,
+} from './LegalEntityModule';
