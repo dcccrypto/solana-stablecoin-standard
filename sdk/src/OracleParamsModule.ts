@@ -158,11 +158,9 @@ export class OracleParamsModule {
     const [configPda] = this.configPda(mint);
 
     // Build the instruction discriminator for `set_oracle_params` (sighash).
+    // SHA-256("global:set_oracle_params")[0..8]
     const discriminator = Buffer.from([
-      // SHA256("global:set_oracle_params")[0..8]  — computed by Anchor codegen
-      // We hard-code to avoid a full IDL import; generated from:
-      //   anchor discriminator set_oracle_params
-      0x9a, 0x4b, 0x5c, 0x3d, 0x8e, 0x2f, 0x1a, 0x7b,
+      0x20, 0xb9, 0xc5, 0xe8, 0x6b, 0x01, 0x26, 0x57,
     ]);
 
     // Encode args: max_age_secs (u32 LE) + max_conf_bps (u16 LE)
