@@ -158,3 +158,12 @@ export type {
 } from './ProbabilisticModule';
 export { ReserveCompositionModule } from './ReserveCompositionModule';
 export type { ReserveCompositionData } from './ReserveCompositionModule';
+export { RedemptionQueueModule, FLAG_REDEMPTION_QUEUE } from './RedemptionQueueModule';
+export type {
+  InitRedemptionQueueParams,
+  EnqueueRedemptionParams,
+  ProcessRedemptionParams,
+  CancelRedemptionParams,
+  UpdateRedemptionQueueParams,
+  CompactRedemptionHeadParams,
+} from './RedemptionQueueModule';
