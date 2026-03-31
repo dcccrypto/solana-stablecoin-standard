@@ -9,6 +9,8 @@ export type { CircuitBreakerParams, CircuitBreakerState } from './CircuitBreaker
 export { SpendPolicyModule, FLAG_SPEND_POLICY } from './SpendPolicyModule';
 export type { SpendPolicyParams, ClearSpendLimitParams } from './SpendPolicyModule';
 export { DaoCommitteeModule, FLAG_DAO_COMMITTEE } from './DaoCommitteeModule';
+export { GuardianModule } from './GuardianModule';
+export type { InitGuardianConfigParams, ProposePauseParams, VotePauseParams, LiftPauseParams } from './GuardianModule';
 export type { ProposalAccount, ProposalActionKind, InitDaoCommitteeParams, ProposeActionParams, VoteActionParams, ExecuteActionParams } from './DaoCommitteeModule';
 export { YieldCollateralModule, FLAG_YIELD_COLLATERAL } from './YieldCollateralModule';
 export type { InitYieldCollateralParams, AddYieldCollateralMintParams, RemoveYieldCollateralMintParams } from './YieldCollateralModule';
@@ -120,6 +122,8 @@ export type {
   PaymentChannel,
 } from './AgentPaymentChannelModule';
 export { CdpModule } from './CdpModule';
+export { InsuranceVaultModule, FLAG_INSURANCE_VAULT_REQUIRED } from './InsuranceVaultModule';
+export type { InitInsuranceVaultParams, SeedInsuranceVaultParams, ReplenishInsuranceVaultParams, DrawInsuranceParams } from './InsuranceVaultModule';
 export type {
   CollateralEntry,
   CdpPosition,
