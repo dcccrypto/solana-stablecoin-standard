@@ -46,38 +46,39 @@ pub struct WsEventsQuery {
 
 /// Expand a comma-separated filter string into canonical `event_type` patterns.
 /// Returns `None` if no filter is specified (= subscribe to all events).
-fn expand_filter(raw: Option<&str>) -> Option<Vec<&'static str>> {
+fn expand_filter(raw: Option<&str>) -> Option<Vec<String>> {
     let raw = raw?;
     if raw.trim().is_empty() {
         return None;
     }
-    let mut types: Vec<&'static str> = Vec::new();
+    let mut types: Vec<String> = Vec::new();
     for part in raw.split(',') {
         match part.trim() {
             "liquidation" => {
-                if !types.contains(&"cdp_liquidate") {
-                    types.push("cdp_liquidate");
+                let s = "cdp_liquidate".to_string();
+                if !types.contains(&s) {
+                    types.push(s);
                 }
             }
             "cdp" => {
                 for t in &["cdp_deposit", "cdp_borrow", "cdp_liquidate"] {
-                    if !types.contains(t) {
-                        types.push(t);
+                    let s = t.to_string();
+                    if !types.contains(&s) {
+                        types.push(s);
                     }
                 }
             }
             "circuit-breaker" => {
-                if !types.contains(&"circuit_breaker_toggle") {
-                    types.push("circuit_breaker_toggle");
+                let s = "circuit_breaker_toggle".to_string();
+                if !types.contains(&s) {
+                    types.push(s);
                 }
             }
             other => {
                 // Pass-through for raw event_type strings (e.g. "oracle_params_update")
-                // We leak the string to produce a &'static str; this is acceptable
-                // because filters are small and infrequent.
-                let leaked: &'static str = Box::leak(other.to_string().into_boxed_str());
-                if !types.contains(&leaked) {
-                    types.push(leaked);
+                let s = other.to_string();
+                if !types.contains(&s) {
+                    types.push(s);
                 }
             }
         }
@@ -90,7 +91,7 @@ fn expand_filter(raw: Option<&str>) -> Option<Vec<&'static str>> {
 }
 
 /// Returns true if the event matches the active filter.
-fn event_matches(event: &serde_json::Value, filter: &Option<Vec<&'static str>>) -> bool {
+fn event_matches(event: &serde_json::Value, filter: &Option<Vec<String>>) -> bool {
     match filter {
         None => true, // no filter → all events
         Some(types) => {
@@ -98,7 +99,7 @@ fn event_matches(event: &serde_json::Value, filter: &Option<Vec<&'static str>>) 
                 .get("event_type")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            types.contains(&et)
+            types.iter().any(|t| t == et)
         }
     }
 }
@@ -118,7 +119,7 @@ pub async fn ws_events_handler(
 async fn handle_socket(
     socket: WebSocket,
     mut rx: broadcast::Receiver<serde_json::Value>,
-    filter: Option<Vec<&'static str>>,
+    filter: Option<Vec<String>>,
 ) {
     let (mut sender, mut receiver) = socket.split();
 
@@ -202,28 +203,28 @@ mod tests {
     #[test]
     fn test_expand_filter_liquidation() {
         let f = expand_filter(Some("liquidation")).unwrap();
-        assert_eq!(f, vec!["cdp_liquidate"]);
+        assert_eq!(f, vec!["cdp_liquidate".to_string()]);
     }
 
     #[test]
     fn test_expand_filter_cdp() {
         let f = expand_filter(Some("cdp")).unwrap();
-        assert!(f.contains(&"cdp_deposit"));
-        assert!(f.contains(&"cdp_borrow"));
-        assert!(f.contains(&"cdp_liquidate"));
+        assert!(f.contains(&"cdp_deposit".to_string()));
+        assert!(f.contains(&"cdp_borrow".to_string()));
+        assert!(f.contains(&"cdp_liquidate".to_string()));
     }
 
     #[test]
     fn test_expand_filter_circuit_breaker() {
         let f = expand_filter(Some("circuit-breaker")).unwrap();
-        assert_eq!(f, vec!["circuit_breaker_toggle"]);
+        assert_eq!(f, vec!["circuit_breaker_toggle".to_string()]);
     }
 
     #[test]
     fn test_expand_filter_combined() {
         let f = expand_filter(Some("liquidation,circuit-breaker")).unwrap();
-        assert!(f.contains(&"cdp_liquidate"));
-        assert!(f.contains(&"circuit_breaker_toggle"));
+        assert!(f.contains(&"cdp_liquidate".to_string()));
+        assert!(f.contains(&"circuit_breaker_toggle".to_string()));
     }
 
     #[test]
@@ -235,14 +236,14 @@ mod tests {
     #[test]
     fn test_event_matches_with_filter_pass() {
         let event = serde_json::json!({ "event_type": "cdp_liquidate" });
-        let filter = Some(vec!["cdp_liquidate", "circuit_breaker_toggle"]);
+        let filter = Some(vec!["cdp_liquidate".to_string(), "circuit_breaker_toggle".to_string()]);
         assert!(event_matches(&event, &filter));
     }
 
     #[test]
     fn test_event_matches_with_filter_reject() {
         let event = serde_json::json!({ "event_type": "oracle_params_update" });
-        let filter = Some(vec!["cdp_liquidate"]);
+        let filter = Some(vec!["cdp_liquidate".to_string()]);
         assert!(!event_matches(&event, &filter));
     }
 
@@ -270,7 +271,7 @@ mod tests {
             tx.send(oracle).unwrap();
             tx.send(liq.clone()).unwrap();
 
-            let filter = Some(vec!["cdp_liquidate"]);
+            let filter = Some(vec!["cdp_liquidate".to_string()]);
             // Drain both; only liq should pass filter
             let mut passed = vec![];
             for _ in 0..2 {

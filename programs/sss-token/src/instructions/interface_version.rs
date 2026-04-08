@@ -109,6 +109,8 @@ pub fn update_interface_version_handler(
 
     let iv = &mut ctx.accounts.interface_version;
     if let Some(v) = new_version {
+        // Prevent version downgrades — interface versions must be monotonically increasing
+        require!(v >= iv.version, SssError::InvalidInterfaceVersion);
         iv.version = v;
     }
     if let Some(a) = active {

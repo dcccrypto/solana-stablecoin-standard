@@ -44,18 +44,18 @@ pub struct SeedRedemptionPool<'info> {
     )]
     pub redemption_pool: Account<'info, RedemptionPool>,
 
-    /// Reserve vault token account holding pool assets.
+    /// Reserve vault token account holding pool assets (collateral, not SSS).
     #[account(
         mut,
-        constraint = reserve_vault.mint == config.mint @ SssError::RedemptionPoolMintMismatch,
+        constraint = reserve_vault.mint == config.collateral_mint @ SssError::RedemptionPoolMintMismatch,
     )]
     pub reserve_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// Authority's source token account for the initial deposit.
+    /// Authority's source token account for the initial deposit (collateral).
     #[account(
         mut,
         constraint = reserve_source.owner == authority.key() @ SssError::TokenAccountOwnerMismatch,
-        constraint = reserve_source.mint == config.mint @ SssError::RedemptionPoolMintMismatch,
+        constraint = reserve_source.mint == config.collateral_mint @ SssError::RedemptionPoolMintMismatch,
     )]
     pub reserve_source: Box<InterfaceAccount<'info, TokenAccount>>,
 
@@ -64,6 +64,11 @@ pub struct SeedRedemptionPool<'info> {
         constraint = sss_mint.key() == config.mint @ SssError::RedemptionPoolMintMismatch,
     )]
     pub sss_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    #[account(
+        constraint = collateral_mint.key() == config.collateral_mint @ SssError::InvalidMint,
+    )]
+    pub collateral_mint: InterfaceAccount<'info, Mint>,
 
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
@@ -83,6 +88,10 @@ pub fn seed_redemption_pool_handler(
         )?;
     }
 
+    require!(
+        ctx.accounts.config.collateral_mint != Pubkey::default(),
+        SssError::NoCollateralConfigured
+    );
     require!(amount > 0, SssError::InvalidAmount);
     require!(
         instant_redemption_fee_bps <= RedemptionPool::MAX_FEE_BPS,
@@ -116,19 +125,19 @@ pub fn seed_redemption_pool_handler(
     pool.current_liquidity = pool.current_liquidity.saturating_add(amount);
     pool.total_seeded = pool.total_seeded.saturating_add(amount);
 
-    // Transfer reserve assets from authority → vault
+    // Transfer reserve assets (collateral) from authority → vault
     transfer_checked(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
             TransferChecked {
                 from: ctx.accounts.reserve_source.to_account_info(),
-                mint: ctx.accounts.sss_mint.to_account_info(),
+                mint: ctx.accounts.collateral_mint.to_account_info(),
                 to: ctx.accounts.reserve_vault.to_account_info(),
                 authority: ctx.accounts.authority.to_account_info(),
             },
         ),
         amount,
-        ctx.accounts.sss_mint.decimals,
+        ctx.accounts.collateral_mint.decimals,
     )?;
 
     emit!(RedemptionPoolSeeded {
@@ -179,11 +188,11 @@ pub struct InstantRedemptionCtx<'info> {
     )]
     pub reserve_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// User's destination token account for reserve assets.
+    /// User's destination token account for reserve assets (collateral).
     #[account(
         mut,
         constraint = user_reserve_account.owner == user.key() @ SssError::TokenAccountOwnerMismatch,
-        constraint = user_reserve_account.mint == config.mint @ SssError::RedemptionPoolMintMismatch,
+        constraint = user_reserve_account.mint == config.collateral_mint @ SssError::RedemptionPoolMintMismatch,
     )]
     pub user_reserve_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
@@ -203,6 +212,11 @@ pub struct InstantRedemptionCtx<'info> {
     )]
     pub sss_mint: Box<InterfaceAccount<'info, Mint>>,
 
+    #[account(
+        constraint = collateral_mint.key() == config.collateral_mint @ SssError::InvalidMint,
+    )]
+    pub collateral_mint: InterfaceAccount<'info, Mint>,
+
     pub token_program: Interface<'info, TokenInterface>,
 }
 
@@ -210,6 +224,10 @@ pub fn instant_redemption_handler(
     ctx: Context<InstantRedemptionCtx>,
     amount: u64,
 ) -> Result<()> {
+    require!(
+        ctx.accounts.config.collateral_mint != Pubkey::default(),
+        SssError::NoCollateralConfigured
+    );
     require!(amount > 0, SssError::InvalidAmount);
 
     let pool = &mut ctx.accounts.redemption_pool;
@@ -265,14 +283,14 @@ pub fn instant_redemption_handler(
             ctx.accounts.token_program.to_account_info(),
             TransferChecked {
                 from: ctx.accounts.reserve_vault.to_account_info(),
-                mint: ctx.accounts.sss_mint.to_account_info(),
+                mint: ctx.accounts.collateral_mint.to_account_info(),
                 to: ctx.accounts.user_reserve_account.to_account_info(),
                 authority: ctx.accounts.vault_authority.to_account_info(),
             },
             signer_seeds,
         ),
         payout,
-        ctx.accounts.sss_mint.decimals,
+        ctx.accounts.collateral_mint.decimals,
     )?;
 
     emit!(InstantRedemption {
@@ -319,7 +337,7 @@ pub struct ReplenishRedemptionPool<'info> {
     #[account(
         mut,
         constraint = replenisher_source.owner == replenisher.key() @ SssError::TokenAccountOwnerMismatch,
-        constraint = replenisher_source.mint == config.mint @ SssError::RedemptionPoolMintMismatch,
+        constraint = replenisher_source.mint == config.collateral_mint @ SssError::RedemptionPoolMintMismatch,
     )]
     pub replenisher_source: Box<InterfaceAccount<'info, TokenAccount>>,
 
@@ -329,6 +347,11 @@ pub struct ReplenishRedemptionPool<'info> {
     )]
     pub sss_mint: Box<InterfaceAccount<'info, Mint>>,
 
+    #[account(
+        constraint = collateral_mint.key() == config.collateral_mint @ SssError::InvalidMint,
+    )]
+    pub collateral_mint: InterfaceAccount<'info, Mint>,
+
     pub token_program: Interface<'info, TokenInterface>,
 }
 
@@ -336,6 +359,10 @@ pub fn replenish_redemption_pool_handler(
     ctx: Context<ReplenishRedemptionPool>,
     amount: u64,
 ) -> Result<()> {
+    require!(
+        ctx.accounts.config.collateral_mint != Pubkey::default(),
+        SssError::NoCollateralConfigured
+    );
     require!(amount > 0, SssError::InvalidAmount);
 
     let pool = &mut ctx.accounts.redemption_pool;
@@ -354,13 +381,13 @@ pub fn replenish_redemption_pool_handler(
             ctx.accounts.token_program.to_account_info(),
             TransferChecked {
                 from: ctx.accounts.replenisher_source.to_account_info(),
-                mint: ctx.accounts.sss_mint.to_account_info(),
+                mint: ctx.accounts.collateral_mint.to_account_info(),
                 to: ctx.accounts.reserve_vault.to_account_info(),
                 authority: ctx.accounts.replenisher.to_account_info(),
             },
         ),
         amount,
-        ctx.accounts.sss_mint.decimals,
+        ctx.accounts.collateral_mint.decimals,
     )?;
 
     emit!(RedemptionPoolReplenished {
@@ -403,11 +430,11 @@ pub struct DrainRedemptionPool<'info> {
     )]
     pub reserve_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// Destination for drained assets (authority's token account).
+    /// Destination for drained assets (authority's collateral token account).
     #[account(
         mut,
         constraint = drain_destination.owner == authority.key() @ SssError::TokenAccountOwnerMismatch,
-        constraint = drain_destination.mint == config.mint @ SssError::RedemptionPoolMintMismatch,
+        constraint = drain_destination.mint == config.collateral_mint @ SssError::RedemptionPoolMintMismatch,
     )]
     pub drain_destination: Box<InterfaceAccount<'info, TokenAccount>>,
 
@@ -424,10 +451,19 @@ pub struct DrainRedemptionPool<'info> {
     )]
     pub sss_mint: Box<InterfaceAccount<'info, Mint>>,
 
+    #[account(
+        constraint = collateral_mint.key() == config.collateral_mint @ SssError::InvalidMint,
+    )]
+    pub collateral_mint: InterfaceAccount<'info, Mint>,
+
     pub token_program: Interface<'info, TokenInterface>,
 }
 
 pub fn drain_redemption_pool_handler(ctx: Context<DrainRedemptionPool>) -> Result<()> {
+    require!(
+        ctx.accounts.config.collateral_mint != Pubkey::default(),
+        SssError::NoCollateralConfigured
+    );
     // Squads authority enforcement
     if ctx.accounts.config.feature_flags & FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(
@@ -452,14 +488,14 @@ pub fn drain_redemption_pool_handler(ctx: Context<DrainRedemptionPool>) -> Resul
             ctx.accounts.token_program.to_account_info(),
             TransferChecked {
                 from: ctx.accounts.reserve_vault.to_account_info(),
-                mint: ctx.accounts.sss_mint.to_account_info(),
+                mint: ctx.accounts.collateral_mint.to_account_info(),
                 to: ctx.accounts.drain_destination.to_account_info(),
                 authority: ctx.accounts.vault_authority.to_account_info(),
             },
             signer_seeds,
         ),
         drain_amount,
-        ctx.accounts.sss_mint.decimals,
+        ctx.accounts.collateral_mint.decimals,
     )?;
 
     emit!(RedemptionPoolDrained {

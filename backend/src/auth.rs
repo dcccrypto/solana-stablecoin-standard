@@ -68,9 +68,10 @@ pub async fn require_api_key(
                 .into_response();
         }
         Err(e) => {
+            tracing::error!("API key lookup error: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"success": false, "error": e.to_string()})),
+                Json(json!({"success": false, "error": "Internal server error"})),
             )
                 .into_response();
         }

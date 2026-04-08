@@ -335,7 +335,8 @@ pub fn psm_dynamic_swap_handler(ctx: Context<PsmDynamicSwap>, amount: u64) -> Re
 
     // 4. Update config state
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(amount).unwrap();
+    config.total_burned = config.total_burned.checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
     config.total_collateral = config.total_collateral.checked_sub(collateral_out)
         .ok_or(error!(SssError::InsufficientReserves))?;
 

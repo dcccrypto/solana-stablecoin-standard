@@ -404,10 +404,13 @@ pub fn process_redemption_handler(
         collateral_decimals,
     )?;
 
-    // Update config total_burned
+    // Update config total_burned and total_collateral
     {
         let config = &mut ctx.accounts.config;
-        config.total_burned = config.total_burned.saturating_add(amount);
+        config.total_burned = config.total_burned.checked_add(amount)
+            .ok_or(error!(SssError::Overflow))?;
+        config.total_collateral = config.total_collateral.checked_sub(amount)
+            .ok_or(error!(SssError::Overflow))?;
     }
 
     // Pay keeper reward from redemption_queue PDA lamports

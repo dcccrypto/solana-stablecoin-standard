@@ -92,6 +92,10 @@ export interface DepositCollateralParams {
   vaultTokenAccount: PublicKey;
   /** Token program for the collateral mint (defaults to TOKEN_PROGRAM_ID) */
   collateralTokenProgram?: PublicKey;
+  /** Optional collateral config account */
+  collateralConfig?: PublicKey;
+  /** Optional yield collateral config account */
+  yieldCollateralConfig?: PublicKey;
 }
 
 export interface BorrowStableParams {
@@ -105,8 +109,14 @@ export interface BorrowStableParams {
   userSssAccount: PublicKey;
   /** Pyth price feed account for collateral/USD */
   pythPriceFeed: PublicKey;
-  /** Token program for the collateral mint */
-  collateralTokenProgram?: PublicKey;
+  /**
+   * Token program for minting SSS stablecoins (Token-2022).
+   * Defaults to TOKEN_2022_PROGRAM_ID. Override only if using a
+   * non-standard token program for the SSS mint.
+   */
+  tokenProgram?: PublicKey;
+  /** Optional oracle consensus account */
+  oracleConsensus?: PublicKey;
 }
 
 export interface RepayStableParams {
@@ -245,6 +255,8 @@ export class CdpModule {
         collateralVault: collateralVaultPda,
         vaultTokenAccount: params.vaultTokenAccount,
         userCollateralAccount: params.userCollateralAccount,
+        collateralConfig: params.collateralConfig ?? null,
+        yieldCollateralConfig: params.yieldCollateralConfig ?? null,
         tokenProgram,
         systemProgram: (await import('@solana/web3.js')).SystemProgram.programId,
       })
@@ -272,7 +284,7 @@ export class CdpModule {
       this.programId,
     );
     const cdpPositionPda = getCdpPositionPda(this.sssMint, user, this.programId);
-    const tokenProgram = params.collateralTokenProgram ?? TOKEN_2022_PROGRAM_ID;
+    const tokenProgram = params.tokenProgram ?? TOKEN_2022_PROGRAM_ID;
 
     return program.methods
       .cdpBorrowStable(new BN(params.amount.toString()))
@@ -285,6 +297,7 @@ export class CdpModule {
         cdpPosition: cdpPositionPda,
         userSssAccount: params.userSssAccount,
         pythPriceFeed: params.pythPriceFeed,
+        oracleConsensus: params.oracleConsensus ?? null,
         tokenProgram,
         systemProgram: (await import('@solana/web3.js')).SystemProgram.programId,
       })
@@ -349,15 +362,21 @@ export class CdpModule {
     connection: Connection,
     collateralMints: PublicKey[] = [],
     collateralUsdPrices?: Map<string, number>,
+    sssDecimals?: number,
+    collateralDecimals?: number,
   ): Promise<CdpPosition> {
     const program = await this._loadProgram();
     const cdpPositionPda = getCdpPositionPda(this.sssMint, wallet, this.programId);
 
     // Fetch CdpPosition on-chain; if it doesn't exist, return zeroed position
     let debtAmount = 0n;
+    let accruedFees = 0n;
     try {
       const positionAccount = await program.account.cdpPosition.fetch(cdpPositionPda);
       debtAmount = BigInt(positionAccount.debtAmount.toString());
+      accruedFees = positionAccount.accruedFees
+        ? BigInt(positionAccount.accruedFees.toString())
+        : 0n;
     } catch {
       // Position doesn't exist yet — return empty
       return {
@@ -388,9 +407,12 @@ export class CdpModule {
     }
 
     // Compute health metrics
-    const debtUsdc = Number(debtAmount) / 1e6;
+    const effectiveDebt = debtAmount + accruedFees;
+    const sssDivisor = 10 ** (sssDecimals ?? 6);
+    const colDivisor = 10 ** (collateralDecimals ?? 6);
+    const debtUsdc = Number(effectiveDebt) / sssDivisor;
 
-    if (debtAmount === 0n) {
+    if (effectiveDebt === 0n) {
       return {
         owner: wallet,
         collateral: collateralEntries,
@@ -406,7 +428,7 @@ export class CdpModule {
     if (collateralUsdPrices && collateralUsdPrices.size > 0) {
       for (const entry of collateralEntries) {
         const price = collateralUsdPrices.get(entry.mint.toBase58()) ?? 0;
-        totalCollateralUsd += (Number(entry.deposited) / 1e6) * price;
+        totalCollateralUsd += (Number(entry.deposited) / colDivisor) * price;
       }
     }
 
@@ -417,9 +439,9 @@ export class CdpModule {
 
     // Liquidation price for first collateral entry
     let liquidationPrice = 0;
-    if (collateralEntries.length > 0 && debtAmount > 0n) {
+    if (collateralEntries.length > 0 && effectiveDebt > 0n) {
       const firstEntry = collateralEntries[0];
-      const depositedUnits = Number(firstEntry.deposited) / 1e6;
+      const depositedUnits = Number(firstEntry.deposited) / colDivisor;
       if (depositedUnits > 0) {
         // Price at which value = debt * liquidation_threshold
         liquidationPrice = (debtUsdc * liquidationRatio) / depositedUnits;
@@ -454,16 +476,22 @@ export class CdpModule {
     wallet: PublicKey,
     connection: Connection,
     pythFeeds?: Map<string, PublicKey>,
+    sssDecimals?: number,
+    collateralDecimals?: number,
   ): Promise<CdpPosition> {
     const program = await this._loadProgram();
     const cdpPositionPda = getCdpPositionPda(this.sssMint, wallet, this.programId);
 
     // 1. Try to fetch on-chain CdpPosition
     let debtAmount = 0n;
+    let accruedFees = 0n;
     let lockedCollateralMint: PublicKey | null = null;
     try {
       const positionAccount = await program.account.cdpPosition.fetch(cdpPositionPda);
       debtAmount = BigInt(positionAccount.debtAmount.toString());
+      accruedFees = positionAccount.accruedFees
+        ? BigInt(positionAccount.accruedFees.toString())
+        : 0n;
       if (positionAccount.collateralMint && !positionAccount.collateralMint.equals(PublicKey.default)) {
         lockedCollateralMint = positionAccount.collateralMint as PublicKey;
       }
@@ -511,23 +539,25 @@ export class CdpModule {
       }
     }
 
-    // 4. Parse vault accounts
-    for (const { account } of vaultAccounts) {
+    // 4. Parse vault accounts and filter to only include vaults for this sssMint
+    for (const { pubkey, account } of vaultAccounts) {
       try {
         const vaultData = await program.account.collateralVault.coder.accounts.decode(
           'CollateralVault',
           account.data,
         );
-        const vaultPda = getCollateralVaultPda(
+        const expectedPda = getCollateralVaultPda(
           this.sssMint,
           wallet,
           vaultData.collateralMint as PublicKey,
           this.programId,
         );
+        // Only include vaults derived from this sssMint
+        if (!expectedPda.equals(pubkey)) continue;
         collateralEntries.push({
           mint: vaultData.collateralMint as PublicKey,
           deposited: BigInt(vaultData.depositedAmount.toString()),
-          vaultPda,
+          vaultPda: expectedPda,
           vaultTokenAccount: vaultData.vaultTokenAccount as PublicKey,
         });
       } catch {
@@ -550,9 +580,12 @@ export class CdpModule {
     }
 
     // 5. Compute health metrics
-    const debtUsdc = Number(debtAmount) / 1e6;
+    const effectiveDebt = debtAmount + accruedFees;
+    const sssDivisor = 10 ** (sssDecimals ?? 6);
+    const colDivisor = 10 ** (collateralDecimals ?? 6);
+    const debtUsdc = Number(effectiveDebt) / sssDivisor;
 
-    if (debtAmount === 0n) {
+    if (effectiveDebt === 0n) {
       return {
         owner: wallet,
         collateral: collateralEntries,
@@ -566,7 +599,7 @@ export class CdpModule {
     let totalCollateralUsd = 0;
     for (const entry of collateralEntries) {
       const price = collateralUsdPrices.get(entry.mint.toBase58()) ?? 0;
-      totalCollateralUsd += (Number(entry.deposited) / 1e6) * price;
+      totalCollateralUsd += (Number(entry.deposited) / colDivisor) * price;
     }
 
     const ratio = totalCollateralUsd > 0 ? totalCollateralUsd / debtUsdc : 0;
@@ -575,9 +608,9 @@ export class CdpModule {
       totalCollateralUsd > 0 ? totalCollateralUsd / (debtUsdc * liquidationRatio) : 0;
 
     let liquidationPrice = 0;
-    if (collateralEntries.length > 0 && debtAmount > 0n) {
+    if (collateralEntries.length > 0 && effectiveDebt > 0n) {
       const firstEntry = collateralEntries[0];
-      const depositedUnits = Number(firstEntry.deposited) / 1e6;
+      const depositedUnits = Number(firstEntry.deposited) / colDivisor;
       if (depositedUnits > 0) {
         liquidationPrice = (debtUsdc * liquidationRatio) / depositedUnits;
       }

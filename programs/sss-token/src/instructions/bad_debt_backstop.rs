@@ -213,7 +213,7 @@ pub fn trigger_backstop_handler(
     let deposited = ctx.accounts.collateral_vault.deposited_amount;
     let debt = ctx.accounts.cdp_position.debt_amount;
     let accrued_fees = ctx.accounts.cdp_position.accrued_fees;
-    let effective_debt = debt.checked_add(accrued_fees).unwrap_or(debt);
+    let effective_debt = debt.checked_add(accrued_fees).ok_or(error!(SssError::Overflow))?;
 
     let collateral_decimals = ctx.accounts.collateral_mint.decimals as u32;
     let sss_decimals = ctx.accounts.sss_mint.decimals as u32;
@@ -239,7 +239,7 @@ pub fn trigger_backstop_handler(
         SssError::NoBadDebt
     );
 
-    let shortfall_amount = ((effective_debt as u128).saturating_sub(collateral_value_in_sss)) as u64;
+    let shortfall_amount = ((effective_debt as u128).saturating_sub(collateral_value_in_sss)).min(u64::MAX as u128) as u64;
 
     // Insurance fund must have a balance.
     let fund_balance = ctx.accounts.insurance_fund.amount;

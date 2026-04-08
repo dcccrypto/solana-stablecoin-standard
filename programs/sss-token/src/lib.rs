@@ -770,4 +770,439 @@ pub mod sss_token {
     pub fn force_close(ctx: Context<ForceClose>, channel_id: u64) -> Result<()> {
         instructions::apc::force_close_handler(ctx, channel_id)
     }
+
+    /// Resolve a disputed payment channel by mutual agreement or authority arbitration.
+    /// Requires either (a) both initiator + counterparty sign, or (b) the config authority signs.
+    pub fn resolve_dispute(
+        ctx: Context<ResolveDispute>,
+        channel_id: u64,
+        settlement_amount: u64,
+    ) -> Result<()> {
+        instructions::apc::resolve_dispute_handler(ctx, channel_id, settlement_amount)
+    }
+
+    // ─── SSS-120: Authority Rotation ─────────────────────────────────────────
+
+    /// Propose a timelocked authority rotation with a backup recovery key.
+    pub fn propose_authority_rotation(ctx: Context<ProposeAuthorityRotation>, new_authority: Pubkey, backup_authority: Pubkey) -> Result<()> {
+        instructions::authority_rotation::propose_authority_rotation_handler(ctx, new_authority, backup_authority)
+    }
+
+    /// Accept a proposed authority rotation after the timelock has elapsed.
+    pub fn accept_authority_rotation(ctx: Context<AcceptAuthorityRotation>) -> Result<()> {
+        instructions::authority_rotation::accept_authority_rotation_handler(ctx)
+    }
+
+    /// Cancel an in-flight authority rotation proposal. Current authority only.
+    pub fn cancel_authority_rotation(ctx: Context<CancelAuthorityRotation>) -> Result<()> {
+        instructions::authority_rotation::cancel_authority_rotation_handler(ctx)
+    }
+
+    /// Emergency recovery: backup authority claims authority after extended timelock.
+    pub fn emergency_recover_authority(ctx: Context<EmergencyRecoverAuthority>) -> Result<()> {
+        instructions::authority_rotation::emergency_recover_authority_handler(ctx)
+    }
+
+    // ─── SSS-BUG-008: Proof of Reserves ─────────────────────────────────────
+
+    /// Initialize the ProofOfReserves PDA for a mint. Authority only.
+    pub fn init_proof_of_reserves(
+        ctx: Context<InitProofOfReserves>,
+        attester: Pubkey,
+    ) -> Result<()> {
+        instructions::proof_of_reserves::init_proof_of_reserves_handler(ctx, attester)
+    }
+
+    /// Submit a new attestation for a mint's proof of reserves.
+    pub fn attest_proof_of_reserves(
+        ctx: Context<AttestProofOfReserves>,
+        verified_ratio_bps: u64,
+    ) -> Result<()> {
+        instructions::proof_of_reserves::attest_proof_of_reserves_handler(ctx, verified_ratio_bps)
+    }
+
+    // ─── SSS-130: Stability Fee PID Auto-Adjustment ─────────────────────────
+
+    /// Initialize PID controller config for automatic stability fee adjustment.
+    pub fn init_pid_config(
+        ctx: Context<InitPidConfig>,
+        params: instructions::pid_fee::InitPidConfigParams,
+    ) -> Result<()> {
+        instructions::pid_fee::init_pid_config_handler(ctx, params)
+    }
+
+    /// Permissionless keeper call: update stability fee via PID controller.
+    pub fn update_stability_fee_pid(
+        ctx: Context<UpdateStabilityFeePid>,
+        current_price: u64,
+    ) -> Result<()> {
+        instructions::pid_fee::update_stability_fee_pid_handler(ctx, current_price)
+    }
+
+    // ─── SSS-131: Graduated Liquidation Bonuses ─────────────────────────────
+
+    /// Initialize graduated liquidation bonus config. Authority only.
+    pub fn init_liquidation_bonus_config(
+        ctx: Context<InitLiquidationBonusConfig>,
+        params: instructions::liquidation_bonus::InitLiquidationBonusConfigParams,
+    ) -> Result<()> {
+        instructions::liquidation_bonus::init_liquidation_bonus_config_handler(ctx, params)
+    }
+
+    /// Update graduated liquidation bonus config. Authority only.
+    pub fn update_liquidation_bonus_config(
+        ctx: Context<UpdateLiquidationBonusConfig>,
+        params: instructions::liquidation_bonus::UpdateLiquidationBonusConfigParams,
+    ) -> Result<()> {
+        instructions::liquidation_bonus::update_liquidation_bonus_config_handler(ctx, params)
+    }
+
+    // ─── SSS-132: PSM Dynamic AMM-Style Slippage Curves ─────────────────────
+
+    /// Initialize PSM curve config for dynamic AMM-style fees. Authority only.
+    pub fn init_psm_curve_config(
+        ctx: Context<InitPsmCurveConfig>,
+        params: instructions::psm_amm_slippage::InitPsmCurveConfigParams,
+    ) -> Result<()> {
+        instructions::psm_amm_slippage::init_psm_curve_config_handler(ctx, params)
+    }
+
+    /// Update PSM curve config. Authority only.
+    pub fn update_psm_curve_config(
+        ctx: Context<UpdatePsmCurveConfig>,
+        params: instructions::psm_amm_slippage::UpdatePsmCurveConfigParams,
+    ) -> Result<()> {
+        instructions::psm_amm_slippage::update_psm_curve_config_handler(ctx, params)
+    }
+
+    /// PSM redeem with dynamic AMM-style fee.
+    pub fn psm_dynamic_swap(ctx: Context<PsmDynamicSwap>, amount: u64) -> Result<()> {
+        instructions::psm_amm_slippage::psm_dynamic_swap_handler(ctx, amount)
+    }
+
+    /// Read-only PSM fee preview (no state mutation). Emits PsmQuoteEvent.
+    pub fn get_psm_quote(ctx: Context<GetPsmQuote>, amount_in: u64) -> Result<()> {
+        instructions::psm_amm_slippage::get_psm_quote_handler(ctx, amount_in)
+    }
+
+    // ─── SSS-134: Squads Protocol V4 Authority ──────────────────────────────
+
+    /// Transfer authority to a Squads V4 multisig PDA. Irreversible.
+    pub fn init_squads_authority(
+        ctx: Context<InitSquadsAuthority>,
+        params: instructions::squads_authority::InitSquadsAuthorityParams,
+    ) -> Result<()> {
+        instructions::squads_authority::init_squads_authority_handler(ctx, params)
+    }
+
+    /// Verify that a signer is the registered Squads multisig PDA. Read-only.
+    pub fn verify_squads_authority(ctx: Context<VerifySquadsAuthority>) -> Result<()> {
+        instructions::squads_authority::verify_squads_authority_handler(ctx)
+    }
+
+    // ─── SSS-133: Per-Wallet Rate Limiting ──────────────────────────────────
+
+    /// Set or update a per-wallet rate limit. Authority only.
+    pub fn set_wallet_rate_limit(
+        ctx: Context<SetWalletRateLimit>,
+        params: instructions::wallet_rate_limit::SetWalletRateLimitParams,
+    ) -> Result<()> {
+        instructions::wallet_rate_limit::set_wallet_rate_limit_handler(ctx, params)
+    }
+
+    /// Remove a per-wallet rate limit and reclaim rent. Authority only.
+    pub fn remove_wallet_rate_limit(
+        ctx: Context<RemoveWalletRateLimit>,
+        wallet: Pubkey,
+    ) -> Result<()> {
+        instructions::wallet_rate_limit::remove_wallet_rate_limit_handler(ctx, wallet)
+    }
+
+    /// Update wallet rate limit counters (called via CPI from transfer hook).
+    pub fn update_wallet_rate_limit(
+        ctx: Context<UpdateWalletRateLimit>,
+        params: instructions::wallet_rate_limit::UpdateWalletRateLimitParams,
+    ) -> Result<()> {
+        instructions::wallet_rate_limit::update_wallet_rate_limit_handler(ctx, params)
+    }
+
+    // ─── Reserve Composition ────────────────────────────────────────────────
+
+    /// Create or update the reserve composition breakdown. Authority only.
+    pub fn update_reserve_composition(
+        ctx: Context<UpdateReserveComposition>,
+        params: instructions::reserve_composition::ReserveCompositionParams,
+    ) -> Result<()> {
+        instructions::reserve_composition::update_reserve_composition_handler(ctx, params)
+    }
+
+    /// Read and log the current reserve composition. Callable by anyone.
+    pub fn get_reserve_composition(ctx: Context<GetReserveComposition>) -> Result<()> {
+        instructions::reserve_composition::get_reserve_composition_handler(ctx)
+    }
+
+    // ─── SSS-125: On-Chain Redemption Guarantee ─────────────────────────────
+
+    /// Register a reserve vault as the redemption pool source. Authority only.
+    pub fn register_redemption_pool(
+        ctx: Context<RegisterRedemptionPool>,
+        max_daily_redemption: u64,
+    ) -> Result<()> {
+        instructions::redemption_guarantee::register_redemption_pool_handler(ctx, max_daily_redemption)
+    }
+
+    /// Request a redemption — locks stable tokens in escrow.
+    pub fn request_redemption(ctx: Context<RequestRedemption>, amount: u64) -> Result<()> {
+        instructions::redemption_guarantee::request_redemption_handler(ctx, amount)
+    }
+
+    /// Fulfill a redemption request within the SLA window.
+    pub fn fulfill_redemption(ctx: Context<FulfillRedemption>) -> Result<()> {
+        instructions::redemption_guarantee::fulfill_redemption_handler(ctx)
+    }
+
+    /// Claim an expired redemption (SLA breached) — returns stable + penalty.
+    pub fn claim_expired_redemption(ctx: Context<ClaimExpiredRedemption>) -> Result<()> {
+        instructions::redemption_guarantee::claim_expired_redemption_handler(ctx)
+    }
+
+    // ─── SSS-137: On-Chain Redemption Pools ─────────────────────────────────
+
+    /// Seed a redemption pool with collateral. Authority only.
+    pub fn seed_redemption_pool(
+        ctx: Context<SeedRedemptionPool>,
+        amount: u64,
+        max_pool_size: u64,
+        instant_redemption_fee_bps: u16,
+    ) -> Result<()> {
+        instructions::redemption_pool::seed_redemption_pool_handler(ctx, amount, max_pool_size, instant_redemption_fee_bps)
+    }
+
+    /// Instant redemption — burn SSS tokens, receive collateral from pool.
+    pub fn instant_redemption(ctx: Context<InstantRedemptionCtx>, amount: u64) -> Result<()> {
+        instructions::redemption_pool::instant_redemption_handler(ctx, amount)
+    }
+
+    /// Replenish a redemption pool. Permissionless.
+    pub fn replenish_redemption_pool(
+        ctx: Context<ReplenishRedemptionPool>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::redemption_pool::replenish_redemption_pool_handler(ctx, amount)
+    }
+
+    /// Drain the redemption pool. Authority only.
+    pub fn drain_redemption_pool(ctx: Context<DrainRedemptionPool>) -> Result<()> {
+        instructions::redemption_pool::drain_redemption_pool_handler(ctx)
+    }
+
+    // ─── SSS-127: Travel Rule Compliance ────────────────────────────────────
+
+    /// Set the travel rule threshold. Authority only.
+    pub fn set_travel_rule_threshold(
+        ctx: Context<SetTravelRuleThreshold>,
+        threshold: u64,
+    ) -> Result<()> {
+        instructions::travel_rule::set_travel_rule_threshold_handler(ctx, threshold)
+    }
+
+    /// Submit a Travel Rule record for a qualifying transfer.
+    pub fn submit_travel_rule_record(
+        ctx: Context<SubmitTravelRuleRecord>,
+        nonce: u64,
+        encrypted_payload: [u8; 256],
+        beneficiary_vasp: Pubkey,
+        transfer_amount: u64,
+    ) -> Result<()> {
+        instructions::travel_rule::submit_travel_rule_record_handler(ctx, nonce, encrypted_payload, beneficiary_vasp, transfer_amount)
+    }
+
+    /// Close a Travel Rule record and reclaim rent.
+    pub fn close_travel_rule_record(
+        ctx: Context<CloseTravelRuleRecord>,
+        nonce: u64,
+    ) -> Result<()> {
+        instructions::travel_rule::close_travel_rule_record_handler(ctx, nonce)
+    }
+
+    // ─── SSS-128: Sanctions Screening Oracle ────────────────────────────────
+
+    /// Register a sanctions oracle and staleness window. Authority only.
+    pub fn set_sanctions_oracle(
+        ctx: Context<SetSanctionsOracle>,
+        oracle: Pubkey,
+        max_staleness_slots: u64,
+    ) -> Result<()> {
+        instructions::sanctions_oracle::set_sanctions_oracle_handler(ctx, oracle, max_staleness_slots)
+    }
+
+    /// Disable the sanctions oracle. Authority only.
+    pub fn clear_sanctions_oracle(ctx: Context<ClearSanctionsOracle>) -> Result<()> {
+        instructions::sanctions_oracle::clear_sanctions_oracle_handler(ctx)
+    }
+
+    /// Oracle signer creates/updates a wallet's sanctions record.
+    pub fn update_sanctions_record(
+        ctx: Context<UpdateSanctionsRecord>,
+        wallet: Pubkey,
+        is_sanctioned: bool,
+    ) -> Result<()> {
+        instructions::sanctions_oracle::update_sanctions_record_handler(ctx, wallet, is_sanctioned)
+    }
+
+    /// Oracle signer closes a sanctions record and reclaims rent.
+    pub fn close_sanctions_record(
+        ctx: Context<CloseSanctionsRecord>,
+        wallet: Pubkey,
+    ) -> Result<()> {
+        instructions::sanctions_oracle::close_sanctions_record_handler(ctx, wallet)
+    }
+
+    // ─── SSS Bridge: Cross-Chain Hooks ──────────────────────────────────────
+
+    /// Initialize bridge config for a mint. Authority only.
+    pub fn init_bridge_config(
+        ctx: Context<InitBridgeConfig>,
+        bridge_type: u8,
+        bridge_program: Pubkey,
+        max_bridge_amount_per_tx: u64,
+        bridge_fee_bps: u16,
+        fee_vault: Pubkey,
+    ) -> Result<()> {
+        instructions::bridge::init_bridge_config_handler(ctx, bridge_type, bridge_program, max_bridge_amount_per_tx, bridge_fee_bps, fee_vault)
+    }
+
+    /// Bridge tokens out of Solana — burns tokens, emits BridgeOut event.
+    pub fn bridge_out(
+        ctx: Context<BridgeTokensOut>,
+        amount: u64,
+        target_chain: u16,
+        recipient_address: [u8; 32],
+    ) -> Result<()> {
+        instructions::bridge::bridge_out_handler(ctx, amount, target_chain, recipient_address)
+    }
+
+    /// Bridge tokens in — verify bridge proof, mint to recipient.
+    pub fn bridge_in(
+        ctx: Context<BridgeTokensIn>,
+        proof: instructions::bridge::BridgeProof,
+        amount: u64,
+        recipient: Pubkey,
+        message_id: [u8; 32],
+    ) -> Result<()> {
+        instructions::bridge::bridge_in_handler(ctx, proof, amount, recipient, message_id)
+    }
+
+    // ─── SSS-153: Multi-Oracle Consensus ────────────────────────────────────
+
+    /// Initialize OracleConsensus PDA with median/TWAP aggregation. Authority only.
+    pub fn init_oracle_consensus(
+        ctx: Context<InitOracleConsensus>,
+        min_oracles: u8,
+        outlier_threshold_bps: u16,
+        max_age_slots: u64,
+    ) -> Result<()> {
+        instructions::multi_oracle::init_oracle_consensus_handler(ctx, min_oracles, outlier_threshold_bps, max_age_slots)
+    }
+
+    /// Add or update an oracle source in the consensus PDA. Authority only.
+    pub fn set_oracle_source(
+        ctx: Context<SetOracleSource>,
+        slot_index: u8,
+        oracle_type: u8,
+        feed_pubkey: Pubkey,
+    ) -> Result<()> {
+        instructions::multi_oracle::set_oracle_source_handler(ctx, slot_index, oracle_type, feed_pubkey)
+    }
+
+    /// Remove an oracle source from the consensus PDA. Authority only.
+    pub fn remove_oracle_source(ctx: Context<RemoveOracleSource>, slot_index: u8) -> Result<()> {
+        instructions::multi_oracle::remove_oracle_source_handler(ctx, slot_index)
+    }
+
+    /// Permissionless keeper: compute consensus price from registered sources.
+    pub fn update_oracle_consensus<'info>(
+        ctx: Context<'_, '_, 'info, 'info, UpdateOracleConsensus<'info>>,
+    ) -> Result<()> {
+        instructions::multi_oracle::update_oracle_consensus_handler(ctx)
+    }
+
+    // ─── SSS-138: Market Maker Hooks ────────────────────────────────────────
+
+    /// Initialize market maker config. Authority only.
+    pub fn init_market_maker_config(
+        ctx: Context<InitMarketMakerConfig>,
+        params: instructions::market_maker::InitMarketMakerConfigParams,
+    ) -> Result<()> {
+        instructions::market_maker::init_market_maker_config_handler(ctx, params)
+    }
+
+    /// Register a whitelisted market maker pubkey. Authority only.
+    pub fn register_market_maker(
+        ctx: Context<RegisterMarketMaker>,
+        mm_pubkey: Pubkey,
+    ) -> Result<()> {
+        instructions::market_maker::register_market_maker_handler(ctx, mm_pubkey)
+    }
+
+    /// Whitelisted market maker mints tokens (subject to per-slot limit + oracle spread).
+    pub fn mm_mint(ctx: Context<MmMintAccounts>, amount: u64) -> Result<()> {
+        instructions::market_maker::mm_mint_handler(ctx, amount)
+    }
+
+    /// Whitelisted market maker burns tokens (subject to per-slot limit + oracle spread).
+    pub fn mm_burn(ctx: Context<MmBurnAccounts>, amount: u64) -> Result<()> {
+        instructions::market_maker::mm_burn_handler(ctx, amount)
+    }
+
+    /// Read-only: emits remaining mint/burn capacity for the current slot.
+    pub fn get_mm_capacity(ctx: Context<GetMmCapacity>) -> Result<()> {
+        instructions::market_maker::get_mm_capacity_handler(ctx)
+    }
+
+    // ─── SSS-150: Upgrade Authority Guard ───────────────────────────────────
+
+    /// Record the expected BPF upgrade authority in the config. Irreversible.
+    pub fn set_upgrade_authority_guard(
+        ctx: Context<SetUpgradeAuthorityGuard>,
+        upgrade_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::upgrade_authority_guard::set_upgrade_authority_guard_handler(ctx, upgrade_authority)
+    }
+
+    /// Verify that the provided upgrade authority matches the recorded guard.
+    pub fn verify_upgrade_authority(
+        ctx: Context<VerifyUpgradeAuthority>,
+        current_upgrade_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::upgrade_authority_guard::verify_upgrade_authority_handler(ctx, current_upgrade_authority)
+    }
+
+    // ─── SSS-152: Circuit Breaker Keeper ────────────────────────────────────
+
+    /// Initialize the keeper config for automated circuit breaker. Authority only.
+    pub fn init_keeper_config(
+        ctx: Context<InitKeeperConfig>,
+        params: instructions::circuit_breaker_keeper::InitKeeperConfigParams,
+    ) -> Result<()> {
+        instructions::circuit_breaker_keeper::init_keeper_config_handler(ctx, params)
+    }
+
+    /// Deposit SOL into the keeper fee vault. Anyone may fund.
+    pub fn seed_keeper_vault(
+        ctx: Context<SeedKeeperVault>,
+        amount_lamports: u64,
+    ) -> Result<()> {
+        instructions::circuit_breaker_keeper::seed_keeper_vault_handler(ctx, amount_lamports)
+    }
+
+    /// Permissionless: trigger circuit breaker if peg deviates beyond threshold.
+    pub fn crank_circuit_breaker(ctx: Context<CrankCircuitBreaker>) -> Result<()> {
+        instructions::circuit_breaker_keeper::crank_circuit_breaker_handler(ctx)
+    }
+
+    /// Permissionless: unpause after price returns within threshold for recovery window.
+    pub fn crank_unpause(ctx: Context<CrankUnpause>) -> Result<()> {
+        instructions::circuit_breaker_keeper::crank_unpause_handler(ctx)
+    }
 }

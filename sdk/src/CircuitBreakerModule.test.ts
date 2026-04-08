@@ -42,12 +42,12 @@ function makeMockProgram(txSig = 'tx-sig-mock') {
 
 /**
  * Build a minimal StablecoinConfig buffer with specific feature_flags.
- * Layout: 8 disc + 5×32 pubkeys + 1 preset + 8 feature_flags
+ * Canonical offset: [298..306] feature_flags (u64 LE)
  */
 function buildConfigData(featureFlags: bigint): Buffer {
-  const buf = Buffer.alloc(200, 0);
-  // feature_flags at offset 169
-  buf.writeBigUInt64LE(featureFlags, 169);
+  const FEATURE_FLAGS_OFFSET = 298;
+  const buf = Buffer.alloc(FEATURE_FLAGS_OFFSET + 8, 0);
+  buf.writeBigUInt64LE(featureFlags, FEATURE_FLAGS_OFFSET);
   return buf;
 }
 

@@ -43,17 +43,16 @@ function makeMockProgram(txSig = 'tx-sig-mock') {
 /**
  * Build a StablecoinConfig buffer with feature_flags + max_transfer_amount.
  *
- * Layout:
- * [0..8]    discriminator
- * [8..168]  5 × Pubkey (zero-filled)
- * [168..169] preset (u8)
- * [169..177] feature_flags (u64 LE)
- * [177..185] max_transfer_amount (u64 LE)
+ * Layout (canonical offsets):
+ * [298..306] feature_flags (u64 LE)
+ * [306..314] max_transfer_amount (u64 LE)
  */
 function buildConfigData(featureFlags: bigint, maxTransferAmount: bigint = 0n): Buffer {
-  const buf = Buffer.alloc(200, 0);
-  buf.writeBigUInt64LE(featureFlags, 169);
-  buf.writeBigUInt64LE(maxTransferAmount, 177);
+  const FEATURE_FLAGS_OFFSET = 298;
+  const MAX_TRANSFER_OFFSET = 306;
+  const buf = Buffer.alloc(MAX_TRANSFER_OFFSET + 8, 0);
+  buf.writeBigUInt64LE(featureFlags, FEATURE_FLAGS_OFFSET);
+  buf.writeBigUInt64LE(maxTransferAmount, MAX_TRANSFER_OFFSET);
   return buf;
 }
 
@@ -253,9 +252,9 @@ describe('SpendPolicyModule.getMaxTransferAmount', () => {
   });
 
   it('returns 0n when account data is too short to include max_transfer_amount', async () => {
-    const shortData = Buffer.alloc(180, 0); // only up to offset 180, needs 185
+    const shortData = Buffer.alloc(310, 0); // only up to offset 310, needs 314
     const sp = new SpendPolicyModule(makeMockProvider(shortData), PROGRAM_ID);
-    // offset 177 + 8 = 185 > 180 → returns 0n
+    // offset 306 + 8 = 314 > 310 → returns 0n
     expect(await sp.getMaxTransferAmount(MINT)).toBe(0n);
   });
 });

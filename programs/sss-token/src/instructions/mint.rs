@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
-use crate::events::MintHaltedByPoRBreach;
+use crate::events::{MintHaltedByPoRBreach, TokensMinted};
 use crate::state::{
     MinterInfo, ProofOfReserves, StablecoinConfig, FLAG_CIRCUIT_BREAKER, FLAG_POR_HALT_ON_BREACH,
 };
@@ -35,7 +35,7 @@ pub struct MintTokens<'info> {
     )]
     pub minter_info: Account<'info, MinterInfo>,
 
-    #[account(mut)]
+    #[account(mut, constraint = recipient_token_account.mint == mint.key() @ SssError::InvalidMint)]
     pub recipient_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,
@@ -108,7 +108,7 @@ pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, MintTokens<'info>>, amo
 
         if minter_info.max_mint_per_epoch > 0 {
             require!(
-                minter_info.minted_this_epoch.checked_add(amount).unwrap()
+                minter_info.minted_this_epoch.checked_add(amount).ok_or(error!(SssError::Overflow))?
                     <= minter_info.max_mint_per_epoch,
                 SssError::MintVelocityExceeded
             );
@@ -118,7 +118,7 @@ pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, MintTokens<'info>>, amo
     let minter_info = &mut ctx.accounts.minter_info;
     if minter_info.cap > 0 {
         require!(
-            minter_info.minted.checked_add(amount).unwrap() <= minter_info.cap,
+            minter_info.minted.checked_add(amount).ok_or(error!(SssError::Overflow))? <= minter_info.cap,
             SssError::MinterCapExceeded
         );
     }
@@ -127,7 +127,7 @@ pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, MintTokens<'info>>, amo
     let config = &ctx.accounts.config;
     if config.max_supply > 0 {
         require!(
-            config.net_supply().checked_add(amount).unwrap() <= config.max_supply,
+            config.net_supply().checked_add(amount).ok_or(error!(SssError::Overflow))? <= config.max_supply,
             SssError::MaxSupplyExceeded
         );
     }
@@ -154,11 +154,19 @@ pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, MintTokens<'info>>, amo
     )?;
 
     let config = &mut ctx.accounts.config;
-    config.total_minted = config.total_minted.checked_add(amount).unwrap();
-    minter_info.minted = minter_info.minted.checked_add(amount).unwrap();
+    config.total_minted = config.total_minted.checked_add(amount).ok_or(error!(SssError::Overflow))?;
+    minter_info.minted = minter_info.minted.checked_add(amount).ok_or(error!(SssError::Overflow))?;
     // SSS-093: Track epoch velocity regardless of whether limit is set
     // (enables auditing even when max_mint_per_epoch == 0).
-    minter_info.minted_this_epoch = minter_info.minted_this_epoch.checked_add(amount).unwrap();
+    minter_info.minted_this_epoch = minter_info.minted_this_epoch.checked_add(amount).ok_or(error!(SssError::Overflow))?;
+
+    emit!(TokensMinted {
+        mint: config.mint,
+        minter: ctx.accounts.minter.key(),
+        recipient: ctx.accounts.recipient_token_account.key(),
+        amount,
+        total_minted: config.total_minted,
+    });
 
     msg!("Minted {} tokens to {}", amount, ctx.accounts.recipient_token_account.key());
     Ok(())

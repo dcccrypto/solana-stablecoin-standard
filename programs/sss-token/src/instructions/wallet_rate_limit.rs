@@ -199,18 +199,22 @@ pub struct UpdateWalletRateLimitParams {
     pub wallet: Pubkey,
     /// Amount being transferred in this operation.
     pub transfer_amount: u64,
-    /// Current slot (from Clock).
-    pub current_slot: u64,
+    /// Deprecated: current_slot is now read from on-chain Clock.
+    /// Kept for backward-compatible deserialization; ignored at runtime.
+    pub _current_slot: u64,
 }
 
 #[derive(Accounts)]
 #[instruction(params: UpdateWalletRateLimitParams)]
 pub struct UpdateWalletRateLimit<'info> {
     /// Must be the transfer-hook program or the sss-token authority.
-    /// UncheckedAccount (not Signer) to allow unsigned CPI from the transfer-hook
-    /// program — the hook cannot sign as a program (no PDA signer), so we validate
-    /// the caller key manually in the handler.
-    /// CHECK: key is verified in update_wallet_rate_limit_handler.
+    /// When the caller is the authority, is_signer is required.
+    /// When the caller is the transfer-hook program, unsigned is allowed —
+    /// the hook program constructs this CPI internally and its pubkey is
+    /// validated against config.transfer_hook_program; external callers
+    /// cannot forge the hook program's pubkey as a signer.
+    /// CHECK: Validated in handler — key checked against config.transfer_hook_program
+    /// or config.authority (with signer requirement for authority path).
     pub caller: UncheckedAccount<'info>,
 
     #[account(
@@ -242,8 +246,18 @@ pub fn update_wallet_rate_limit_handler(
         SssError::Unauthorized
     );
 
+    // Authority path requires signature — prevents unsigned spoofing of the
+    // authority key.  Transfer hook path: caller key is validated against
+    // config.transfer_hook_program; only the hook program can construct the
+    // correct remaining_accounts for this CPI, and the unsigned path only
+    // allows the specific hook program key.
+    if ctx.accounts.caller.key() == ctx.accounts.config.authority {
+        require!(ctx.accounts.caller.is_signer, SssError::Unauthorized);
+    }
+
     let wrl = &mut ctx.accounts.wallet_rate_limit;
-    let current_slot = params.current_slot;
+    // Use on-chain Clock instead of caller-supplied slot to prevent manipulation.
+    let current_slot = Clock::get()?.slot;
 
     // Reset window if elapsed
     if current_slot >= wrl.window_start_slot.saturating_add(wrl.window_slots) {

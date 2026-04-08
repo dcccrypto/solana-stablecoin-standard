@@ -287,12 +287,13 @@ describe("SSS-129: ZK credential registry", () => {
       .verifyZkCredential(proof, signals)
       .accounts({
         holder: holderA.publicKey,
+        issuer: issuer.publicKey,
         config,
         registry,
         credentialRecord: credRecord,
         systemProgram: SystemProgram.programId,
       })
-      .signers([holderA])
+      .signers([holderA, issuer])
       .rpc();
 
     const record = await program.account.credentialRecord.fetch(credRecord);
@@ -375,12 +376,13 @@ describe("SSS-129: ZK credential registry", () => {
       .verifyZkCredential(proof, signals)
       .accounts({
         holder: holderB.publicKey,
+        issuer: issuer.publicKey,
         config: config3,
         registry: registry3,
         credentialRecord: credRecord3,
         systemProgram: SystemProgram.programId,
       })
-      .signers([holderB])
+      .signers([holderB, issuer])
       .rpc();
 
     const record = await program.account.credentialRecord.fetch(credRecord3);
@@ -410,12 +412,13 @@ describe("SSS-129: ZK credential registry", () => {
         .verifyZkCredential(proof, signals)
         .accounts({
           holder: holderB.publicKey,
+          issuer: issuer.publicKey,
           config,
           registry,
           credentialRecord: credRecord,
           systemProgram: SystemProgram.programId,
         })
-        .signers([holderB])
+        .signers([holderB, issuer])
         .rpc();
       expect.fail("Should have thrown InvalidZkProof");
     } catch (err: any) {
@@ -436,12 +439,13 @@ describe("SSS-129: ZK credential registry", () => {
         .verifyZkCredential(shortProof, signals)
         .accounts({
           holder: holderB.publicKey,
+          issuer: issuer.publicKey,
           config,
           registry,
           credentialRecord: credRecord,
           systemProgram: SystemProgram.programId,
         })
-        .signers([holderB])
+        .signers([holderB, issuer])
         .rpc();
       expect.fail("Should have thrown InvalidZkProof");
     } catch (err: any) {
@@ -554,12 +558,13 @@ describe("SSS-129: ZK credential registry", () => {
       .verifyZkCredential(proof, signals)
       .accounts({
         holder: holderA.publicKey,
+        issuer: issuer.publicKey,
         config,
         registry,
         credentialRecord: credRecordA,
         systemProgram: SystemProgram.programId,
       })
-      .signers([holderA])
+      .signers([holderA, issuer])
       .rpc();
 
     try {
@@ -592,12 +597,13 @@ describe("SSS-129: ZK credential registry", () => {
       .verifyZkCredential(proof, signals)
       .accounts({
         holder: holderB.publicKey,
+        issuer: issuer.publicKey,
         config,
         registry,
         credentialRecord: credRecordB,
         systemProgram: SystemProgram.programId,
       })
-      .signers([holderB])
+      .signers([holderB, issuer])
       .rpc();
 
     const balanceBefore = await connection.getBalance(holderB.publicKey);
@@ -632,12 +638,13 @@ describe("SSS-129: ZK credential registry", () => {
       .verifyZkCredential(proof, signals)
       .accounts({
         holder: holderB.publicKey,
+        issuer: issuer.publicKey,
         config,
         registry,
         credentialRecord: credRecordB,
         systemProgram: SystemProgram.programId,
       })
-      .signers([holderB])
+      .signers([holderB, issuer])
       .rpc();
 
     try {
@@ -673,12 +680,13 @@ describe("SSS-129: ZK credential registry", () => {
       .verifyZkCredential(proof, signals)
       .accounts({
         holder: holderA.publicKey,
+        issuer: issuer.publicKey,
         config,
         registry,
         credentialRecord: credRecordA,
         systemProgram: SystemProgram.programId,
       })
-      .signers([holderA])
+      .signers([holderA, issuer])
       .rpc();
 
     const recordAfter = await program.account.credentialRecord.fetch(credRecordA);

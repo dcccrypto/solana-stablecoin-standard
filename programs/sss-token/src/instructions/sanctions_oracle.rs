@@ -242,7 +242,11 @@ pub fn verify_sanctions_if_required(
 
     let record = match record {
         Some(r) => r,
-        // No record = not sanctioned (oracle hasn't flagged this wallet)
+        // SECURITY NOTE: Fail-open by design — new wallets that haven't been scanned
+        // by the sanctions oracle are allowed to transact. The oracle must proactively
+        // scan and flag sanctioned wallets. A fail-closed design would block all new
+        // wallets until the oracle creates a "clean" record for them.
+        // See: audit finding AUDIT-R1-C3
         None => return Ok(()),
     };
 

@@ -75,6 +75,10 @@ pub fn init_pid_config_handler(
     ctx: Context<InitPidConfig>,
     params: InitPidConfigParams,
 ) -> Result<()> {
+    // AUDIT NOTE: No timelock enforcement — PID config initialization
+    // is not currently supported by the admin timelock operation set.
+    // TODO: Add ADMIN_OP_INIT_PID_CONFIG to admin_timelock.rs
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(
@@ -164,6 +168,28 @@ pub fn update_stability_fee_pid_handler(
         config.check_feature_flag(FLAG_PID_FEE_CONTROL),
         SssError::PidConfigNotFound,
     );
+
+    // Cooldown: reject updates that are too frequent (at least 10 slots apart)
+    let current_slot = Clock::get()?.slot;
+    require!(
+        current_slot >= pid.last_update_slot.saturating_add(10),
+        SssError::PidUpdateTooFrequent
+    );
+
+    // Validate current_price against on-chain oracle when available
+    if config.oracle_type != 0 && config.oracle_feed != Pubkey::default() {
+        // When oracle is configured, bound the keeper-supplied price to
+        // within 10% of the target price as a sanity check.
+        // Full oracle verification would require the oracle account in remaining_accounts.
+        let target = pid.target_price;
+        let max_deviation = target / 10; // 10% max deviation
+        let lower = target.saturating_sub(max_deviation);
+        let upper = target.saturating_add(max_deviation);
+        require!(
+            current_price >= lower && current_price <= upper,
+            SssError::InvalidPrice
+        );
+    }
 
     // PID computation (i64 arithmetic, 1e6-scaled gains)
     let error: i64 = (pid.target_price as i64).saturating_sub(current_price as i64);

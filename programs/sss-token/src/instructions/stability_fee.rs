@@ -124,7 +124,7 @@ pub fn collect_stability_fee_handler(ctx: Context<CollectStabilityFee>) -> Resul
         .ok_or(error!(SssError::InvalidPrice))?
         / (10_000u128 * SECS_PER_YEAR as u128);
 
-    let new_fee = new_fee as u64;
+    let new_fee = new_fee.min(u64::MAX as u128) as u64;
 
     // BUG-012 CRIT-07: total_to_burn = previously accrued (pending) + newly accrued
     // accrued_fees holds PENDING un-burned fees; after burn it resets to 0.
@@ -134,7 +134,7 @@ pub fn collect_stability_fee_handler(ctx: Context<CollectStabilityFee>) -> Resul
         .cdp_position
         .accrued_fees
         .checked_add(new_fee)
-        .unwrap_or(u64::MAX);
+        .ok_or(error!(SssError::Overflow))?;
 
     if total_to_burn == 0 {
         // Update timestamp even if rounded down to zero
@@ -175,7 +175,8 @@ pub fn collect_stability_fee_handler(ctx: Context<CollectStabilityFee>) -> Resul
     ctx.accounts.cdp_position.last_fee_accrual = now;
 
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(total_to_burn).unwrap();
+    config.total_burned = config.total_burned.checked_add(total_to_burn)
+        .ok_or(error!(SssError::Overflow))?;
 
     msg!(
         "SSS-092/BUG-015-016 stability fee: burned {} SSS from {}. elapsed={}s fee_bps={} caller={}",
@@ -341,29 +342,13 @@ pub struct BurnAccruedFees<'info> {
     pub cdp_position: Account<'info, CdpPosition>,
 }
 
-/// BUG-012 CRIT-07: Burn accrued stability fees for a CDP position.
-/// Resets `accrued_fees` to 0 after burn to prevent double-counting.
-pub fn burn_accrued_fees_handler(ctx: Context<BurnAccruedFees>) -> Result<()> {
-    let position = &mut ctx.accounts.cdp_position;
-    let config = &mut ctx.accounts.config;
-
-    let fees = position.accrued_fees;
-    if fees == 0 {
-        msg!("burn_accrued_fees: no accrued fees to burn");
-        return Ok(());
-    }
-
-    // Deduct from total minted (simulates fee burn)
-    config.total_burned = config.total_burned.saturating_add(fees);
-
-    // BUG-012: Reset to 0 to prevent double-count
-    position.accrued_fees = 0;
-
-    msg!(
-        "burn_accrued_fees: burned {} accrued fees for debtor {} mint {}",
-        fees,
-        ctx.accounts.debtor.key(),
-        config.mint,
-    );
-    Ok(())
+/// BUG FIX: This handler previously forgave debt without burning tokens.
+/// The accounts struct lacks a token account and token program, so no actual
+/// burn CPI was performed — yet `accrued_fees` was reset to 0 and
+/// `total_burned` was incremented, effectively forgiving debt.
+/// Accrued fees must be settled via `collect_stability_fee` or `cdp_repay_stable`.
+pub fn burn_accrued_fees_handler(_ctx: Context<BurnAccruedFees>) -> Result<()> {
+    // BUG FIX: This handler previously forgave debt without burning tokens.
+    // Accrued fees must be settled via collect_stability_fee or cdp_repay_stable.
+    err!(SssError::InstructionDisabled)
 }

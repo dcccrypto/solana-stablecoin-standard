@@ -366,7 +366,8 @@ pub fn mm_mint_handler(ctx: Context<MmMintAccounts>, amount: u64) -> Result<()> 
 
     // 6. Update StablecoinConfig supply totals
     let config = &mut ctx.accounts.config;
-    config.total_minted = config.total_minted.checked_add(amount).unwrap();
+    config.total_minted = config.total_minted.checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
 
     emit!(MmMint {
         mint: ctx.accounts.mint.key(),
@@ -493,7 +494,8 @@ pub fn mm_burn_handler(ctx: Context<MmBurnAccounts>, amount: u64) -> Result<()> 
 
     // 5. Update StablecoinConfig supply totals
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(amount).unwrap();
+    config.total_burned = config.total_burned.checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
 
     emit!(MmBurn {
         mint: ctx.accounts.mint.key(),

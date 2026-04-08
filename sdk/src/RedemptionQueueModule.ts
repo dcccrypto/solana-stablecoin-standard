@@ -185,9 +185,8 @@ export class RedemptionQueueModule {
    * Seeds: `[b"redemption-queue", config_pubkey]`
    */
   getRedemptionQueuePda(mint: PublicKey): [PublicKey, number] {
-    const [config] = this.getConfigPda(mint);
     return PublicKey.findProgramAddressSync(
-      [RedemptionQueueModule.REDEMPTION_QUEUE_SEED, config.toBuffer()],
+      [RedemptionQueueModule.REDEMPTION_QUEUE_SEED, mint.toBuffer()],
       this.programId
     );
   }
@@ -198,11 +197,10 @@ export class RedemptionQueueModule {
    * Seeds: `[b"redemption-entry", config_pubkey, queue_index.to_le_bytes()]`
    */
   getRedemptionEntryPda(mint: PublicKey, queueIndex: BN | number): [PublicKey, number] {
-    const [config] = this.getConfigPda(mint);
     const idxBuf = Buffer.alloc(8);
     idxBuf.writeBigUInt64LE(BigInt(queueIndex.toString()), 0);
     return PublicKey.findProgramAddressSync(
-      [RedemptionQueueModule.REDEMPTION_ENTRY_SEED, config.toBuffer(), idxBuf],
+      [RedemptionQueueModule.REDEMPTION_ENTRY_SEED, mint.toBuffer(), idxBuf],
       this.programId
     );
   }
@@ -213,11 +211,10 @@ export class RedemptionQueueModule {
    * Seeds: `[b"queue-escrow", config_pubkey, queue_index.to_le_bytes()]`
    */
   getEscrowStablePda(mint: PublicKey, queueIndex: BN | number): [PublicKey, number] {
-    const [config] = this.getConfigPda(mint);
     const idxBuf = Buffer.alloc(8);
     idxBuf.writeBigUInt64LE(BigInt(queueIndex.toString()), 0);
     return PublicKey.findProgramAddressSync(
-      [RedemptionQueueModule.QUEUE_ESCROW_SEED, config.toBuffer(), idxBuf],
+      [RedemptionQueueModule.QUEUE_ESCROW_SEED, mint.toBuffer(), idxBuf],
       this.programId
     );
   }

@@ -205,9 +205,8 @@ describe('ZkComplianceModule.initZkCompliance', () => {
     const zk = makeModule(makeMockProvider(), mockProgram);
     await zk.initZkCompliance({ mint: MINT });
     // Methods proxy was called — verify rpc was invoked
-    const rpc = (mockProgram.methods as any)[Symbol.iterator];
-    // Just assert no throw and result is returned
-    expect(true).toBe(true);
+    const result = await zk.initZkCompliance({ mint: MINT });
+    expect(result).toBeDefined();
   });
 
   it('calls rpc with confirmed commitment', async () => {

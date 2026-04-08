@@ -86,6 +86,7 @@ pub fn init_oracle_consensus_handler(
     oc.last_consensus_slot = 0;
     oc.twap_price = 0;
     oc.twap_last_slot = 0;
+    oc.last_consensus_conf = 0;
     oc.bump = ctx.bumps.oracle_consensus;
 
     msg!("SSS-153: OracleConsensus initialised for mint {}", oc.mint);
@@ -344,6 +345,9 @@ pub fn update_oracle_consensus_handler<'info>(
     if fresh_count == 0 {
         // No fresh sources at all — fall back to TWAP if available
         if oc.twap_price > 0 {
+            let twap_age = current_slot.saturating_sub(oc.twap_last_slot);
+            // Reject TWAP older than 1000 slots (~7 minutes)
+            require!(twap_age <= 1000, SssError::StalePriceFeed);
             let twap = oc.twap_price;
             let oc_mint = oc.mint;
             update_twap(oc, twap, current_slot);
@@ -398,14 +402,40 @@ pub fn update_oracle_consensus_handler<'info>(
         sort_slice(&mut accepted_sorted[..accepted_count]);
         (median_of(&accepted_sorted[..accepted_count]), false)
     } else if oc.twap_price > 0 {
+        let twap_age = current_slot.saturating_sub(oc.twap_last_slot);
+        // Reject TWAP older than 1000 slots (~7 minutes)
+        require!(twap_age <= 1000, SssError::StalePriceFeed);
         (oc.twap_price, true)
     } else {
         return err!(SssError::InsufficientOracles);
     };
 
+    // Reject zero consensus price (e.g. all sources reported zero)
+    require!(consensus_price > 0, SssError::InvalidPrice);
+
+    // Compute confidence as max deviation of any accepted price from consensus
+    let max_dev = if !used_twap {
+        let mut md: u64 = 0;
+        for i in 0..accepted_count {
+            let p = accepted_prices[i];
+            let dev = if p > consensus_price {
+                p.saturating_sub(consensus_price)
+            } else {
+                consensus_price.saturating_sub(p)
+            };
+            if dev > md {
+                md = dev;
+            }
+        }
+        md
+    } else {
+        0
+    };
+
     // ── Step 6: update TWAP (EMA: alpha=1/8 ≈ 12.5%) ─────────────────────
     update_twap(oc, consensus_price, current_slot);
     oc.last_consensus_price = consensus_price;
+    oc.last_consensus_conf = max_dev;
     oc.last_consensus_slot = current_slot;
 
     emit!(OracleConsensusUpdated {

@@ -30,7 +30,8 @@ export type ProposalActionKind =
   | { kind: 'SetFeatureFlag'; flag: bigint }
   | { kind: 'ClearFeatureFlag'; flag: bigint }
   | { kind: 'UpdateMinter'; newMinter: PublicKey }
-  | { kind: 'RevokeMinter'; minter: PublicKey };
+  | { kind: 'RevokeMinter'; minter: PublicKey }
+  | { kind: 'DrawInsurance' };
 
 /**
  * On-chain state of a proposal, as decoded from the `ProposalPda` account.
@@ -243,8 +244,23 @@ export class DaoCommitteeModule {
     const [proposal] = this.getProposalPda(mint, proposalId);
 
     // IDL expects: (action, param, target) — proposalId is NOT an arg (comes from committee.next_proposal_id)
+    let param = new BN(0);
+    let target = PublicKey.default;
+    switch (action.kind) {
+      case 'SetFeatureFlag':
+      case 'ClearFeatureFlag':
+        param = new BN(action.flag.toString());
+        break;
+      case 'UpdateMinter':
+        target = action.newMinter;
+        break;
+      case 'RevokeMinter':
+        target = action.minter;
+        break;
+    }
+
     return program.methods
-      .proposeAction(this._encodeAction(action), new BN(0), PublicKey.default)
+      .proposeAction(this._encodeAction(action), param, target)
       .accounts({
         proposer: this.provider.wallet.publicKey,
         mint,
@@ -274,7 +290,7 @@ export class DaoCommitteeModule {
     const [proposal] = this.getProposalPda(mint, proposalId);
 
     return program.methods
-      .voteAction(proposalId)
+      .voteAction(new BN(proposalId))
       .accounts({
         voter: this.provider.wallet.publicKey,
         mint,
@@ -303,7 +319,7 @@ export class DaoCommitteeModule {
     const [proposal] = this.getProposalPda(mint, proposalId);
 
     return program.methods
-      .executeAction(proposalId)
+      .executeAction(new BN(proposalId))
       .accounts({
         executor: this.provider.wallet.publicKey,
         mint,
@@ -334,7 +350,7 @@ export class DaoCommitteeModule {
         config: raw.config as PublicKey,
         proposalId: raw.proposalId as number,
         proposer: raw.proposer as PublicKey,
-        action: this._decodeAction(raw.action),
+        action: this._decodeAction(raw),
         votes: (raw.votes ?? []) as PublicKey[],
         executed: raw.executed as boolean,
         cancelled: raw.cancelled as boolean,
@@ -357,13 +373,15 @@ export class DaoCommitteeModule {
       case 'Unpause':
         return { unpause: {} };
       case 'SetFeatureFlag':
-        return { setFeatureFlag: { flag: new BN(action.flag.toString()) } };
+        return { setFeatureFlag: {} };
       case 'ClearFeatureFlag':
-        return { clearFeatureFlag: { flag: new BN(action.flag.toString()) } };
+        return { clearFeatureFlag: {} };
       case 'UpdateMinter':
-        return { updateMinter: { newMinter: action.newMinter } };
+        return { updateMinter: {} };
       case 'RevokeMinter':
-        return { revokeMinter: { minter: action.minter } };
+        return { revokeMinter: {} };
+      case 'DrawInsurance':
+        return { drawInsurance: {} };
     }
   }
 
@@ -371,17 +389,18 @@ export class DaoCommitteeModule {
    * Decode an Anchor enum action variant back to `ProposalActionKind`.
    * @internal
    */
-  private _decodeAction(raw: any): ProposalActionKind {
-    if (raw.pause !== undefined) return { kind: 'Pause' };
-    if (raw.unpause !== undefined) return { kind: 'Unpause' };
-    if (raw.setFeatureFlag !== undefined)
-      return { kind: 'SetFeatureFlag', flag: BigInt(raw.setFeatureFlag.flag.toString()) };
-    if (raw.clearFeatureFlag !== undefined)
-      return { kind: 'ClearFeatureFlag', flag: BigInt(raw.clearFeatureFlag.flag.toString()) };
-    if (raw.updateMinter !== undefined)
-      return { kind: 'UpdateMinter', newMinter: raw.updateMinter.newMinter as PublicKey };
-    if (raw.revokeMinter !== undefined)
-      return { kind: 'RevokeMinter', minter: raw.revokeMinter.minter as PublicKey };
+  private _decodeAction(proposal: any): ProposalActionKind {
+    const raw = proposal.action ?? proposal;
+    const param = proposal.param ? BigInt(proposal.param.toString()) : 0n;
+    const target = proposal.target ?? null;
+
+    if ('pause' in raw) return { kind: 'Pause' };
+    if ('unpause' in raw) return { kind: 'Unpause' };
+    if ('setFeatureFlag' in raw) return { kind: 'SetFeatureFlag', flag: param };
+    if ('clearFeatureFlag' in raw) return { kind: 'ClearFeatureFlag', flag: param };
+    if ('updateMinter' in raw) return { kind: 'UpdateMinter', newMinter: target };
+    if ('revokeMinter' in raw) return { kind: 'RevokeMinter', minter: target };
+    if ('drawInsurance' in raw) return { kind: 'DrawInsurance' };
     throw new Error(`Unknown ProposalAction variant: ${JSON.stringify(raw)}`);
   }
 

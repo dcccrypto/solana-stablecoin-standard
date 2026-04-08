@@ -152,9 +152,30 @@ pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> 
     // SSS-113 HIGH-05: Use effective debt (principal + accrued fees) for ratio check.
     // Without accrued_fees, borrowers could over-borrow once fees pushed them past the limit.
     let existing_debt = ctx.accounts.cdp_position.debt_amount as u128;
-    let accrued_fees = ctx.accounts.cdp_position.accrued_fees as u128;
-    let effective_existing_debt = existing_debt.checked_add(accrued_fees).unwrap();
-    let new_total_debt = effective_existing_debt.checked_add(amount as u128).unwrap();
+    let stored_accrued_fees = ctx.accounts.cdp_position.accrued_fees;
+
+    // Accrue pending time-based fees before ratio check so that fees accumulated
+    // since last_fee_accrual are not ignored, preventing under-collateralised borrows.
+    let now = clock.unix_timestamp;
+    let last_accrual = ctx.accounts.cdp_position.last_fee_accrual;
+    let pending_fees: u64 = if last_accrual > 0 && ctx.accounts.config.stability_fee_bps > 0 {
+        let elapsed = (now.saturating_sub(last_accrual)).max(0) as u128;
+        let debt_u128 = ctx.accounts.cdp_position.debt_amount as u128;
+        let fee_bps = ctx.accounts.config.stability_fee_bps as u128;
+        let secs_per_year = 31_536_000u128;
+        (debt_u128.checked_mul(fee_bps).unwrap_or(0)
+            .checked_mul(elapsed).unwrap_or(0)
+            / (10_000u128.checked_mul(secs_per_year).unwrap_or(1)))
+            .min(u64::MAX as u128) as u64
+    } else {
+        0
+    };
+    let total_accrued = stored_accrued_fees.checked_add(pending_fees).unwrap_or(stored_accrued_fees);
+
+    let effective_existing_debt = existing_debt.checked_add(total_accrued as u128)
+        .ok_or(error!(SssError::Overflow))?;
+    let new_total_debt = effective_existing_debt.checked_add(amount as u128)
+        .ok_or(error!(SssError::Overflow))?;
 
     require!(
         new_total_debt <= max_borrow_sss,
@@ -201,11 +222,16 @@ pub fn cdp_borrow_stable_handler(ctx: Context<CdpBorrowStable>, amount: u64) -> 
             position.collateral_mint == ctx.accounts.collateral_mint.key(),
             SssError::WrongCollateralMint,
         );
+        // Persist accrued pending fees and reset accrual timestamp on subsequent borrows
+        position.accrued_fees = total_accrued;
+        position.last_fee_accrual = now;
     }
-    position.debt_amount = position.debt_amount.checked_add(amount).unwrap();
+    position.debt_amount = position.debt_amount.checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
 
     let config = &mut ctx.accounts.config;
-    config.total_minted = config.total_minted.checked_add(amount).unwrap();
+    config.total_minted = config.total_minted.checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
 
     emit!(CdpBorrowed {
         sss_mint: ctx.accounts.sss_mint.key(),

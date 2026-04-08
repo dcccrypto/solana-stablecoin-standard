@@ -16,12 +16,8 @@ const DEBTOR_TOKEN_ACCOUNT = Keypair.generate().publicKey;
 /**
  * Build a fake StablecoinConfig account buffer.
  *
- * Layout tail (SSS-092/093 fields, bytes from the end):
- *   [-1]      bump: u8
- *   [-3..-1]  max_oracle_conf_bps: u16 LE  (SSS-090)
- *   [-7..-3]  max_oracle_age_secs: u32 LE  (SSS-090)
- *   [-9..-7]  redemption_fee_bps: u16 LE   (SSS-093)
- *   [-11..-9] stability_fee_bps: u16 LE    (SSS-092)
+ * Canonical offset:
+ *   [409..411] stability_fee_bps: u16 LE (SSS-092)
  */
 function buildConfigData(
   stabilityFeeBps: number,
@@ -29,16 +25,11 @@ function buildConfigData(
     redemptionFeeBps?: number;
     maxOracleAgeSecs?: number;
     maxOracleConfBps?: number;
-    totalLen?: number;
   } = {},
 ): Buffer {
-  const totalLen = opts.totalLen ?? 300;
-  const buf = Buffer.alloc(totalLen, 0xab);
-  buf.writeUInt16LE(stabilityFeeBps, totalLen - 11);
-  buf.writeUInt16LE(opts.redemptionFeeBps ?? 0, totalLen - 9);
-  buf.writeUInt32LE(opts.maxOracleAgeSecs ?? 60, totalLen - 7);
-  buf.writeUInt16LE(opts.maxOracleConfBps ?? 100, totalLen - 3);
-  buf.writeUInt8(255, totalLen - 1); // bump
+  const STABILITY_FEE_BPS_OFFSET = 409;
+  const buf = Buffer.alloc(STABILITY_FEE_BPS_OFFSET + 2, 0);
+  buf.writeUInt16LE(stabilityFeeBps, STABILITY_FEE_BPS_OFFSET);
   return buf;
 }
 

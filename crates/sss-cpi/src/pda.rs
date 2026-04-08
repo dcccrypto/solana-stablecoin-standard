@@ -31,7 +31,7 @@ const SEED_SANCTIONS_RECORD: &[u8] = b"sanctions-record";
 const SEED_CREDENTIAL_REGISTRY: &[u8] = b"credential-registry";
 const SEED_CREDENTIAL_RECORD: &[u8] = b"credential-record";
 const SEED_PID_CONFIG: &[u8] = b"pid-config";
-const SEED_AUTHORITY_ROTATION: &[u8] = b"authority-rotation-request";
+const SEED_AUTHORITY_ROTATION: &[u8] = b"authority-rotation";
 const SEED_GUARDIAN_CONFIG: &[u8] = b"guardian-config";
 const SEED_PAUSE_PROPOSAL: &[u8] = b"pause-proposal";
 const SEED_CUSTOM_PRICE_FEED: &[u8] = b"custom-price-feed";
@@ -70,20 +70,20 @@ pub fn find_interface_version(mint: &Pubkey) -> (Pubkey, u8) {
 
 /// Derive the CDP collateral vault PDA.
 ///
-/// Seeds: `["cdp-collateral-vault", config, collateral_mint]`
-pub fn find_cdp_vault(config: &Pubkey, collateral_mint: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["cdp-collateral-vault", sss_mint, user, collateral_mint]`
+pub fn find_cdp_vault(sss_mint: &Pubkey, user: &Pubkey, collateral_mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_CDP_VAULT, config.as_ref(), collateral_mint.as_ref()],
+        &[SEED_CDP_VAULT, sss_mint.as_ref(), user.as_ref(), collateral_mint.as_ref()],
         &sss_program_id(),
     )
 }
 
 /// Derive the CDP position PDA for a specific owner.
 ///
-/// Seeds: `["cdp-position", config, owner]`
-pub fn find_cdp_position(config: &Pubkey, owner: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["cdp-position", sss_mint, owner]`
+pub fn find_cdp_position(sss_mint: &Pubkey, owner: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_CDP_POSITION, config.as_ref(), owner.as_ref()],
+        &[SEED_CDP_POSITION, sss_mint.as_ref(), owner.as_ref()],
         &sss_program_id(),
     )
 }
@@ -130,61 +130,64 @@ pub fn find_guardian_config(config: &Pubkey) -> (Pubkey, u8) {
 
 /// Derive a pause proposal PDA.
 ///
-/// Seeds: `["pause-proposal", config]`
-pub fn find_pause_proposal(config: &Pubkey) -> (Pubkey, u8) {
-    Pubkey::find_program_address(&[SEED_PAUSE_PROPOSAL, config.as_ref()], &sss_program_id())
+/// Seeds: `["pause-proposal", config, &proposal_id.to_le_bytes()]`
+pub fn find_pause_proposal(config: &Pubkey, proposal_id: u64, program_id: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[SEED_PAUSE_PROPOSAL, config.as_ref(), &proposal_id.to_le_bytes()],
+        program_id,
+    )
 }
 
 // ── Compliance / KYC PDAs ─────────────────────────────────────────────────────
 
 /// Derive the ZK compliance config PDA.
 ///
-/// Seeds: `["zk-compliance-config", config]`
-pub fn find_zk_compliance_config(config: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["zk-compliance-config", mint]`
+pub fn find_zk_compliance_config(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_ZK_COMPLIANCE_CONFIG, config.as_ref()],
+        &[SEED_ZK_COMPLIANCE_CONFIG, mint.as_ref()],
         &sss_program_id(),
     )
 }
 
 /// Derive a ZK verification record PDA for a specific user.
 ///
-/// Seeds: `["zk-verification", config, user]`
-pub fn find_zk_verification_record(config: &Pubkey, user: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["zk-verification", mint, user]`
+pub fn find_zk_verification_record(mint: &Pubkey, user: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_ZK_VERIFICATION, config.as_ref(), user.as_ref()],
+        &[SEED_ZK_VERIFICATION, mint.as_ref(), user.as_ref()],
         &sss_program_id(),
     )
 }
 
 /// Derive the credential registry PDA.
 ///
-/// Seeds: `["credential-registry", config]`
-pub fn find_credential_registry(config: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["credential-registry", mint]`
+pub fn find_credential_registry(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_CREDENTIAL_REGISTRY, config.as_ref()],
+        &[SEED_CREDENTIAL_REGISTRY, mint.as_ref()],
         &sss_program_id(),
     )
 }
 
 /// Derive a credential record PDA for a holder.
 ///
-/// Seeds: `["credential-record", registry, holder]`
-pub fn find_credential_record(registry: &Pubkey, holder: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["credential-record", mint, holder]`
+pub fn find_credential_record(mint: &Pubkey, holder: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_CREDENTIAL_RECORD, registry.as_ref(), holder.as_ref()],
+        &[SEED_CREDENTIAL_RECORD, mint.as_ref(), holder.as_ref()],
         &sss_program_id(),
     )
 }
 
 /// Derive a travel rule record PDA for a transfer.
 ///
-/// Seeds: `["travel-rule-record", config, &transfer_id.to_le_bytes()]`
-pub fn find_travel_rule_record(config: &Pubkey, transfer_id: u64) -> (Pubkey, u8) {
+/// Seeds: `["travel-rule-record", mint, &transfer_id.to_le_bytes()]`
+pub fn find_travel_rule_record(mint: &Pubkey, transfer_id: u64) -> (Pubkey, u8) {
     Pubkey::find_program_address(
         &[
             SEED_TRAVEL_RULE_RECORD,
-            config.as_ref(),
+            mint.as_ref(),
             &transfer_id.to_le_bytes(),
         ],
         &sss_program_id(),
@@ -193,10 +196,10 @@ pub fn find_travel_rule_record(config: &Pubkey, transfer_id: u64) -> (Pubkey, u8
 
 /// Derive a sanctions record PDA for a wallet.
 ///
-/// Seeds: `["sanctions-record", config, wallet]`
-pub fn find_sanctions_record(config: &Pubkey, wallet: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["sanctions-record", mint, wallet]`
+pub fn find_sanctions_record(mint: &Pubkey, wallet: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_SANCTIONS_RECORD, config.as_ref(), wallet.as_ref()],
+        &[SEED_SANCTIONS_RECORD, mint.as_ref(), wallet.as_ref()],
         &sss_program_id(),
     )
 }
@@ -205,12 +208,12 @@ pub fn find_sanctions_record(config: &Pubkey, wallet: &Pubkey) -> (Pubkey, u8) {
 
 /// Derive the collateral config PDA.
 ///
-/// Seeds: `["collateral-config", config, collateral_mint]`
-pub fn find_collateral_config(config: &Pubkey, collateral_mint: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["collateral-config", sss_mint, collateral_mint]`
+pub fn find_collateral_config(sss_mint: &Pubkey, collateral_mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
         &[
             SEED_COLLATERAL_CONFIG,
-            config.as_ref(),
+            sss_mint.as_ref(),
             collateral_mint.as_ref(),
         ],
         &sss_program_id(),
@@ -229,32 +232,32 @@ pub fn find_proof_of_reserves(mint: &Pubkey) -> (Pubkey, u8) {
 
 /// Derive the reserve composition PDA.
 ///
-/// Seeds: `["reserve-composition", config]`
-pub fn find_reserve_composition(config: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["reserve-composition", mint]`
+pub fn find_reserve_composition(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_RESERVE_COMPOSITION, config.as_ref()],
+        &[SEED_RESERVE_COMPOSITION, mint.as_ref()],
         &sss_program_id(),
     )
 }
 
 /// Derive the redemption guarantee PDA.
 ///
-/// Seeds: `["redemption-guarantee", config]`
-pub fn find_redemption_guarantee(config: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["redemption-guarantee", mint]`
+pub fn find_redemption_guarantee(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_REDEMPTION_GUARANTEE, config.as_ref()],
+        &[SEED_REDEMPTION_GUARANTEE, mint.as_ref()],
         &sss_program_id(),
     )
 }
 
 /// Derive a redemption request PDA for a specific user.
 ///
-/// Seeds: `["redemption-request", config, requester]`
-pub fn find_redemption_request(config: &Pubkey, requester: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["redemption-request", mint, requester]`
+pub fn find_redemption_request(mint: &Pubkey, requester: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
         &[
             SEED_REDEMPTION_REQUEST,
-            config.as_ref(),
+            mint.as_ref(),
             requester.as_ref(),
         ],
         &sss_program_id(),
@@ -265,56 +268,56 @@ pub fn find_redemption_request(config: &Pubkey, requester: &Pubkey) -> (Pubkey, 
 
 /// Derive the PID fee config PDA.
 ///
-/// Seeds: `["pid-config", config]`
-pub fn find_pid_config(config: &Pubkey) -> (Pubkey, u8) {
-    Pubkey::find_program_address(&[SEED_PID_CONFIG, config.as_ref()], &sss_program_id())
+/// Seeds: `["pid-config", mint]`
+pub fn find_pid_config(mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[SEED_PID_CONFIG, mint.as_ref()], &sss_program_id())
 }
 
 /// Derive a custom price feed PDA.
 ///
-/// Seeds: `["custom-price-feed", config]`
-pub fn find_custom_price_feed(config: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["custom-price-feed", mint]`
+pub fn find_custom_price_feed(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_CUSTOM_PRICE_FEED, config.as_ref()],
+        &[SEED_CUSTOM_PRICE_FEED, mint.as_ref()],
         &sss_program_id(),
     )
 }
 
 /// Derive the confidential transfer config PDA.
 ///
-/// Seeds: `["ct-config", config]`
-pub fn find_ct_config(config: &Pubkey) -> (Pubkey, u8) {
-    Pubkey::find_program_address(&[SEED_CT_CONFIG, config.as_ref()], &sss_program_id())
+/// Seeds: `["ct-config", mint]`
+pub fn find_ct_config(mint: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[SEED_CT_CONFIG, mint.as_ref()], &sss_program_id())
 }
 
 // ── SSS-131 / SSS-132 / SSS-133 / SSS-134 PDAs ───────────────────────────────
 
 /// Derive the liquidation bonus config PDA.
 ///
-/// Seeds: `["liquidation-bonus-config", config]`
-pub fn find_liquidation_bonus_config(config: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["liquidation-bonus-config", mint]`
+pub fn find_liquidation_bonus_config(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_LIQUIDATION_BONUS_CONFIG, config.as_ref()],
+        &[SEED_LIQUIDATION_BONUS_CONFIG, mint.as_ref()],
         &sss_program_id(),
     )
 }
 
 /// Derive the PSM curve config PDA.
 ///
-/// Seeds: `["psm-curve-config", config]`
-pub fn find_psm_curve_config(config: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["psm-curve-config", mint]`
+pub fn find_psm_curve_config(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_PSM_CURVE_CONFIG, config.as_ref()],
+        &[SEED_PSM_CURVE_CONFIG, mint.as_ref()],
         &sss_program_id(),
     )
 }
 
 /// Derive a wallet rate-limit PDA for a specific wallet.
 ///
-/// Seeds: `["wallet-rate-limit", config, wallet]`
-pub fn find_wallet_rate_limit(config: &Pubkey, wallet: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["wallet-rate-limit", mint, wallet]`
+pub fn find_wallet_rate_limit(mint: &Pubkey, wallet: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_WALLET_RATE_LIMIT, config.as_ref(), wallet.as_ref()],
+        &[SEED_WALLET_RATE_LIMIT, mint.as_ref(), wallet.as_ref()],
         &sss_program_id(),
     )
 }
@@ -331,10 +334,10 @@ pub fn find_squads_multisig_config(mint: &Pubkey) -> (Pubkey, u8) {
 
 /// Derive the yield collateral config PDA.
 ///
-/// Seeds: `["yield-collateral", config]`
-pub fn find_yield_collateral_config(config: &Pubkey) -> (Pubkey, u8) {
+/// Seeds: `["yield-collateral", mint]`
+pub fn find_yield_collateral_config(mint: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[SEED_YIELD_COLLATERAL, config.as_ref()],
+        &[SEED_YIELD_COLLATERAL, mint.as_ref()],
         &sss_program_id(),
     )
 }

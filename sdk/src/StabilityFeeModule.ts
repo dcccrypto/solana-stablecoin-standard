@@ -291,24 +291,38 @@ export class StabilityFeeModule {
     const data = accountInfo.data;
 
     // StablecoinConfig layout (state.rs, SSS-092 schema):
-    //   [0..8]   discriminator
-    //   [8..40]  authority: Pubkey
-    //   [40..72] mint: Pubkey
-    //   [72]     preset: u8
-    //   [73]     paused: bool
-    //   [74..82] max_supply: u64
-    //   [82..90] total_minted: u64
-    //   [90..98] total_burned: u64
-    //   ...      (variable-length fields: minter_registry PDA, etc.)
-    //   [-1]     bump: u8
-    //   [-3..-1] max_oracle_conf_bps: u16 LE  (SSS-090)
-    //   [-7..-3] max_oracle_age_secs: u32 LE  (SSS-090)
-    //   [-9..-7] redemption_fee_bps: u16 LE   (SSS-093)
-    //   [-11..-9] stability_fee_bps: u16 LE   (SSS-092, appended before SSS-093 fields)
-    //
-    // We read from the tail to stay robust against layout changes.
-    const len = data.length;
-    const stabilityFeeBps = data.readUInt16LE(len - 11);
+    //   [0..8]     discriminator
+    //   [8..40]    mint: Pubkey
+    //   [40..72]   authority: Pubkey
+    //   [72..104]  compliance_authority: Pubkey
+    //   [104]      preset: u8
+    //   [105]      paused: bool
+    //   [106..114] total_minted: u64
+    //   [114..122] total_burned: u64
+    //   [122..154] transfer_hook_program: Pubkey
+    //   [154..186] collateral_mint: Pubkey
+    //   [186..218] reserve_vault: Pubkey
+    //   [218..226] total_collateral: u64
+    //   [226..234] max_supply: u64
+    //   [234..266] pending_authority: Pubkey
+    //   [266..298] pending_compliance_authority: Pubkey
+    //   [298..306] feature_flags: u64
+    //   [306..314] max_transfer_amount: u64
+    //   [314..346] expected_pyth_feed: Pubkey
+    //   [346..354] admin_op_mature_slot: u64
+    //   [354]      admin_op_kind: u8
+    //   [355..363] admin_op_param: u64
+    //   [363..395] admin_op_target: Pubkey
+    //   [395..403] admin_timelock_delay: u64
+    //   [403..407] max_oracle_age_secs: u32
+    //   [407..409] max_oracle_conf_bps: u16
+    //   [409..411] stability_fee_bps: u16
+    const STABILITY_FEE_BPS_OFFSET = 409;
+
+    if (data.length < STABILITY_FEE_BPS_OFFSET + 2) {
+      return { stabilityFeeBps: 0 };
+    }
+    const stabilityFeeBps = data.readUInt16LE(STABILITY_FEE_BPS_OFFSET);
 
     return { stabilityFeeBps };
   }

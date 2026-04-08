@@ -30,7 +30,7 @@ import {
 
 /** Deployed program IDs (devnet + localnet) — matches Anchor.toml (SSS-DEVNET-002) */
 export const SSS_TOKEN_PROGRAM_ID = new PublicKey(
-  '2haUR6bUPcWXkCG9bZCPvVJYvtkGRDHnLtX1X1j9zbUY'
+  'ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811'
 );
 export const SSS_TRANSFER_HOOK_PROGRAM_ID = new PublicKey(
   'phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp'
@@ -187,7 +187,7 @@ export class SolanaStablecoin {
     }
     // SSS-147a: squads multisig — only if deployed IDL supports it
     if (hasField('squads_multisig')) {
-      initParams['squadsMultisig'] = null;
+      initParams['squadsMultisig'] = config.squadsMultisig ?? null;
     }
 
     // Build accounts — ctConfig is optional and only included when the CT flag is set
@@ -440,10 +440,10 @@ export class SolanaStablecoin {
   async updateRoles(params: UpdateRolesParams): Promise<TransactionSignature> {
     const program = await this._loadProgram();
     return program.methods
-      .updateRoles(
-        params.newAuthority ?? null,
-        params.newComplianceAuthority ?? null
-      )
+      .updateRoles({
+        newAuthority: params.newAuthority ?? null,
+        newComplianceAuthority: params.newComplianceAuthority ?? null,
+      })
       .accounts({
         authority: this.provider.wallet.publicKey,
         config: this.configPda,
@@ -473,10 +473,10 @@ export class SolanaStablecoin {
     // the on-chain program stores it in pending_authority /
     // pending_compliance_authority and emits AuthorityProposed.
     return program.methods
-      .updateRoles(
-        isCompliance ? null : params.proposed,
-        isCompliance ? params.proposed : null
-      )
+      .updateRoles({
+        newAuthority: isCompliance ? null : params.proposed,
+        newComplianceAuthority: isCompliance ? params.proposed : null,
+      })
       .accounts({
         authority: this.provider.wallet.publicKey,
         config: this.configPda,
@@ -533,6 +533,7 @@ export class SolanaStablecoin {
   async depositCollateral(
     params: DepositCollateralParams
   ): Promise<TransactionSignature> {
+    const { TOKEN_PROGRAM_ID } = await import('@solana/spl-token');
     const program = await this._loadProgram();
     return program.methods
       .depositCollateral(new BN(params.amount.toString()))
@@ -543,7 +544,7 @@ export class SolanaStablecoin {
         collateralMint: params.collateralMint,
         depositorCollateral: params.depositorCollateral,
         reserveVault: params.reserveVault,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        tokenProgram: params.collateralTokenProgram ?? TOKEN_PROGRAM_ID,
       })
       .rpc({ commitment: 'confirmed' });
   }

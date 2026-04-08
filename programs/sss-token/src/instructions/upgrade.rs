@@ -16,34 +16,46 @@ pub const MIN_SUPPORTED_VERSION: u8 = 1;
 
 // Byte offsets into a StablecoinConfig account (including 8-byte discriminator).
 // Layout matches Borsh serialization order in state.rs:
-//   [0..8]     Anchor discriminator (8 bytes)
-//   [8..40]    mint                 (Pubkey, 32 bytes)
-//   [40..72]   authority            (Pubkey, 32 bytes)
-//   ...many fields...
-//   [657]      version              (u8, 1 byte)
-//
-// authority offset = disc(8) + mint(32) = 40
-// version offset   = 40 + authority(32) + compliance_authority(32) + preset(1) +
-//                    paused(1) + total_minted(8) + total_burned(8) +
-//                    transfer_hook_program(32) + collateral_mint(32) +
-//                    reserve_vault(32) + total_collateral(8) + max_supply(8) +
-//                    pending_authority(32) + pending_compliance_authority(32) +
-//                    feature_flags(8) + max_transfer_amount(8) +
-//                    expected_pyth_feed(32) + admin_op_mature_slot(8) +
-//                    admin_op_kind(1) + admin_op_param(8) + admin_op_target(32) +
-//                    admin_timelock_delay(8) + max_oracle_age_secs(4) +
-//                    max_oracle_conf_bps(2) + stability_fee_bps(2) +
-//                    redemption_fee_bps(2) + insurance_fund_pubkey(32) +
-//                    max_backstop_bps(2) + auditor_elgamal_pubkey(32) +
-//                    min_reserve_ratio_bps(2) + reserve_attestor_whitelist(32*4) +
-//                    travel_rule_threshold(8) + sanctions_oracle(32) +
-//                    sanctions_max_staleness_slots(8) = 657
+//   [0..8]     Anchor discriminator       (8 bytes)
+//   [8..40]    mint                       (Pubkey, 32 bytes)
+//   [40..72]   authority                  (Pubkey, 32 bytes)
+//   [72..104]  compliance_authority       (Pubkey, 32 bytes)
+//   [104]      preset                     (u8, 1 byte)
+//   [105]      paused                     (bool, 1 byte)
+//   [106..114] total_minted              (u64, 8 bytes)
+//   [114..122] total_burned              (u64, 8 bytes)
+//   [122..154] transfer_hook_program     (Pubkey, 32 bytes)
+//   [154..186] collateral_mint           (Pubkey, 32 bytes)
+//   [186..218] reserve_vault             (Pubkey, 32 bytes)
+//   [218..226] total_collateral          (u64, 8 bytes)
+//   [226..234] max_supply                (u64, 8 bytes)
+//   [234..266] pending_authority         (Pubkey, 32 bytes)
+//   [266..298] pending_compliance_authority (Pubkey, 32 bytes)
+//   [298..306] feature_flags             (u64, 8 bytes)
+//   [306..314] max_transfer_amount       (u64, 8 bytes)
+//   [314..346] expected_pyth_feed        (Pubkey, 32 bytes)
+//   [346..354] admin_op_mature_slot      (u64, 8 bytes)
+//   [354]      admin_op_kind             (u8, 1 byte)
+//   [355..363] admin_op_param            (u64, 8 bytes)
+//   [363..395] admin_op_target           (Pubkey, 32 bytes)
+//   [395..403] admin_timelock_delay      (u64, 8 bytes)
+//   [403..407] max_oracle_age_secs       (u32, 4 bytes)
+//   [407..409] max_oracle_conf_bps       (u16, 2 bytes)
+//   [409..411] stability_fee_bps         (u16, 2 bytes)
+//   [411..413] redemption_fee_bps        (u16, 2 bytes)
+//   [413..445] insurance_fund_pubkey     (Pubkey, 32 bytes)
+//   [445..447] max_backstop_bps          (u16, 2 bytes)
+//   [447..479] auditor_elgamal_pubkey    ([u8;32], 32 bytes)
+//   [479]      oracle_type               (u8, 1 byte)
+//   [480..512] oracle_feed               (Pubkey, 32 bytes)
+//   [512]      supply_cap_locked         (bool, 1 byte)
+//   [513]      version                   (u8, 1 byte)
 //
 // These offsets must stay in sync with StablecoinConfig field declaration order.
 const DISC_LEN: usize = 8;
 const OFFSET_MINT: usize = DISC_LEN;                    // 8
 const OFFSET_AUTHORITY: usize = DISC_LEN + 32;          // 40
-const OFFSET_VERSION: usize = 657;                      // after all preceding fields
+const OFFSET_VERSION: usize = 513;                      // after all preceding fields
 const V0_MIN_READ: usize = DISC_LEN + 32 + 32;          // 72 bytes minimum (disc+mint+authority)
 
 /// Anchor discriminator for StablecoinConfig.
@@ -91,7 +103,12 @@ pub fn migrate_config_handler(ctx: Context<MigrateConfig>) -> Result<()> {
             SssError::Unauthorized
         );
 
-        let version = data[OFFSET_VERSION];
+        // If the account is too small to contain the version field, treat as v0.
+        let version = if data.len() <= OFFSET_VERSION {
+            0u8
+        } else {
+            data[OFFSET_VERSION]
+        };
         let authority = Pubkey::try_from(&data[OFFSET_AUTHORITY..OFFSET_AUTHORITY + 32])
             .map_err(|_| error!(SssError::Unauthorized))?;
         let full_size = DISC_LEN + StablecoinConfig::INIT_SPACE;

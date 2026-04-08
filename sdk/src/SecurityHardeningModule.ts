@@ -241,14 +241,14 @@ export class SlippageGuard {
     //   offset 208: price (i64)
     //   offset 216: conf  (u64)
     //   offset 224: status (u32)
-    //   offset 228: pub_slot (u64)
+    //   offset 232: pub_slot (u64)
     //
     // For SDK safety this guard uses a minimal decode of just the
     // aggregate price + confidence fields.
     const AGGREGATE_PRICE_OFFSET = 208;
     const data = accountInfo.data;
 
-    if (data.length < AGGREGATE_PRICE_OFFSET + 24) {
+    if (data.length < AGGREGATE_PRICE_OFFSET + 32) {
       throw new Error(`SlippageGuard: Pyth feed account data too short (${data.length} bytes)`);
     }
 
@@ -261,8 +261,8 @@ export class SlippageGuard {
     const confHigh = data.readUInt32LE(AGGREGATE_PRICE_OFFSET + 12);
     const confRaw = confHigh * 4294967296 + confLow;
 
-    const pubSlotLow = data.readUInt32LE(AGGREGATE_PRICE_OFFSET + 20);
-    const pubSlotHigh = data.readUInt32LE(AGGREGATE_PRICE_OFFSET + 24);
+    const pubSlotLow = data.readUInt32LE(AGGREGATE_PRICE_OFFSET + 24);
+    const pubSlotHigh = data.readUInt32LE(AGGREGATE_PRICE_OFFSET + 28);
     const validSlot = pubSlotHigh * 4294967296 + pubSlotLow;
 
     // Pyth price exponent is at offset 20 in the price account

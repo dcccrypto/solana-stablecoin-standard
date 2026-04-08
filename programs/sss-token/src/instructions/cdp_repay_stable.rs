@@ -6,7 +6,7 @@ use anchor_spl::token_interface::{
 
 use crate::error::SssError;
 use crate::events::CdpRepaid;
-use crate::state::{CdpPosition, CollateralVault, StablecoinConfig};
+use crate::state::{CdpPosition, CollateralConfig, CollateralVault, StablecoinConfig};
 
 // BUG-012: cdp_repay_stable must settle accrued_fees before/during repayment.
 // Repay flow: (1) burn accrued_fees first (fee settlement), (2) burn principal repay amount,
@@ -85,6 +85,15 @@ pub struct CdpRepayStable<'info> {
     )]
     pub user_collateral_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
+    /// Optional: CollateralConfig PDA for per-collateral params (SSS-098).
+    /// When present, total_deposited is decremented on collateral release.
+    #[account(
+        mut,
+        seeds = [CollateralConfig::SEED, sss_mint.key().as_ref(), collateral_mint.key().as_ref()],
+        bump = collateral_config.bump,
+    )]
+    pub collateral_config: Option<Box<Account<'info, CollateralConfig>>>,
+
     /// Token program for SSS-3 (Token-2022)
     pub sss_token_program: Interface<'info, TokenInterface>,
 
@@ -95,6 +104,13 @@ pub struct CdpRepayStable<'info> {
 #[inline(never)]
 pub fn cdp_repay_stable_handler(ctx: Context<CdpRepayStable>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
+    require!(
+        ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
+        SssError::ConfigVersionTooOld
+    );
+
+    // NOTE: Repayment is allowed during pause — blocking repayment would
+    // prevent users from reducing debt, worsening system health.
 
     let position = &ctx.accounts.cdp_position;
     let debt = position.debt_amount;
@@ -111,7 +127,7 @@ pub fn cdp_repay_stable_handler(ctx: Context<CdpRepayStable>, amount: u64) -> Re
     let collateral_to_release = if debt > 0 {
         (deposited as u128)
             .checked_mul(amount as u128)
-            .unwrap()
+            .ok_or(error!(SssError::Overflow))?
             .checked_div(debt as u128)
             .unwrap_or(0) as u64
     } else {
@@ -169,7 +185,8 @@ pub fn cdp_repay_stable_handler(ctx: Context<CdpRepayStable>, amount: u64) -> Re
 
     // 3. Update state
     let position = &mut ctx.accounts.cdp_position;
-    position.debt_amount = position.debt_amount.checked_sub(amount).unwrap();
+    position.debt_amount = position.debt_amount.checked_sub(amount)
+        .ok_or(error!(SssError::Overflow))?;
     // BUG-012 CRIT-06: reset accrued_fees to 0 — they have been burned above
     position.accrued_fees = 0;
 
@@ -177,11 +194,20 @@ pub fn cdp_repay_stable_handler(ctx: Context<CdpRepayStable>, amount: u64) -> Re
     vault.deposited_amount = vault
         .deposited_amount
         .checked_sub(collateral_to_release)
-        .unwrap_or(0);
+        .ok_or(error!(SssError::Overflow))?;
+
+    // Decrement CollateralConfig.total_deposited to keep the global counter accurate.
+    if collateral_to_release > 0 {
+        if let Some(cc) = ctx.accounts.collateral_config.as_mut() {
+            cc.total_deposited = cc.total_deposited.checked_sub(collateral_to_release)
+                .ok_or(error!(SssError::Overflow))?;
+        }
+    }
 
     let config = &mut ctx.accounts.config;
     // total_burned includes both principal and fees
-    config.total_burned = config.total_burned.checked_add(total_burn).unwrap();
+    config.total_burned = config.total_burned.checked_add(total_burn)
+        .ok_or(error!(SssError::Overflow))?;
 
     emit!(CdpRepaid {
         sss_mint: ctx.accounts.sss_mint.key(),

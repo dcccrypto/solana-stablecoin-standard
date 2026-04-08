@@ -48,14 +48,14 @@ const FLAG_CONFIDENTIAL_TRANSFERS: u64 = 1 << 5;
 /// FLAG_ZK_COMPLIANCE bit in feature_flags (bit 4 = 1 << 4).
 const FLAG_ZK_COMPLIANCE: u64 = 1 << 4;
 
-/// FLAG_SANCTIONS_ORACLE bit in feature_flags (bit 9 = 1 << 9).
-const FLAG_SANCTIONS_ORACLE: u64 = 1 << 9;
+/// FLAG_SANCTIONS_ORACLE bit in feature_flags (bit 7 = 1 << 7).
+const FLAG_SANCTIONS_ORACLE: u64 = 1 << 7;
 
-/// FLAG_ZK_CREDENTIALS bit in feature_flags (bit 10 = 1 << 10).
-const FLAG_ZK_CREDENTIALS: u64 = 1 << 10;
+/// FLAG_ZK_CREDENTIALS bit in feature_flags (bit 8 = 1 << 8).
+const FLAG_ZK_CREDENTIALS: u64 = 1 << 8;
 
-/// FLAG_WALLET_RATE_LIMITS bit in feature_flags (bit 14 = 1 << 14).
-const FLAG_WALLET_RATE_LIMITS: u64 = 1 << 14;
+/// FLAG_WALLET_RATE_LIMITS bit in feature_flags (bit 12 = 1 << 12).
+const FLAG_WALLET_RATE_LIMITS: u64 = 1 << 12;
 
 /// BUG-024: FLAG_REQUIRE_OWNER_CONSENT bit in feature_flags (bit 15 = 1 << 15).
 /// When set, permanent-delegate transfers are rejected unless the wallet owner
@@ -88,7 +88,7 @@ const CREDENTIAL_RECORD_SEED: &[u8] = b"credential-record";
 
 /// Program ID of the sss-token program that owns CredentialRecord PDAs.
 /// CredentialRecord PDAs are derived against THIS program, not the transfer-hook.
-const SSS_TOKEN_PROGRAM_ID: &str = "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat";
+const SSS_TOKEN_PROGRAM_ID: Pubkey = solana_program::pubkey!("ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811");
 
 /// PDA seed for VerificationRecord in the sss-token program.
 const ZK_VERIFICATION_SEED: &[u8] = b"zk-verification";
@@ -107,29 +107,31 @@ const SANCTIONS_RECORD_SEED: &[u8] = b"sanctions-record";
 
 /// Byte offset of `sanctions_oracle` (Pubkey, 32 bytes) in StablecoinConfig.
 /// Layout from FEATURE_FLAGS_OFFSET=298:
-///   306  max_transfer_amount  u64   8
-///   314  expected_pyth_feed   Pubkey 32
-///   346  admin_op_mature_slot u64   8
-///   354  admin_op_kind        u8    1
-///   355  admin_op_param       u64   8
-///   363  admin_op_target      Pubkey 32
-///   395  admin_timelock_delay u64   8
-///   403  max_oracle_age_secs  u32   4
-///   407  max_oracle_conf_bps  u16   2
-///   409  stability_fee_bps    u16   2
-///   411  redemption_fee_bps   u16   2
-///   413  insurance_fund_pubkey Pubkey 32
-///   445  max_backstop_bps     u16   2
-///   447  auditor_elgamal_pubkey [u8;32] 32
-///   479  min_reserve_ratio_bps u16  2
-///   481  reserve_attestor_whitelist [Pubkey;4] 128
-///   609  travel_rule_threshold u64  8
-///   617  sanctions_oracle     Pubkey 32   <--
-///   649  sanctions_max_staleness_slots u64 8
-///   657  bump                 u8    1
-const SANCTIONS_ORACLE_OFFSET: usize = 617;
-const SANCTIONS_MAX_STALENESS_OFFSET: usize = 649;
-const SANCTIONS_CONFIG_MIN_SIZE: usize = 658; // discriminator(8) + up through bump(1)
+///   306  max_transfer_amount       u64      8
+///   314  expected_pyth_feed        Pubkey  32
+///   346  admin_op_mature_slot      u64      8
+///   354  admin_op_kind             u8       1
+///   355  admin_op_param            u64      8
+///   363  admin_op_target           Pubkey  32
+///   395  admin_timelock_delay      u64      8
+///   403  max_oracle_age_secs       u32      4
+///   407  max_oracle_conf_bps       u16      2
+///   409  stability_fee_bps         u16      2
+///   411  redemption_fee_bps        u16      2
+///   413  insurance_fund_pubkey     Pubkey  32
+///   445  max_backstop_bps          u16      2
+///   447  auditor_elgamal_pubkey    [u8;32] 32
+///   479  oracle_type               u8       1
+///   480  oracle_feed               Pubkey  32
+///   512  supply_cap_locked         bool     1
+///   513  version                   u8       1
+///   514  min_reserve_ratio_bps     u16      2
+///   516  travel_rule_threshold     u64      8
+///   524  sanctions_oracle          Pubkey  32  <--
+///   556  sanctions_max_staleness_slots u64  8
+const SANCTIONS_ORACLE_OFFSET: usize = 524;
+const SANCTIONS_MAX_STALENESS_OFFSET: usize = 556;
+const SANCTIONS_CONFIG_MIN_SIZE: usize = 564; // up through sanctions_max_staleness_slots
 
 /// Byte offsets within SanctionsRecord account data (Borsh layout):
 ///   discriminator      8  @ 0
@@ -147,7 +149,7 @@ const STABLECOIN_CONFIG_SEED: &[u8] = b"stablecoin-config";
 /// Used to verify the stablecoin_config PDA address in transfer_hook.
 pub mod sss_token_program {
     use anchor_lang::declare_id;
-    declare_id!("AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat");
+    declare_id!("ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811");
 }
 
 /// SSS-2 Transfer Hook — enforces blacklist and spend policy on every transfer.
@@ -395,7 +397,7 @@ pub mod sss_transfer_hook {
                 // Find it by deriving the expected PDA and matching.
                 // BUG-002 fix: CredentialRecord lives in sss-token, not transfer-hook.
                 // Using crate::ID (transfer-hook) would derive the wrong PDA address.
-                let sss_token_pid: Pubkey = SSS_TOKEN_PROGRAM_ID.parse().unwrap();
+                let sss_token_pid: Pubkey = SSS_TOKEN_PROGRAM_ID;
                 let (expected_cr_pda, _bump) = Pubkey::find_program_address(
                     &[CREDENTIAL_RECORD_SEED, ctx.accounts.mint.key().as_ref(), src_owner.as_ref()],
                     &sss_token_pid,
@@ -619,11 +621,11 @@ pub mod sss_transfer_hook {
                         msg!("WalletRateLimit CPI write-back OK: wallet={}", src_owner);
                     }
                     None => {
-                        // Mint not in remaining_accounts — CPI write-back cannot proceed.
-                        // The rate limit cap was already enforced by the read-only pre-check.
-                        // TODO(SSS-138): Callers should include the mint in remaining_accounts
-                        // so the WRL counter is durably updated via CPI.
-                        msg!("WalletRateLimit: mint not in remaining_accounts, write-back skipped (pre-check enforced)");
+                        // Rate limit write-back requires mint in remaining_accounts.
+                        // Without it, the counter cannot be updated, so we must reject
+                        // the transfer to prevent rate limit bypass.
+                        msg!("WalletRateLimit: mint not in remaining_accounts — transfer rejected");
+                        return Err(ProgramError::InvalidAccountData.into());
                     }
                 };
             }

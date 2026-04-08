@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{burn, Burn, Mint, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
+use crate::events::TokensBurned;
 use crate::state::{MinterInfo, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
 
 #[derive(Accounts)]
@@ -32,6 +33,7 @@ pub struct BurnTokens<'info> {
 
     #[account(
         mut,
+        constraint = source_token_account.mint == mint.key() @ SssError::InvalidMint,
         constraint = source_token_account.owner == minter.key(),
     )]
     pub source_token_account: InterfaceAccount<'info, TokenAccount>,
@@ -67,7 +69,15 @@ pub fn handler(ctx: Context<BurnTokens>, amount: u64) -> Result<()> {
     )?;
 
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(amount).unwrap();
+    config.total_burned = config.total_burned.checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
+
+    emit!(TokensBurned {
+        mint: config.mint,
+        minter: ctx.accounts.minter.key(),
+        amount,
+        total_burned: config.total_burned,
+    });
 
     msg!("Burned {} tokens from {}", amount, ctx.accounts.source_token_account.key());
     Ok(())

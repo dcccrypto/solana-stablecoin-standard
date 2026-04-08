@@ -5,8 +5,8 @@ use anchor_spl::token_interface::{
 };
 
 use crate::error::SssError;
-use crate::events::PsmSwapEvent;
-use crate::state::StablecoinConfig;
+use crate::events::{CollateralRedeemed, PsmSwapEvent};
+use crate::state::{StablecoinConfig, FLAG_CIRCUIT_BREAKER};
 
 /// Accounts for `redeem` (SSS-3 only).
 /// Burns SSS tokens from the redeemer's account and releases collateral from the vault.
@@ -70,6 +70,15 @@ pub struct RedeemCtx<'info> {
 pub fn redeem_handler(ctx: Context<RedeemCtx>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
     require!(
+        ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
+        SssError::ConfigVersionTooOld
+    );
+    // Circuit breaker — halt redemptions when FLAG_CIRCUIT_BREAKER is set.
+    require!(
+        ctx.accounts.config.feature_flags & FLAG_CIRCUIT_BREAKER == 0,
+        SssError::CircuitBreakerActive
+    );
+    require!(
         ctx.accounts.reserve_vault.amount >= amount,
         SssError::InsufficientReserves
     );
@@ -77,11 +86,11 @@ pub fn redeem_handler(ctx: Context<RedeemCtx>, amount: u64) -> Result<()> {
     // 1. Compute PSM fee (stays in vault; redeemer receives amount - fee).
     let fee_bps = ctx.accounts.config.redemption_fee_bps as u64;
     let fee_amount = if fee_bps > 0 {
-        amount.saturating_mul(fee_bps) / 10_000
+        ((amount as u128).checked_mul(fee_bps as u128).ok_or(error!(SssError::Overflow))? / 10_000u128) as u64
     } else {
         0
     };
-    let collateral_out = amount.checked_sub(fee_amount).unwrap();
+    let collateral_out = amount.checked_sub(fee_amount).ok_or(error!(SssError::InvalidAmount))?;
     require!(
         ctx.accounts.reserve_vault.amount >= amount,
         SssError::InsufficientReserves
@@ -127,9 +136,16 @@ pub fn redeem_handler(ctx: Context<RedeemCtx>, amount: u64) -> Result<()> {
 
     // 4. Update config state: burn decreases supply; fee stays in vault.
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(amount).unwrap();
+    config.total_burned = config.total_burned.checked_add(amount).ok_or(error!(SssError::Overflow))?;
     // Only the collateral that left the vault reduces total_collateral.
-    config.total_collateral = config.total_collateral.checked_sub(collateral_out).unwrap();
+    config.total_collateral = config.total_collateral.checked_sub(collateral_out).ok_or(error!(SssError::Overflow))?;
+
+    emit!(CollateralRedeemed {
+        mint: config.mint,
+        redeemer: ctx.accounts.redeemer.key(),
+        amount: collateral_out,
+        total_collateral: config.total_collateral,
+    });
 
     emit!(PsmSwapEvent {
         mint: config.mint,

@@ -37,7 +37,7 @@ use serde_json;
 type ApiError = (StatusCode, Json<ApiResponse<()>>);
 
 /// Known SSS program IDs (mirrors WATCHED_PROGRAMS in indexer.rs).
-const SSS_TOKEN_PROGRAM_ID: &str = "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat";
+const SSS_TOKEN_PROGRAM_ID: &str = "ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811";
 const SSS_TRANSFER_HOOK_PROGRAM_ID: &str = "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp";
 
 /// AUDIT3C-M3: Validate that a wallet query param is present and non-empty.

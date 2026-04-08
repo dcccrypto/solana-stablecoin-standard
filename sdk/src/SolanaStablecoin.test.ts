@@ -553,10 +553,10 @@ describe('SolanaStablecoin — Anchor IDL wiring', () => {
       await stablecoin.proposeAuthority({ proposed });
 
       expect(mockProgram._methodCalls.updateRoles).toHaveBeenCalledOnce();
-      // proposeAuthority(isCompliance=false) → updateRoles(proposed, null)
-      const [newAuthority, newComplianceAuthority] = mockProgram._methodCalls.updateRoles.mock.calls[0];
-      expect(newAuthority).toEqual(proposed);
-      expect(newComplianceAuthority).toBeNull();
+      // proposeAuthority(isCompliance=false) → updateRoles({ newAuthority: proposed, newComplianceAuthority: null })
+      const [rolesArg] = mockProgram._methodCalls.updateRoles.mock.calls[0];
+      expect(rolesArg.newAuthority).toEqual(proposed);
+      expect(rolesArg.newComplianceAuthority).toBeNull();
     });
 
     it('includes config, mint, and authority in accounts', async () => {

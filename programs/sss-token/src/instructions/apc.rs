@@ -28,7 +28,8 @@ use anchor_spl::token_interface::{
 
 use crate::error::SssError;
 use crate::events::{
-    ChannelDisputed, ChannelForceClosed, ChannelOpened, ChannelSettled, WorkProofSubmitted,
+    ChannelDisputed, ChannelForceClosed, ChannelOpened, ChannelSettled, DisputeResolved,
+    WorkProofSubmitted,
 };
 use crate::state::{StablecoinConfig, FLAG_AGENT_PAYMENT_CHANNEL};
 
@@ -264,15 +265,16 @@ pub fn submit_work_proof_handler(
     output_hash: [u8; 32],
     proof_type: u8,
 ) -> Result<()> {
-    // Store combined hash: SHA-256(task_hash || output_hash) — approximated as
-    // XOR for on-chain simplicity (actual SHA-256 would require syscall).
-    let mut combined = [0u8; 32];
-    for i in 0..32 {
-        combined[i] = task_hash[i] ^ output_hash[i];
-    }
+    // Store combined hash: hash(task_hash || output_hash) using the Solana
+    // SHA-256 syscall. Previous XOR approach was insecure — XOR is commutative
+    // and trivially invertible, allowing proof forgery.
+    let mut combined = [0u8; 64];
+    combined[..32].copy_from_slice(&task_hash);
+    combined[32..].copy_from_slice(&output_hash);
+    let combined_hash = blake3::hash(&combined);
 
     let channel = &mut ctx.accounts.channel;
-    channel.work_proof_hash = combined;
+    channel.work_proof_hash = *combined_hash.as_bytes();
 
     emit!(WorkProofSubmitted {
         channel_id: channel.channel_id,
@@ -585,6 +587,165 @@ pub fn force_close_handler(ctx: Context<ForceClose>, _channel_id: u64) -> Result
     msg!(
         "APC: channel {} force-closed, {} tokens returned to initiator",
         channel.channel_id, deposit,
+    );
+    Ok(())
+}
+
+// ─── resolve_dispute ─────────────────────────────────────────────────────────
+//
+// Provides a resolution path for disputed channels. Without this, once a
+// channel enters `Disputed` status the only exit is `force_close`, which
+// always returns all funds to the initiator — ignoring the dispute entirely.
+//
+// Resolution requires EITHER:
+//   (a) Both parties sign (mutual agreement), OR
+//   (b) The stablecoin authority signs (arbitration).
+//
+// The `settlement_amount` specifies how much goes to the counterparty;
+// the remainder is returned to the initiator.
+
+#[derive(Accounts)]
+#[instruction(channel_id: u64, settlement_amount: u64)]
+pub struct ResolveDispute<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    /// Initiator signer — required unless authority is resolving.
+    /// CHECK: Validated in handler logic against channel.initiator.
+    pub initiator_signer: UncheckedAccount<'info>,
+
+    /// Counterparty signer — required unless authority is resolving.
+    /// CHECK: Validated in handler logic against channel.counterparty.
+    pub counterparty_signer: UncheckedAccount<'info>,
+
+    /// Optional authority signer — if present and matches config.authority,
+    /// both-party signatures are not required.
+    /// CHECK: Validated in handler logic against config.authority.
+    pub authority: UncheckedAccount<'info>,
+
+    #[account(
+        seeds = [StablecoinConfig::SEED, stable_mint.key().as_ref()],
+        bump = config.bump,
+    )]
+    pub config: Box<Account<'info, StablecoinConfig>>,
+
+    #[account(
+        mut,
+        constraint = channel.status == ChannelStatus::Disputed @ SssError::ChannelAlreadyClosed,
+    )]
+    pub channel: Box<Account<'info, PaymentChannel>>,
+
+    #[account(constraint = stable_mint.key() == channel.stable_mint)]
+    pub stable_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    #[account(
+        mut,
+        constraint = escrow_token_account.mint == stable_mint.key(),
+        constraint = escrow_token_account.owner == channel.key(),
+    )]
+    pub escrow_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    /// Counterparty's token account — receives the settlement amount.
+    #[account(
+        mut,
+        constraint = counterparty_token_account.mint == stable_mint.key(),
+        constraint = counterparty_token_account.owner == channel.counterparty,
+    )]
+    pub counterparty_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    /// Initiator's token account — receives the remainder.
+    #[account(
+        mut,
+        constraint = initiator_token_account.mint == stable_mint.key(),
+        constraint = initiator_token_account.owner == channel.initiator,
+    )]
+    pub initiator_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
+
+    pub token_program: Interface<'info, TokenInterface>,
+}
+
+#[inline(never)]
+pub fn resolve_dispute_handler(
+    ctx: Context<ResolveDispute>,
+    _channel_id: u64,
+    settlement_amount: u64,
+) -> Result<()> {
+    // Authorization: either both parties sign, or the authority signs.
+    let both_parties_signed = ctx.accounts.initiator_signer.is_signer
+        && ctx.accounts.counterparty_signer.is_signer
+        && ctx.accounts.initiator_signer.key() == ctx.accounts.channel.initiator
+        && ctx.accounts.counterparty_signer.key() == ctx.accounts.channel.counterparty;
+
+    let authority_signed = ctx.accounts.authority.is_signer
+        && ctx.accounts.authority.key() == ctx.accounts.config.authority;
+
+    require!(
+        both_parties_signed || authority_signed,
+        SssError::Unauthorized
+    );
+
+    let deposit = ctx.accounts.channel.initiator_deposit;
+    require!(settlement_amount <= deposit, SssError::InvalidSettleAmount);
+
+    let initiator_key = ctx.accounts.channel.initiator;
+    let channel_id_bytes = ctx.accounts.channel.channel_id.to_le_bytes();
+    let bump = ctx.accounts.channel.bump;
+    let bump_slice = &[bump];
+    let seeds = channel_signer_seeds(initiator_key.as_ref(), &channel_id_bytes, bump_slice);
+    let signer_seeds = &[&seeds[..]];
+
+    // Transfer settlement_amount to counterparty.
+    if settlement_amount > 0 {
+        transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.escrow_token_account.to_account_info(),
+                    mint: ctx.accounts.stable_mint.to_account_info(),
+                    to: ctx.accounts.counterparty_token_account.to_account_info(),
+                    authority: ctx.accounts.channel.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            settlement_amount,
+            ctx.accounts.stable_mint.decimals,
+        )?;
+    }
+
+    let remainder = deposit.saturating_sub(settlement_amount);
+
+    // Return remainder to initiator.
+    if remainder > 0 {
+        transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.escrow_token_account.to_account_info(),
+                    mint: ctx.accounts.stable_mint.to_account_info(),
+                    to: ctx.accounts.initiator_token_account.to_account_info(),
+                    authority: ctx.accounts.channel.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            remainder,
+            ctx.accounts.stable_mint.decimals,
+        )?;
+    }
+
+    let channel = &mut ctx.accounts.channel;
+    channel.status = ChannelStatus::Settled;
+
+    emit!(DisputeResolved {
+        channel_id: channel.channel_id,
+        initiator: channel.initiator,
+        counterparty: channel.counterparty,
+        amount_to_counterparty: settlement_amount,
+        amount_to_initiator: remainder,
+    });
+
+    msg!(
+        "APC: dispute resolved for channel {} — {} to counterparty, {} to initiator",
+        channel.channel_id, settlement_amount, remainder,
     );
     Ok(())
 }

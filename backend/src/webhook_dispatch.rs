@@ -29,7 +29,6 @@ use sha2::Sha256;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{info, warn};
-use uuid::Uuid;
 
 use crate::db::Database;
 #[allow(unused_imports)]
@@ -104,14 +103,12 @@ pub async fn execute_attempt(
                     None,
                     None,
                 );
-            } else {
-                if let Err(e2) = db.mark_webhook_delivery_failed(
-                    delivery_id,
-                    attempt,
-                    next_retry.as_deref(),
-                ) {
-                    warn!("Failed to mark delivery {delivery_id} failed: {e2}");
-                }
+            } else if let Err(e2) = db.mark_webhook_delivery_failed(
+                delivery_id,
+                attempt,
+                next_retry.as_deref(),
+            ) {
+                warn!("Failed to mark delivery {delivery_id} failed: {e2}");
             }
         }
     }
@@ -137,9 +134,6 @@ pub fn dispatch(db: &Arc<Database>, event_type: &str, payload: Value) {
         }
     };
 
-    // Webhook secret for HMAC signing (optional — empty string disables signing).
-    let secret = std::env::var("SSS_WEBHOOK_SECRET").unwrap_or_default();
-
     for wh in webhooks {
         if !wh.events.iter().any(|e| e == event_type || e == "*") {
             continue;
@@ -147,35 +141,37 @@ pub fn dispatch(db: &Arc<Database>, event_type: &str, payload: Value) {
 
         let url = wh.url.clone();
         // Assign a unique delivery ID and current Unix timestamp.
-        let delivery_id = Uuid::new_v4().to_string();
         let delivered_at = chrono::Utc::now().timestamp();
 
+        let body = serde_json::json!({
+            "event": event_type,
+            "delivered_at": delivered_at,
+            "data": payload,
+        });
+
+        // Insert a delivery log row so execute_attempt can claim it.
+        let payload_str = body.to_string();
+        let delivery_id = match db.insert_webhook_delivery(&wh.id, event_type, &payload_str) {
+            Ok(id) => id,
+            Err(e) => {
+                warn!("webhook_dispatch: failed to insert delivery log for {}: {}", wh.url, e);
+                continue;
+            }
+        };
+
+        // Include delivery_id in the body sent to the receiver.
         let body = serde_json::json!({
             "event": event_type,
             "delivery_id": delivery_id,
             "delivered_at": delivered_at,
             "data": payload,
         });
-        let _payload_str = body.to_string();
-
-        let secret_clone = secret.clone();
-        let body2 = body.clone();
-        let delivery_id2 = delivery_id.clone();
-
-        tokio::spawn(async move {
-            if let Err(e) = post_json(&url, &body, &delivery_id, delivered_at, &secret_clone).await {
-                warn!(url = %url, error = %e, "Webhook delivery failed");
-            } else {
-                info!(url = %url, delivery_id = %delivery_id, "Webhook delivered");
-            }
-        });
 
         let db_clone = Arc::clone(db);
-        let url = wh.url.clone();
         let secret = wh.hashed_secret.clone();
 
         tokio::spawn(async move {
-            execute_attempt(&db_clone, &delivery_id2, 1, &url, &body2, secret.as_deref()).await;
+            execute_attempt(&db_clone, &delivery_id, 1, &url, &body, secret.as_deref()).await;
         });
     }
 }

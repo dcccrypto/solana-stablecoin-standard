@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{
-    transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
+    burn, transfer_checked, Burn, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
 
 use crate::error::SssError;
@@ -124,10 +124,10 @@ pub struct RequestRedemption<'info> {
     pub user_stable_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// Escrow: stable tokens held here until fulfilled or expired.
-    /// Seeds: [b"redemption-escrow", mint] — authority = redemption_guarantee PDA.
+    /// Seeds: [b"redemption-escrow", mint, user] — per-user escrow.
     #[account(
         mut,
-        seeds = [b"redemption-escrow", config.mint.as_ref()],
+        seeds = [b"redemption-escrow", config.mint.as_ref(), user.key().as_ref()],
         bump,
         token::mint = config.mint,
         token::authority = redemption_guarantee,
@@ -240,10 +240,10 @@ pub struct FulfillRedemption<'info> {
     )]
     pub redemption_request: Box<Account<'info, RedemptionRequest>>,
 
-    /// Escrow: must match PDA seeds.
+    /// Escrow: must match PDA seeds (per-user).
     #[account(
         mut,
-        seeds = [b"redemption-escrow", config.mint.as_ref()],
+        seeds = [b"redemption-escrow", config.mint.as_ref(), redemption_request.user.as_ref()],
         bump,
         token::mint = config.mint,
         token::authority = redemption_guarantee,
@@ -268,6 +268,7 @@ pub struct FulfillRedemption<'info> {
     )]
     pub burn_destination: Box<InterfaceAccount<'info, TokenAccount>>,
 
+    #[account(mut)]
     pub stable_mint: Box<InterfaceAccount<'info, Mint>>,
     pub collateral_mint: Box<InterfaceAccount<'info, Mint>>,
     pub token_program: Interface<'info, TokenInterface>,
@@ -285,7 +286,6 @@ pub fn fulfill_redemption_handler(ctx: Context<FulfillRedemption>) -> Result<()>
     );
 
     let amount = rr.amount;
-    let stable_decimals = ctx.accounts.stable_mint.decimals;
     let collateral_decimals = ctx.accounts.collateral_mint.decimals;
 
     // PDA signer: redemption_guarantee owns the escrow
@@ -297,20 +297,19 @@ pub fn fulfill_redemption_handler(ctx: Context<FulfillRedemption>) -> Result<()>
         &[bump],
     ]];
 
-    // escrow → burn_destination
-    transfer_checked(
+    // Burn the escrowed stable tokens (fixes: previously transferred without burning,
+    // causing total_burned to increment without actual supply reduction)
+    burn(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
-            TransferChecked {
-                from: ctx.accounts.escrow_stable.to_account_info(),
+            Burn {
                 mint: ctx.accounts.stable_mint.to_account_info(),
-                to: ctx.accounts.burn_destination.to_account_info(),
+                from: ctx.accounts.escrow_stable.to_account_info(),
                 authority: ctx.accounts.redemption_guarantee.to_account_info(),
             },
             signer_seeds,
         ),
         amount,
-        stable_decimals,
     )?;
 
     // reserve_vault → user_collateral_ata (1:1 par)
@@ -331,7 +330,8 @@ pub fn fulfill_redemption_handler(ctx: Context<FulfillRedemption>) -> Result<()>
     rr.fulfilled = true;
 
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.saturating_add(amount);
+    config.total_burned = config.total_burned.checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
 
     let sla_slots_used = clock.slot.saturating_sub(rr.requested_slot);
 
@@ -387,10 +387,10 @@ pub struct ClaimExpiredRedemption<'info> {
     )]
     pub redemption_request: Box<Account<'info, RedemptionRequest>>,
 
-    /// Escrow: stable tokens returned to user on breach.
+    /// Escrow: stable tokens returned to user on breach (per-user).
     #[account(
         mut,
-        seeds = [b"redemption-escrow", config.mint.as_ref()],
+        seeds = [b"redemption-escrow", config.mint.as_ref(), user.key().as_ref()],
         bump,
         token::mint = config.mint,
         token::authority = redemption_guarantee,

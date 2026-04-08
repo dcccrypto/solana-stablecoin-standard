@@ -105,7 +105,7 @@ pub struct WebhookEntry {
     /// Stored hashed secret. This is the HMAC key stored in the DB as a hash;
     /// callers must NOT use this directly for HMAC signing — it is stored hashed.
     /// For dispatch, retrieve the plaintext secret from registration and use it there.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     pub hashed_secret: Option<String>,
     pub created_at: String,
 }

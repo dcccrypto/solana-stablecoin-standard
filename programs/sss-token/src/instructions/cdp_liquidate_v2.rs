@@ -119,6 +119,7 @@ pub struct CdpLiquidateV2<'info> {
     /// Provides per-collateral liquidation_threshold_bps and liquidation_bonus_bps.
     /// Seeds: [b"collateral-config", sss_mint, collateral_mint]
     #[account(
+        mut,
         seeds = [
             CollateralConfig::SEED,
             sss_mint.key().as_ref(),
@@ -157,6 +158,12 @@ pub fn cdp_liquidate_v2_handler(
     debt_to_repay: u64,
     min_collateral_amount: u64,
 ) -> Result<()> {
+    // Version guard — reject configs that haven't been migrated.
+    require!(
+        ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
+        SssError::ConfigVersionTooOld
+    );
+
     // ── BUG-020: Circuit breaker — halt V2 liquidations when FLAG_CIRCUIT_BREAKER is set.
     // Mirrors the same guard in cdp_liquidate (V1) to ensure no bypass via the V2 path.
     require!(
@@ -224,13 +231,16 @@ pub fn cdp_liquidate_v2_handler(
         / 10u128.pow(collateral_decimals);
 
     // ── 5. Current collateral ratio check ────────────────────────────────
-    let total_debt = ctx.accounts.cdp_position.debt_amount;
+    let accrued_fees = ctx.accounts.cdp_position.accrued_fees;
+    let total_debt = ctx.accounts.cdp_position.debt_amount
+        .checked_add(accrued_fees)
+        .ok_or(error!(SssError::Overflow))?;
     require!(total_debt > 0, SssError::InsufficientDebt);
 
     let sss_decimals = ctx.accounts.sss_mint.decimals as u32;
     let debt_usd_e6: u128 = (total_debt as u128)
         .checked_mul(1_000_000u128)
-        .unwrap()
+        .ok_or(error!(SssError::Overflow))?
         / 10u128.pow(sss_decimals);
 
     let ratio_bps: u128 = collateral_value_usd_e6
@@ -265,7 +275,7 @@ pub fn cdp_liquidate_v2_handler(
 
     let debt_repaid_usd_e6: u128 = (actual_debt_repaid as u128)
         .checked_mul(1_000_000u128)
-        .unwrap()
+        .ok_or(error!(SssError::Overflow))?
         / 10u128.pow(sss_decimals);
 
     let bonus_factor_num: u128 = 10_000 + liquidation_bonus_bps as u128;
@@ -309,7 +319,7 @@ pub fn cdp_liquidate_v2_handler(
 
             let remaining_debt_usd_e6: u128 = (remaining_debt as u128)
                 .checked_mul(1_000_000u128)
-                .unwrap()
+                .ok_or(error!(SssError::Overflow))?
                 / 10u128.pow(sss_decimals);
 
             let post_ratio_bps: u128 = remaining_collateral_usd_e6
@@ -378,13 +388,30 @@ pub fn cdp_liquidate_v2_handler(
 
     // ── 11. Update state ──────────────────────────────────────────────────
     let position = &mut ctx.accounts.cdp_position;
-    position.debt_amount = total_debt.saturating_sub(actual_debt_repaid);
+    // Deduct repayment from principal first, then fees
+    if actual_debt_repaid >= position.debt_amount {
+        let remainder = actual_debt_repaid.saturating_sub(position.debt_amount);
+        position.debt_amount = 0;
+        position.accrued_fees = position.accrued_fees.saturating_sub(remainder);
+    } else {
+        position.debt_amount = position.debt_amount.saturating_sub(actual_debt_repaid);
+    }
+    // Full liquidation: clear both
+    if position.debt_amount == 0 {
+        position.accrued_fees = 0;
+    }
 
     let vault = &mut ctx.accounts.collateral_vault;
     vault.deposited_amount = deposited.saturating_sub(collateral_to_seize);
 
+    // Decrement CollateralConfig.total_deposited to keep the global counter accurate.
+    let cc = &mut ctx.accounts.collateral_config;
+    cc.total_deposited = cc.total_deposited.checked_sub(collateral_to_seize)
+        .ok_or(error!(SssError::Overflow))?;
+
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(actual_debt_repaid).unwrap();
+    config.total_burned = config.total_burned.checked_add(actual_debt_repaid)
+        .ok_or(error!(SssError::Overflow))?;
 
     // ── 12. Emit CollateralLiquidated event ───────────────────────────────
     emit!(CollateralLiquidated {

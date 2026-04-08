@@ -91,6 +91,8 @@ export interface DepositCollateralParams {
   reserveVault: PublicKey;
   /** Collateral token mint */
   collateralMint: PublicKey;
+  /** Token program for collateral (defaults to TOKEN_PROGRAM_ID) */
+  collateralTokenProgram?: PublicKey;
 }
 
 /** Parameters for redeeming collateral (SSS-3) */

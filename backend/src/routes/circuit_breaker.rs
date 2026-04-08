@@ -33,7 +33,7 @@ use crate::{error::AppError, models::ApiResponse, state::AppState};
 // ---------------------------------------------------------------------------
 
 /// Anchor program ID for the SSS-token program.
-const PROGRAM_ID: &str = "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat";
+const PROGRAM_ID: &str = "ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811";
 
 /// Circuit breaker flag bit (matches programs/sss-token/src/state.rs FLAG_CIRCUIT_BREAKER).
 const FLAG_CIRCUIT_BREAKER: u64 = 1u64;

@@ -103,7 +103,7 @@ pub fn get_effective_oracle_price(
         // Since both feeds are the same asset, expo is the same.
         Ok(OraclePrice {
             price: consensus_price as i64,
-            conf: 0,
+            conf: oc.last_consensus_conf,
             expo: -8, // canonical stablecoin collateral expo; TODO: store in OracleConsensus
         })
     } else {

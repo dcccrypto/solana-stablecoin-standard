@@ -39,7 +39,7 @@ use crate::state::AppState;
 
 /// Known SSS program addresses to watch.
 const WATCHED_PROGRAMS: &[(&str, &str)] = &[
-    ("sss-token", "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat"),
+    ("sss-token", "ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811"),
     (
         "sss-transfer-hook",
         "phAtzRyRUJGpMC3ftAtWzoaX7UkghRe9x5KTig8jPQp",
@@ -446,7 +446,7 @@ mod tests {
     #[test]
     fn test_parse_circuit_breaker_log() {
         let line = r#"Program log: CircuitBreakerToggled { "halted": true, "authority": "ABC123" }"#;
-        let result = parse_event_log(line, "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat");
+        let result = parse_event_log(line, "ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811");
         assert!(result.is_some());
         let (event_type, _addr, _data) = result.unwrap();
         assert_eq!(event_type, "circuit_breaker_toggle");
@@ -455,7 +455,7 @@ mod tests {
     #[test]
     fn test_parse_cdp_borrow_log() {
         let line = r#"Program log: StablecoinsIssued { "amount": 1000, "mint": "TokenMintXXX" }"#;
-        let result = parse_event_log(line, "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat");
+        let result = parse_event_log(line, "ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811");
         assert!(result.is_some());
         let (event_type, address, _data) = result.unwrap();
         assert_eq!(event_type, "cdp_borrow");
@@ -465,7 +465,7 @@ mod tests {
     #[test]
     fn test_parse_json_encoded_event() {
         let line = r#"Program log: {"event":"OracleParamsUpdated","address":"OracleAddr123","staleness":60}"#;
-        let result = parse_event_log(line, "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat");
+        let result = parse_event_log(line, "ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811");
         assert!(result.is_some());
         let (event_type, address, _data) = result.unwrap();
         assert_eq!(event_type, "oracle_params_update");
@@ -475,14 +475,14 @@ mod tests {
     #[test]
     fn test_parse_unrelated_log() {
         let line = "Program log: Instruction: MintTo";
-        let result = parse_event_log(line, "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat");
+        let result = parse_event_log(line, "ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811");
         assert!(result.is_none());
     }
 
     #[test]
     fn test_parse_liquidation_log() {
         let line = r#"Program log: PositionLiquidated { "position": "PosABC", "debt_cleared": 500 }"#;
-        let result = parse_event_log(line, "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat");
+        let result = parse_event_log(line, "ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811");
         assert!(result.is_some());
         let (event_type, address, _data) = result.unwrap();
         assert_eq!(event_type, "cdp_liquidate");

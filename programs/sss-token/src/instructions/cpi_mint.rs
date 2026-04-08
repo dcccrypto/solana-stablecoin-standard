@@ -17,7 +17,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
-use crate::events::MintHaltedByPoRBreach;
+use crate::events::{MintHaltedByPoRBreach, TokensMinted};
 use crate::state::{
     InterfaceVersion, MinterInfo, ProofOfReserves, StablecoinConfig, FLAG_CIRCUIT_BREAKER,
     FLAG_POR_HALT_ON_BREACH,
@@ -50,7 +50,7 @@ pub struct CpiMint<'info> {
     )]
     pub mint: InterfaceAccount<'info, Mint>,
 
-    #[account(mut)]
+    #[account(mut, constraint = recipient_token_account.mint == mint.key() @ SssError::InvalidMint)]
     pub recipient_token_account: InterfaceAccount<'info, TokenAccount>,
 
     /// InterfaceVersion PDA — caller-supplied; validated against expected seeds.
@@ -72,6 +72,12 @@ pub fn cpi_mint_handler(ctx: Context<CpiMint>, amount: u64, required_version: u8
     require!(
         iv.version == required_version,
         SssError::InterfaceVersionMismatch
+    );
+
+    // ── Version guard (mirrors mint::handler) ────────────────────────────────
+    require!(
+        ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
+        SssError::ConfigVersionTooOld
     );
 
     // ── Standard mint logic (identical to mint::handler) ─────────────────────
@@ -118,10 +124,31 @@ pub fn cpi_mint_handler(ctx: Context<CpiMint>, amount: u64, required_version: u8
         }
     }
 
+    // SSS-093: Per-minter epoch velocity limit check (mirrors mint::handler).
+    {
+        let clock = Clock::get()?;
+        let current_epoch = clock.epoch;
+        let minter_info = &mut ctx.accounts.minter_info;
+
+        // Reset epoch counter if epoch has advanced since last reset.
+        if minter_info.last_epoch_reset == 0 || current_epoch != minter_info.last_epoch_reset {
+            minter_info.minted_this_epoch = 0;
+            minter_info.last_epoch_reset = current_epoch;
+        }
+
+        if minter_info.max_mint_per_epoch > 0 {
+            require!(
+                minter_info.minted_this_epoch.checked_add(amount).ok_or(error!(SssError::Overflow))?
+                    <= minter_info.max_mint_per_epoch,
+                SssError::MintVelocityExceeded
+            );
+        }
+    }
+
     let minter_info = &mut ctx.accounts.minter_info;
     if minter_info.cap > 0 {
         require!(
-            minter_info.minted.checked_add(amount).unwrap() <= minter_info.cap,
+            minter_info.minted.checked_add(amount).ok_or(error!(SssError::Overflow))? <= minter_info.cap,
             SssError::MinterCapExceeded
         );
     }
@@ -129,7 +156,7 @@ pub fn cpi_mint_handler(ctx: Context<CpiMint>, amount: u64, required_version: u8
     let config = &ctx.accounts.config;
     if config.max_supply > 0 {
         require!(
-            config.net_supply().checked_add(amount).unwrap() <= config.max_supply,
+            config.net_supply().checked_add(amount).ok_or(error!(SssError::Overflow))? <= config.max_supply,
             SssError::MaxSupplyExceeded
         );
     }
@@ -156,10 +183,18 @@ pub fn cpi_mint_handler(ctx: Context<CpiMint>, amount: u64, required_version: u8
     )?;
 
     let config = &mut ctx.accounts.config;
-    config.total_minted = config.total_minted.checked_add(amount).unwrap();
-    minter_info.minted = minter_info.minted.checked_add(amount).unwrap();
+    config.total_minted = config.total_minted.checked_add(amount).ok_or(error!(SssError::Overflow))?;
+    minter_info.minted = minter_info.minted.checked_add(amount).ok_or(error!(SssError::Overflow))?;
     // SSS-113 HIGH-02: Track epoch velocity (mirrors mint::handler).
-    minter_info.minted_this_epoch = minter_info.minted_this_epoch.checked_add(amount).unwrap();
+    minter_info.minted_this_epoch = minter_info.minted_this_epoch.checked_add(amount).ok_or(error!(SssError::Overflow))?;
+
+    emit!(TokensMinted {
+        mint: config.mint,
+        minter: ctx.accounts.minter.key(),
+        recipient: ctx.accounts.recipient_token_account.key(),
+        amount,
+        total_minted: config.total_minted,
+    });
 
     msg!(
         "cpi_mint: {} tokens to {} (interface v{})",

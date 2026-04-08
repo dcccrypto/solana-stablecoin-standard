@@ -6,7 +6,7 @@ use crate::events::{
     AuthorityRotationCancelled, AuthorityRotationCompleted, AuthorityRotationEmergencyRecovered,
     AuthorityRotationProposed,
 };
-use crate::state::{AuthorityRotationRequest, StablecoinConfig};
+use crate::state::{AuthorityRotationRequest, StablecoinConfig, FLAG_SQUADS_AUTHORITY};
 
 /// 48 hours in slots at ~400ms/slot = 432,000 slots
 pub const ROTATION_TIMELOCK_SLOTS: u64 = 432_000;
@@ -51,6 +51,14 @@ pub fn propose_authority_rotation_handler(
     new_authority: Pubkey,
     backup_authority: Pubkey,
 ) -> Result<()> {
+    // SSS-134: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let config = &ctx.accounts.config;
     let clock = Clock::get()?;
 
@@ -145,7 +153,7 @@ pub fn accept_authority_rotation_handler(ctx: Context<AcceptAuthorityRotation>) 
     let req = &ctx.accounts.rotation_request;
 
     require!(
-        clock.slot >= req.proposed_slot + req.timelock_slots,
+        clock.slot >= req.proposed_slot.checked_add(req.timelock_slots).ok_or(error!(SssError::Overflow))?,
         SssError::TimelockNotMature
     );
 
@@ -212,7 +220,7 @@ pub fn emergency_recover_authority_handler(
     let req = &ctx.accounts.rotation_request;
 
     require!(
-        clock.slot >= req.proposed_slot + EMERGENCY_RECOVERY_SLOTS,
+        clock.slot >= req.proposed_slot.checked_add(EMERGENCY_RECOVERY_SLOTS).ok_or(error!(SssError::Overflow))?,
         SssError::EmergencyRecoveryNotReady
     );
 
@@ -267,6 +275,14 @@ pub struct CancelAuthorityRotation<'info> {
 }
 
 pub fn cancel_authority_rotation_handler(ctx: Context<CancelAuthorityRotation>) -> Result<()> {
+    // SSS-134: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
+    if ctx.accounts.config.feature_flags & FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let config = &ctx.accounts.config;
     let req = &ctx.accounts.rotation_request;
 

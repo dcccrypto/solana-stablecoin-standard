@@ -11,7 +11,7 @@ import { AnchorProvider, BN } from '@coral-xyz/anchor';
  *
  * Matches `FLAG_LEGAL_REGISTRY` in the Anchor program.
  */
-export const FLAG_LEGAL_REGISTRY = 1n << 5n; // 0x20
+export const FLAG_LEGAL_REGISTRY = 1n << 24n; // 0x1000000
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

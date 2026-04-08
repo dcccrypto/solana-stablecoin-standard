@@ -211,28 +211,39 @@ export class OracleParamsModule {
     const data = accountInfo.data;
 
     // StablecoinConfig layout (see state.rs, post-SSS-090):
-    //  [0..8]   discriminator
-    //  [8..40]  authority: Pubkey
-    //  [40..72] mint: Pubkey
-    //  [72..73] preset: u8
-    //  [73..74] paused: bool
-    //  [74..82] max_supply: u64
-    //  [82..90] total_minted: u64
-    //  [90..98] total_burned: u64
-    //  [98..99] bump: u8
-    //  ... (minter_registry, collateral_vault, feature_flags, spend_limit, etc.)
-    //
-    // The two SSS-090 fields were appended just before the final `bump` at the
-    // end of the struct. To stay robust against layout drift we scan from the
-    // end of the buffer:
-    //   -1: bump (u8)
-    //   -3..-1: max_oracle_conf_bps (u16 LE)
-    //   -7..-3: max_oracle_age_secs (u32 LE)
-    //
-    // This makes the reader independent of exact middle-field sizes.
-    const len = data.length;
-    const maxAgeSecs = data.readUInt32LE(len - 7);
-    const maxConfBps = data.readUInt16LE(len - 3);
+    //  [0..8]     discriminator
+    //  [8..40]    mint: Pubkey
+    //  [40..72]   authority: Pubkey
+    //  [72..104]  compliance_authority: Pubkey
+    //  [104]      preset: u8
+    //  [105]      paused: bool
+    //  [106..114] total_minted: u64
+    //  [114..122] total_burned: u64
+    //  [122..154] transfer_hook_program: Pubkey
+    //  [154..186] collateral_mint: Pubkey
+    //  [186..218] reserve_vault: Pubkey
+    //  [218..226] total_collateral: u64
+    //  [226..234] max_supply: u64
+    //  [234..266] pending_authority: Pubkey
+    //  [266..298] pending_compliance_authority: Pubkey
+    //  [298..306] feature_flags: u64
+    //  [306..314] max_transfer_amount: u64
+    //  [314..346] expected_pyth_feed: Pubkey
+    //  [346..354] admin_op_mature_slot: u64
+    //  [354]      admin_op_kind: u8
+    //  [355..363] admin_op_param: u64
+    //  [363..395] admin_op_target: Pubkey
+    //  [395..403] admin_timelock_delay: u64
+    //  [403..407] max_oracle_age_secs: u32
+    //  [407..409] max_oracle_conf_bps: u16
+    const MAX_ORACLE_AGE_OFFSET = 403;
+    const MAX_ORACLE_CONF_OFFSET = 407;
+
+    if (data.length < MAX_ORACLE_CONF_OFFSET + 2) {
+      return { maxAgeSecs: 0, maxConfBps: 0 };
+    }
+    const maxAgeSecs = data.readUInt32LE(MAX_ORACLE_AGE_OFFSET);
+    const maxConfBps = data.readUInt16LE(MAX_ORACLE_CONF_OFFSET);
 
     return { maxAgeSecs, maxConfBps };
   }

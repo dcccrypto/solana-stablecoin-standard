@@ -12,7 +12,7 @@ import { TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
  *
  * Matches `FLAG_INSURANCE_VAULT_REQUIRED` in the Anchor program.
  */
-export const FLAG_INSURANCE_VAULT_REQUIRED = 1n << 14n; // 0x4000
+export const FLAG_INSURANCE_VAULT_REQUIRED = 1n << 21n; // 0x200000
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

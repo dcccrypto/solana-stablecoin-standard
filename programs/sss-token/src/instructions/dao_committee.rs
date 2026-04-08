@@ -20,7 +20,8 @@ use anchor_spl::token_interface::{Mint, TokenInterface};
 
 use crate::error::SssError;
 use crate::state::{
-    DaoCommitteeConfig, FLAG_DAO_COMMITTEE, ProposalAction, ProposalPda, StablecoinConfig,
+    DaoCommitteeConfig, FLAG_DAO_COMMITTEE, FLAG_SQUADS_AUTHORITY, ProposalAction, ProposalPda,
+    StablecoinConfig,
 };
 
 // ---------------------------------------------------------------------------
@@ -190,7 +191,8 @@ pub fn propose_action_handler(
 
     let committee = &mut ctx.accounts.committee;
     let proposal_id = committee.next_proposal_id;
-    committee.next_proposal_id = proposal_id.checked_add(1).unwrap();
+    committee.next_proposal_id = proposal_id.checked_add(1)
+        .ok_or(error!(SssError::Overflow))?;
 
     let proposal = &mut ctx.accounts.proposal;
     proposal.config = ctx.accounts.config.key();
@@ -363,6 +365,14 @@ pub fn execute_action_handler(ctx: Context<ExecuteAction>, _proposal_id: u64) ->
             );
         }
         ProposalAction::ClearFeatureFlag => {
+            require!(
+                param & FLAG_DAO_COMMITTEE == 0,
+                SssError::DaoFlagProtected
+            );
+            require!(
+                param & FLAG_SQUADS_AUTHORITY == 0,
+                SssError::DaoFlagProtected
+            );
             config.feature_flags &= !param;
             msg!(
                 "Proposal #{} EXECUTED — ClearFeatureFlag 0x{:016x} flags=0x{:016x}",

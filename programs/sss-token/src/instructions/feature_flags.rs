@@ -30,6 +30,12 @@ pub fn set_feature_flag_handler(
     ctx: Context<UpdateFeatureFlag>,
     flag: u64,
 ) -> Result<()> {
+    // BUG-010: block direct call when timelock is active.
+    crate::instructions::admin_timelock::require_timelock_executed(
+        &ctx.accounts.config,
+        crate::state::ADMIN_OP_SET_FEATURE_FLAG,
+    )?;
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(
@@ -59,6 +65,12 @@ pub fn clear_feature_flag_handler(
     ctx: Context<UpdateFeatureFlag>,
     flag: u64,
 ) -> Result<()> {
+    // BUG-010: block direct call when timelock is active.
+    crate::instructions::admin_timelock::require_timelock_executed(
+        &ctx.accounts.config,
+        crate::state::ADMIN_OP_CLEAR_FEATURE_FLAG,
+    )?;
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(
@@ -66,6 +78,17 @@ pub fn clear_feature_flag_handler(
             &ctx.accounts.authority.key(),
         )?;
     }
+
+    // Protect FLAG_DAO_COMMITTEE and FLAG_SQUADS_AUTHORITY from being cleared
+    // via direct call — these governance flags are sticky once set.
+    require!(
+        flag & crate::state::FLAG_DAO_COMMITTEE == 0,
+        SssError::DaoFlagProtected
+    );
+    require!(
+        flag & crate::state::FLAG_SQUADS_AUTHORITY == 0,
+        SssError::DaoFlagProtected
+    );
 
     let config = &mut ctx.accounts.config;
     // Same guard: DAO committee is active → must use the proposal flow.

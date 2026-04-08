@@ -1,3 +1,4 @@
+pub mod authority_rotation;
 pub mod bad_debt_backstop;
 pub mod guardian;
 pub mod accept_authority;
@@ -53,6 +54,7 @@ pub mod upgrade;
 pub mod upgrade_authority_guard;
 pub mod circuit_breaker_keeper;
 
+pub use authority_rotation::*;
 pub use bad_debt_backstop::*;
 pub use oracle_config::*;
 pub use pbs::*;

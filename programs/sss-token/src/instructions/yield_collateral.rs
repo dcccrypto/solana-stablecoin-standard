@@ -50,6 +50,10 @@ pub fn init_yield_collateral_handler(
     ctx: Context<InitYieldCollateral>,
     initial_mints: Vec<Pubkey>,
 ) -> Result<()> {
+    // AUDIT NOTE: No timelock enforcement — yield collateral initialization
+    // is not currently supported by the admin timelock operation set.
+    // TODO: Add ADMIN_OP_INIT_YIELD_COLLATERAL to admin_timelock.rs
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(

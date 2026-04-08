@@ -19,7 +19,7 @@ use axum::{
     Router,
 };
 use std::net::SocketAddr;
-use http::HeaderValue;
+use http::{HeaderValue, Method};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -119,9 +119,10 @@ async fn main() {
         })
         .collect();
 
+    // TODO: In production, restrict CORS origins. allow_origin(Any) is for development only.
     let public_cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods(Any)
+        .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers(Any);
 
     // Admin sub-router — all routes here additionally require is_admin=true on the key.
@@ -163,7 +164,7 @@ async fn main() {
         .route("/api/webhooks/:id", delete(delete_webhook))
         .route("/api/alerts", get(get_alerts).post(post_alert))
         .route("/api/webhook-deliveries", get(list_webhook_deliveries))
-        .route("/api/travel-rule/records", get(get_travel_rule_records).post(post_travel_rule_record))
+        .route("/api/travel-rule/records", get(get_travel_rule_records))
         .route("/api/pid-config", get(get_pid_config))
         .route("/api/zk-credentials/records", get(list_credential_records))
         .route("/api/zk-credentials/submit", post(submit_credential))
@@ -493,7 +494,7 @@ mod tests {
         // Insert two events of different types
         db.insert_event_log(
             "circuit_breaker_toggle",
-            "AxE9NQ8z6tzNJT9AHBu2YRsVqX41uCjPmpN5RLavAaat",
+            "ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811",
             serde_json::json!({"halted": true, "authority": "test"}),
             Some("sig1"),
             Some(12345),

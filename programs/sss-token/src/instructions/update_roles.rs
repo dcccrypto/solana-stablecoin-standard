@@ -3,7 +3,7 @@ use anchor_spl::token_interface::{Mint, TokenInterface};
 
 use crate::error::SssError;
 use crate::events::AuthorityProposed;
-use crate::state::{StablecoinConfig, UpdateRolesParams};
+use crate::state::{StablecoinConfig, UpdateRolesParams, FLAG_SQUADS_AUTHORITY};
 
 #[derive(Accounts)]
 pub struct UpdateRoles<'info> {
@@ -25,6 +25,16 @@ pub struct UpdateRoles<'info> {
 
 pub fn handler(ctx: Context<UpdateRoles>, params: UpdateRolesParams) -> Result<()> {
     let config = &mut ctx.accounts.config;
+    // AUDIT NOTE: Squads enforcement — defense-in-depth verify_squads_signer check.
+    // The has_one = authority constraint already guarantees config.authority == authority.key(),
+    // and after init_squads_authority config.authority IS the Squads multisig PDA, so the
+    // constraint provides equivalent security. This explicit check adds belt-and-suspenders.
+    if config.feature_flags & FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
     // BUG-019: Compliance authority transfer ALWAYS requires the admin timelock
     // (minimum 432_000 slots), regardless of admin_timelock_delay setting.
     // This check is placed FIRST to ensure a combined call (new_authority +

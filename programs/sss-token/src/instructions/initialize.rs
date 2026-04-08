@@ -7,9 +7,11 @@ use spl_token_2022::extension::ExtensionType;
 use spl_token_2022::state::{AccountState, Mint};
 
 use crate::error::SssError;
+use crate::events::TokenInitialized;
 use crate::state::{
     ConfidentialTransferConfig, InitializeParams, StablecoinConfig, ADMIN_OP_NONE,
-    DEFAULT_ADMIN_TIMELOCK_DELAY, FLAG_CONFIDENTIAL_TRANSFERS, FLAG_SQUADS_AUTHORITY,
+    DEFAULT_ADMIN_TIMELOCK_DELAY, FLAG_CONFIDENTIAL_TRANSFERS, FLAG_DAO_COMMITTEE,
+    FLAG_SQUADS_AUTHORITY,
 };
 
 // SSS-091: Mint space = base Mint size + DefaultAccountState extension.
@@ -181,12 +183,23 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     config.admin_op_param = 0;
     config.admin_op_target = Pubkey::default();
     config.admin_timelock_delay = params.admin_timelock_delay.unwrap_or(DEFAULT_ADMIN_TIMELOCK_DELAY);
+    if params.preset == 3 {
+        require!(
+            config.admin_timelock_delay >= 216_000,
+            SssError::InvalidTimelockDelay
+        );
+    }
     // SSS-092: stability fee starts at 0 (disabled by default)
     config.stability_fee_bps = 0;
     // SSS-093: PSM redemption fee starts at 0 (disabled by default)
     config.redemption_fee_bps = 0;
     // SSS-106: confidential transfers; SSS-147A: set FLAG_SQUADS_AUTHORITY if squads_multisig is provided
     let mut feature_flags = params.feature_flags.unwrap_or(0);
+    // Reject FLAG_DAO_COMMITTEE at init — requires init_dao_committee first
+    require!(
+        feature_flags & FLAG_DAO_COMMITTEE == 0,
+        SssError::InvalidFeatureFlags
+    );
     if let Some(squads_pk) = params.squads_multisig {
         if squads_pk != Pubkey::default() {
             config.squads_multisig = squads_pk;
@@ -206,6 +219,13 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     // freshly-initialized stablecoins. migrate_config is only for old on-chain state.
     config.version = crate::instructions::upgrade::CURRENT_VERSION;
     config.bump = ctx.bumps.config;
+
+    emit!(TokenInitialized {
+        mint: config.mint,
+        authority: config.authority,
+        preset: config.preset,
+        max_supply: config.max_supply,
+    });
 
     msg!(
         "SSS-{} initialized: mint={} authority={} default_account_state=Frozen",

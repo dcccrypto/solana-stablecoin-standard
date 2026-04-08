@@ -9,6 +9,15 @@ use crate::state::{
     CredentialRecord, CredentialRegistry, StablecoinConfig, FLAG_ZK_CREDENTIALS,
 };
 
+// # ZK Credential Trust Model
+//
+// On-chain Groth16 verification is not feasible on Solana due to compute limits.
+// Instead, the compliance authority verifies proofs off-chain and attests on-chain
+// by calling rotate_credential_root with the verified merkle root.
+//
+// Trust assumption: compliance_authority honestly verifies ZK proofs.
+// This is documented in docs/TRUST-MODEL.md and SSS-3.md.
+
 // ---------------------------------------------------------------------------
 // SSS-129: ZK credential registry — Groth16-based selective disclosure
 // ---------------------------------------------------------------------------
@@ -16,10 +25,10 @@ use crate::state::{
 // Design:
 //   1. Authority calls `init_credential_registry(issuer, merkle_root, ttl)` to
 //      enable FLAG_ZK_CREDENTIALS and create a CredentialRegistry PDA.
-//   2. A credential holder submits a Groth16 proof (encoded as a byte array) to
-//      `verify_zk_credential`.  The program verifies the proof against the
-//      registry Merkle root.  On success, a `CredentialRecord` PDA is created
-//      (or refreshed) for the holder.
+//   2. The issuer (compliance authority) verifies a holder's Groth16 proof
+//      off-chain, then calls `verify_zk_credential` as a co-signer to attest
+//      on-chain.  On success, a `CredentialRecord` PDA is created (or
+//      refreshed) for the holder.
 //   3. The transfer hook (when FLAG_ZK_CREDENTIALS is active) reads
 //      `CredentialRecord` for the sender — if absent, expired, or revoked, the
 //      transfer is rejected with `CredentialRequired`.
@@ -30,21 +39,25 @@ use crate::state::{
 //
 // Groth16 note:
 //   Full on-chain pairing is expensive (~200k CU with syscall optimisations).
-//   This implementation uses a *stub* that checks proof.len() == 192 (standard
-//   Groth16 proof length) and that the first 32 bytes of the public signal
-//   matches the registry Merkle root — suitable for devnet/testnet and as a
-//   placeholder until the Solana syscall `verify_groth16_bn254` is stabilised.
-//   Replace `verify_groth16_stub` with the syscall when available.
+//   On-chain ZK proof verification is NOT performed.  The issuer (compliance
+//   authority) MUST verify proofs off-chain before co-signing the
+//   `verify_zk_credential` transaction.  `validate_proof_structure` only checks
+//   structural validity (correct byte lengths, Merkle root commitment match).
+//   Replace with the `verify_groth16_bn254` syscall when stabilised.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Stub Groth16 verifier.  Returns Ok if proof looks structurally valid and
-/// the embedded public input (first 32 bytes of `public_signals`) matches
-/// `expected_root`.  Panics/errors on malformed input.
-fn verify_groth16_stub(
+/// WARNING: On-chain ZK proof verification is NOT performed.
+/// This function validates proof structure only. Real verification
+/// MUST be done off-chain by the compliance authority before
+/// calling rotate_credential_root.
+///
+/// The on-chain program trusts that the compliance_authority has
+/// verified the proof off-chain before submitting the credential.
+fn validate_proof_structure(
     proof: &[u8],
     public_signals: &[u8],
     expected_root: &[u8; 32],
@@ -200,6 +213,13 @@ pub struct VerifyZkCredential<'info> {
     #[account(mut)]
     pub holder: Signer<'info>,
 
+    /// The credential issuer (compliance authority) MUST co-sign this
+    /// transaction, attesting that the ZK proof was verified off-chain.
+    #[account(
+        constraint = issuer.key() == registry.issuer @ SssError::Unauthorized,
+    )]
+    pub issuer: Signer<'info>,
+
     #[account(
         seeds = [StablecoinConfig::SEED, config.mint.as_ref()],
         bump = config.bump,
@@ -238,8 +258,9 @@ pub fn verify_zk_credential_handler(
         SssError::CredentialRegistryNotFound,
     );
 
-    // Verify the Groth16 proof against the registry Merkle root.
-    verify_groth16_stub(&proof, &public_signals, &registry.merkle_root)?;
+    // Validate proof structure (real Groth16 verification is done off-chain
+    // by the issuer, who must co-sign this transaction as attestation).
+    validate_proof_structure(&proof, &public_signals, &registry.merkle_root)?;
 
     let slot = Clock::get()?.slot;
     let expires_slot = if registry.credential_ttl_slots == 0 {

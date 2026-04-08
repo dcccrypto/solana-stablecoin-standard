@@ -259,17 +259,29 @@ export class YieldCollateralModule {
   /**
    * Parse `feature_flags` (u64 LE) from raw `StablecoinConfig` account data.
    *
-   * Layout:
+   * Layout (correct on-chain StablecoinConfig field order):
    * ```
-   * [0..8]    discriminator
-   * [8..168]  5 × Pubkey (32 bytes each)
-   * [168..169] preset (u8)
-   * [169..177] feature_flags (u64 LE)
+   * [0..8]     discriminator
+   * [8..40]    mint (Pubkey, 32)
+   * [40..72]   authority (Pubkey, 32)
+   * [72..104]  compliance_authority (Pubkey, 32)
+   * [104..105] preset (u8, 1)
+   * [105..106] paused (bool, 1)
+   * [106..114] total_minted (u64, 8)
+   * [114..122] total_burned (u64, 8)
+   * [122..154] transfer_hook_program (Pubkey, 32)
+   * [154..186] collateral_mint (Pubkey, 32)
+   * [186..218] reserve_vault (Pubkey, 32)
+   * [218..226] total_collateral (u64, 8)
+   * [226..234] max_supply (u64, 8)
+   * [234..266] pending_authority (Pubkey, 32)
+   * [266..298] pending_compliance_authority (Pubkey, 32)
+   * [298..306] feature_flags (u64 LE, 8)
    * ```
    * @internal
    */
   private _readFeatureFlags(data: Buffer): bigint {
-    const OFFSET = 8 + 5 * 32 + 1; // 169
+    const OFFSET = 298; // 8 + 32 + 32 + 32 + 1 + 1 + 8 + 8 + 32 + 32 + 32 + 8 + 8 + 32 + 32
     if (data.length < OFFSET + 8) return 0n;
     return data.readBigUInt64LE(OFFSET);
   }

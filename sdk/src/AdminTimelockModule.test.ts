@@ -28,6 +28,7 @@ function makeMockProgram(txSig = TX_SIG) {
   const methods: Record<string, () => { accounts: typeof accounts }> = {};
   const methodProxy = vi.fn().mockReturnValue({ accounts });
   return {
+    programId: new PublicKey('ApQTVMKdtUUrGXgL6Hhzt9W2JFyLt6vGnHuimcdXe811'),
     methods: new Proxy({} as any, { get: () => methodProxy }),
     _methodProxy: methodProxy,
     _accounts: accounts,

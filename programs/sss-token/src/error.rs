@@ -489,4 +489,18 @@ pub enum SssError {
     WalletRateLimitsNotEnabled,
     #[msg("DAO proposal amount exhausted — cumulative draws have consumed the full approved amount")]
     DaoProposalExhausted,
+    #[msg("Invalid feature flags — prohibited flags set at initialization")]
+    InvalidFeatureFlags,
+    #[msg("This instruction has been disabled")]
+    InstructionDisabled,
+    #[msg("No collateral mint configured — collateral_mint is Pubkey::default")]
+    NoCollateralConfigured,
+    #[msg("Arithmetic overflow")]
+    Overflow,
+    #[msg("PID controller updates must be at least 10 slots apart")]
+    PidUpdateTooFrequent,
+    #[msg("Invalid collateral config — max_ltv_bps and liquidation_threshold_bps must be <= 10_000")]
+    InvalidCollateralConfig,
+    #[msg("Interface version downgrade not allowed — new version must be >= current version")]
+    InvalidInterfaceVersion,
 }

@@ -64,6 +64,8 @@ pub struct RegisterLegalEntity<'info> {
 
     #[account(
         mut,
+        seeds = [StablecoinConfig::SEED, config.mint.as_ref()],
+        bump = config.bump,
         has_one = authority @ SssError::Unauthorized,
     )]
     pub config: Account<'info, StablecoinConfig>,
@@ -154,6 +156,10 @@ pub struct AttestLegalEntity<'info> {
     /// Must match registry.attestor
     pub attestor: Signer<'info>,
 
+    #[account(
+        seeds = [StablecoinConfig::SEED, config.mint.as_ref()],
+        bump = config.bump,
+    )]
     pub config: Account<'info, StablecoinConfig>,
 
     #[account(
@@ -211,6 +217,8 @@ pub struct UpdateLegalEntity<'info> {
     pub authority: Signer<'info>,
 
     #[account(
+        seeds = [StablecoinConfig::SEED, config.mint.as_ref()],
+        bump = config.bump,
         has_one = authority @ SssError::Unauthorized,
     )]
     pub config: Account<'info, StablecoinConfig>,

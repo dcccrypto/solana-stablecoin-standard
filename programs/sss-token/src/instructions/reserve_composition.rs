@@ -54,6 +54,10 @@ pub fn update_reserve_composition_handler(
     ctx: Context<UpdateReserveComposition>,
     params: ReserveCompositionParams,
 ) -> Result<()> {
+    // AUDIT NOTE: No timelock enforcement — reserve composition updates
+    // are not currently supported by the admin timelock operation set.
+    // TODO: Add ADMIN_OP_UPDATE_RESERVE_COMPOSITION to admin_timelock.rs
+
     // SSS-135: enforce Squads multisig when FLAG_SQUADS_AUTHORITY is active
     if ctx.accounts.config.feature_flags & crate::state::FLAG_SQUADS_AUTHORITY != 0 {
         crate::instructions::squads_authority::verify_squads_signer(

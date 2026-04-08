@@ -532,6 +532,8 @@ describe('CdpModule — fetchCdpPosition', () => {
     });
 
     // Return one vault account from getProgramAccounts
+    // Use the correct PDA so the vault scan filter matches
+    const expectedVaultPda = cdp.getCollateralVaultPda(MOCK_USER, MOCK_COLLATERAL_MINT);
     const vaultData = {
       collateralMint: MOCK_COLLATERAL_MINT,
       depositedAmount: { toString: () => '2000000' }, // 2 units collateral
@@ -539,7 +541,7 @@ describe('CdpModule — fetchCdpPosition', () => {
     };
     mockDecodeFn.mockReturnValue(vaultData);
     (mockConn.getProgramAccounts as any).mockResolvedValue([
-      { pubkey: PublicKey.unique(), account: { data: Buffer.alloc(100) } },
+      { pubkey: expectedVaultPda, account: { data: Buffer.alloc(100) } },
     ]);
 
     // Pyth price: $1.50 per unit
@@ -577,6 +579,8 @@ describe('CdpModule — fetchCdpPosition', () => {
       collateralMint: MOCK_COLLATERAL_MINT,
     });
 
+    // Use the correct PDA so the vault scan filter matches
+    const expectedVaultPda = cdp.getCollateralVaultPda(MOCK_USER, MOCK_COLLATERAL_MINT);
     const vaultData = {
       collateralMint: MOCK_COLLATERAL_MINT,
       depositedAmount: { toString: () => '2000000' }, // 2 units
@@ -584,7 +588,7 @@ describe('CdpModule — fetchCdpPosition', () => {
     };
     mockDecodeFn.mockReturnValue(vaultData);
     (mockConn.getProgramAccounts as any).mockResolvedValue([
-      { pubkey: PublicKey.unique(), account: { data: Buffer.alloc(100) } },
+      { pubkey: expectedVaultPda, account: { data: Buffer.alloc(100) } },
     ]);
     (parsePriceData as any).mockReturnValue({ price: 2.0 });
     (mockConn.getMultipleAccountsInfo as any).mockResolvedValue([

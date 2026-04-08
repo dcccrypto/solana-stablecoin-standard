@@ -119,6 +119,7 @@ pub struct CdpLiquidate<'info> {
     /// When provided, overrides the global liquidation threshold and bonus.
     /// Seeds: [b"collateral-config", sss_mint, collateral_mint]
     #[account(
+        mut,
         seeds = [
             CollateralConfig::SEED,
             sss_mint.key().as_ref(),
@@ -149,6 +150,11 @@ pub struct CdpLiquidate<'info> {
 pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidateParams) -> Result<()> {
     let min_collateral_amount = params.min_collateral_amount;
     let partial_repay_amount = params.partial_repay_amount;
+
+    require!(
+        ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
+        SssError::ConfigVersionTooOld
+    );
 
     // SSS-110: Circuit breaker — halt liquidations when FLAG_CIRCUIT_BREAKER is set.
     require!(
@@ -198,14 +204,14 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
     // 3. Compute current collateral ratio and check liquidatability
     let debt = ctx.accounts.cdp_position.debt_amount;
     let accrued_fees = ctx.accounts.cdp_position.accrued_fees;
-    let effective_debt = debt.checked_add(accrued_fees).unwrap_or(debt);
+    let effective_debt = debt.checked_add(accrued_fees).ok_or(error!(SssError::Overflow))?;
     require!(effective_debt > 0, SssError::InsufficientDebt);
 
     let sss_decimals = ctx.accounts.sss_mint.decimals as u32;
     // BUG-012 fix: use effective_debt (debt + accrued_fees) for all ratio/health calculations
     let effective_debt_usd_e6: u128 = (effective_debt as u128)
         .checked_mul(1_000_000u128)
-        .unwrap()
+        .ok_or(error!(SssError::Overflow))?
         / 10u128.pow(sss_decimals);
 
     // ratio_bps = collateral_value / effective_debt * 10000
@@ -246,7 +252,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         // collateral_for_repay = repay_usd_e6 * 10^coll_decimals / (price * 10^(6 - expo_abs)) * (10000 + bonus) / 10000
         let repay_usd_e6: u128 = (repay as u128)
             .checked_mul(1_000_000u128)
-            .unwrap()
+            .ok_or(error!(SssError::Overflow))?
             / 10u128.pow(sss_decimals);
 
         // collateral_amount = repay_usd_e6 * 10^coll_decimals * (10000 + bonus_bps) / (price_val * 10^(6 - expo_abs) * 10000)
@@ -257,8 +263,10 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
             .ok_or(error!(SssError::InvalidPrice))?
             .checked_mul(bonus_factor)
             .ok_or(error!(SssError::InvalidPrice))?
+            .checked_mul(10u128.pow(price_expo_abs))
+            .ok_or(error!(SssError::InvalidPrice))?
             / price_val
-            / 10u128.pow(price_expo_abs.saturating_sub(6))
+            / 1_000_000u128
             / 10_000u128;
 
         // Clamp to available collateral (can't seize more than exists)
@@ -268,7 +276,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         // If remaining_effective_debt == 0 treat as full liquidation path.
         // BUG-012 fix: remaining effective debt includes accrued_fees (fees survive partial repay)
         let remaining_debt = debt.saturating_sub(repay);
-        let remaining_effective_debt = remaining_debt.checked_add(accrued_fees).unwrap_or(remaining_debt);
+        let remaining_effective_debt = remaining_debt.checked_add(accrued_fees).ok_or(error!(SssError::Overflow))?;
         if remaining_effective_debt > 0 {
             let remaining_collateral = deposited.saturating_sub(coll_to_seize);
             let remaining_coll_value: u128 = (remaining_collateral as u128)
@@ -281,7 +289,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
 
             let remaining_debt_usd_e6: u128 = (remaining_effective_debt as u128)
                 .checked_mul(1_000_000u128)
-                .unwrap()
+                .ok_or(error!(SssError::Overflow))?
                 / 10u128.pow(sss_decimals);
 
             let post_ratio_bps = remaining_coll_value
@@ -298,8 +306,8 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
 
         (repay, coll_to_seize)
     } else {
-        // Full liquidation: burn all debt, seize all collateral
-        (debt, deposited)
+        // Full liquidation: burn all effective debt (principal + accrued fees), seize all collateral
+        (effective_debt, deposited)
     };
 
     // SSS-085 Fix 5: Slippage protection
@@ -356,12 +364,23 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
     // 7. Update state
     let position = &mut ctx.accounts.cdp_position;
     position.debt_amount = position.debt_amount.saturating_sub(debt_to_burn);
+    // Clear accrued fees on full liquidation to prevent stale state.
+    if position.debt_amount == 0 {
+        position.accrued_fees = 0;
+    }
 
     let vault = &mut ctx.accounts.collateral_vault;
     vault.deposited_amount = vault.deposited_amount.saturating_sub(collateral_to_seize);
 
+    // Decrement CollateralConfig.total_deposited to keep the global counter accurate.
+    if let Some(cc) = ctx.accounts.collateral_config.as_mut() {
+        cc.total_deposited = cc.total_deposited.checked_sub(collateral_to_seize)
+            .ok_or(error!(SssError::Overflow))?;
+    }
+
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(debt_to_burn).unwrap();
+    config.total_burned = config.total_burned.checked_add(debt_to_burn)
+        .ok_or(error!(SssError::Overflow))?;
 
     // 8. Emit SSS-100 CollateralLiquidated event
     emit!(CollateralLiquidated {
@@ -381,7 +400,7 @@ pub fn cdp_liquidate_handler(ctx: Context<CdpLiquidate>, params: CdpLiquidatePar
         owner: ctx.accounts.cdp_owner.key(),
         liquidator: ctx.accounts.liquidator.key(),
         collateral_mint: ctx.accounts.collateral_mint.key(),
-        debt_burned: debt,
+        debt_burned: debt_to_burn,
         collateral_seized: collateral_to_seize,
         ratio_bps: ratio_bps as u64,
     });

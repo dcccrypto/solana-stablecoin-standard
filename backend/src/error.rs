@@ -25,7 +25,14 @@ impl IntoResponse for AppError {
             AppError::NotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
             AppError::UnprocessableEntity(_) => (StatusCode::UNPROCESSABLE_ENTITY, self.to_string()),
-            _ => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+            AppError::Database(e) => {
+                tracing::error!(error = %e, "Database error");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+            }
+            AppError::Internal(e) => {
+                tracing::error!(error = %e, "Internal error");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+            }
         };
         (
             status,

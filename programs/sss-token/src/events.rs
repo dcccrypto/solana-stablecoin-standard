@@ -257,6 +257,16 @@ pub struct ChannelDisputed {
     pub evidence_hash: [u8; 32],
 }
 
+/// Emitted when a disputed channel is resolved by mutual agreement or authority.
+#[event]
+pub struct DisputeResolved {
+    pub channel_id: u64,
+    pub initiator: Pubkey,
+    pub counterparty: Pubkey,
+    pub amount_to_counterparty: u64,
+    pub amount_to_initiator: u64,
+}
+
 /// Emitted when a channel is force-closed by the initiator after timeout.
 #[event]
 pub struct ChannelForceClosed {

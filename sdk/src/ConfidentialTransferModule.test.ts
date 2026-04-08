@@ -229,98 +229,74 @@ describe('getConfig', () => {
 });
 
 describe('enableConfidentialTransfers', () => {
-  it('throws if auditorElGamalPubkey is not 32 bytes', async () => {
+  it('throws "not supported as a standalone instruction" even with invalid auditorElGamalPubkey', async () => {
     await expect(
       ct.enableConfidentialTransfers({
         mint,
         auditorElGamalPubkey: new Uint8Array(16), // wrong length
       })
-    ).rejects.toThrow('auditorElGamalPubkey must be exactly 32 bytes');
+    ).rejects.toThrow('not supported as a standalone instruction');
   });
 
-  it('calls program.methods.initConfidentialTransferConfig with correct args', async () => {
+  it('throws "not supported as a standalone instruction" (CT config created during initialize)', async () => {
     const auditorKey = makeAuditorKey(0xaa);
-    const calls: { method: string; args: any[] }[] = [];
-
-    const { Program } = await import('@coral-xyz/anchor') as any;
-    Program.mockImplementationOnce(() => makeMockProgram('sig-enable', calls));
 
     const ct2 = new ConfidentialTransferModule(provider, programId);
-    const result = await ct2.enableConfidentialTransfers({
-      mint,
-      auditorElGamalPubkey: auditorKey,
-      autoApproveNewAccounts: true,
-    });
-
-    expect(result).toBe('sig-enable');
-    expect(calls[0].method).toBe('initConfidentialTransferConfig');
-    expect(calls[0].args[0]).toEqual(Array.from(auditorKey));
-    expect(calls[0].args[1]).toBe(true);
+    await expect(
+      ct2.enableConfidentialTransfers({
+        mint,
+        auditorElGamalPubkey: auditorKey,
+        autoApproveNewAccounts: true,
+      })
+    ).rejects.toThrow('not supported as a standalone instruction');
   });
 
-  it('defaults autoApproveNewAccounts to false', async () => {
+  it('throws even with default autoApproveNewAccounts', async () => {
     const auditorKey = makeAuditorKey(0xbb);
-    const calls: { method: string; args: any[] }[] = [];
-
-    const { Program } = await import('@coral-xyz/anchor') as any;
-    Program.mockImplementationOnce(() => makeMockProgram('sig-default', calls));
 
     const ct3 = new ConfidentialTransferModule(provider, programId);
-    await ct3.enableConfidentialTransfers({ mint, auditorElGamalPubkey: auditorKey });
-
-    expect(calls[0].method).toBe('initConfidentialTransferConfig');
-    expect(calls[0].args[1]).toBe(false);
+    await expect(
+      ct3.enableConfidentialTransfers({ mint, auditorElGamalPubkey: auditorKey })
+    ).rejects.toThrow('not supported as a standalone instruction');
   });
 });
 
 describe('depositConfidential', () => {
-  it('throws if amount is 0', async () => {
-    await expect(ct.depositConfidential({ mint, amount: 0n })).rejects.toThrow('amount must be > 0');
+  it('throws if amount is 0 (method not supported)', async () => {
+    await expect(ct.depositConfidential({ mint, amount: 0n })).rejects.toThrow('not supported as a standalone instruction');
   });
 
-  it('throws if amount is negative', async () => {
-    await expect(ct.depositConfidential({ mint, amount: -1n })).rejects.toThrow('amount must be > 0');
+  it('throws if amount is negative (method not supported)', async () => {
+    await expect(ct.depositConfidential({ mint, amount: -1n })).rejects.toThrow('not supported as a standalone instruction');
   });
 
-  it('resolves successfully for a valid amount', async () => {
-    const calls: { method: string; args: any[] }[] = [];
-    const { Program } = await import('@coral-xyz/anchor') as any;
-    Program.mockImplementationOnce(() => makeMockProgram('sig-deposit', calls));
-
+  it('throws "not supported as a standalone instruction" for valid amount', async () => {
     const ct4 = new ConfidentialTransferModule(provider, programId);
-    const sig = await ct4.depositConfidential({ mint, amount: 1_000_000n });
-    expect(sig).toBe('sig-deposit');
-    expect(calls[0].method).toBe('depositConfidential');
+    await expect(
+      ct4.depositConfidential({ mint, amount: 1_000_000n })
+    ).rejects.toThrow('not supported as a standalone instruction');
   });
 });
 
 describe('withdrawConfidential', () => {
-  it('throws if amount is 0', async () => {
-    await expect(ct.withdrawConfidential({ mint, amount: 0n })).rejects.toThrow('amount must be > 0');
+  it('throws if amount is 0 (method not supported)', async () => {
+    await expect(ct.withdrawConfidential({ mint, amount: 0n })).rejects.toThrow('not supported as a standalone instruction');
   });
 
-  it('resolves successfully for a valid amount', async () => {
-    const calls: { method: string; args: any[] }[] = [];
-    const { Program } = await import('@coral-xyz/anchor') as any;
-    Program.mockImplementationOnce(() => makeMockProgram('sig-withdraw', calls));
-
+  it('throws "not supported as a standalone instruction" for valid amount', async () => {
     const ct5 = new ConfidentialTransferModule(provider, programId);
-    const sig = await ct5.withdrawConfidential({ mint, amount: 500_000n });
-    expect(sig).toBe('sig-withdraw');
-    expect(calls[0].method).toBe('withdrawConfidential');
+    await expect(
+      ct5.withdrawConfidential({ mint, amount: 500_000n })
+    ).rejects.toThrow('not supported as a standalone instruction');
   });
 });
 
 describe('applyPendingBalance', () => {
-  it('resolves with a transaction signature', async () => {
-    const calls: { method: string; args: any[] }[] = [];
-    const { Program } = await import('@coral-xyz/anchor') as any;
-    Program.mockImplementationOnce(() => makeMockProgram('sig-apply', calls));
-
+  it('throws "not supported as a standalone instruction"', async () => {
     const ct6 = new ConfidentialTransferModule(provider, programId);
-    const sig = await ct6.applyPendingBalance({ mint });
-    expect(sig).toBe('sig-apply');
-    expect(calls[0].method).toBe('applyPendingConfidentialBalance');
+    await expect(
+      ct6.applyPendingBalance({ mint })
+    ).rejects.toThrow('not supported as a standalone instruction');
   });
 });
 

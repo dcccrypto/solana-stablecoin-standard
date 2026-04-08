@@ -1,6 +1,7 @@
 import { Connection, PublicKey, TransactionSignature } from '@solana/web3.js';
 import { AnchorProvider } from '@coral-xyz/anchor';
-import { freezeAccount, thawAccount, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
+// freezeAccount/thawAccount imports removed — those methods are deprecated in
+// favour of SolanaStablecoin.freeze()/thaw() which CPI through the program.
 
 /**
  * ComplianceModule — SSS-2 blacklist + freeze/thaw operations.
@@ -89,39 +90,30 @@ export class ComplianceModule {
   }
 
   /**
-   * Freeze a token account — prevents any transfers.
-   * Uses the Token-2022 freeze authority (held by the compliance authority).
+   * @deprecated Use `SolanaStablecoin.freeze()` instead. The config PDA is the
+   * freeze authority, so freeze must go through the sss-token program (CPI).
+   * This method cannot work because the wallet is not the freeze authority.
    */
   async freezeAccount(
-    targetTokenAccount: PublicKey
+    _targetTokenAccount: PublicKey
   ): Promise<TransactionSignature> {
-    return freezeAccount(
-      this.provider.connection,
-      this.provider.wallet as any,
-      targetTokenAccount,
-      this.mint,
-      this.provider.wallet.publicKey,
-      [],
-      { commitment: 'confirmed' },
-      TOKEN_2022_PROGRAM_ID
+    throw new Error(
+      'ComplianceModule.freezeAccount is deprecated: the config PDA is the freeze authority, ' +
+      'not the wallet. Use SolanaStablecoin.freeze() which calls the sss-token program instruction.'
     );
   }
 
   /**
-   * Thaw a frozen token account.
+   * @deprecated Use `SolanaStablecoin.thaw()` instead. The config PDA is the
+   * freeze authority, so thaw must go through the sss-token program (CPI).
+   * This method cannot work because the wallet is not the freeze authority.
    */
   async thawAccount(
-    targetTokenAccount: PublicKey
+    _targetTokenAccount: PublicKey
   ): Promise<TransactionSignature> {
-    return thawAccount(
-      this.provider.connection,
-      this.provider.wallet as any,
-      targetTokenAccount,
-      this.mint,
-      this.provider.wallet.publicKey,
-      [],
-      { commitment: 'confirmed' },
-      TOKEN_2022_PROGRAM_ID
+    throw new Error(
+      'ComplianceModule.thawAccount is deprecated: the config PDA is the freeze authority, ' +
+      'not the wallet. Use SolanaStablecoin.thaw() which calls the sss-token program instruction.'
     );
   }
 
@@ -182,7 +174,7 @@ export class ComplianceModule {
     if (this._program) return this._program;
     const { Program: AnchorProgram } = await import('@coral-xyz/anchor');
     const idl = await import('./idl/sss_transfer_hook.json');
-    this._program = new AnchorProgram(idl as any, this.provider) as any;
+    this._program = new AnchorProgram({ ...idl as any, address: this.hookProgramId.toBase58() }, this.provider) as any;
     return this._program;
   }
 }

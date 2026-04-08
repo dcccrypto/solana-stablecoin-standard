@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{thaw_account, ThawAccount as ThawAccountCpi, Mint, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
+use crate::events::AccountThawed;
 use crate::state::StablecoinConfig;
 
 #[derive(Accounts)]
@@ -21,7 +22,7 @@ pub struct ThawAccount<'info> {
     )]
     pub mint: InterfaceAccount<'info, Mint>,
 
-    #[account(mut)]
+    #[account(mut, constraint = target_token_account.mint == mint.key() @ SssError::InvalidMint)]
     pub target_token_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,
@@ -42,6 +43,10 @@ pub fn handler(ctx: Context<ThawAccount>) -> Result<()> {
             signer_seeds,
         ),
     )?;
+    emit!(AccountThawed {
+        mint: ctx.accounts.mint.key(),
+        account: ctx.accounts.target_token_account.key(),
+    });
     msg!("Thawed account {}", ctx.accounts.target_token_account.key());
     Ok(())
 }

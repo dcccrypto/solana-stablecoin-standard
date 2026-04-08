@@ -252,8 +252,13 @@ pub fn prove_and_resolve_handler(
     ctx: Context<ProveAndResolve>,
     proof_hash: [u8; 32],
 ) -> Result<()> {
+    // Preimage verification: claimant reveals the secret (`proof_hash`),
+    // we hash it and compare against the on-chain condition_hash.
+    // This prevents an attacker from reading condition_hash on-chain and
+    // replaying it — they must know the original secret (preimage).
+    let computed = blake3::hash(&proof_hash);
     require!(
-        proof_hash == ctx.accounts.vault.condition_hash,
+        computed.as_bytes() == &ctx.accounts.vault.condition_hash,
         SssError::ProofHashMismatch
     );
 
@@ -317,12 +322,9 @@ pub fn prove_and_resolve_handler(
 // (Expired).  The second instruction will fail with VaultAlreadyTerminal.
 //
 // Resolution: treating `PartiallyResolved` as terminal when remainder == 0
-// (BUG-AUDIT3-001 fix) closes the most dangerous surface.  The remaining
-// `PartiallyResolved` state (remainder > 0) is intentionally non-terminal to
-// allow repeated partial draws; protocol integrators should be aware that
-// `expire_and_refund` can race with a subsequent `partial_resolve` call after
-// the expiry slot.  Consider making PartiallyResolved fully terminal in a future
-// protocol upgrade if repeated-partial semantics are not required.
+// (BUG-AUDIT3-001 fix) closes the most dangerous surface.
+// partial_resolve releases `amount` to claimant and returns `remainder` to issuer.
+// The vault is always set to Resolved (terminal) after a partial resolve.
 
 #[derive(Accounts)]
 pub struct PartialResolve<'info> {
@@ -369,8 +371,11 @@ pub fn partial_resolve_handler(
     amount: u64,
     proof_hash: [u8; 32],
 ) -> Result<()> {
+    // Preimage verification: claimant reveals the secret (`proof_hash`),
+    // we hash it and compare against the on-chain condition_hash.
+    let computed = blake3::hash(&proof_hash);
     require!(
-        proof_hash == ctx.accounts.vault.condition_hash,
+        computed.as_bytes() == &ctx.accounts.vault.condition_hash,
         SssError::ProofHashMismatch
     );
 
@@ -422,15 +427,19 @@ pub fn partial_resolve_handler(
     }
 
     let vault = &mut ctx.accounts.vault;
-    vault.resolved_amount = vault.resolved_amount.saturating_add(amount);
-    // BUG-AUDIT3-001: if remainder == 0 the vault is fully resolved; mark it
-    // terminal (Resolved) so it cannot be re-entered by expire_and_refund or
-    // another partial_resolve call in the same / later slot.
-    vault.status = if remainder == 0 {
-        VaultStatus::Resolved
-    } else {
-        VaultStatus::PartiallyResolved
-    };
+    vault.resolved_amount = vault
+        .resolved_amount
+        .checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
+    // If remainder was returned to issuer, the escrow is fully drained —
+    // mark resolved_amount = committed_amount and set terminal state so it
+    // cannot be re-entered by expire_and_refund or another partial_resolve.
+    if remainder > 0 {
+        vault.resolved_amount = vault.committed_amount; // fully resolved
+    }
+    // In both cases (remainder returned to issuer, or claimant got everything)
+    // the vault is terminal — all funds have left escrow.
+    vault.status = VaultStatus::Resolved;
 
     emit!(ProbabilisticCommitmentResolved {
         config: vault.config,

@@ -78,7 +78,11 @@ pub struct CdpDepositCollateral<'info> {
     /// Optional: CollateralConfig PDA for per-collateral params (SSS-098).
     /// Seeds: [b"collateral-config", sss_mint, collateral_mint]
     /// When present, whitelist + deposit cap are enforced and total_deposited is updated.
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [CollateralConfig::SEED, sss_mint.key().as_ref(), collateral_mint.key().as_ref()],
+        bump = collateral_config.bump,
+    )]
     pub collateral_config: Option<Box<Account<'info, CollateralConfig>>>,
 
     pub token_program: Interface<'info, TokenInterface>,
@@ -90,6 +94,10 @@ pub fn cdp_deposit_collateral_handler(
     amount: u64,
 ) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
+    require!(
+        ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
+        SssError::ConfigVersionTooOld
+    );
 
     // SSS-BUG-032: Intentionally NO pause check for collateral deposits.
     // Depositing collateral improves the CDP health ratio and prevents
@@ -165,11 +173,13 @@ pub fn cdp_deposit_collateral_handler(
         ctx.accounts.collateral_mint.decimals,
     )?;
 
-    vault.deposited_amount = vault.deposited_amount.checked_add(amount).unwrap();
+    vault.deposited_amount = vault.deposited_amount.checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
 
     // Update CollateralConfig running total (SSS-098)
     if let Some(cc) = ctx.accounts.collateral_config.as_mut() {
-        cc.total_deposited = cc.total_deposited.saturating_add(amount);
+        cc.total_deposited = cc.total_deposited.checked_add(amount)
+            .ok_or(error!(SssError::Overflow))?;
     }
 
     emit!(CdpCollateralDeposited {

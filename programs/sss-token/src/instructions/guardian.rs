@@ -31,7 +31,7 @@ use crate::events::{
     GuardianPauseAuthorityOverride, GuardianPauseLifted, GuardianPauseProposed,
     GuardianPauseVoted, MintPausedEvent,
 };
-use crate::state::{GuardianConfig, PauseProposal, StablecoinConfig};
+use crate::state::{GuardianConfig, PauseProposal, StablecoinConfig, FLAG_SQUADS_AUTHORITY};
 
 // ─── init_guardian_config ────────────────────────────────────────────────────
 
@@ -72,6 +72,17 @@ pub fn init_guardian_config_handler(
     guardians: Vec<Pubkey>,
     threshold: u8,
 ) -> Result<()> {
+    // AUDIT NOTE: Squads enforcement — defense-in-depth verify_squads_signer check.
+    // The has_one = authority constraint already guarantees config.authority == authority.key(),
+    // and after init_squads_authority config.authority IS the Squads multisig PDA, so the
+    // constraint provides equivalent security. This explicit check adds belt-and-suspenders.
+    if ctx.accounts.config.feature_flags & FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     require!(!guardians.is_empty(), SssError::GuardianListEmpty);
     require!(
         guardians.len() <= GuardianConfig::MAX_GUARDIANS,
@@ -163,7 +174,8 @@ pub fn guardian_propose_pause_handler(
     require!(gc.guardians.contains(&proposer), SssError::NotAGuardian);
 
     let proposal_id = gc.next_proposal_id;
-    gc.next_proposal_id = gc.next_proposal_id.checked_add(1).unwrap();
+    gc.next_proposal_id = gc.next_proposal_id.checked_add(1)
+        .ok_or(error!(SssError::Overflow))?;
 
     let proposal = &mut ctx.accounts.proposal;
     proposal.config = ctx.accounts.config.key();
@@ -199,7 +211,7 @@ pub fn guardian_propose_pause_handler(
         gc.guardian_pause_active = true;
         gc.guardian_pause_unlocks_at =
             now.checked_add(GuardianConfig::GUARDIAN_PAUSE_AUTHORITY_OVERRIDE_DELAY)
-                .unwrap();
+                .ok_or(error!(SssError::Overflow))?;
         gc.pending_lift_votes.clear();
         emit!(MintPausedEvent {
             mint: ctx.accounts.mint.key(),
@@ -291,7 +303,7 @@ pub fn guardian_vote_pause_handler(
         gc.guardian_pause_active = true;
         gc.guardian_pause_unlocks_at =
             now.checked_add(GuardianConfig::GUARDIAN_PAUSE_AUTHORITY_OVERRIDE_DELAY)
-                .unwrap();
+                .ok_or(error!(SssError::Overflow))?;
         gc.pending_lift_votes.clear();
         emit!(MintPausedEvent {
             mint: ctx.accounts.mint.key(),
@@ -387,6 +399,13 @@ pub fn guardian_lift_pause_handler(ctx: Context<GuardianLiftPause>) -> Result<()
 
     // Authority path
     require!(is_authority, SssError::Unauthorized);
+    // AUDIT NOTE: Squads enforcement on authority lift-pause path.
+    if cfg.feature_flags & FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            cfg,
+            &caller,
+        )?;
+    }
 
     if gc.guardian_pause_active {
         // BUG-018: check timelock before allowing authority override

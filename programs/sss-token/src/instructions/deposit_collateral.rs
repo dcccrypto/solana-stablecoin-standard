@@ -4,6 +4,7 @@ use anchor_spl::token_interface::{
 };
 
 use crate::error::SssError;
+use crate::events::CollateralDeposited;
 use crate::state::StablecoinConfig;
 
 /// Accounts for `deposit_collateral` (SSS-3 only).
@@ -49,6 +50,10 @@ pub struct DepositCollateralCtx<'info> {
 
 pub fn deposit_collateral_handler(ctx: Context<DepositCollateralCtx>, amount: u64) -> Result<()> {
     require!(amount > 0, SssError::ZeroAmount);
+    require!(
+        ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
+        SssError::ConfigVersionTooOld
+    );
 
     // SSS-BUG-032: Intentionally NO pause check here.
     // Depositing collateral into the reserve vault is always beneficial —
@@ -75,8 +80,14 @@ pub fn deposit_collateral_handler(ctx: Context<DepositCollateralCtx>, amount: u6
         .config
         .total_collateral
         .checked_add(amount)
-        .unwrap();
+        .ok_or(error!(SssError::Overflow))?;
 
+    emit!(CollateralDeposited {
+        mint: ctx.accounts.sss_mint.key(),
+        depositor: ctx.accounts.depositor.key(),
+        amount,
+        total_collateral: ctx.accounts.config.total_collateral,
+    });
     msg!(
         "Deposited {} collateral. Vault total: {}",
         amount,

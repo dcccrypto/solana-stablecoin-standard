@@ -278,6 +278,7 @@ impl StablecoinConfig {
 
     /// Net circulating supply (total_minted - total_burned)
     pub fn net_supply(&self) -> u64 {
+        debug_assert!(self.total_minted >= self.total_burned, "invariant: total_minted >= total_burned");
         self.total_minted.saturating_sub(self.total_burned)
     }
 
@@ -287,7 +288,11 @@ impl StablecoinConfig {
         if supply == 0 {
             return 10_000;
         }
-        self.total_collateral.saturating_mul(10_000) / supply
+        ((self.total_collateral as u128)
+            .checked_mul(10_000)
+            .unwrap_or(u128::MAX)
+            .checked_div(supply as u128)
+            .unwrap_or(0)) as u64
     }
 
     /// Returns true if this token is SSS-3 (has a reserve vault).
@@ -680,6 +685,8 @@ impl CollateralConfig {
     /// Validate params: threshold > ltv, bonus <= 50%.
     pub fn validate(ltv: u16, threshold: u16, bonus: u16) -> anchor_lang::Result<()> {
         use crate::error::SssError;
+        require!(ltv <= 10_000, SssError::InvalidCollateralConfig);
+        require!(threshold <= 10_000, SssError::InvalidCollateralConfig);
         require!(threshold > ltv, SssError::InvalidCollateralThreshold);
         require!(bonus <= 5000, SssError::InvalidLiquidationBonus);
         Ok(())
@@ -779,8 +786,8 @@ pub struct AuthorityRotationRequest {
 
 impl AuthorityRotationRequest {
     pub const SEED: &'static [u8] = b"authority-rotation";
-    /// Discriminator(8) + 3×Pubkey(96) + 2×u64(16) + u8(1) + padding(7) = 128
-    pub const SPACE: usize = 96 + 16 + 1 + 7;
+    /// 4×Pubkey(128) + 2×u64(16) + u8(1) = 145  (discriminator added by `init`)
+    pub const SPACE: usize = 4 * 32 + 2 * 8 + 1;
 }
 
 // SSS-121: Guardian Multisig Emergency Pause
@@ -958,6 +965,8 @@ pub struct OracleConsensus {
     pub twap_price: u64,
     /// Slot of last TWAP update.
     pub twap_last_slot: u64,
+    /// Confidence: max deviation of any accepted price from the consensus median.
+    pub last_consensus_conf: u64,
     pub bump: u8,
 }
 
@@ -1029,7 +1038,8 @@ impl InsuranceVault {
         ((net_supply as u128)
             .saturating_mul(self.min_seed_bps as u128)
             .checked_div(10_000)
-            .unwrap_or(0)) as u64
+            .unwrap_or(0)
+            .min(u64::MAX as u128)) as u64
     }
 }
 
@@ -1318,7 +1328,7 @@ impl PsmCurveConfig {
             .saturating_mul(imbalance_ratio)
             .saturating_mul(imbalance_ratio)
             .checked_div(1_000_000_000_000)
-            .unwrap_or(0) as u16;
+            .unwrap_or(0).min(self.max_fee_bps as u128) as u16;
         let fee = self.base_fee_bps.saturating_add(delta);
         fee.min(self.max_fee_bps)
     }

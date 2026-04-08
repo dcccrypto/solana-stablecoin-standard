@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenInterface};
 
 use crate::error::SssError;
+use crate::events::MintPausedEvent;
 use crate::state::{StablecoinConfig, FLAG_DAO_COMMITTEE};
 
 #[derive(Accounts)]
@@ -48,6 +49,10 @@ pub fn handler(ctx: Context<Pause>, paused: bool) -> Result<()> {
         SssError::DaoCommitteeRequired
     );
     ctx.accounts.config.paused = paused;
+    emit!(MintPausedEvent {
+        mint: ctx.accounts.mint.key(),
+        paused,
+    });
     msg!("Mint {} paused={} (no-timelock path)", ctx.accounts.mint.key(), paused);
     Ok(())
 }

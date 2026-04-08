@@ -11,6 +11,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{burn, Burn, Mint, TokenAccount, TokenInterface};
 
 use crate::error::SssError;
+use crate::events::TokensBurned;
 use crate::state::{InterfaceVersion, MinterInfo, StablecoinConfig, FLAG_CIRCUIT_BREAKER};
 
 #[derive(Accounts)]
@@ -41,6 +42,7 @@ pub struct CpiBurn<'info> {
 
     #[account(
         mut,
+        constraint = source_token_account.mint == mint.key() @ SssError::InvalidMint,
         constraint = source_token_account.owner == minter.key(),
     )]
     pub source_token_account: InterfaceAccount<'info, TokenAccount>,
@@ -62,6 +64,12 @@ pub fn cpi_burn_handler(ctx: Context<CpiBurn>, amount: u64, required_version: u8
     require!(
         iv.version == required_version,
         SssError::InterfaceVersionMismatch
+    );
+
+    // ── Version guard (mirrors burn::handler) ────────────────────────────────
+    require!(
+        ctx.accounts.config.version >= crate::instructions::upgrade::MIN_SUPPORTED_VERSION,
+        SssError::ConfigVersionTooOld
     );
 
     // ── Standard burn logic ───────────────────────────────────────────────────
@@ -86,7 +94,15 @@ pub fn cpi_burn_handler(ctx: Context<CpiBurn>, amount: u64, required_version: u8
     )?;
 
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(amount).unwrap();
+    config.total_burned = config.total_burned.checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
+
+    emit!(TokensBurned {
+        mint: config.mint,
+        minter: ctx.accounts.minter.key(),
+        amount,
+        total_burned: config.total_burned,
+    });
 
     msg!(
         "cpi_burn: {} tokens from {} (interface v{})",

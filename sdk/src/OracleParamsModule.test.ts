@@ -26,16 +26,16 @@ const MINT = Keypair.generate().publicKey;
 
 /**
  * Build a fake StablecoinConfig account buffer.
- * Last 7 bytes (before trailing bump byte):
- *   bytes[-7..-3]: max_oracle_age_secs (u32 LE)
- *   bytes[-3..-1]: max_oracle_conf_bps (u16 LE)
- *   byte[-1]:      bump (u8)
+ * Canonical offsets:
+ *   [403..407]: max_oracle_age_secs (u32 LE)
+ *   [407..409]: max_oracle_conf_bps (u16 LE)
  */
-function buildConfigData(maxAgeSecs: number, maxConfBps: number, totalLen = 300): Buffer {
-  const buf = Buffer.alloc(totalLen, 0xab); // fill with garbage to simulate real fields
-  buf.writeUInt32LE(maxAgeSecs, totalLen - 7);
-  buf.writeUInt16LE(maxConfBps, totalLen - 3);
-  buf.writeUInt8(255, totalLen - 1); // bump = 255
+function buildConfigData(maxAgeSecs: number, maxConfBps: number): Buffer {
+  const MAX_ORACLE_AGE_OFFSET = 403;
+  const MAX_ORACLE_CONF_OFFSET = 407;
+  const buf = Buffer.alloc(MAX_ORACLE_CONF_OFFSET + 2, 0);
+  buf.writeUInt32LE(maxAgeSecs, MAX_ORACLE_AGE_OFFSET);
+  buf.writeUInt16LE(maxConfBps, MAX_ORACLE_CONF_OFFSET);
   return buf;
 }
 

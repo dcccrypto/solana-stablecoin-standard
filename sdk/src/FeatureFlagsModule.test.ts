@@ -55,10 +55,8 @@ function makeMockProvider(accountData: Buffer | null = null) {
 // ─── FLAG_CIRCUIT_BREAKER constant ───────────────────────────────────────────
 
 describe('FLAG_CIRCUIT_BREAKER', () => {
-  it('equals 1n << 7n (0x80) — DEPRECATED value retained for backward-compat (F-1)', () => {
-    // The value is preserved for backward compatibility but is WRONG.
-    // Correct constant is FLAG_CIRCUIT_BREAKER_V2 = 0x01 from CircuitBreakerModule.
-    expect(FLAG_CIRCUIT_BREAKER).toBe(128n);
+  it('equals 1n << 0n (0x01) — bit 0 (F-1)', () => {
+    expect(FLAG_CIRCUIT_BREAKER).toBe(1n);
   });
 
   it('does NOT emit a console.warn in test environment (NODE_ENV=test)', () => {
@@ -129,7 +127,8 @@ describe('FeatureFlagsModule.isFeatureFlagSet', () => {
     const ff = new FeatureFlagsModule(makeMockProvider(data), PROGRAM_ID);
     expect(await ff.isFeatureFlagSet(MINT, FLAG_A)).toBe(true);
     expect(await ff.isFeatureFlagSet(MINT, FLAG_B)).toBe(true);
-    expect(await ff.isFeatureFlagSet(MINT, FLAG_CIRCUIT_BREAKER)).toBe(false);
+    // FLAG_CIRCUIT_BREAKER = 1n << 0n = FLAG_A, so it IS set
+    expect(await ff.isFeatureFlagSet(MINT, FLAG_CIRCUIT_BREAKER)).toBe(true);
   });
 });
 

@@ -25,6 +25,7 @@ use crate::state::{
     ADMIN_OP_SET_SPEND_LIMIT, ADMIN_OP_SET_STABILITY_FEE, ADMIN_OP_SET_TIMELOCK_DELAY,
     ADMIN_OP_SET_TRAVEL_RULE_THRESHOLD, ADMIN_OP_TRANSFER_AUTHORITY,
     ADMIN_OP_TRANSFER_COMPLIANCE_AUTHORITY, ADMIN_OP_UNPAUSE, DEFAULT_ADMIN_TIMELOCK_DELAY,
+    FLAG_SQUADS_AUTHORITY,
 };
 
 // ---------------------------------------------------------------------------
@@ -104,6 +105,21 @@ pub fn propose_timelocked_op_handler(
     param: u64,
     target: Pubkey,
 ) -> Result<()> {
+    // AUDIT NOTE: Squads enforcement — defense-in-depth verify_squads_signer check.
+    // The has_one = authority constraint already guarantees config.authority == authority.key(),
+    // and after init_squads_authority config.authority IS the Squads multisig PDA, so the
+    // constraint provides equivalent security. This explicit check adds belt-and-suspenders.
+    if ctx.accounts.config.feature_flags & FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
+    // BUG-018 / SSS-121: Block ADMIN_OP_UNPAUSE at proposal time to prevent
+    // bypassing the guardian 24h pause override.
+    require!(op_kind != ADMIN_OP_UNPAUSE, SssError::InstructionDisabled);
+
     require!(
         matches!(
             op_kind,
@@ -123,7 +139,6 @@ pub fn propose_timelocked_op_handler(
                 | ADMIN_OP_SET_SANCTIONS_PARAMS
                 | ADMIN_OP_SET_TIMELOCK_DELAY
                 | ADMIN_OP_PAUSE
-                | ADMIN_OP_UNPAUSE
         ),
         SssError::InvalidTimelockOpKind
     );
@@ -142,7 +157,7 @@ pub fn propose_timelocked_op_handler(
         delay
     };
 
-    let mature_slot = clock.slot.checked_add(effective_delay).unwrap();
+    let mature_slot = clock.slot.checked_add(effective_delay).ok_or(error!(SssError::Overflow))?;
 
     config.admin_op_kind = op_kind;
     config.admin_op_param = param;
@@ -185,6 +200,14 @@ pub struct ExecuteTimelockOp<'info> {
 
 /// Execute the pending timelocked admin operation once the timelock has matured.
 pub fn execute_timelocked_op_handler(ctx: Context<ExecuteTimelockOp>) -> Result<()> {
+    // AUDIT NOTE: Squads enforcement — defense-in-depth verify_squads_signer check.
+    if ctx.accounts.config.feature_flags & FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let config = &mut ctx.accounts.config;
     let op_kind = config.admin_op_kind;
 
@@ -219,6 +242,12 @@ pub fn execute_timelocked_op_handler(ctx: Context<ExecuteTimelockOp>) -> Result<
             // Removing the DAO committee guard requires an explicit DAO governance vote.
             require!(
                 param & crate::state::FLAG_DAO_COMMITTEE == 0,
+                SssError::DaoFlagProtected
+            );
+            // AUDIT3C: FLAG_SQUADS_AUTHORITY cannot be cleared via timelock admin op.
+            // Downgrading from multisig to single-signer requires explicit governance.
+            require!(
+                param & crate::state::FLAG_SQUADS_AUTHORITY == 0,
                 SssError::DaoFlagProtected
             );
             config.feature_flags &= !param;
@@ -331,8 +360,10 @@ pub fn execute_timelocked_op_handler(ctx: Context<ExecuteTimelockOp>) -> Result<
             msg!("Timelock: protocol PAUSED");
         }
         ADMIN_OP_UNPAUSE => {
-            config.paused = false;
-            msg!("Timelock: protocol UNPAUSED");
+            // Unpause via admin timelock is disabled to prevent bypassing
+            // the guardian 24h pause override (BUG-018 / SSS-121).
+            // Use the `pause` instruction (direct) or `guardian_lift_pause` instead.
+            return err!(SssError::InstructionDisabled);
         }
 
         _ => return err!(SssError::InvalidTimelockOpKind),
@@ -371,6 +402,14 @@ pub struct CancelTimelockOp<'info> {
 
 /// Cancel the pending timelocked admin operation.  No-op if none is pending.
 pub fn cancel_timelocked_op_handler(ctx: Context<CancelTimelockOp>) -> Result<()> {
+    // AUDIT NOTE: Squads enforcement — defense-in-depth verify_squads_signer check.
+    if ctx.accounts.config.feature_flags & FLAG_SQUADS_AUTHORITY != 0 {
+        crate::instructions::squads_authority::verify_squads_signer(
+            &ctx.accounts.config,
+            &ctx.accounts.authority.key(),
+        )?;
+    }
+
     let config = &mut ctx.accounts.config;
     let op_kind = config.admin_op_kind;
     require!(op_kind != ADMIN_OP_NONE, SssError::NoTimelockPending);

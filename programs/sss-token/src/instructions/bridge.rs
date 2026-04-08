@@ -180,38 +180,30 @@ pub fn bridge_out_handler(
 
     // Compute fee
     let fee_amount = if bc.bridge_fee_bps > 0 {
-        amount
-            .checked_mul(bc.bridge_fee_bps as u64)
-            .unwrap()
+        ((amount as u128)
+            .checked_mul(bc.bridge_fee_bps as u128)
+            .ok_or(error!(SssError::InvalidPrice))?
             .checked_div(10_000)
-            .unwrap()
+            .ok_or(error!(SssError::InvalidPrice))?) as u64
     } else {
         0
     };
-    let burn_amount = amount.checked_sub(fee_amount).unwrap();
+    let burn_amount = amount.checked_sub(fee_amount)
+        .ok_or(error!(SssError::Overflow))?;
     require!(burn_amount > 0, SssError::ZeroAmount);
 
-    // Transfer fee tokens from sender to fee vault (protocol revenue, not burned).
-    let mint_key = ctx.accounts.mint.key();
-    let config_bump = ctx.accounts.config.bump;
-    let seeds = &[
-        StablecoinConfig::SEED,
-        mint_key.as_ref(),
-        &[config_bump],
-    ];
-    let signer_seeds = &[&seeds[..]];
-
+    // BUG FIX: Use sender as authority (they sign the tx), not the config PDA.
+    // The config PDA has no delegate authority over the sender's token account.
     if fee_amount > 0 {
         anchor_spl::token_interface::transfer_checked(
-            CpiContext::new_with_signer(
+            CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 anchor_spl::token_interface::TransferChecked {
                     from: ctx.accounts.sender_token_account.to_account_info(),
                     mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.fee_vault.to_account_info(),
-                    authority: ctx.accounts.config.to_account_info(),
+                    authority: ctx.accounts.sender.to_account_info(),
                 },
-                signer_seeds,
             ),
             fee_amount,
             ctx.accounts.mint.decimals,
@@ -219,25 +211,27 @@ pub fn bridge_out_handler(
     }
 
     // Burn only the net amount (amount - fee) from sender.
+    // BUG FIX: Use sender as authority, not the config PDA.
     burn(
-        CpiContext::new_with_signer(
+        CpiContext::new(
             ctx.accounts.token_program.to_account_info(),
             Burn {
                 mint: ctx.accounts.mint.to_account_info(),
                 from: ctx.accounts.sender_token_account.to_account_info(),
-                authority: ctx.accounts.config.to_account_info(),
+                authority: ctx.accounts.sender.to_account_info(),
             },
-            signer_seeds,
         ),
         burn_amount,
     )?;
 
     // Update accounting
     let config = &mut ctx.accounts.config;
-    config.total_burned = config.total_burned.checked_add(burn_amount).unwrap();
+    config.total_burned = config.total_burned.checked_add(burn_amount)
+        .ok_or(error!(SssError::Overflow))?;
 
     let bc = &mut ctx.accounts.bridge_config;
-    bc.total_bridged_out = bc.total_bridged_out.checked_add(burn_amount).unwrap();
+    bc.total_bridged_out = bc.total_bridged_out.checked_add(burn_amount)
+        .ok_or(error!(SssError::Overflow))?;
 
     // Emit bridge event — off-chain relayer picks this up
     emit!(BridgeOut {
@@ -387,7 +381,8 @@ pub fn bridge_in_handler(
     // Supply cap check (respects max_supply)
     if config.max_supply > 0 {
         require!(
-            config.net_supply().checked_add(amount).unwrap() <= config.max_supply,
+            config.net_supply().checked_add(amount)
+                .ok_or(error!(SssError::Overflow))? <= config.max_supply,
             SssError::MaxSupplyExceeded
         );
     }
@@ -441,10 +436,12 @@ pub fn bridge_in_handler(
 
     // Update accounting
     let config = &mut ctx.accounts.config;
-    config.total_minted = config.total_minted.checked_add(amount).unwrap();
+    config.total_minted = config.total_minted.checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
 
     let bc = &mut ctx.accounts.bridge_config;
-    bc.total_bridged_in = bc.total_bridged_in.checked_add(amount).unwrap();
+    bc.total_bridged_in = bc.total_bridged_in.checked_add(amount)
+        .ok_or(error!(SssError::Overflow))?;
 
     emit!(BridgeIn {
         sss_mint: ctx.accounts.mint.key(),
